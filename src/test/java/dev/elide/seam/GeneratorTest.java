@@ -111,6 +111,42 @@ class GeneratorTest {
   }
 
   @Test
+  void exportsCarryIncludePredicatesAndTypedCarriers() {
+    String source =
+        MODULE
+            + "opaque Handle\n"
+            + "export open symbol=x_open return=i64 java=fixture.Ops.open isolate=thread error=abort"
+            + " include=fixture.ImageOnly\n"
+            + "  param path type=ptr<u8> nullable=false access=read\n"
+            + "  param argv type=ptr<ptr<u8>>\n"
+            + "  param any type=ptr<void>\n"
+            + "  param ints type=ptr<i32>\n"
+            + "  param handle type=ptr<Handle>\n"
+            + "end\n";
+    var output = generate(source);
+    String ni = output.get("SeamNative.java");
+    assertTrue(
+        ni.contains("@CEntryPoint(name = \"x_open\", include = fixture.ImageOnly.class)"), ni);
+    assertTrue(
+        ni.contains(
+            "open(IsolateThread isolate_thread, CCharPointer path, CCharPointerPointer argv,"
+                + " VoidPointer any, CIntPointer ints, PointerBase handle)"),
+        ni);
+    assertTrue(ni.contains("return fixture.Ops.open(path, argv, any, ints, handle);"));
+    assertFalse(ni.contains("WordFactory"));
+    assertFalse(ni.contains("CFunction"));
+    assertTrue(output.get("seam.json").contains("\"include\":\"fixture.ImageOnly\""));
+    assertNotEquals(
+        output.get("seam.abi"), generate(source.replace(" include=fixture.ImageOnly", "")).get("seam.abi"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(source.replace("include=fixture.ImageOnly", "include=ImageOnly")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(VALID.replace("error=no_failure", "error=no_failure include=fixture.ImageOnly")));
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())

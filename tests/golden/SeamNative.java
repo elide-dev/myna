@@ -4,16 +4,16 @@ package dev.elide.seam.generated;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CFunction;
-import org.graalvm.word.PointerBase;
-import org.graalvm.word.WordFactory;
+import org.graalvm.nativeimage.c.type.CCharPointer;
+import org.graalvm.nativeimage.c.type.CLongPointer;
 
 public final class SeamNative {
     private SeamNative() {}
-    public static final String ABI_FINGERPRINT = "48366837bdd46637037cf534922cd7ac9da7a519a97994acb36a0a2fc36e4d21";
+    public static final String ABI_FINGERPRINT = "d3342f8e738d98009b02ac606e6d283a15b96646bbf41ad6a5bcd0a9c2c13d9e";
     @CFunction(value = "seam_inspect", transition = CFunction.Transition.NO_TRANSITION)
-    public static native long inspect(PointerBase value);
+    public static native long inspect(CLongPointer value);
     @CEntryPoint(name = "seam_sum")
-    public static long sum(IsolateThread isolate_thread, PointerBase data, long length) {
+    public static long sum(IsolateThread isolate_thread, CCharPointer data, long length) {
         try {
             return fixture.BufferOps.sum(data, length);
         } catch (Throwable failure) {

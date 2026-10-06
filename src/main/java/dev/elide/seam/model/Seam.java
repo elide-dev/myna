@@ -6,7 +6,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.1.0";
+  public static final String VERSION = "0.2.0";
 
   public enum Direction {
     IMPORT,
@@ -126,6 +126,7 @@ public final class Seam {
       ErrorConvention error,
       String sentinel,
       String javaTarget,
+      String include,
       boolean isolateThread,
       SortedMap<String, Fact> facts) {
     public Function {

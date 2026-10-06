@@ -101,6 +101,7 @@ public final class Dsl {
               if (sentinel != null && sentinel.matches("-?[0-9]+"))
                 sentinel = new java.math.BigInteger(sentinel).toString();
               String javaTarget = take(options, "java", null);
+              String include = take(options, "include", null);
               String isolate = take(options, "isolate", "none");
               require(
                   isolate.equals("none") || isolate.equals("thread"),
@@ -117,6 +118,7 @@ public final class Dsl {
                       error,
                       sentinel,
                       javaTarget,
+                      include,
                       isolate.equals("thread"),
                       facts(options)));
             }

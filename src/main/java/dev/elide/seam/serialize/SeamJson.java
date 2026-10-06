@@ -79,6 +79,7 @@ public final class SeamJson {
         + quote(f.sentinel())
         + ",\"javaTarget\":"
         + quote(f.javaTarget())
+        + (f.include() == null ? "" : ",\"include\":" + quote(f.include()))
         + ",\"isolateThread\":"
         + f.isolateThread()
         + ",\"parameters\":"

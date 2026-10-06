@@ -35,8 +35,22 @@ final class Types {
     return rust(p.type());
   }
 
+  /** Native Image word carriers; typed C pointers where the pointee has one. */
   static String java(Type type) {
-    if (type instanceof Pointer) return "PointerBase";
+    if (type instanceof Pointer p) {
+      if (p.pointee() instanceof Pointer inner && inner.pointee() instanceof Scalar s)
+        if (s == Scalar.I8 || s == Scalar.U8) return "CCharPointerPointer";
+      if (!(p.pointee() instanceof Scalar s)) return "PointerBase";
+      return switch (s) {
+        case VOID -> "VoidPointer";
+        case I8, U8 -> "CCharPointer";
+        case I16, U16 -> "CShortPointer";
+        case I32, U32 -> "CIntPointer";
+        case I64, U64 -> "CLongPointer";
+        case F32 -> "CFloatPointer";
+        case F64 -> "CDoublePointer";
+      };
+    }
     return switch ((Scalar) type) {
       case VOID -> "void";
       case I8, U8 -> "byte";

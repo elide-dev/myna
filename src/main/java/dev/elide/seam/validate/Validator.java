@@ -117,11 +117,18 @@ public final class Validator {
                 && function.javaTarget().matches("(?:[a-zA-Z][\\w]*\\.)+[a-zA-Z][\\w]*"),
             "export requires java=qualified.Class.method");
         for (String part : function.javaTarget().split("\\.")) identifier(part);
+        if (function.include() != null) {
+          require(
+              function.include().matches("(?:[a-zA-Z][\\w]*\\.)+[a-zA-Z][\\w]*"),
+              "include requires a qualified BooleanSupplier class");
+          for (String part : function.include().split("\\.")) identifier(part);
+        }
         require(
             function.error() != ErrorConvention.NO_FAILURE,
             "exports must translate exceptions: abort, integer_sentinel, or null_sentinel");
       } else {
         require(function.javaTarget() == null, "java target is only valid on exports");
+        require(function.include() == null, "include is only valid on exports");
         require(
             function.error() == ErrorConvention.NO_FAILURE,
             "imports describe an existing non-throwing C ABI; use error=no_failure");

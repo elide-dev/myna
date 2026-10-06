@@ -4,7 +4,7 @@ import "elide:Sources.pkl" as Sources
 import "elide:NativeImage.pkl" as Native
 
 name = "svmgen"
-version = "0.1.0"
+version = "0.2.0"
 jvm {
   main = "dev.elide.seam.cli.Main"
   target = 25
