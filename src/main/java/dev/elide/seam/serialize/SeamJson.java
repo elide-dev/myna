@@ -20,6 +20,7 @@ public final class SeamJson {
         + m.abiVersion()
         + ",\n  \"targetTriple\": "
         + quote(m.targetTriple())
+        + java(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -51,6 +52,16 @@ public final class SeamJson {
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
         + "\n}\n";
+  }
+
+  /** Omitted unless named, so descriptors without Java naming keep their fingerprints. */
+  private static String java(Module m) {
+    if (m.javaPackage() == null && m.javaClass() == null) return "";
+    return ",\n  \"java\": {\"package\":"
+        + quote(m.javaPackageName())
+        + ",\"class\":"
+        + quote(m.nativeClass())
+        + "}";
   }
 
   private static String function(Function f) {

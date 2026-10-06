@@ -7,7 +7,7 @@ import dev.elide.seam.validate.Validator;
 import java.util.*;
 
 public final class CHeader implements Backend {
-  public String filename() {
+  public String filename(Module module) {
     return "seam.h";
   }
 

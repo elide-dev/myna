@@ -10,7 +10,7 @@ public final class Dsl {
   private Dsl() {}
 
   public static Module parse(String source) {
-    String name = null, target = null;
+    String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
     var opaque = new ArrayList<String>();
     var structs = new ArrayList<Struct>();
@@ -38,6 +38,8 @@ public final class Dsl {
             var opts = options(words, 2);
             target = take(opts, "target", null);
             abi = Integer.parseInt(take(opts, "abi", "1"));
+            javaPackage = take(opts, "java_package", null);
+            javaClass = take(opts, "java_class", null);
             empty(opts);
           }
           case "opaque" -> {
@@ -129,7 +131,7 @@ public final class Dsl {
     }
     require(name != null, "missing module");
     require(header == null, "unterminated block");
-    return new Module(name, abi, target, opaque, structs, functions);
+    return new Module(name, abi, target, javaPackage, javaClass, opaque, structs, functions);
   }
 
   private static Map<String, String> options(String[] words, int start) {

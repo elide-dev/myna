@@ -158,10 +158,15 @@ public final class Seam {
     }
   }
 
+  public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.seam.generated";
+
+  /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
   public record Module(
       String name,
       int abiVersion,
       String targetTriple,
+      String javaPackage,
+      String javaClass,
       List<String> opaqueTypes,
       List<Struct> structs,
       List<Function> functions) {
@@ -169,6 +174,28 @@ public final class Seam {
       opaqueTypes = opaqueTypes.stream().sorted().toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();
       functions = functions.stream().sorted(Comparator.comparing(Function::symbol)).toList();
+    }
+
+    public Module withTarget(String target) {
+      return new Module(
+          name, abiVersion, target, javaPackage, javaClass, opaqueTypes, structs, functions);
+    }
+
+    public String javaPackageName() {
+      return javaPackage == null ? DEFAULT_JAVA_PACKAGE : javaPackage;
+    }
+
+    /** The Native Image class; FFM and Feature classes take it as a prefix when it is named. */
+    public String nativeClass() {
+      return javaClass == null ? "SeamNative" : javaClass;
+    }
+
+    public String ffmClass() {
+      return javaClass == null ? "SeamFFM" : javaClass + "FFM";
+    }
+
+    public String foreignFeatureClass() {
+      return javaClass == null ? "SeamForeignFeature" : javaClass + "ForeignFeature";
     }
   }
 }

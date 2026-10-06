@@ -58,6 +58,59 @@ class GeneratorTest {
   }
 
   @Test
+  void javaNamingSelectsPackageClassesAndFilenames() {
+    String named =
+        VALID.replace(
+            "module sample ", "module sample java_package=dev.example.io java_class=IoNatives ");
+    var output = generate(named);
+    assertEquals(
+        Set.of(
+            "IoNatives.java",
+            "IoNativesFFM.java",
+            "IoNativesForeignFeature.java",
+            "seam.abi",
+            "seam.h",
+            "seam.json",
+            "seam.ll",
+            "seam.rs"),
+        output.keySet());
+    String nativeImage = output.get("IoNatives.java");
+    assertTrue(nativeImage.contains("package dev.example.io;"));
+    assertTrue(nativeImage.contains("public final class IoNatives {"));
+    assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Binding.HANDLE"));
+    assertTrue(
+        output
+            .get("IoNativesForeignFeature.java")
+            .contains("\"dev.example.io.IoNativesFFM$inspect_Binding\""));
+    assertTrue(output.get("seam.json").contains("\"java\": {\"package\":\"dev.example.io\""));
+    assertNotEquals(generate(VALID).get("seam.abi"), output.get("seam.abi"));
+    assertFalse(generate(VALID).get("seam.json").contains("\"java\""));
+    for (String bad : List.of("java_package=dev..io", "java_package=dev.fn", "java_class=1x"))
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> generate(VALID.replace("module sample ", "module sample " + bad + " ")));
+  }
+
+  @Test
+  void rustPinsOnlyImportImplementations() {
+    String rust =
+        generate(
+                VALID
+                    + "export sum symbol=seam_sum return=i64 java=fixture.Ops.sum isolate=thread"
+                    + " error=integer_sentinel sentinel=-1\nend\n")
+            .get("seam.rs");
+    assertTrue(rust.contains("let _: unsafe extern \"C\" fn(*const i64) -> i64 = inspect;"));
+    assertFalse(rust.contains("= seam_sum;"));
+    String exportsOnly =
+        generate(
+                MODULE
+                    + "export sum return=i64 java=fixture.Ops.sum isolate=thread"
+                    + " error=abort\nend\n")
+            .get("seam.rs");
+    assertFalse(exportsOnly.contains("assert_implementations"));
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())

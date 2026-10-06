@@ -74,15 +74,7 @@ public final class Main {
         }
       }
       Module module = Dsl.parse(Files.readString(input));
-      if (target != null)
-        module =
-            new Module(
-                module.name(),
-                module.abiVersion(),
-                target,
-                module.opaqueTypes(),
-                module.structs(),
-                module.functions());
+      if (target != null) module = module.withTarget(target);
       Validator.validate(module, strict);
       if (args[0].equals("validate")) {
         if (destination != null || check)

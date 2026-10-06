@@ -7,7 +7,7 @@ import java.util.*;
 
 /** LLVM 23 declaration contracts. These do not provide native implementation bodies. */
 public final class Llvm implements Backend {
-  public String filename() {
+  public String filename(Module module) {
     return "seam.ll";
   }
 

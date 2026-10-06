@@ -21,7 +21,7 @@ public final class Generator {
             new JavaFfm(),
             new NativeImage(),
             new NativeImageForeign(),
-            new Llvm())) outputs.put(backend.filename(), backend.generate(module));
+            new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
     return Collections.unmodifiableSortedMap(outputs);
   }
 }

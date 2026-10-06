@@ -30,3 +30,15 @@ unsafe extern "C" {
     #[link_name = "seam_sum"]
     pub fn sum(isolate_thread: *mut core::ffi::c_void, data: *const u8, length: i64) -> i64;
 }
+
+/// Pins each import's implementation, in scope under its symbol name, to this ABI.
+#[allow(unused_macros)]
+macro_rules! assert_implementations {
+    () => {
+        const _: () = {
+            let _: unsafe extern "C" fn(*const i64) -> i64 = seam_inspect;
+        };
+    };
+}
+#[allow(unused_imports)]
+pub(crate) use assert_implementations;

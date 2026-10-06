@@ -39,6 +39,9 @@ public final class Validator {
 
   public static void validate(Module module, boolean strict) {
     identifier(module.name());
+    if (module.javaPackage() != null)
+      for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
+    if (module.javaClass() != null) identifier(module.javaClass());
     require(module.abiVersion() > 0, "abi must be positive");
     require(
         module.targetTriple() != null && TARGETS.contains(module.targetTriple()),

@@ -6,7 +6,7 @@ import dev.elide.seam.serialize.SeamJson;
 import dev.elide.seam.validate.Validator;
 
 public final class RustFfi implements Backend {
-  public String filename() {
+  public String filename(Module module) {
     return "seam.rs";
   }
 
@@ -90,6 +90,24 @@ public final class RustFfi implements Backend {
       if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
       out.append(";\n");
     }
-    return out.append("}\n").toString();
+    out.append("}\n");
+    var imports = m.functions().stream().filter(f -> f.direction() == Direction.IMPORT).toList();
+    if (!imports.isEmpty()) {
+      out.append(
+          "\n/// Pins each import's implementation, in scope under its symbol name, to this ABI.\n"
+              + "#[allow(unused_macros)]\nmacro_rules! assert_implementations {\n"
+              + "    () => {\n        const _: () = {\n");
+      for (Function f : imports) {
+        out.append("            let _: unsafe extern \"C\" fn(")
+            .append(
+                String.join(", ", f.abiParameters().stream().map(Types::rust).toList()))
+            .append(')');
+        if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+        out.append(" = ").append(f.symbol()).append(";\n");
+      }
+      out.append(
+          "        };\n    };\n}\n#[allow(unused_imports)]\npub(crate) use assert_implementations;\n");
+    }
+    return out.toString();
   }
 }
