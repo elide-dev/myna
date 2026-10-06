@@ -135,6 +135,19 @@ unsafe extern "C" { fn seam_inspect(p: *const i64) -> i64; }
         wrong_target.write_text(self.contracts.read_text().replace(TARGET, other))
         self.assertIn("target mismatch", self.apply(original, self.work / "bad.o", wrong_target, ok=False).stdout)
 
+    def test_merges_compiler_facts_to_the_stronger_one(self):
+        # rustc/LLVM may already infer weaker or stronger versions of contracted facts; both hold.
+        source = self.work / "inferred.ll"
+        source.write_text(f'target triple = "{TARGET}"\n'
+                          'declare i64 @seam_inspect(ptr align 16 captures(address) dereferenceable(64))\n'
+                          'define i64 @probe(ptr %p) {\n  %r = call i64 @seam_inspect(ptr %p)\n  ret i64 %r\n}\n')
+        run(llvm("llvm-as"), source, "-o", self.work / "inferred.o")
+        self.apply(self.work / "inferred.o", self.work / "merged.o")
+        decl = next(l for l in self.ir(self.work / "merged.o").splitlines() if l.startswith("declare i64 @seam_inspect"))
+        for fact in ("align 16", "captures(none)", "dereferenceable(64)", "nonnull", "readonly"):
+            self.assertIn(fact, decl)
+        self.assertNotIn("captures(address)", decl)
+
     def test_rejects_wrong_abi_stale_contracts_and_native_objects(self):
         original = self.c_object()
         annotated = self.work / "annotated.o"

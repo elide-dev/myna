@@ -25,6 +25,7 @@
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Triple.h"
+#include "llvm/Transforms/Utils/AssignGUID.h"
 #include <memory>
 #include <deque>
 #include <string>
@@ -80,20 +81,55 @@ static bool supportedType(Type *T, bool Return) {
   if (auto *P = dyn_cast<PointerType>(T)) return P->getAddressSpace() == 0;
   return T->isIntegerTy(32) || T->isIntegerTy(64) || T->isFloatTy() || T->isDoubleTy();
 }
-static Error compatible(AttributeSet Existing, AttributeSet Incoming) {
+// Both the compiler's facts and the contract's hold, so equal kinds merge to the stronger fact.
+static Expected<SmallVector<Attribute, 8>> merge(LLVMContext &Ctx, AttributeSet Existing, AttributeSet Incoming) {
   for (auto Pair : {std::make_pair(Attribute::ReadOnly, Attribute::WriteOnly),
                     std::make_pair(Attribute::NoReturn, Attribute::WillReturn)}) {
     if ((Existing.hasAttribute(Pair.first) && Incoming.hasAttribute(Pair.second)) ||
         (Existing.hasAttribute(Pair.second) && Incoming.hasAttribute(Pair.first)))
       return fail("existing attributes contradict seam contracts");
   }
-  // Do not silently weaken or replace a compiler's parameterized facts.
+  SmallVector<Attribute, 8> Out;
   for (Attribute A : Incoming) {
-    if (!A.isIntAttribute()) continue;
-    Attribute Old = Existing.getAttribute(A.getKindAsEnum());
-    if (Old.isValid() && Old != A)
-      return fail("parameterized contract conflicts with existing attribute: " + A.getAsString());
+    auto Kind = A.getKindAsEnum();
+    if ((Kind == Attribute::ReadOnly || Kind == Attribute::WriteOnly) && Existing.hasAttribute(Attribute::ReadNone))
+      continue;
+    Attribute Old = Existing.getAttribute(Kind);
+    if (!A.isIntAttribute() || !Old.isValid() || Old == A) {
+      Out.push_back(A);
+      continue;
+    }
+    switch (Kind) {
+    case Attribute::Captures:
+      Out.push_back(Attribute::getWithCaptureInfo(Ctx, Old.getCaptureInfo() & A.getCaptureInfo()));
+      break;
+    case Attribute::Alignment:
+      Out.push_back(Old.getAlignment().valueOrOne() >= A.getAlignment().valueOrOne() ? Old : A);
+      break;
+    case Attribute::Dereferenceable:
+      Out.push_back(Old.getDereferenceableBytes() >= A.getDereferenceableBytes() ? Old : A);
+      break;
+    default:
+      return fail("parameterized contract conflicts with existing attribute: " + A.getAsString() + " vs " +
+                  Old.getAsString());
+    }
   }
+  return Out;
+}
+static Error annotate(Function &F, CallBase *Call, const Function &Contract) {
+  auto Attrs = Call ? Call->getAttributes() : F.getAttributes();
+  auto In = Contract.getAttributes();
+  auto Fn = merge(F.getContext(), Attrs.getFnAttrs(), In.getFnAttrs());
+  if (!Fn) return joinErrors(fail(F.getName() + ":"), Fn.takeError());
+  std::vector<SmallVector<Attribute, 8>> Params;
+  for (unsigned I = 0; I < F.arg_size(); ++I) {
+    auto P = merge(F.getContext(), Attrs.getParamAttrs(I), In.getParamAttrs(I));
+    if (!P) return joinErrors(fail(F.getName() + " argument " + Twine(I) + ":"), P.takeError());
+    Params.push_back(std::move(*P));
+  }
+  for (Attribute A : *Fn) Call ? Call->addFnAttr(A) : F.addFnAttr(A);
+  for (unsigned I = 0; I < F.arg_size(); ++I)
+    for (Attribute A : Params[I]) Call ? Call->addParamAttr(I, A) : F.addParamAttr(I, A);
   return Error::success();
 }
 static Error validateContracts(const Module &C) {
@@ -140,12 +176,7 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
     if (auto E = ordinaryABI(F->getAttributes().getRetAttrs())) return E;
     for (unsigned I = 0; I < F->arg_size(); ++I)
       if (auto E = ordinaryABI(F->getAttributes().getParamAttrs(I))) return E;
-    if (auto E = compatible(F->getAttributes().getFnAttrs(), Contract.getAttributes().getFnAttrs())) return E;
-    for (unsigned I = 0; I < F->arg_size(); ++I)
-      if (auto E = compatible(F->getAttributes().getParamAttrs(I), Contract.getAttributes().getParamAttrs(I))) return E;
-    for (Attribute A : Contract.getAttributes().getFnAttrs()) F->addFnAttr(A);
-    for (unsigned I = 0; I < F->arg_size(); ++I)
-      for (Attribute A : Contract.getAttributes().getParamAttrs(I)) F->addParamAttr(I, A);
+    if (auto E = annotate(*F, nullptr, Contract)) return E;
     ++Matched; Changed = true;
     for (Function &Caller : M) for (BasicBlock &BB : Caller) for (Instruction &Inst : BB) {
       auto *Call = dyn_cast<CallBase>(&Inst);
@@ -155,12 +186,7 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
       if (auto E = ordinaryABI(Call->getAttributes().getRetAttrs())) return E;
       for (unsigned I = 0; I < F->arg_size(); ++I)
         if (auto E = ordinaryABI(Call->getAttributes().getParamAttrs(I))) return E;
-      if (auto E = compatible(Call->getAttributes().getFnAttrs(), Contract.getAttributes().getFnAttrs())) return E;
-      for (unsigned I = 0; I < F->arg_size(); ++I)
-        if (auto E = compatible(Call->getAttributes().getParamAttrs(I), Contract.getAttributes().getParamAttrs(I))) return E;
-      for (Attribute A : Contract.getAttributes().getFnAttrs()) Call->addFnAttr(A);
-      for (unsigned I = 0; I < F->arg_size(); ++I)
-        for (Attribute A : Contract.getAttributes().getParamAttrs(I)) Call->addParamAttr(I, A);
+      if (auto E = annotate(*F, Call, Contract)) return E;
       ++Calls;
     }
   }
@@ -181,6 +207,8 @@ static Expected<std::unique_ptr<MemoryBuffer>> rewrite(MemoryBufferRef Buffer, L
   if (auto E = apply(M, Contract, Hash)) return E;
   if (Before == Matched) return MemoryBuffer::getMemBufferCopy(Buffer.getBuffer(), Buffer.getBufferIdentifier());
   // Recompute both summary and module hash. Reusing old summaries/cache keys is incorrect.
+  // Producers without a GUID pass (llvm-as, older tools) leave definitions unassigned.
+  AssignGUIDPass::runOnModule(M);
   ProfileSummaryInfo PSI(M);
   auto Index = buildModuleSummaryIndex(M, nullptr, &PSI);
   SmallVector<char, 0> Bytes;
