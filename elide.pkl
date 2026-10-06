@@ -1,0 +1,52 @@
+amends "elide:project.pkl"
+import "elide:Jvm.pkl" as Jvm
+import "elide:Sources.pkl" as Sources
+import "elide:NativeImage.pkl" as Native
+
+name = "svmgen"
+version = "0.1.0"
+jvm {
+  main = "dev.elide.seam.cli.Main"
+  target = 25
+}
+sources {
+  ["main"] = new Sources.SourceSetSpec {
+    paths { "src/main/java/**/*.java" }
+  }
+  ["feature"] = new Sources.SourceSetSpec {
+    dependsOn { "main" }
+    paths { "src/feature/java/**/*.java" }
+  }
+  ["test"] = new Sources.SourceSetSpec {
+    dependsOn { "main"; "feature" }
+    paths { "src/test/java/**/*.java" }
+  }
+}
+artifacts {
+  ["jar"] = new Jvm.Jar {
+    name = "svmgen"
+    main = "dev.elide.seam.cli.Main"
+    sources { "main" }
+  }
+  ["feature-jar"] = new Jvm.Jar {
+    name = "svmgen-feature"
+    sources { "main"; "feature" }
+  }
+  ["native"] = new Native.NativeImage {
+    name = "svmgen"
+    from { "jar" }
+    entrypoint = "dev.elide.seam.cli.Main"
+    options {
+      optimization = "2"
+      driverMode = "external"
+      classInit { default = "runtime" }
+    }
+  }
+}
+
+dependencies {
+  maven {
+    compileOnly { "org.graalvm.sdk:nativeimage:25.0.1" }
+    testPackages { "org.junit.jupiter:junit-jupiter:5.13.4"; "org.graalvm.sdk:nativeimage:25.0.1" }
+  }
+}

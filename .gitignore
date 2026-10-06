@@ -1,0 +1,9 @@
+.build/
+build/
+target/
+.elide/
+.deps/
+.DS_Store
+.dev/
+__pycache__/
+*.pyc

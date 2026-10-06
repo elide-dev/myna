@@ -1,0 +1,10 @@
+# ABI inventory fixture: elide/crates/runtime/src/lzma.rs and LzmaNatives.java.
+# data is permitted to be null for len=0. No capture/effect promises were inferred.
+module elide_lzma abi=1 target=aarch64-apple-darwin
+import compress symbol=elide_lzma_compress return=i32 error=no_failure
+  param handle type=i64
+  param data type=ptr<u8> nullable=true access=read ownership=borrowed
+  param len type=i64
+  param action type=i32
+  param bufsize type=i64
+end

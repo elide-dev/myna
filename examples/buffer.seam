@@ -1,0 +1,16 @@
+# Owned by this repo: a deliberately small, testable Native Image / Rust seam.
+module buffer abi=1 target=aarch64-apple-darwin
+opaque Buffer
+struct BufferView size=24 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+  field flags type=u32 offset=16
+end
+# This leaf implementation only reads one off-heap i64; no blocking or Java callbacks.
+import inspect native_leaf=true@explicit_contract symbol=seam_inspect return=i64 error=no_failure nounwind=true@explicit_contract willreturn=true@explicit_contract
+  param value type=ptr<i64> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract nocapture=true@explicit_contract readonly=true@explicit_contract align=8@explicit_contract dereferenceable=8@explicit_contract
+end
+export sum symbol=seam_sum return=i64 java=fixture.BufferOps.sum isolate=thread error=integer_sentinel sentinel=-1 nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract
+  param length type=i64
+end

@@ -1,0 +1,74 @@
+name: Containers
+on:
+  pull_request:
+    paths: ['Dockerfile', '.dockerignore', 'src/main/**', 'llvm/**', '.github/workflows/container.yml']
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        target: [generator, llvm23]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Image name
+        id: image
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          suffix=""
+          if [ '${{ matrix.target }}' = llvm23 ]; then suffix=-llvm23; fi
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: suffix=${{ steps.image.outputs.suffix }},onlatest=true
+          tags: |
+            type=ref,event=tag
+            type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          load: true
+          push: false
+          tags: svmgen:test
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Smoke-test container
+        run: |
+          docker run --rm svmgen:test --version
+          mkdir -p build/container
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu --check
+      - name: Smoke-test object application
+        if: matrix.target == 'llvm23'
+        run: |
+          printf '%s\n' 'extern long seam_inspect(const long*); long f(void) { long x=42; seam_inspect(&x); return x; }' > build/container/caller.c
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint clang svmgen:test -O1 -flto=thin -c build/container/caller.c -o build/container/caller.o
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test apply --contracts build/container/seam.ll --input build/container/caller.o --output build/container/caller.seam.o
+      - uses: docker/build-push-action@v6
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
