@@ -15,4 +15,32 @@ public final class BufferOps {
     slot.write(result);
     return SeamNative.inspect(slot);
   }
+
+  /** Sign of {@code value}; -128 for zero when strict. Fails loudly if the leaf import mis-extends. */
+  public static byte classify(short value, boolean strict) {
+    if (value == 12345) {
+      int mask = 0;
+      if (SeamNative.widen((byte) -1, (byte) 0, (short) 0, (short) 0, false) == -1) mask |= 1;
+      if (SeamNative.widen((byte) 0, (byte) 255, (short) 0, (short) 0, false) == 255) mask |= 2;
+      if (SeamNative.widen((byte) 0, (byte) 0, (short) -2, (short) 0, false) == -2) mask |= 4;
+      if (SeamNative.widen((byte) 0, (byte) 0, (short) 0, (short) 65535, false) == 65535) mask |= 8;
+      if (SeamNative.widen((byte) 0, (byte) 0, (short) 0, (short) 0, true) == 1000) mask |= 16;
+      if (SeamNative.lowUnsigned(0x1ff) == (byte) 0xff) mask |= 32;
+      if (SeamNative.lowSigned(0x1ff) == (byte) -1) mask |= 64;
+      return (byte) mask;
+    }
+    if (SeamNative.widen((byte) -1, (byte) 255, (short) -2, (short) 65535, true) != 66787)
+      return 99;
+    if (value == 0) return strict ? (byte) -128 : 0;
+    return (byte) (value < 0 ? -1 : 1);
+  }
+
+  /** Unsigned bytes arrive as raw bits. */
+  public static boolean isHigh(byte value) {
+    return (value & 0xff) >= 128;
+  }
+
+  public static byte echo(byte value) {
+    return value;
+  }
 }

@@ -13,6 +13,13 @@ fn main() {
         assert_eq!(bindings::sum(thread, bytes.as_ptr(), bytes.len() as i64), 262);
         assert_eq!(bindings::sum(thread, bytes.as_ptr(), 0), 0);
         assert_eq!(bindings::sum(thread, bytes.as_ptr(), -1), -1);
+        assert_eq!(bindings::classify(thread, 12345, false), 127, "small-value probe mask");
+        assert_eq!(bindings::classify(thread, -300, false), -1);
+        assert_eq!(bindings::classify(thread, 300, false), 1);
+        assert_eq!(bindings::classify(thread, 0, true), -128);
+        assert!(bindings::isHigh(thread, 200));
+        assert!(!bindings::isHigh(thread, 5));
+        assert_eq!(bindings::echo(thread, 200), 200);
         assert_eq!(graal_tear_down_isolate(thread), 0);
     }
     println!("Rust -> Native Image -> Rust ABI round trip passed");

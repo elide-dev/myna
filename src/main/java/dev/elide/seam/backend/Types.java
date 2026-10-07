@@ -11,6 +11,7 @@ final class Types {
     Scalar s = (Scalar) type;
     return switch (s) {
       case VOID -> "void";
+      case BOOL -> "bool";
       case F32 -> "float";
       case F64 -> "double";
       default -> (s.text().startsWith("u") ? "uint" : "int") + s.bytes * 8 + "_t";
@@ -43,7 +44,7 @@ final class Types {
       if (!(p.pointee() instanceof Scalar s)) return "PointerBase";
       return switch (s) {
         case VOID -> "VoidPointer";
-        case I8, U8 -> "CCharPointer";
+        case BOOL, I8, U8 -> "CCharPointer";
         case I16, U16 -> "CShortPointer";
         case I32, U32 -> "CIntPointer";
         case I64, U64 -> "CLongPointer";
@@ -53,6 +54,7 @@ final class Types {
     }
     return switch ((Scalar) type) {
       case VOID -> "void";
+      case BOOL -> "boolean";
       case I8, U8 -> "byte";
       case I16, U16 -> "short";
       case I32, U32 -> "int";
@@ -69,6 +71,7 @@ final class Types {
   static String layout(Type type) {
     if (type instanceof Pointer) return "ValueLayout.ADDRESS";
     return switch ((Scalar) type) {
+      case BOOL -> "ValueLayout.JAVA_BOOLEAN";
       case I8, U8 -> "ValueLayout.JAVA_BYTE";
       case I16, U16 -> "ValueLayout.JAVA_SHORT";
       case I32, U32 -> "ValueLayout.JAVA_INT";
@@ -83,9 +86,24 @@ final class Types {
     if (type instanceof Pointer) return "ptr";
     return switch ((Scalar) type) {
       case VOID -> "void";
+      case BOOL -> "i1";
       case F32 -> "float";
       case F64 -> "double";
       default -> "i" + ((Scalar) type).bytes * 8;
+    };
+  }
+
+  /**
+   * C ABI extension of a sub-32-bit parameter, as clang and rustc both emit it: extended on x86-64
+   * and Apple arm64, left to the callee on AAPCS64 Linux. Returns are not described: the producers
+   * disagree on x86-64 Linux (clang extends, rustc does not).
+   */
+  static String extension(Type type, String target) {
+    if (!(type instanceof Scalar s) || s.bytes >= 4 || s == Scalar.VOID) return "";
+    if (target.equals("aarch64-unknown-linux-gnu")) return "";
+    return switch (s) {
+      case I8, I16 -> "signext";
+      default -> "zeroext";
     };
   }
 }

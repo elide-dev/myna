@@ -33,7 +33,12 @@ public final class Llvm implements Backend {
                   f.abiParameters().stream()
                       .map(
                           p -> {
-                            String attributes = attributes(p.facts());
+                            String attributes =
+                                String.join(
+                                        " ",
+                                        Types.extension(p.type(), m.targetTriple()),
+                                        attributes(p.facts()))
+                                    .strip();
                             return Types.llvm(p.type())
                                 + (attributes.isEmpty() ? "" : " " + attributes)
                                 + " %"

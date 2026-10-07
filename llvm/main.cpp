@@ -61,6 +61,7 @@ static Error validateAttributes(AttributeSet Attrs, bool FunctionLevel) {
     case Attribute::NonNull: case Attribute::Captures:
     case Attribute::ReadOnly: case Attribute::WriteOnly: case Attribute::NoAlias:
     case Attribute::Alignment: case Attribute::Dereferenceable:
+    case Attribute::SExt: case Attribute::ZExt:
       if (FunctionLevel) return fail("parameter contract on function");
       break;
     default: return fail("unsupported seam attribute: " + A.getAsString());
@@ -72,14 +73,15 @@ static Error ordinaryABI(AttributeSet Attrs) {
   for (auto Kind : {Attribute::ByVal, Attribute::ByRef, Attribute::StructRet,
                     Attribute::InAlloca, Attribute::Preallocated, Attribute::InReg,
                     Attribute::Nest, Attribute::SwiftSelf, Attribute::SwiftError,
-                    Attribute::SwiftAsync, Attribute::SExt, Attribute::ZExt})
+                    Attribute::SwiftAsync})
     if (Attrs.hasAttribute(Kind)) return fail("unsupported ABI attribute: " + Attribute::getNameFromAttrKind(Kind));
   return Error::success();
 }
 static bool supportedType(Type *T, bool Return) {
   if (T->isVoidTy()) return Return;
   if (auto *P = dyn_cast<PointerType>(T)) return P->getAddressSpace() == 0;
-  return T->isIntegerTy(32) || T->isIntegerTy(64) || T->isFloatTy() || T->isDoubleTy();
+  return T->isIntegerTy(1) || T->isIntegerTy(8) || T->isIntegerTy(16) || T->isIntegerTy(32) ||
+         T->isIntegerTy(64) || T->isFloatTy() || T->isDoubleTy();
 }
 // Both the compiler's facts and the contract's hold, so equal kinds merge to the stronger fact.
 static Expected<SmallVector<Attribute, 8>> merge(LLVMContext &Ctx, AttributeSet Existing, AttributeSet Incoming) {
@@ -92,6 +94,7 @@ static Expected<SmallVector<Attribute, 8>> merge(LLVMContext &Ctx, AttributeSet 
   SmallVector<Attribute, 8> Out;
   for (Attribute A : Incoming) {
     auto Kind = A.getKindAsEnum();
+    if (Kind == Attribute::SExt || Kind == Attribute::ZExt) continue;
     if ((Kind == Attribute::ReadOnly || Kind == Attribute::WriteOnly) && Existing.hasAttribute(Attribute::ReadNone))
       continue;
     Attribute Old = Existing.getAttribute(Kind);
@@ -123,6 +126,13 @@ static Error annotate(Function &F, CallBase *Call, const Function &Contract) {
   if (!Fn) return joinErrors(fail(F.getName() + ":"), Fn.takeError());
   std::vector<SmallVector<Attribute, 8>> Params;
   for (unsigned I = 0; I < F.arg_size(); ++I) {
+    // Extension is ABI, not an optimizer fact: clang and rustc agree on parameters, so a difference
+    // means the producer and the descriptor disagree on signedness or target.
+    auto Ext = [](AttributeSet A) {
+      return A.hasAttribute(Attribute::SExt) ? 1 : A.hasAttribute(Attribute::ZExt) ? 2 : 0;
+    };
+    if (Ext(Attrs.getParamAttrs(I)) != Ext(In.getParamAttrs(I)))
+      return fail(F.getName() + " argument " + Twine(I) + ": ABI extension mismatch (signedness or target)");
     auto P = merge(F.getContext(), Attrs.getParamAttrs(I), In.getParamAttrs(I));
     if (!P) return joinErrors(fail(F.getName() + " argument " + Twine(I) + ":"), P.takeError());
     Params.push_back(std::move(*P));
@@ -145,8 +155,13 @@ static Error validateContracts(const Module &C) {
     for (unsigned I = 0; I < F.arg_size(); ++I) {
       if (!supportedType(F.getFunctionType()->getParamType(I), false)) return fail("unsupported parameter ABI type");
       auto Attrs = F.getAttributes().getParamAttrs(I);
-      if (Attrs.hasAttributes() && !F.getFunctionType()->getParamType(I)->isPointerTy())
-        return fail("pointer contracts on non-pointer argument");
+      Type *T = F.getFunctionType()->getParamType(I);
+      for (Attribute A : Attrs) {
+        bool Ext = A.hasKindAsEnum() && (A.getKindAsEnum() == Attribute::SExt || A.getKindAsEnum() == Attribute::ZExt);
+        if (Ext && !(T->isIntegerTy() && T->getIntegerBitWidth() < 32))
+          return fail("extension on a non-narrow argument");
+        if (!Ext && !T->isPointerTy()) return fail("pointer contracts on non-pointer argument");
+      }
       if (auto E = validateAttributes(Attrs, false)) return E;
     }
   }

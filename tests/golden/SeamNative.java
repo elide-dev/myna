@@ -9,9 +9,25 @@ import org.graalvm.nativeimage.c.type.CLongPointer;
 
 public final class SeamNative {
     private SeamNative() {}
-    public static final String ABI_FINGERPRINT = "d3342f8e738d98009b02ac606e6d283a15b96646bbf41ad6a5bcd0a9c2c13d9e";
+    public static final String ABI_FINGERPRINT = "8a92ad19a5b593ca7a44354722924acef6f9c93e26bfbe9a55005c04cad53583";
+    @CEntryPoint(name = "seam_classify")
+    public static int classify(IsolateThread isolate_thread, short value, boolean strict) {
+        return fixture.BufferOps.classify(value, strict);
+    }
+    @CEntryPoint(name = "seam_echo")
+    public static int echo(IsolateThread isolate_thread, byte value) {
+        return fixture.BufferOps.echo(value) & 0xff;
+    }
     @CFunction(value = "seam_inspect", transition = CFunction.Transition.NO_TRANSITION)
     public static native long inspect(CLongPointer value);
+    @CEntryPoint(name = "seam_is_high")
+    public static int isHigh(IsolateThread isolate_thread, byte value) {
+        return fixture.BufferOps.isHigh(value) ? 1 : 0;
+    }
+    @CFunction(value = "seam_low_signed", transition = CFunction.Transition.NO_TRANSITION)
+    public static native byte lowSigned(int value);
+    @CFunction(value = "seam_low_unsigned", transition = CFunction.Transition.NO_TRANSITION)
+    public static native byte lowUnsigned(int value);
     @CEntryPoint(name = "seam_sum")
     public static long sum(IsolateThread isolate_thread, CCharPointer data, long length) {
         try {
@@ -20,4 +36,9 @@ public final class SeamNative {
             return -1L;
         }
     }
+    public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) {
+        return widenNative(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+    }
+    @CFunction(value = "seam_widen", transition = CFunction.Transition.NO_TRANSITION)
+    private static native int widenNative(byte signedByte, int unsignedByte, short signedShort, int unsignedShort, boolean flag);
 }

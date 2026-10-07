@@ -22,6 +22,7 @@ public final class CHeader implements Backend {
                 + "\n#define "
                 + guard
                 + "\n"
+                + "#include <stdbool.h>\n"
                 + "#include <stdint.h>\n"
                 + "#include <stddef.h>\n\n"
                 + "#ifdef __cplusplus\n"

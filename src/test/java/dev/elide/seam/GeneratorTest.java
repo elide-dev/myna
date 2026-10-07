@@ -147,6 +147,40 @@ class GeneratorTest {
   }
 
   @Test
+  void smallValuesExtendPerTargetAndLeaveJavaZeroExtended() {
+    String source =
+        "module small target=TARGET\n"
+            + "import put return=u8 error=no_failure\n  param a type=i8\n  param b type=u8\n"
+            + "  param c type=u16\n  param d type=bool\nend\n"
+            + "export get symbol=x_get return=u16 java=fixture.Ops.get isolate=thread error=abort\n"
+            + "  param a type=i16\nend\n";
+    for (String target :
+        List.of("x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin")) {
+      String ll = generate(source.replace("TARGET", target)).get("seam.ll");
+      assertTrue(
+          ll.contains("declare i8 @put(i8 signext %a, i8 zeroext %b, i16 zeroext %c, i1 zeroext %d)"),
+          ll);
+    }
+    var output = generate(source.replace("TARGET", "aarch64-unknown-linux-gnu"));
+    assertTrue(output.get("seam.ll").contains("declare i8 @put(i8 %a, i8 %b, i16 %c, i1 %d)"));
+    String ni = output.get("SeamNative.java");
+    assertTrue(ni.contains("public static byte put(byte a, byte b, short c, boolean d) {"), ni);
+    assertTrue(ni.contains("return putNative(a, b & 0xff, c & 0xffff, d);"), ni);
+    assertTrue(ni.contains("private static native byte putNative(byte a, int b, int c, boolean d);"), ni);
+    assertTrue(ni.contains("public static int get(IsolateThread isolate_thread, short a) {"), ni);
+    assertTrue(ni.contains("return fixture.Ops.get(a) & 0xffff;"), ni);
+    String rust = output.get("seam.rs");
+    assertTrue(rust.contains("pub fn put(a: i8, b: u8, c: u16, d: bool) -> u8;"), rust);
+    assertTrue(output.get("seam.h").contains("uint8_t put(int8_t a, uint8_t b, uint16_t c, bool d);"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            generate(
+                source.replace("TARGET", "x86_64-unknown-linux-gnu")
+                    + "import putNative return=void error=no_failure\nend\n"));
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())
@@ -433,7 +467,6 @@ class GeneratorTest {
         VALID.replace("ptr<i64>", "ptr<Unknown>"),
         VALID.replace("ptr<i64>", "void"),
         VALID.replace("ptr<i64>", "ptr<ptr<Unknown>>"),
-        VALID.replace("return=i64", "return=i8"),
         VALID.replace("return=i64", "return=Record"),
         MODULE + FUNCTION + PARAM + PARAM + "end",
         VALID + FUNCTION + PARAM + "end",

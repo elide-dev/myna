@@ -148,6 +148,22 @@ unsafe extern "C" { fn seam_inspect(p: *const i64) -> i64; }
             self.assertIn(fact, decl)
         self.assertNotIn("captures(address)", decl)
 
+    def test_small_integer_extension_is_verified_not_added(self):
+        source = self.work / "small.rs"
+        source.write_text("""#![crate_type = "rlib"]
+unsafe extern "C" { fn seam_widen(a: i8, b: u8, c: i16, d: u16, e: bool) -> i32; }
+#[unsafe(no_mangle)] pub fn widen_probe() -> i32 { unsafe { seam_widen(-1, 255, -2, 65535, true) } }
+""")
+        rlib = self.work / "libsmall.rlib"
+        run("rustc", "--edition=2024", "-O", "-Clinker-plugin-lto", "--target", TARGET, source, "-o", rlib)
+        self.assertIn("1 direct calls", self.apply(rlib, self.work / "small.seam.rlib").stdout)
+        if TARGET == "aarch64-unknown-linux-gnu":
+            return  # AAPCS64 Linux carries no extension, so signedness is invisible here.
+        flipped = self.work / "flipped.ll"
+        flipped.write_text(self.contracts.read_text().replace("i8 signext %signedByte", "i8 zeroext %signedByte"))
+        result = self.apply(rlib, self.work / "bad.rlib", flipped, ok=False)
+        self.assertIn("ABI extension mismatch", result.stdout + result.stderr)
+
     def test_rejects_wrong_abi_stale_contracts_and_native_objects(self):
         original = self.c_object()
         annotated = self.work / "annotated.o"

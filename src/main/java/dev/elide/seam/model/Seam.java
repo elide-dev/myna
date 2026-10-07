@@ -61,6 +61,7 @@ public final class Seam {
 
   public enum Scalar implements Type {
     VOID("void", 0),
+    BOOL("bool", 1),
     I8("i8", 1),
     U8("u8", 1),
     I16("i16", 2),

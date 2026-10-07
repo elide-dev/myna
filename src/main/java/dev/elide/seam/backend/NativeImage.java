@@ -19,6 +19,25 @@ public final class NativeImage implements Backend {
     return p.name().equals("isolate_thread") ? "IsolateThread" : Types.java(p.type());
   }
 
+  private static boolean unsignedSmall(Type t) {
+    return t == Scalar.U8 || t == Scalar.U16;
+  }
+
+  private static boolean small(Type t) {
+    return t instanceof Scalar s && s != Scalar.VOID && s.bytes < 4;
+  }
+
+  /**
+   * Native Image extends a narrow Java value by its Java (signed) type, so unsigned values leaving
+   * Java travel as a zero-extended {@code int}; the C ABI reads the same low bits either way.
+   */
+  private static String widened(Type t, String value) {
+    if (t == Scalar.U8) return value + " & 0xff";
+    if (t == Scalar.U16) return value + " & 0xffff";
+    if (t == Scalar.BOOL) return value + " ? 1 : 0";
+    return value;
+  }
+
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
@@ -57,20 +76,55 @@ public final class NativeImage implements Backend {
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
     for (Function f : m.functions()) {
+      boolean lowered =
+          f.direction() == Direction.IMPORT && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
+      if (lowered) {
+        out.append("    public static ")
+            .append(Types.java(f.returns()))
+            .append(' ')
+            .append(f.name())
+            .append('(')
+            .append(
+                String.join(
+                    ", ", f.parameters().stream().map(p -> carrier(p) + " " + p.name()).toList()))
+            .append(") {\n        ")
+            .append(f.returns() == Scalar.VOID ? "" : "return ")
+            .append(f.name())
+            .append("Native(")
+            .append(
+                String.join(
+                    ", ",
+                    f.parameters().stream()
+                        .map(p -> unsignedSmall(p.type()) ? widened(p.type(), p.name()) : p.name())
+                        .toList()))
+            .append(");\n    }\n");
+      }
       if (f.direction() == Direction.IMPORT)
         out.append("    @CFunction(value = ")
             .append(SeamJson.quote(f.symbol()))
             .append(nativeLeaf(f) ? ", transition = CFunction.Transition.NO_TRANSITION" : "")
-            .append(")\n    public static native ");
+            .append(lowered ? ")\n    private static native " : ")\n    public static native ");
       else
         out.append("    @CEntryPoint(name = ")
             .append(SeamJson.quote(f.symbol()))
             .append(f.include() == null ? "" : ", include = " + f.include() + ".class")
             .append(")\n    public static ");
-      out.append(Types.java(f.returns())).append(' ').append(f.name()).append('(');
+      boolean widenReturn = f.direction() == Direction.EXPORT && small(f.returns());
+      out.append(widenReturn ? "int" : Types.java(f.returns()))
+          .append(' ')
+          .append(f.name())
+          .append(lowered ? "Native" : "")
+          .append('(');
       out.append(
           String.join(
-              ", ", f.abiParameters().stream().map(p -> carrier(p) + " " + p.name()).toList()));
+              ", ",
+              f.abiParameters().stream()
+                  .map(
+                      p ->
+                          (lowered && unsignedSmall(p.type()) ? "int" : carrier(p))
+                              + " "
+                              + p.name())
+                  .toList()));
       if (f.direction() == Direction.IMPORT) {
         out.append(");\n");
         continue;
@@ -80,10 +134,12 @@ public final class NativeImage implements Backend {
       if (translate) out.append("        try {\n");
       out.append(translate ? "            " : "        ");
       if (f.returns() != Scalar.VOID) out.append("return ");
-      out.append(f.javaTarget())
-          .append('(')
-          .append(String.join(", ", f.parameters().stream().map(Parameter::name).toList()))
-          .append(");\n");
+      String call =
+          f.javaTarget()
+              + "("
+              + String.join(", ", f.parameters().stream().map(Parameter::name).toList())
+              + ")";
+      out.append(widenReturn ? widened(f.returns(), call) : call).append(";\n");
       if (translate) {
         out.append("        } catch (Throwable failure) {\n            return ");
         if (f.error() == ErrorConvention.NULL_SENTINEL) out.append("WordFactory.nullPointer()");

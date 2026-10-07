@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class SeamFFM {
     private SeamFFM() {}
-    public static final String ABI_FINGERPRINT = "d3342f8e738d98009b02ac606e6d283a15b96646bbf41ad6a5bcd0a9c2c13d9e";
+    public static final String ABI_FINGERPRINT = "8a92ad19a5b593ca7a44354722924acef6f9c93e26bfbe9a55005c04cad53583";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
@@ -18,13 +18,51 @@ public final class SeamFFM {
     public static final long BufferView_data_OFFSET = 0L;
     public static final long BufferView_length_OFFSET = 8L;
     public static final long BufferView_flags_OFFSET = 16L;
+    public static final FunctionDescriptor classify_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_BOOLEAN);
+    public static MethodHandle classify(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_classify").orElseThrow(() -> new UnsatisfiedLinkError("seam_classify")), classify_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor echo_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_BYTE);
+    public static MethodHandle echo(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_echo").orElseThrow(() -> new UnsatisfiedLinkError("seam_echo")), echo_DESCRIPTOR);
+    }
     public static final FunctionDescriptor inspect_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
     public static MethodHandle inspect(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_inspect").orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), inspect_DESCRIPTOR);
     }
+    public static final FunctionDescriptor isHigh_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BOOLEAN, ValueLayout.ADDRESS, ValueLayout.JAVA_BYTE);
+    public static MethodHandle isHigh(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_is_high").orElseThrow(() -> new UnsatisfiedLinkError("seam_is_high")), isHigh_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor lowSigned_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT);
+    public static MethodHandle lowSigned(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_signed").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed")), lowSigned_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor lowUnsigned_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT);
+    public static MethodHandle lowUnsigned(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_unsigned").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned")), lowUnsigned_DESCRIPTOR);
+    }
     public static final FunctionDescriptor sum_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle sum(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_sum").orElseThrow(() -> new UnsatisfiedLinkError("seam_sum")), sum_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor widen_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_BOOLEAN);
+    public static MethodHandle widen(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), widen_DESCRIPTOR);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class classify_Binding {
+        static final MethodHandle HANDLE = SeamFFM.classify(SymbolLookup.loaderLookup());
+    }
+    public static byte classify(MemorySegment isolate_thread, short value, boolean strict) throws Throwable {
+        return (byte) SeamFFM.classify_Binding.HANDLE.invokeExact(isolate_thread, value, strict);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class echo_Binding {
+        static final MethodHandle HANDLE = SeamFFM.echo(SymbolLookup.loaderLookup());
+    }
+    public static byte echo(MemorySegment isolate_thread, byte value) throws Throwable {
+        return (byte) SeamFFM.echo_Binding.HANDLE.invokeExact(isolate_thread, value);
     }
     // Load the library in this class loader before first use. One handle per symbol.
     private static final class inspect_Binding {
@@ -34,10 +72,38 @@ public final class SeamFFM {
         return (long) SeamFFM.inspect_Binding.HANDLE.invokeExact(value);
     }
     // Load the library in this class loader before first use. One handle per symbol.
+    private static final class isHigh_Binding {
+        static final MethodHandle HANDLE = SeamFFM.isHigh(SymbolLookup.loaderLookup());
+    }
+    public static boolean isHigh(MemorySegment isolate_thread, byte value) throws Throwable {
+        return (boolean) SeamFFM.isHigh_Binding.HANDLE.invokeExact(isolate_thread, value);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class lowSigned_Binding {
+        static final MethodHandle HANDLE = SeamFFM.lowSigned(SymbolLookup.loaderLookup());
+    }
+    public static byte lowSigned(int value) throws Throwable {
+        return (byte) SeamFFM.lowSigned_Binding.HANDLE.invokeExact(value);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class lowUnsigned_Binding {
+        static final MethodHandle HANDLE = SeamFFM.lowUnsigned(SymbolLookup.loaderLookup());
+    }
+    public static byte lowUnsigned(int value) throws Throwable {
+        return (byte) SeamFFM.lowUnsigned_Binding.HANDLE.invokeExact(value);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
     private static final class sum_Binding {
         static final MethodHandle HANDLE = SeamFFM.sum(SymbolLookup.loaderLookup());
     }
     public static long sum(MemorySegment isolate_thread, MemorySegment data, long length) throws Throwable {
         return (long) SeamFFM.sum_Binding.HANDLE.invokeExact(isolate_thread, data, length);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class widen_Binding {
+        static final MethodHandle HANDLE = SeamFFM.widen(SymbolLookup.loaderLookup());
+    }
+    public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
+        return (int) SeamFFM.widen_Binding.HANDLE.invokeExact(signedByte, unsignedByte, signedShort, unsignedShort, flag);
     }
 }

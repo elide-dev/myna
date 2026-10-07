@@ -14,3 +14,27 @@ export sum symbol=seam_sum return=i64 java=fixture.BufferOps.sum isolate=thread 
   param data type=ptr<u8> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract
   param length type=i64
 end
+# Sub-32-bit values in both directions; each target's C extension rule applies (docs/dsl.md).
+import widen native_leaf=true@explicit_contract symbol=seam_widen return=i32 error=no_failure nounwind=true@explicit_contract willreturn=true@explicit_contract
+  param signedByte type=i8
+  param unsignedByte type=u8
+  param signedShort type=i16
+  param unsignedShort type=u16
+  param flag type=bool
+end
+export classify symbol=seam_classify return=i8 java=fixture.BufferOps.classify isolate=thread error=abort
+  param value type=i16
+  param strict type=bool
+end
+export isHigh symbol=seam_is_high return=bool java=fixture.BufferOps.isHigh isolate=thread error=abort
+  param value type=u8
+end
+import lowUnsigned native_leaf=true@explicit_contract symbol=seam_low_unsigned return=u8 error=no_failure nounwind=true@explicit_contract willreturn=true@explicit_contract
+  param value type=i32
+end
+import lowSigned native_leaf=true@explicit_contract symbol=seam_low_signed return=i8 error=no_failure nounwind=true@explicit_contract willreturn=true@explicit_contract
+  param value type=i32
+end
+export echo symbol=seam_echo return=u8 java=fixture.BufferOps.echo isolate=thread error=abort
+  param value type=u8
+end

@@ -7,9 +7,21 @@ import org.graalvm.nativeimage.hosted.RuntimeForeignAccess;
 
 public final class SeamForeignFeature implements Feature {
     @Override public void duringSetup(DuringSetupAccess access) {
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.classify_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$classify_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.echo_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$echo_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.inspect_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$inspect_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.isHigh_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$isHigh_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.lowSigned_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$lowSigned_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.lowUnsigned_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$lowUnsigned_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.sum_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$sum_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.widen_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$widen_Binding");
     }
 }

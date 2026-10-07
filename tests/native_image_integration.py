@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import unittest
 from support import BINARY, ROOT, TARGET, main, run
+LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
     def test_generated_aot_ffm_stubs(self):
@@ -49,5 +50,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
         driver = work / "driver"
         run("rustc", "--edition=2024", "-Awarnings", ROOT / "tests/abi/driver.rs", "-L", work, "-l", "dylib=seamfixture", "-C", f"link-arg=-Wl,-rpath,{work}", "-o", driver)
         self.assertIn("round trip passed", run(driver).stdout)
+        c_driver = work / "c-driver"
+        run(LLVM / "clang", "-O2", "-I", generated, ROOT / "tests/abi/driver.c", "-L", work, "-lseamfixture",
+            f"-Wl,-rpath,{work}", "-o", c_driver)
+        self.assertIn("narrow returns passed", run(c_driver).stdout)
 
 if __name__ == "__main__": main(sys.modules[__name__], "native-image-integration")

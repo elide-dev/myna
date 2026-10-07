@@ -14,7 +14,9 @@ Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unkno
 
 ## Types and layouts
 
-Scalars are `void`, `i8/u8`, `i16/u16`, `i32/u32`, `i64/u64`, `f32/f64`. `ptr<T>` supports scalar, opaque, record, and nested-pointer pointees. Function scalars are limited to 32/64 bits plus floats and void returns. `void` cannot be a parameter/field. Unsigned Java carriers preserve raw bits in the same-width signed primitive.
+Scalars are `void`, `bool`, `i8/u8`, `i16/u16`, `i32/u32`, `i64/u64`, `f32/f64`. `ptr<T>` supports scalar, opaque, record, and nested-pointer pointees.
+
+Sub-32-bit values (`bool`, `i8/u8`, `i16/u16`) follow each target's C extension rule, as clang and rustc emit it: parameters are `signext`/`zeroext` on x86-64 and Apple arm64 and unextended on AAPCS64 Linux. Returns carry no extension contract because the producers disagree on x86-64 Linux. `svmgen apply` verifies extension against the compiler's and never adds it. Native Image extends a narrow Java value by its signed Java type, so unsigned imports go through a `<name>Native` `int` binding behind a typed wrapper, and exports return an explicitly extended `int`. `void` cannot be a parameter/field. Unsigned Java carriers preserve raw bits in the same-width signed primitive.
 
 ```text
 opaque Buffer

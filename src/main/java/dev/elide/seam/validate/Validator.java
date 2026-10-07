@@ -129,6 +129,12 @@ public final class Validator {
       } else {
         require(function.javaTarget() == null, "java target is only valid on exports");
         require(function.include() == null, "include is only valid on exports");
+        if (function.parameters().stream()
+            .anyMatch(p -> p.type() == Scalar.U8 || p.type() == Scalar.U16))
+          require(
+              module.functions().stream()
+                  .noneMatch(other -> other.name().equals(function.name() + "Native")),
+              "logical name collides with the lowered Java helper " + function.name() + "Native");
         require(
             function.error() == ErrorConvention.NO_FAILURE,
             "imports describe an existing non-throwing C ABI; use error=no_failure");
@@ -210,11 +216,8 @@ public final class Validator {
     return false;
   }
 
-  private static void functionScalar(Type type) {
-    require(
-        !(type instanceof Scalar s) || s == Scalar.VOID || s.bytes >= 4,
-        "small integer function ABI extension is not implemented; use i32/u32 or pointer");
-  }
+  /** Small values cross with each target's extension rule ({@code Types.extension}). */
+  private static void functionScalar(Type type) {}
 
   private static void type(Type type, Set<String> names, boolean allowVoid) {
     if (type instanceof Pointer p) {
