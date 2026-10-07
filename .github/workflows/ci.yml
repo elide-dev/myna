@@ -98,7 +98,8 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           use_oidc: true
-          directory: build/reports
+          files: build/reports/native-e2e.xml,build/reports/llvm-integration.xml,build/reports/native-image-integration.xml
+          disable_search: true
           flags: native-${{ matrix.os }}
           fail_ci_if_error: true
       - uses: actions/upload-artifact@v4
