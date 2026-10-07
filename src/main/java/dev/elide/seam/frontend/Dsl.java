@@ -12,6 +12,7 @@ public final class Dsl {
   public static Module parse(String source) {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
+    NativeConfig nativeConfig = null;
     var opaque = new ArrayList<String>();
     var structs = new ArrayList<Struct>();
     var functions = new ArrayList<Function>();
@@ -44,6 +45,14 @@ public final class Dsl {
             abi = Integer.parseInt(take(opts, "abi", "1"));
             javaPackage = take(opts, "java_package", null);
             javaClass = take(opts, "java_class", null);
+            String context = take(opts, "c_context", null);
+            String library = take(opts, "c_library", null);
+            String requireStatic = take(opts, "c_library_static", null);
+            require(
+                requireStatic == null || library != null, "c_library_static requires c_library");
+            if (context != null || library != null)
+              nativeConfig =
+                  new NativeConfig(context, library, requireStatic != null && bool(requireStatic));
             empty(opts);
           }
           case "resource" -> {
@@ -120,7 +129,11 @@ public final class Dsl {
             require(header != null && words.length == 1, "unexpected end");
             if (header[0].equals("callback")) {
               callbacks.add(
-                  new Signature(header[1], Seam.type(takeRequired(options, "return")), parameters));
+                  new Signature(
+                      header[1],
+                      Seam.type(takeRequired(options, "return")),
+                      parameters,
+                      take(options, "java_type", null)));
               empty(options);
             } else if (header[0].equals("struct")) {
               structs.add(
@@ -184,7 +197,8 @@ public final class Dsl {
         callbacks,
         functions,
         resources,
-        borrows);
+        borrows,
+        nativeConfig);
   }
 
   private static Map<String, String> options(String[] words, int start) {

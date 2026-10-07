@@ -178,7 +178,11 @@ public final class Seam {
   }
 
   /** A callback signature, referenced as {@code fn<name>}. */
-  public record Signature(String name, Type returns, List<Parameter> parameters) {
+  public record Signature(String name, Type returns, List<Parameter> parameters, String javaType) {
+    public Signature(String name, Type returns, List<Parameter> parameters) {
+      this(name, returns, parameters, null);
+    }
+
     public Signature {
       parameters = List.copyOf(parameters);
     }
@@ -198,6 +202,9 @@ public final class Seam {
   /** A byte-buffer borrow valid only for the dynamic extent of one call. */
   public record BufferBorrow(String function, String parameter, String length) {}
 
+  /** Optional Native Image build integration, without dependencies on hosted SDK classes. */
+  public record NativeConfig(String cContext, String cLibrary, boolean requireStatic) {}
+
   public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.seam.generated";
 
   /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
@@ -212,7 +219,35 @@ public final class Seam {
       List<Signature> callbacks,
       List<Function> functions,
       List<Resource> resources,
-      List<BufferBorrow> borrows) {
+      List<BufferBorrow> borrows,
+      NativeConfig nativeConfig) {
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          null);
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -281,7 +316,8 @@ public final class Seam {
           callbacks,
           functions,
           resources,
-          borrows);
+          borrows,
+          nativeConfig);
     }
 
     public String javaPackageName() {

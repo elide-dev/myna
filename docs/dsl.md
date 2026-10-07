@@ -114,3 +114,26 @@ Declarations and fact keys are sorted, parameter/field order is preserved, and o
 ## Resource lifecycles and call borrows
 
 `resource NAME representation=native threading=confined|shared create=FUNCTION destroy=FUNCTION` declares a unique native resource lifecycle. `NAME` must already be an opaque type. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.
+
+## Native Image C context, library linkage, and handwritten callbacks
+
+Module options `c_context=qualified.DirectivesClass` and `c_library=library_name` annotate the generated Native Image class with `@CContext` and `@CLibrary`. They can be used independently. `c_library_static=true` requests static linkage and requires `c_library`; its default is false. These options require at least one native import.
+
+```text
+module bemo target=aarch64-apple-darwin java_package=my.bemo java_class=BemoImports c_context=my.bemo.BemoDirectives c_library=bemo c_library_static=true
+callback Completion return=i64 java_type=my.bemo.HandwrittenCompletion
+  param thread type=isolate_thread
+  param status type=i64
+end
+import registerCompletion return=void error=no_failure
+  param callback type=fn<Completion>
+end
+```
+
+The consumer supplies the public, accessible `CContext.Directives` implementation on the image builder's classpath. It can provide headers, macros, library search paths, and other build settings. `c_library` is the library name without the platform prefix/extension, as expected by Native Image. Annotations are on the class, so they also cover private native methods generated for small-integer lowering. See [CContext](https://www.graalvm.org/sdk/javadoc/org/graalvm/nativeimage/c/CContext.html) and [CLibrary](https://www.graalvm.org/sdk/javadoc/org/graalvm/nativeimage/c/function/CLibrary.html).
+
+`java_type` on a callback references an existing fully qualified Java function-pointer interface. The generator uses that type in Native Image parameters, returns, and explicitly requested entry-point literals, and **does not emit a replacement interface**. The handwritten interface must extend `CFunctionPointer` and supply its own `@InvokeCFunctionPointer` method with the declared ABI. The descriptor remains the signature source for C, Rust, FFM, and LLVM; keeping the handwritten Java signature consistent is the consumer's obligation, since descriptor validation does not load consumer classes.
+
+Omit `callback=` on an export if its entry-point literal should also remain handwritten. Existing callback declarations without `java_type` continue generating nested interfaces. Callback retention and lifetime management remain the consumer's responsibility.
+
+Both linkage configuration and handwritten type mappings are serialized and fingerprinted; target overrides preserve them. The executable [Bemo integration fixture](../tests/bemo/bemo.seam) links a static Rust archive using only the generated annotations and consumer directives, then calls back through a handwritten interface and literal.

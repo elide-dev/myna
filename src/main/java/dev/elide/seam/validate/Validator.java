@@ -42,6 +42,19 @@ public final class Validator {
     if (module.javaPackage() != null)
       for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
     if (module.javaClass() != null) identifier(module.javaClass());
+    if (module.nativeConfig() != null) {
+      var config = module.nativeConfig();
+      if (config.cContext() != null) qualifiedType(config.cContext());
+      if (config.cLibrary() != null)
+        require(
+            config.cLibrary().matches("[A-Za-z0-9_][A-Za-z0-9_.+-]*"), "invalid C library name");
+      require(
+          !config.requireStatic() || config.cLibrary() != null,
+          "static linkage requires a C library");
+      require(
+          module.functions().stream().anyMatch(f -> f.direction() == Direction.IMPORT),
+          "native linkage configuration requires imports");
+    }
     require(module.abiVersion() > 0, "abi must be positive");
     require(
         module.targetTriple() != null && TARGETS.contains(module.targetTriple()),
@@ -92,6 +105,7 @@ public final class Validator {
     Set<String> signatures = new HashSet<>();
     for (Signature signature : module.callbacks()) {
       identifier(signature.name());
+      if (signature.javaType() != null) qualifiedType(signature.javaType());
       require(types.add(signature.name()), "duplicate type: " + signature.name());
       require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
       signatures.add(signature.name());
@@ -116,18 +130,22 @@ public final class Validator {
       identifier(function.name());
       identifier(function.symbol());
       require(logicalNames.add(function.name()), "duplicate logical name: " + function.name());
-      if (function.returns() instanceof Named || function.parameters().stream().anyMatch(p -> p.type() instanceof Named)) {
+      if (function.returns() instanceof Named
+          || function.parameters().stream().anyMatch(p -> p.type() instanceof Named)) {
         require(
             function.parameters().stream().noneMatch(p -> p.name().equals("result"))
                 || !(function.returns() instanceof Named),
             "parameter name 'result' is reserved for by-value record returns");
         require(function.callback() == null, "by-value records cannot cross a callback");
         require(
-            module.functions().stream().noneMatch(o -> o.symbol().equals(function.symbol() + "_svmgen_ref")),
+            module.functions().stream()
+                .noneMatch(o -> o.symbol().equals(function.symbol() + "_svmgen_ref")),
             "symbol collides with the by-value reference form of " + function.name());
       }
-      String rustAlias = Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
-      require(!types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
+      String rustAlias =
+          Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
+      require(
+          !types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
       require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
       record(module, function.returns());
       if (!(function.returns() instanceof Named)) type(function.returns(), types, signatures, true);
@@ -164,10 +182,13 @@ public final class Validator {
                   .filter(c -> c.name().equals(function.callback()))
                   .findFirst()
                   .orElseThrow(
-                      () -> new IllegalArgumentException("unknown callback: " + function.callback()));
+                      () ->
+                          new IllegalArgumentException("unknown callback: " + function.callback()));
           require(
               signature.returns().equals(function.returns())
-                  && signature.parameters().stream().map(Parameter::type).toList()
+                  && signature.parameters().stream()
+                      .map(Parameter::type)
+                      .toList()
                       .equals(function.abiParameters().stream().map(Parameter::type).toList()),
               "export " + function.name() + " does not match callback " + signature.name());
         }
@@ -268,6 +289,11 @@ public final class Validator {
     OwnershipValidator.validate(module);
   }
 
+  private static void qualifiedType(String name) {
+    require(name.contains("."), "Java type must be fully qualified: " + name);
+    for (String part : name.split("\\.", -1)) identifier(part);
+  }
+
   private static boolean isScalarName(String name) {
     for (Scalar scalar : Scalar.values()) if (scalar.text().equals(name)) return true;
     return false;
@@ -296,7 +322,8 @@ public final class Validator {
     } else if (type instanceof FunctionPointer f)
       require(signatures.contains(f.signature()), "unknown callback: " + f.signature());
     else if (type instanceof Named)
-      throw new IllegalArgumentException("by-value records are function parameters and returns only; use ptr<T>");
+      throw new IllegalArgumentException(
+          "by-value records are function parameters and returns only; use ptr<T>");
     else require(allowVoid || type != Scalar.VOID, "void parameter or field");
   }
 

@@ -7,6 +7,27 @@ from support import BINARY, ROOT, TARGET, main, run
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
+    def test_bemo_static_linkage_and_handwritten_callbacks(self):
+        work = ROOT / "build/bemo-test"
+        work.mkdir(parents=True, exist_ok=True)
+        generated = work / "generated"
+        fixture = ROOT / "tests/bemo"
+        run(BINARY, "generate", fixture / "bemo.seam", "--out", generated, "--target", TARGET)
+        obj = work / "bemo.o"
+        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Crelocation-model=pic", fixture / "native.rs", "-o", obj)
+        run("ar", "rcs", work / "libbemofixture.a", obj)
+        run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
+        sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
+        classes = work / "classes"
+        classes.mkdir(exist_ok=True)
+        run("javac", "-cp", sdk, "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
+        app = work / "bemo-app"
+        # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
+        run("native-image", "--no-fallback", "-O1", "-cp", classes,
+            "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
+            f"-Dsvmgen.bemo.libraryPath={work}", "fixture.bemo.BemoMain", "-o", app)
+        self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
+
     def test_consumer_ownership_and_off_heap_buffers(self):
         work = ROOT / "build/ownership-test"
         work.mkdir(parents=True, exist_ok=True)

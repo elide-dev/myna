@@ -15,8 +15,20 @@ public final class NativeImage implements Backend {
     return leaf != null && leaf.enabled() && leaf.approved();
   }
 
-  private static String carrier(Parameter p) {
-    return Types.java(p.type());
+  private static String javaType(Module m, Type type) {
+    if (type instanceof FunctionPointer pointer) {
+      Signature signature =
+          m.callbacks().stream()
+              .filter(c -> c.name().equals(pointer.signature()))
+              .findFirst()
+              .orElseThrow();
+      return signature.javaType() == null ? signature.name() : signature.javaType();
+    }
+    return Types.java(type);
+  }
+
+  private static String carrier(Module m, Parameter p) {
+    return javaType(m, p.type());
   }
 
   private static final Map<String, String> WORD_TYPES =
@@ -33,8 +45,8 @@ public final class NativeImage implements Backend {
     else if (type instanceof Pointer) imports.add("org.graalvm.nativeimage.c.type." + c);
   }
 
-  private static String params(List<Parameter> ps) {
-    return String.join(", ", ps.stream().map(p -> carrier(p) + " " + p.name()).toList());
+  private static String params(Module m, List<Parameter> ps) {
+    return String.join(", ", ps.stream().map(p -> carrier(m, p) + " " + p.name()).toList());
   }
 
   /** {@code @CConst} reaches the C headers Native Image writes for entry points. */
@@ -64,7 +76,12 @@ public final class NativeImage implements Backend {
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
-    if (!m.callbacks().isEmpty()) {
+    if (m.nativeConfig() != null) {
+      if (m.nativeConfig().cContext() != null) imports.add("org.graalvm.nativeimage.c.CContext");
+      if (m.nativeConfig().cLibrary() != null)
+        imports.add("org.graalvm.nativeimage.c.function.CLibrary");
+    }
+    if (m.callbacks().stream().anyMatch(c -> c.javaType() == null)) {
       imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
     }
@@ -74,11 +91,13 @@ public final class NativeImage implements Backend {
     }
     for (Struct st : m.structs()) st.fields().forEach(f -> carrierImport(imports, f.type()));
     for (Signature c : m.callbacks()) {
+      if (c.javaType() != null) continue;
       carrierImport(imports, c.returns());
       c.parameters().forEach(p -> carrierImport(imports, p.type()));
     }
     for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
-      if (f.direction() == Direction.IMPORT) imports.add("org.graalvm.nativeimage.c.function.CFunction");
+      if (f.direction() == Direction.IMPORT)
+        imports.add("org.graalvm.nativeimage.c.function.CFunction");
       else {
         imports.add("org.graalvm.nativeimage.c.function.CEntryPoint");
         if (f.error() == ErrorConvention.NULL_SENTINEL) imports.add("org.graalvm.word.WordFactory");
@@ -95,7 +114,10 @@ public final class NativeImage implements Backend {
 
   /** Class literal for {@code CEntryPointLiteral.create}; nested callback types are qualified. */
   private static String classLiteral(Module m, Type type) {
-    return (type instanceof FunctionPointer ? m.nativeClass() + "." : "") + Types.java(type) + ".class";
+    String carrier = javaType(m, type);
+    return (type instanceof FunctionPointer && !carrier.contains(".") ? m.nativeClass() + "." : "")
+        + carrier
+        + ".class";
   }
 
   public String generate(Module m) {
@@ -106,7 +128,19 @@ public final class NativeImage implements Backend {
                 + m.javaPackageName()
                 + ";\n\n");
     for (String i : imports(m)) out.append("import ").append(i).append(";\n");
-    out.append("\npublic final class ")
+    out.append('\n');
+    if (m.nativeConfig() != null) {
+      NativeConfig config = m.nativeConfig();
+      if (config.cContext() != null)
+        out.append("@CContext(").append(config.cContext()).append(".class)\n");
+      if (config.cLibrary() != null)
+        out.append("@CLibrary(value = ")
+            .append(SeamJson.quote(config.cLibrary()))
+            .append(", requireStatic = ")
+            .append(config.requireStatic())
+            .append(")\n");
+    }
+    out.append("public final class ")
         .append(m.nativeClass())
         .append(" {\n    private ")
         .append(m.nativeClass())
@@ -114,24 +148,26 @@ public final class NativeImage implements Backend {
     out.append("    public static final String ABI_FINGERPRINT = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
-    for (Struct st : m.structs()) accessors(st, out);
-    for (Signature c : m.callbacks())
+    for (Struct st : m.structs()) accessors(m, st, out);
+    for (Signature c : m.callbacks()) {
+      if (c.javaType() != null) continue;
       out.append("    public interface ")
           .append(c.name())
           .append(" extends CFunctionPointer {\n        @InvokeCFunctionPointer\n        ")
-          .append(Types.java(c.returns()))
+          .append(javaType(m, c.returns()))
           .append(" invoke(")
-          .append(params(c.parameters()))
+          .append(params(m, c.parameters()))
           .append(");\n    }\n");
+    }
     if (m.functions().stream().anyMatch(f -> f.callback() != null)) {
       out.append(
-              "    /** Entry-point addresses; CEntryPointLiteral.create is hosted-only, so initialize"
-                  + " this class at image build time. */\n"
-                  + "    public static final class Literals {\n        private Literals() {}\n");
+          "    /** Entry-point addresses; CEntryPointLiteral.create is hosted-only, so initialize"
+              + " this class at image build time. */\n"
+              + "    public static final class Literals {\n        private Literals() {}\n");
       for (Function f : m.functions())
         if (f.callback() != null)
           out.append("        public static final CEntryPointLiteral<")
-              .append(f.callback())
+              .append(javaType(m, new FunctionPointer(f.callback())))
               .append("> ")
               .append(f.name())
               .append(" =\n            CEntryPointLiteral.create(")
@@ -147,16 +183,18 @@ public final class NativeImage implements Backend {
     }
     for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
       boolean lowered =
-          f.direction() == Direction.IMPORT && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
+          f.direction() == Direction.IMPORT
+              && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
       if (lowered) {
         out.append("    public static ")
-            .append(Types.java(f.returns()))
+            .append(javaType(m, f.returns()))
             .append(' ')
             .append(f.name())
             .append('(')
             .append(
                 String.join(
-                    ", ", f.parameters().stream().map(p -> carrier(p) + " " + p.name()).toList()))
+                    ", ",
+                    f.parameters().stream().map(p -> carrier(m, p) + " " + p.name()).toList()))
             .append(") {\n        ")
             .append(f.returns() == Scalar.VOID ? "" : "return ")
             .append(f.name())
@@ -180,7 +218,7 @@ public final class NativeImage implements Backend {
             .append(f.include() == null ? "" : ", include = " + f.include() + ".class")
             .append(")\n    public static ");
       boolean widenReturn = f.direction() == Direction.EXPORT && small(f.returns());
-      out.append(widenReturn ? "int" : Types.java(f.returns()))
+      out.append(widenReturn ? "int" : javaType(m, f.returns()))
           .append(' ')
           .append(f.name())
           .append(lowered ? "Native" : "")
@@ -191,8 +229,10 @@ public final class NativeImage implements Backend {
               f.abiParameters().stream()
                   .map(
                       p ->
-                          (f.direction() == Direction.EXPORT && readOnlyPointer(p) ? "@CConst " : "")
-                              + (lowered && unsignedSmall(p.type()) ? "int" : carrier(p))
+                          (f.direction() == Direction.EXPORT && readOnlyPointer(p)
+                                  ? "@CConst "
+                                  : "")
+                              + (lowered && unsignedSmall(p.type()) ? "int" : carrier(m, p))
                               + " "
                               + p.name())
                   .toList()));
@@ -229,7 +269,7 @@ public final class NativeImage implements Backend {
    * Field access at the descriptor's offsets, for records in Java-managed memory (StackValue,
    * UnmanagedMemory) and for the reference form of by-value calls.
    */
-  private static void accessors(Struct st, StringBuilder out) {
+  private static void accessors(Module m, Struct st, StringBuilder out) {
     out.append("    public static final class ")
         .append(st.name())
         .append(" {\n        private ")
@@ -240,7 +280,7 @@ public final class NativeImage implements Backend {
         .append(st.alignment())
         .append(";\n");
     for (Field f : st.fields()) {
-      String carrier = Types.java(f.type());
+      String carrier = javaType(m, f.type());
       String at = "((Pointer) record)";
       String get, set;
       if (f.type() instanceof Scalar s)

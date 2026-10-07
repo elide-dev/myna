@@ -21,6 +21,7 @@ public final class SeamJson {
         + ",\n  \"targetTriple\": "
         + quote(m.targetTriple())
         + java(m)
+        + nativeConfig(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -56,6 +57,7 @@ public final class SeamJson {
                     c ->
                         "{\"name\":"
                             + quote(c.name())
+                            + (c.javaType() == null ? "" : ",\"javaType\":" + quote(c.javaType()))
                             + ",\"returnType\":"
                             + quote(c.returns().text())
                             + ",\"parameters\":"
@@ -66,6 +68,18 @@ public final class SeamJson {
         + array(m.functions().stream().map(SeamJson::function).toList())
         + ownership(m)
         + "\n}\n";
+  }
+
+  private static String nativeConfig(Module m) {
+    NativeConfig c = m.nativeConfig();
+    if (c == null) return "";
+    return ",\n  \"nativeConfig\": {\"cContext\":"
+        + quote(c.cContext())
+        + ",\"cLibrary\":"
+        + quote(c.cLibrary())
+        + ",\"requireStatic\":"
+        + c.requireStatic()
+        + "}";
   }
 
   private static String ownership(Module m) {

@@ -1,0 +1,14 @@
+module bemo_fixture target=aarch64-apple-darwin java_package=fixture.bemo java_class=BemoImports c_context=fixture.bemo.BemoDirectives c_library=bemofixture c_library_static=true
+callback Sink return=i64 java_type=fixture.bemo.HandwrittenSink
+  param thread type=isolate_thread
+  param value type=i64
+end
+import invokeSink symbol=bemo_invoke return=i64 error=no_failure
+  param callback type=fn<Sink>
+  param thread type=isolate_thread
+  param value type=i64
+end
+
+struct HandlerSlot size=8 align=8
+  field callback type=fn<Sink> offset=0
+end
