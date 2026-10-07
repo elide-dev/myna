@@ -1,5 +1,7 @@
 ![Myna](./docs/banner.png)
 
+[![CI](https://github.com/elide-dev/myna/actions/workflows/ci.yml/badge.svg)](https://github.com/elide-dev/myna/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/elide-dev/myna/graph/badge.svg?token=LynXFKjtbf)](https://codecov.io/gh/elide-dev/myna)
 [![Discord](https://img.shields.io/discord/1119121740161884252?b2&logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
 ![Java 21+](https://img.shields.io/badge/-Java%2021%2B-blue.svg?logo=openjdk&logoColor=white)
 ![Rust 2024](https://img.shields.io/badge/-Rust%202024-orange.svg?logo=rust&logoColor=white)
