@@ -253,6 +253,7 @@ public final class Validator {
             "noalias requires explicit_contract or compiler_proven");
       }
     }
+    OwnershipValidator.validate(module);
   }
 
   private static boolean isScalarName(String name) {

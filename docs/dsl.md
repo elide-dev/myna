@@ -100,3 +100,7 @@ Declarations and fact keys are sorted, parameter/field order is preserved, and o
 ## Native Image leaf-call policy
 
 `native_leaf=true@explicit_contract` on an import selects `CFunction.Transition.NO_TRANSITION`. It promises short, bounded execution with no blocking or Java callbacks and compliance with the Native Image no-transition restrictions. Exports and `noreturn` functions cannot opt in. Default imports retain normal transitions. This runtime contract is recorded in JSON/fingerprints, never emitted as an LLVM attribute, and never inferred from `nounwind` or `willreturn`. See [the performance design](performance.md) for obligations and optimization boundaries.
+
+## Resource lifecycles and call borrows
+
+`resource NAME representation=native threading=confined|shared create=FUNCTION destroy=FUNCTION` declares a unique native resource lifecycle. `NAME` must already be an opaque type. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.

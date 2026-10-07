@@ -1,0 +1,26 @@
+# Lifecycle contracts are explicit obligations of these native implementations.
+module ownership_demo target=aarch64-apple-darwin java_package=fixture.owned java_class=NativeApi
+opaque Ticket
+resource Ticket representation=native threading=shared create=ticketCreate destroy=ticketDestroy
+
+import ticketCreate symbol=ticket_create return=ptr<Ticket> error=no_failure nounwind=true@explicit_contract
+end
+import ticketDestroy symbol=ticket_destroy return=void error=no_failure nounwind=true@explicit_contract
+  param ticket type=ptr<Ticket> nullable=false ownership=transferred_to_callee access=read_write
+end
+
+# No retained pointers, no extra preconditions, and no access beyond the supplied length.
+borrow checksum bytes length=count lifetime=call
+import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+borrow increment bytes length=count lifetime=call
+import increment symbol=buffer_increment return=void error=no_failure nounwind=true@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param count type=u64
+end
+import liveCount symbol=ticket_live return=i64 error=no_failure nounwind=true@explicit_contract
+end
+import failNext symbol=ticket_fail_next return=void error=no_failure nounwind=true@explicit_contract
+end

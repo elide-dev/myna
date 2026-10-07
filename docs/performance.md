@@ -54,6 +54,10 @@ Generated typed methods use per-symbol lazy, static-final handles and `invokeExa
 
 The integration suite compiles and runs this path as a Native Image executable calling Rust. Full callback/lifetime modeling is still future work. Graal's [FFM documentation](https://www.graalvm.org/latest/reference-manual/native-image/native-code-interoperability/ffm-api/) explains AOT registration and specialization for known upcall targets.
 
+## Ownership and off-heap access
+
+The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer code. Each resource type supplies one reusable native destructor callback. Off-heap buffer calls use consumer acquire/release hooks and a direct C API call without generated per-call allocation, copies, or monitors. Rust lifetime markers have no runtime bookkeeping. These are structural properties, not latency benchmark results; consumer GC registration and retention costs remain part of the integration.
+
 ## Performance acceptance
 
 The current evidence is executable ABI correctness and inspected LLVM optimization results, not measured minimum latency. Future performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.

@@ -128,6 +128,7 @@ public final class RustFfi implements Backend {
       out.append(
           "        };\n    };\n}\n#[allow(unused_imports)]\npub(crate) use assert_implementations;\n");
     }
+    out.append(RustOwnership.generate(m));
     return out.toString();
   }
 }

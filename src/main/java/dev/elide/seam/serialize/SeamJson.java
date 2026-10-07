@@ -64,7 +64,45 @@ public final class SeamJson {
                 .toList())
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
+        + ownership(m)
         + "\n}\n";
+  }
+
+  private static String ownership(Module m) {
+    String result = "";
+    if (!m.resources().isEmpty())
+      result +=
+          ",\n  \"resources\": "
+              + array(
+                  m.resources().stream()
+                      .map(
+                          r ->
+                              "{\"name\":"
+                                  + quote(r.name())
+                                  + ",\"representation\":\"native\",\"threading\":"
+                                  + quote(r.shared() ? "shared" : "confined")
+                                  + ",\"create\":"
+                                  + quote(r.create())
+                                  + ",\"destroy\":"
+                                  + quote(r.destroy())
+                                  + "}")
+                      .toList());
+    if (!m.borrows().isEmpty())
+      result +=
+          ",\n  \"borrows\": "
+              + array(
+                  m.borrows().stream()
+                      .map(
+                          b ->
+                              "{\"function\":"
+                                  + quote(b.function())
+                                  + ",\"parameter\":"
+                                  + quote(b.parameter())
+                                  + ",\"length\":"
+                                  + quote(b.length())
+                                  + ",\"lifetime\":\"call\"}")
+                      .toList());
+    return result;
   }
 
   /** Omitted unless named, so descriptors without Java naming keep their fingerprints. */

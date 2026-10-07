@@ -53,6 +53,10 @@ Every generation produces:
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.
 
+## Ownership and off-heap buffers
+
+Explicit `resource` and `borrow` declarations generate Rust owners/lifetimes and an optional Native Image ownership API. Native Image consumers implement their own lifecycle and GC integration; the generator supplies reusable destructor callbacks. Off-heap buffers expose consumer-controlled acquire/release hooks around zero-copy direct calls. See [ownership contracts and adoption](docs/ownership.md) and [the executable example](examples/ownership.seam).
+
 ## Tests and reports
 
 ```sh
@@ -116,4 +120,4 @@ Typed FFM calls and Native Image downcall-stub registration are implemented. Ful
 
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets, and isolate-thread exports with include predicates and abort/integer/null exception translation. Records cross function boundaries by pointer.
 
-By-value aggregates, enums, allocator return contracts, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](elide-seam-generator-briefing.md) describes the broader roadmap.
+By-value aggregates, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](elide-seam-generator-briefing.md) describes the broader roadmap.

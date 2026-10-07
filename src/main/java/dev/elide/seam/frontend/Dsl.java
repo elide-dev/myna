@@ -16,6 +16,8 @@ public final class Dsl {
     var structs = new ArrayList<Struct>();
     var functions = new ArrayList<Function>();
     var callbacks = new ArrayList<Signature>();
+    var resources = new ArrayList<Resource>();
+    var borrows = new ArrayList<BufferBorrow>();
     String[] header = null;
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
@@ -42,6 +44,36 @@ public final class Dsl {
             abi = Integer.parseInt(take(opts, "abi", "1"));
             javaPackage = take(opts, "java_package", null);
             javaClass = take(opts, "java_class", null);
+            empty(opts);
+          }
+          case "resource" -> {
+            require(
+                name != null && header == null && words.length >= 2,
+                "resource requires a top-level name");
+            var opts = options(words, 2);
+            require(
+                takeRequired(opts, "representation").equals("native"),
+                "only representation=native is supported");
+            String threading = takeRequired(opts, "threading");
+            require(
+                threading.equals("confined") || threading.equals("shared"),
+                "threading must be confined or shared");
+            resources.add(
+                new Resource(
+                    words[1],
+                    takeRequired(opts, "create"),
+                    takeRequired(opts, "destroy"),
+                    threading.equals("shared")));
+            empty(opts);
+          }
+          case "borrow" -> {
+            require(
+                name != null && header == null && words.length >= 3,
+                "borrow requires FUNCTION PARAMETER");
+            var opts = options(words, 3);
+            require(
+                takeRequired(opts, "lifetime").equals("call"), "only lifetime=call is supported");
+            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length")));
             empty(opts);
           }
           case "opaque" -> {
@@ -142,7 +174,17 @@ public final class Dsl {
     require(name != null, "missing module");
     require(header == null, "unterminated block");
     return new Module(
-        name, abi, target, javaPackage, javaClass, opaque, structs, callbacks, functions);
+        name,
+        abi,
+        target,
+        javaPackage,
+        javaClass,
+        opaque,
+        structs,
+        callbacks,
+        functions,
+        resources,
+        borrows);
   }
 
   private static Map<String, String> options(String[] words, int start) {

@@ -192,6 +192,12 @@ public final class Seam {
     }
   }
 
+  /** Explicit lifecycle contract for a unique native allocation. Null creation means failure. */
+  public record Resource(String name, String create, String destroy, boolean shared) {}
+
+  /** A byte-buffer borrow valid only for the dynamic extent of one call. */
+  public record BufferBorrow(String function, String parameter, String length) {}
+
   public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.seam.generated";
 
   /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
@@ -204,8 +210,59 @@ public final class Seam {
       List<String> opaqueTypes,
       List<Struct> structs,
       List<Signature> callbacks,
-      List<Function> functions) {
+      List<Function> functions,
+      List<Resource> resources,
+      List<BufferBorrow> borrows) {
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Function> functions) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          List.of(),
+          functions,
+          List.of(),
+          List.of());
+    }
+
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          List.of(),
+          List.of());
+    }
+
     public Module {
+      resources = resources.stream().sorted(Comparator.comparing(Resource::name)).toList();
+      borrows = borrows.stream().sorted(Comparator.comparing(BufferBorrow::function)).toList();
       opaqueTypes = opaqueTypes.stream().sorted().toList();
       callbacks = callbacks.stream().sorted(Comparator.comparing(Signature::name)).toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();
@@ -214,8 +271,17 @@ public final class Seam {
 
     public Module withTarget(String target) {
       return new Module(
-          name, abiVersion, target, javaPackage, javaClass, opaqueTypes, structs, callbacks,
-          functions);
+          name,
+          abiVersion,
+          target,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows);
     }
 
     public String javaPackageName() {
@@ -225,6 +291,10 @@ public final class Seam {
     /** The Native Image class; FFM and Feature classes take it as a prefix when it is named. */
     public String nativeClass() {
       return javaClass == null ? "SeamNative" : javaClass;
+    }
+
+    public String ownershipClass() {
+      return javaClass == null ? "SeamOwnership" : javaClass + "Ownership";
     }
 
     public String ffmClass() {

@@ -22,6 +22,10 @@ public final class Generator {
             new NativeImage(),
             new NativeImageForeign(),
             new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
+    if (!module.resources().isEmpty() || !module.borrows().isEmpty()) {
+      var ownership = new NativeOwnership();
+      outputs.put(ownership.filename(module), ownership.generate(module));
+    }
     return Collections.unmodifiableSortedMap(outputs);
   }
 }
