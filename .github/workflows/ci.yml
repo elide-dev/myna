@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  id-token: write
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -19,6 +20,23 @@ jobs:
           java-version: '25'
           cache: maven
       - run: mvn -B verify
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() && hashFiles('target/site/jacoco/jacoco.xml') != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: target/site/jacoco/jacoco.xml
+          disable_search: true
+          flags: jvm
+          fail_ci_if_error: true
+      - name: Upload JVM test results to Codecov
+        if: ${{ !cancelled() && hashFiles('target/surefire-reports/TEST-*.xml') != '' }}
+        uses: codecov/test-results-action@v1
+        with:
+          use_oidc: true
+          directory: target/surefire-reports
+          flags: jvm
+          fail_ci_if_error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -30,7 +48,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        include:
+          - os: ubuntu-24.04
+            elide_asset: linux-amd64
+          - os: macos-15
+            elide_asset: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +63,8 @@ jobs:
           cache: maven
       - uses: elide-dev/setup-elide@v4
         with:
-          version: '1.5.4'
+          version: '1.5.4+20260921'
+          custom_url: https://github.com/elide-dev/elide/releases/download/1.5.4%2B20260921/elide.${{ matrix.elide_asset }}.txz
           telemetry: 'false'
       - name: Install matching Rust
         run: |
@@ -70,6 +93,14 @@ jobs:
       - run: python3 tests/e2e.py
       - run: python3 tests/llvm_integration.py
       - run: python3 tests/native_image_integration.py
+      - name: Upload native test results to Codecov
+        if: ${{ !cancelled() && hashFiles('build/reports/*.xml') != '' }}
+        uses: codecov/test-results-action@v1
+        with:
+          use_oidc: true
+          directory: build/reports
+          flags: native-${{ matrix.os }}
+          fail_ci_if_error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

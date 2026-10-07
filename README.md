@@ -3,7 +3,7 @@
 [![CI](https://github.com/elide-dev/myna/actions/workflows/ci.yml/badge.svg)](https://github.com/elide-dev/myna/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/elide-dev/myna/graph/badge.svg?token=LynXFKjtbf)](https://codecov.io/gh/elide-dev/myna)
 [![Discord](https://img.shields.io/discord/1119121740161884252?b2&logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
-![Java 21+](https://img.shields.io/badge/-Java%2021%2B-blue.svg?logo=openjdk&logoColor=white)
+![Java 25+](https://img.shields.io/badge/-Java%2025%2B-blue.svg?logo=openjdk&logoColor=white)
 ![Rust 2024](https://img.shields.io/badge/-Rust%202024-orange.svg?logo=rust&logoColor=white)
 
 # Myna
@@ -95,7 +95,7 @@ python3 tests/native_image_integration.py
 
 Coverage gates are 85% line coverage and 70% branch coverage. Golden outputs are checked in under `tests/golden/`. The LLVM suite proves load elimination in both C and Rust, checks attributes in LLD's saved ThinLTO output, preserves archive metadata/native members, and rejects stale contracts and incompatible ABIs. The Native Image suite runs Rust → Native Image → Rust and tests exception translation and a leaf call with no VM transition. It also builds and runs the generated FFM bindings as a Native Image executable.
 
-CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. It pins a Rust nightly and requires LLVM major 23; update both together when upgrading the toolchain.
+CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It pins a Rust nightly and requires LLVM major 23; update both together when upgrading the toolchain.
 
 ## Downstream distribution
 
