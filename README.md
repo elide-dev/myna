@@ -116,4 +116,4 @@ Typed FFM calls and Native Image downcall-stub registration are implemented. Ful
 
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets, and isolate-thread exports with include predicates and abort/integer/null exception translation. Records cross function boundaries by pointer.
 
-By-value aggregates, enums, allocator return contracts, automatic ownership inference, additional address spaces, and YAML remain future work. The LZMA fixture records a real Elide ABI, but the separate Elide checkout has not been migrated. The original [architecture briefing](elide-seam-generator-briefing.md) describes the broader roadmap.
+By-value aggregates, enums, allocator return contracts, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](elide-seam-generator-briefing.md) describes the broader roadmap.
