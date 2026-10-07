@@ -238,6 +238,51 @@ class GeneratorTest {
   }
 
   @Test
+  void byValueRecordsLowerOnlyAtTheNativeImageBoundary() {
+    String base =
+        MODULE
+            + "opaque Handle\n"
+            + "struct Pt size=8 align=4\n  field x type=i32 offset=0\n  field y type=i32 offset=4\nend\n"
+            + "import flip symbol=pt_flip return=Pt error=no_failure\n  param p type=Pt\n  param k type=i32\nend\n"
+            + "export norm symbol=pt_norm return=i32 java=fixture.Ops.norm isolate=thread error=abort\n"
+            + "  param p type=Pt\nend\n";
+    var output = generate(base);
+    String ni = output.get("SeamNative.java");
+    assertTrue(ni.contains("@CFunction(value = \"pt_flip_svmgen_ref\")"), ni);
+    assertTrue(ni.contains("public static native void flip(PointerBase p, int k, PointerBase result);"), ni);
+    assertTrue(ni.contains("@CEntryPoint(name = \"pt_norm_svmgen_ref\")"), ni);
+    assertTrue(ni.contains("return fixture.Ops.norm(p);"), ni);
+    assertTrue(ni.contains("public static final int SIZE = 8;"), ni);
+    assertTrue(ni.contains("((Pointer) record).readInt(4)"), ni);
+    String rust = output.get("seam.rs");
+    assertTrue(rust.contains("pub fn flip(p: Pt, k: i32) -> Pt;"), rust);
+    assertTrue(rust.contains("pub fn normRef(isolate_thread: *mut core::ffi::c_void, p: *const Pt) -> i32;"), rust);
+    assertTrue(rust.contains("pub unsafe fn norm(isolate_thread: *mut core::ffi::c_void, p: Pt) -> i32 {"), rust);
+    assertTrue(rust.contains("#[derive(Clone, Copy)]"));
+    assertTrue(rust.contains("pub unsafe extern \"C\" fn pt_flip_svmgen_ref(p: *const $($seam)::+::Pt, k: i32, result: *mut $($seam)::+::Pt)"), rust);
+    assertTrue(rust.contains("unsafe { result.write(pt_flip(p.read(), k)) }"), rust);
+    String ll = output.get("seam.ll");
+    assertFalse(ll.contains("@pt_flip("), ll);
+    assertTrue(
+        ll.contains(
+            "declare void @pt_flip_svmgen_ref(ptr align 4 dereferenceable(8) captures(none) nonnull readonly %p, i32 %k, ptr align 4 dereferenceable(8) captures(none) nonnull writeonly %result)"),
+        ll);
+    String h = output.get("seam.h");
+    assertTrue(h.contains("struct Pt pt_flip(struct Pt p, int32_t k);"), h);
+    assertTrue(h.contains("static inline int32_t pt_norm(void * isolate_thread, struct Pt p) {"), h);
+    assertFalse(output.get("SeamFFM.java").contains("public static Pt flip"));
+    assertTrue(output.get("SeamFFM.java").contains("flip(SegmentAllocator allocator, MemorySegment p, int k)"));
+    for (String bad :
+        List.of(
+            base.replace("return=Pt error=no_failure", "return=Handle error=no_failure"),
+            base.replace("param k type=i32", "param result type=i32"),
+            base + "callback Cb return=void\n  param p type=Pt\nend\n",
+            base + "struct Outer size=8 align=4\n  field inner type=Pt offset=0\nend\n",
+            base + "import clash symbol=pt_flip_svmgen_ref return=void error=no_failure\nend\n"))
+      assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())

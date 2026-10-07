@@ -92,7 +92,10 @@ public final class CHeader implements Backend {
             .append(f.offset())
             .append(", \"field offset\");\n");
     }
-    for (Function f : m.functions()) {
+    for (Function declared : m.functions()) {
+      // Native Image exports records by reference; C callers keep a by-value inline wrapper.
+      boolean wrapped = declared.direction() == Direction.EXPORT && ByValue.applies(declared);
+      Function f = wrapped ? ByValue.lower(m, declared) : declared;
       out.append("\n/* ")
           .append(f.direction())
           .append("; error=")
@@ -115,9 +118,33 @@ public final class CHeader implements Backend {
               : String.join(
                   ", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
       out.append(");\n");
+      if (wrapped) wrapper(declared, f, out);
     }
     return out.append(
             "\n#ifdef __cplusplus\n}\n#endif\n#undef SEAM_ASSERT\n#undef SEAM_ALIGNOF\n#endif\n")
         .toString();
+  }
+
+  private static void wrapper(Function f, Function ref, StringBuilder out) {
+    boolean record = f.returns() instanceof Named;
+    out.append("static inline ")
+        .append(Types.c(f.returns()))
+        .append(' ')
+        .append(f.symbol())
+        .append('(')
+        .append(String.join(", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
+        .append(") {\n");
+    if (record) out.append("  ").append(Types.c(f.returns())).append(" result;\n");
+    var args = new java.util.ArrayList<String>();
+    for (Parameter p : f.abiParameters()) args.add(p.type() instanceof Named ? "&" + p.name() : p.name());
+    if (record) args.add("&result");
+    out.append("  ")
+        .append(!record && f.returns() != Scalar.VOID ? "return " : "")
+        .append(ref.symbol())
+        .append('(')
+        .append(String.join(", ", args))
+        .append(");\n")
+        .append(record ? "  return result;\n" : "")
+        .append("}\n");
   }
 }

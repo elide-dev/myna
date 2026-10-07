@@ -30,7 +30,7 @@ public final class RustFfi implements Backend {
       out.append(">;\n");
     }
     for (Struct s : m.structs()) {
-      out.append("#[repr(C)]\npub struct ").append(s.name()).append(" {\n");
+      out.append("#[repr(C)]\n#[derive(Clone, Copy)]\npub struct ").append(s.name()).append(" {\n");
       long offset = 0;
       int padding = 0;
       for (Field f : s.fields()) {
@@ -74,7 +74,10 @@ public final class RustFfi implements Backend {
       out.append("};\n");
     }
     out.append("\nunsafe extern \"C\" {\n");
-    for (Function f : m.functions()) {
+    for (Function declared : m.functions()) {
+      // Native Image exports records by reference; a by-value wrapper follows the block.
+      boolean wrapped = declared.direction() == Direction.EXPORT && ByValue.applies(declared);
+      Function f = wrapped ? ByValue.lower(m, declared) : declared;
       out.append("    // ").append(f.direction()).append("; error=").append(f.error()).append('\n');
       for (Parameter p : f.abiParameters())
         out.append("    // ")
@@ -90,6 +93,7 @@ public final class RustFfi implements Backend {
           .append(SeamJson.quote(f.symbol()))
           .append("]\n    pub fn ")
           .append(f.name())
+          .append(wrapped ? "Ref" : "")
           .append('(');
       out.append(
               String.join(
@@ -100,8 +104,11 @@ public final class RustFfi implements Backend {
       out.append(";\n");
     }
     out.append("}\n");
+    for (Function f : m.functions())
+      if (f.direction() == Direction.EXPORT && ByValue.applies(f)) wrapper(m, f, out);
     // Function-pointer types for callers that resolve symbols dynamically (dlsym/GetProcAddress).
-    for (Function f : m.functions()) {
+    for (Function declared : m.functions()) {
+      Function f = declared.direction() == Direction.EXPORT ? ByValue.lower(m, declared) : declared;
       out.append("pub type ")
           .append(Character.toUpperCase(f.name().charAt(0)))
           .append(f.name().substring(1))
@@ -115,20 +122,94 @@ public final class RustFfi implements Backend {
     if (!imports.isEmpty()) {
       out.append(
           "\n/// Pins each import's implementation, in scope under its symbol name, to this ABI.\n"
+              + "/// Pass this module's path when the declared types are not in scope.\n"
               + "#[allow(unused_macros)]\nmacro_rules! assert_implementations {\n"
               + "    () => {\n        const _: () = {\n");
-      for (Function f : imports) {
-        out.append("            let _: unsafe extern \"C\" fn(")
-            .append(
-                String.join(", ", f.abiParameters().stream().map(Types::rust).toList()))
-            .append(')');
-        if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
-        out.append(" = ").append(f.symbol()).append(";\n");
-      }
+      pins(imports, "", out);
+      out.append("        };\n    };\n    ($($seam:ident)::+) => {\n        const _: () = {\n");
+      pins(imports, "$($seam)::+::", out);
       out.append(
           "        };\n    };\n}\n#[allow(unused_imports)]\npub(crate) use assert_implementations;\n");
+      var byValue = imports.stream().filter(ByValue::applies).toList();
+      if (!byValue.isEmpty()) shims(m, byValue, out);
     }
     out.append(RustOwnership.generate(m));
     return out.toString();
+  }
+
+  private static void pins(java.util.List<Function> imports, String q, StringBuilder out) {
+    for (Function f : imports) {
+      out.append("            let _: unsafe extern \"C\" fn(")
+          .append(String.join(", ", f.abiParameters().stream().map(p -> Types.rust(p, q)).toList()))
+          .append(')');
+      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns(), q));
+      out.append(" = ").append(f.symbol()).append(";\n");
+    }
+  }
+
+  /** Inline by-value wrapper over a Native Image export's reference form. */
+  private static void wrapper(Module m, Function f, StringBuilder out) {
+    out.append("#[inline]\n#[allow(non_snake_case, clippy::missing_safety_doc)]\npub unsafe fn ")
+        .append(f.name())
+        .append('(')
+        .append(
+            String.join(
+                ", ", f.abiParameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList()))
+        .append(')');
+    if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+    out.append(" {\n");
+    boolean record = f.returns() instanceof Named;
+    if (record)
+      out.append("    let mut result = core::mem::MaybeUninit::<")
+          .append(Types.rust(f.returns()))
+          .append(">::uninit();\n");
+    var args = new java.util.ArrayList<String>();
+    for (Parameter p : f.abiParameters())
+      args.add(p.type() instanceof Named ? "&" + p.name() : p.name());
+    if (record) args.add("result.as_mut_ptr()");
+    out.append("    unsafe { ")
+        .append(f.name())
+        .append("Ref(")
+        .append(String.join(", ", args))
+        .append(") }");
+    out.append(record ? ";\n    unsafe { result.assume_init() }\n}\n" : "\n}\n");
+  }
+
+  /**
+   * Reference-form definitions for by-value imports, for the crate that implements them and links
+   * into Native Image. Each reads its records and calls the implementation by symbol name.
+   */
+  private static void shims(Module m, java.util.List<Function> imports, StringBuilder out) {
+    String q = "$($seam)::+::";
+    out.append(
+        "\n/// Defines the Native Image reference forms of by-value imports beside their\n"
+            + "/// implementations; pass this module's path.\n"
+            + "#[allow(unused_macros)]\nmacro_rules! native_image_shims {\n"
+            + "    ($($seam:ident)::+) => {\n");
+    for (Function f : imports) {
+      Function ref = ByValue.lower(m, f);
+      out.append("        #[unsafe(no_mangle)]\n        #[allow(non_snake_case)]\n")
+          .append("        pub unsafe extern \"C\" fn ")
+          .append(ref.symbol())
+          .append('(')
+          .append(
+              String.join(
+                  ", ", ref.parameters().stream().map(p -> p.name() + ": " + Types.rust(p, q)).toList()))
+          .append(')');
+      if (ref.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(ref.returns(), q));
+      String call =
+          f.symbol()
+              + "("
+              + String.join(
+                  ", ",
+                  f.parameters().stream()
+                      .map(p -> p.type() instanceof Named ? p.name() + ".read()" : p.name())
+                      .toList())
+              + ")";
+      out.append(" {\n            unsafe { ")
+          .append(f.returns() instanceof Named ? ByValue.RESULT + ".write(" + call + ")" : call)
+          .append(" }\n        }\n");
+    }
+    out.append("    };\n}\n#[allow(unused_imports)]\npub(crate) use native_image_shims;\n");
   }
 }

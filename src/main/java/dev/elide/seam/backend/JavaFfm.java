@@ -59,7 +59,7 @@ public final class JavaFfm implements Backend {
             .append(f.offset())
             .append("L;\n");
     }
-    for (Function f : m.functions()) {
+    for (Function f : m.functions().stream().map(d -> ffmForm(m, d)).toList()) {
       var args = new ArrayList<String>();
       if (f.returns() != Scalar.VOID) args.add(Types.layout(f.returns()));
       f.abiParameters().forEach(p -> args.add(Types.layout(p.type())));
@@ -81,7 +81,7 @@ public final class JavaFfm implements Backend {
           .append(f.name())
           .append("_DESCRIPTOR);\n    }\n");
     }
-    for (Function f : m.functions()) {
+    for (Function f : m.functions().stream().map(d -> ffmForm(m, d)).toList()) {
       String carrier = Types.ffmCarrier(f.returns());
       out.append(
               "    // Load the library in this class loader before first use. One handle per"
@@ -99,6 +99,7 @@ public final class JavaFfm implements Backend {
           .append(' ')
           .append(f.name())
           .append('(')
+          .append(f.returns() instanceof Named ? "SegmentAllocator allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
           .append(
               String.join(
                   ", ",
@@ -111,9 +112,18 @@ public final class JavaFfm implements Backend {
           .append('.')
           .append(f.name())
           .append("_Binding.HANDLE.invokeExact(")
+          .append(f.returns() instanceof Named ? "allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
           .append(String.join(", ", f.abiParameters().stream().map(Parameter::name).toList()))
           .append(");\n    }\n");
     }
     return out.append("}\n").toString();
+  }
+
+  /**
+   * FFM passes records by value natively, so only exports (which Native Image publishes in
+   * reference form) are lowered.
+   */
+  private static Function ffmForm(Module m, Function f) {
+    return f.direction() == Direction.EXPORT ? ByValue.lower(m, f) : f;
   }
 }

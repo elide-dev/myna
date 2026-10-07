@@ -47,7 +47,17 @@ struct View size=24 align=8
 end
 ```
 
-Fields are scalar/pointer values in ascending, non-overlapping, naturally aligned offsets. All padding and final size are explicit. C/Rust emit compile-time size/alignment/offset assertions; FFM uses explicit padding layouts. By-value records/arrays and custom packing are not implemented. Symbol/type/parameter names must be portable identifiers and avoid reserved words.
+Fields are scalar/pointer values in ascending, non-overlapping, naturally aligned offsets. All padding and final size are explicit. C/Rust emit compile-time size/alignment/offset assertions; FFM uses explicit padding layouts. Rust records derive `Clone, Copy`; the Native Image class gets a nested accessor class per record (`SIZE`, `ALIGNMENT`, typed get/set at each offset) for records in `StackValue` or unmanaged memory. Arrays, nested by-value fields and custom packing are not implemented.
+
+### Records by value
+
+A declared `struct` may be a function parameter or return type (`param p type=Pt`, `return=Pt`). C, Rust and FFM use the real by-value C ABI. Native Image's C interface carries only primitives and words, so that boundary uses a reference form, `<symbol>_svmgen_ref`, taking `const T *` for each record and returning a record through a trailing `T *result`:
+
+- Imports: the native side implements the by-value symbol; the implementing Rust crate invokes `native_image_shims!(path::to::seam)` beside it to define the reference forms, which Java's `@CFunction`s bind. ThinLTO inlines each shim into its implementation.
+- Exports: Native Image exports only the reference form, and the Java target takes `PointerBase` records plus `result`. `seam.rs` adds an `#[inline]` by-value wrapper and `seam.h` a `static inline` one, so Rust and C call by value.
+- `seam.ll` declares only reference forms, with `nonnull`, `captures(none)`, `readonly`/`writeonly`, `align` and `dereferenceable` from the record layout; by-value lowering itself (registers, `byval`, `sret`) is target-specific and not described.
+
+Records cannot cross callbacks, and `result` is reserved as a parameter name when a function returns a record. Macros expanded outside the generated module take its path: `assert_implementations!(seam)`, `native_image_shims!(seam)`. Symbol/type/parameter names must be portable identifiers and avoid reserved words.
 
 ## Functions
 

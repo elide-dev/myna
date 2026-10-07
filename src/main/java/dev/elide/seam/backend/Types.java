@@ -39,6 +39,20 @@ final class Types {
     return type.text();
   }
 
+  /** Rust type with declared names qualified by {@code q}, for macros expanded elsewhere. */
+  static String rust(Type type, String q) {
+    if (type instanceof FunctionPointer f) return q + f.signature();
+    if (type instanceof Named n) return q + n.name();
+    if (type instanceof Pointer p) return "*mut " + rust(p.pointee(), q);
+    return rust(type);
+  }
+
+  static String rust(Parameter p, String q) {
+    if (p.type() instanceof Pointer ptr)
+      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee(), q);
+    return rust(p.type(), q);
+  }
+
   static String rust(Parameter p) {
     if (p.type() instanceof Pointer ptr)
       return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee());
@@ -81,6 +95,7 @@ final class Types {
   }
 
   static String layout(Type type) {
+    if (type instanceof Named n) return n.name() + "_LAYOUT"; // by value; declared in the FFM class
     if (!(type instanceof Scalar)) return "ValueLayout.ADDRESS";
     return switch ((Scalar) type) {
       case BOOL -> "ValueLayout.JAVA_BOOLEAN";

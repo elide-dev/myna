@@ -25,8 +25,18 @@ public final class SeamForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$lowUnsigned_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.reducer_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$reducer_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.rotate_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$rotate_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.scale_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$scale_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.spread_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$spread_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.structProbe_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$structProbe_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.sum_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$sum_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.swapPair_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$swapPair_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.visit_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$visit_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.widen_DESCRIPTOR);

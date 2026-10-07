@@ -116,10 +116,21 @@ public final class Validator {
       identifier(function.name());
       identifier(function.symbol());
       require(logicalNames.add(function.name()), "duplicate logical name: " + function.name());
+      if (function.returns() instanceof Named || function.parameters().stream().anyMatch(p -> p.type() instanceof Named)) {
+        require(
+            function.parameters().stream().noneMatch(p -> p.name().equals("result"))
+                || !(function.returns() instanceof Named),
+            "parameter name 'result' is reserved for by-value record returns");
+        require(function.callback() == null, "by-value records cannot cross a callback");
+        require(
+            module.functions().stream().noneMatch(o -> o.symbol().equals(function.symbol() + "_svmgen_ref")),
+            "symbol collides with the by-value reference form of " + function.name());
+      }
       String rustAlias = Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
       require(!types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
       require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
-      type(function.returns(), types, signatures, true);
+      record(module, function.returns());
+      if (!(function.returns() instanceof Named)) type(function.returns(), types, signatures, true);
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
@@ -206,7 +217,8 @@ public final class Validator {
       for (Parameter parameter : function.parameters()) {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
-        type(parameter.type(), types, signatures, false);
+        record(module, parameter.type());
+        if (!(parameter.type() instanceof Named)) type(parameter.type(), types, signatures, false);
         functionScalar(parameter.type());
         facts(parameter.facts(), PARAM_FACTS, strict);
         boolean pointer = parameter.type() instanceof Pointer;
@@ -264,6 +276,14 @@ public final class Validator {
   /** Small values cross with each target's extension rule ({@code Types.extension}). */
   private static void functionScalar(Type type) {}
 
+  /** By-value records are function values only, and only declared structs (never opaque). */
+  private static void record(Module module, Type type) {
+    if (type instanceof Named n)
+      require(
+          module.structs().stream().anyMatch(st -> st.name().equals(n.name())),
+          "by-value type must be a declared struct: " + n.name());
+  }
+
   private static void type(
       Type type, Set<String> names, Set<String> signatures, boolean allowVoid) {
     if (type instanceof Pointer p) {
@@ -276,7 +296,7 @@ public final class Validator {
     } else if (type instanceof FunctionPointer f)
       require(signatures.contains(f.signature()), "unknown callback: " + f.signature());
     else if (type instanceof Named)
-      throw new IllegalArgumentException("by-value records are not supported; use ptr<T>");
+      throw new IllegalArgumentException("by-value records are function parameters and returns only; use ptr<T>");
     else require(allowVoid || type != Scalar.VOID, "void parameter or field");
   }
 

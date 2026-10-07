@@ -21,39 +21,43 @@ public final class Llvm implements Backend {
                 + " indexing.\n"
                 + "source_filename = \"seam-contracts\"\n");
     out.append("target triple = ").append(SeamJson.quote(m.targetTriple())).append("\n\n");
-    for (Function f : m.functions()) {
-      out.append("declare ")
-          .append(Types.llvm(f.returns()))
-          .append(" @")
-          .append(f.symbol())
-          .append('(');
-      out.append(
-              String.join(
-                  ", ",
-                  f.abiParameters().stream()
-                      .map(
-                          p -> {
-                            String attributes =
-                                String.join(
-                                        " ",
-                                        Types.extension(p.type(), m.targetTriple()),
-                                        attributes(p.facts()))
-                                    .strip();
-                            return Types.llvm(p.type())
-                                + (attributes.isEmpty() ? "" : " " + attributes)
-                                + " %"
-                                + p.name();
-                          })
-                      .toList()))
-          .append(')');
-      String attrs = attributes(f.facts());
-      if (!attrs.isEmpty()) out.append(' ').append(attrs);
-      out.append('\n');
-    }
+    // By-value lowering is target-specific (registers, byval, sret), so a record-passing function
+    // is declared only in its reference form; its by-value symbol could never match compiler output.
+    for (Function f : m.functions()) declaration(m, ByValue.lower(m, f), out);
     out.append("\n!svmgen.contract = !{!0}\n!0 = !{!\"")
         .append(SeamJson.fingerprint(m))
         .append("\"}\n");
     return out.toString();
+  }
+
+  private static void declaration(Module m, Function f, StringBuilder out) {
+    out.append("declare ")
+        .append(Types.llvm(f.returns()))
+        .append(" @")
+        .append(f.symbol())
+        .append('(');
+    out.append(
+            String.join(
+                ", ",
+                f.abiParameters().stream()
+                    .map(
+                        p -> {
+                          String attributes =
+                              String.join(
+                                      " ",
+                                      Types.extension(p.type(), m.targetTriple()),
+                                      attributes(p.facts()))
+                                  .strip();
+                          return Types.llvm(p.type())
+                              + (attributes.isEmpty() ? "" : " " + attributes)
+                              + " %"
+                              + p.name();
+                        })
+                    .toList()))
+        .append(')');
+    String attrs = attributes(f.facts());
+    if (!attrs.isEmpty()) out.append(' ').append(attrs);
+    out.append('\n');
   }
 
   private static String attributes(Map<String, Fact> facts) {

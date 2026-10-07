@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class SeamFFM {
     private SeamFFM() {}
-    public static final String ABI_FINGERPRINT = "7662bb31a02f7f7b753df3d135114daa4c9102b5355d7629f02a1e332d408706";
+    public static final String ABI_FINGERPRINT = "833c9c4355813400466776e8c0b7e51f3203b0dc81a41f22631a671aa5695dfc";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
@@ -18,6 +18,19 @@ public final class SeamFFM {
     public static final long BufferView_data_OFFSET = 0L;
     public static final long BufferView_length_OFFSET = 8L;
     public static final long BufferView_flags_OFFSET = 16L;
+    public static final StructLayout Pair_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_LONG.withName("left"),
+        ValueLayout.JAVA_INT.withName("right"),
+        MemoryLayout.paddingLayout(4));
+    public static final long Pair_left_OFFSET = 0L;
+    public static final long Pair_right_OFFSET = 8L;
+    public static final StructLayout Triple_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_LONG.withName("a"),
+        ValueLayout.JAVA_LONG.withName("b"),
+        ValueLayout.JAVA_LONG.withName("c"));
+    public static final long Triple_a_OFFSET = 0L;
+    public static final long Triple_b_OFFSET = 8L;
+    public static final long Triple_c_OFFSET = 16L;
     public static final FunctionDescriptor classify_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_BOOLEAN);
     public static MethodHandle classify(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_classify").orElseThrow(() -> new UnsatisfiedLinkError("seam_classify")), classify_DESCRIPTOR);
@@ -54,9 +67,29 @@ public final class SeamFFM {
     public static MethodHandle reducer(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_reducer").orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer")), reducer_DESCRIPTOR);
     }
+    public static final FunctionDescriptor rotate_DESCRIPTOR = FunctionDescriptor.of(Triple_LAYOUT, Triple_LAYOUT, ValueLayout.JAVA_INT);
+    public static MethodHandle rotate(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_rotate").orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), rotate_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor scale_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+    public static MethodHandle scale(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_scale_svmgen_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_scale_svmgen_ref")), scale_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor spread_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
+    public static MethodHandle spread(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_spread_svmgen_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_spread_svmgen_ref")), spread_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor structProbe_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+    public static MethodHandle structProbe(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_struct_probe").orElseThrow(() -> new UnsatisfiedLinkError("seam_struct_probe")), structProbe_DESCRIPTOR);
+    }
     public static final FunctionDescriptor sum_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle sum(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_sum").orElseThrow(() -> new UnsatisfiedLinkError("seam_sum")), sum_DESCRIPTOR);
+    }
+    public static final FunctionDescriptor swapPair_DESCRIPTOR = FunctionDescriptor.of(Pair_LAYOUT, Pair_LAYOUT);
+    public static MethodHandle swapPair(SymbolLookup lookup) {
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_swap_pair").orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair")), swapPair_DESCRIPTOR);
     }
     public static final FunctionDescriptor visit_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle visit(SymbolLookup lookup) {
@@ -130,11 +163,46 @@ public final class SeamFFM {
         return (MemorySegment) SeamFFM.reducer_Binding.HANDLE.invokeExact();
     }
     // Load the library in this class loader before first use. One handle per symbol.
+    private static final class rotate_Binding {
+        static final MethodHandle HANDLE = SeamFFM.rotate(SymbolLookup.loaderLookup());
+    }
+    public static MemorySegment rotate(SegmentAllocator allocator, MemorySegment value, int times) throws Throwable {
+        return (MemorySegment) SeamFFM.rotate_Binding.HANDLE.invokeExact(allocator, value, times);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class scale_Binding {
+        static final MethodHandle HANDLE = SeamFFM.scale(SymbolLookup.loaderLookup());
+    }
+    public static void scale(MemorySegment isolate_thread, MemorySegment value, int factor, MemorySegment result) throws Throwable {
+        SeamFFM.scale_Binding.HANDLE.invokeExact(isolate_thread, value, factor, result);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class spread_Binding {
+        static final MethodHandle HANDLE = SeamFFM.spread(SymbolLookup.loaderLookup());
+    }
+    public static void spread(MemorySegment isolate_thread, MemorySegment value, MemorySegment result) throws Throwable {
+        SeamFFM.spread_Binding.HANDLE.invokeExact(isolate_thread, value, result);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class structProbe_Binding {
+        static final MethodHandle HANDLE = SeamFFM.structProbe(SymbolLookup.loaderLookup());
+    }
+    public static int structProbe(MemorySegment isolate_thread) throws Throwable {
+        return (int) SeamFFM.structProbe_Binding.HANDLE.invokeExact(isolate_thread);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
     private static final class sum_Binding {
         static final MethodHandle HANDLE = SeamFFM.sum(SymbolLookup.loaderLookup());
     }
     public static long sum(MemorySegment isolate_thread, MemorySegment data, long length) throws Throwable {
         return (long) SeamFFM.sum_Binding.HANDLE.invokeExact(isolate_thread, data, length);
+    }
+    // Load the library in this class loader before first use. One handle per symbol.
+    private static final class swapPair_Binding {
+        static final MethodHandle HANDLE = SeamFFM.swapPair(SymbolLookup.loaderLookup());
+    }
+    public static MemorySegment swapPair(SegmentAllocator allocator, MemorySegment value) throws Throwable {
+        return (MemorySegment) SeamFFM.swapPair_Binding.HANDLE.invokeExact(allocator, value);
     }
     // Load the library in this class loader before first use. One handle per symbol.
     private static final class visit_Binding {

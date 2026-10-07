@@ -59,3 +59,29 @@ import reducer symbol=seam_reducer return=fn<Reducer> error=no_failure
 end
 export exercise symbol=seam_exercise return=i64 java=fixture.BufferOps.exercise isolate=thread error=abort
 end
+# By-value records: a register-class pair and a memory-class (sret) triple, in both directions.
+struct Pair size=16 align=8
+  field left type=i64 offset=0
+  field right type=i32 offset=8
+end
+struct Triple size=24 align=8
+  field a type=i64 offset=0
+  field b type=i64 offset=8
+  field c type=i64 offset=16
+end
+import swapPair symbol=seam_swap_pair return=Pair error=no_failure nounwind=true@explicit_contract
+  param value type=Pair
+end
+import rotate symbol=seam_rotate return=Triple error=no_failure nounwind=true@explicit_contract
+  param value type=Triple
+  param times type=i32
+end
+export scale symbol=seam_scale return=Pair java=fixture.BufferOps.scale isolate=thread error=abort
+  param value type=Pair
+  param factor type=i32
+end
+export spread symbol=seam_spread return=Triple java=fixture.BufferOps.spread isolate=thread error=abort
+  param value type=Triple
+end
+export structProbe symbol=seam_struct_probe return=i32 java=fixture.BufferOps.structProbe isolate=thread error=abort
+end

@@ -68,11 +68,16 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
     }
+    if (!m.structs().isEmpty()) {
+      imports.add("org.graalvm.word.Pointer");
+      imports.add("org.graalvm.word.PointerBase");
+    }
+    for (Struct st : m.structs()) st.fields().forEach(f -> carrierImport(imports, f.type()));
     for (Signature c : m.callbacks()) {
       carrierImport(imports, c.returns());
       c.parameters().forEach(p -> carrierImport(imports, p.type()));
     }
-    for (Function f : m.functions()) {
+    for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
       if (f.direction() == Direction.IMPORT) imports.add("org.graalvm.nativeimage.c.function.CFunction");
       else {
         imports.add("org.graalvm.nativeimage.c.function.CEntryPoint");
@@ -109,6 +114,7 @@ public final class NativeImage implements Backend {
     out.append("    public static final String ABI_FINGERPRINT = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
+    for (Struct st : m.structs()) accessors(st, out);
     for (Signature c : m.callbacks())
       out.append("    public interface ")
           .append(c.name())
@@ -139,7 +145,7 @@ public final class NativeImage implements Backend {
               .append(");\n");
       out.append("    }\n");
     }
-    for (Function f : m.functions()) {
+    for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
       boolean lowered =
           f.direction() == Direction.IMPORT && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
       if (lowered) {
@@ -217,5 +223,64 @@ public final class NativeImage implements Backend {
       out.append("    }\n");
     }
     return out.append("}\n").toString();
+  }
+
+  /**
+   * Field access at the descriptor's offsets, for records in Java-managed memory (StackValue,
+   * UnmanagedMemory) and for the reference form of by-value calls.
+   */
+  private static void accessors(Struct st, StringBuilder out) {
+    out.append("    public static final class ")
+        .append(st.name())
+        .append(" {\n        private ")
+        .append(st.name())
+        .append("() {}\n        public static final int SIZE = ")
+        .append(st.size())
+        .append(";\n        public static final int ALIGNMENT = ")
+        .append(st.alignment())
+        .append(";\n");
+    for (Field f : st.fields()) {
+      String carrier = Types.java(f.type());
+      String at = "((Pointer) record)";
+      String get, set;
+      if (f.type() instanceof Scalar s)
+        switch (s) {
+          case BOOL -> {
+            get = at + ".readByte(" + f.offset() + ") != 0";
+            set = at + ".writeByte(" + f.offset() + ", (byte) (value ? 1 : 0))";
+          }
+          default -> {
+            String kind =
+                switch (s) {
+                  case CHAR, I8, U8 -> "Byte";
+                  case I16, U16 -> "Short";
+                  case I32, U32 -> "Int";
+                  case F32 -> "Float";
+                  case F64 -> "Double";
+                  default -> "Long";
+                };
+            get = at + ".read" + kind + "(" + f.offset() + ")";
+            set = at + ".write" + kind + "(" + f.offset() + ", value)";
+          }
+        }
+      else {
+        get = at + ".readWord(" + f.offset() + ")";
+        set = at + ".writeWord(" + f.offset() + ", value)";
+      }
+      out.append("        public static ")
+          .append(carrier)
+          .append(' ')
+          .append(f.name())
+          .append("(PointerBase record) {\n            return ")
+          .append(get)
+          .append(";\n        }\n        public static void ")
+          .append(f.name())
+          .append("(PointerBase record, ")
+          .append(carrier)
+          .append(" value) {\n            ")
+          .append(set)
+          .append(";\n        }\n");
+    }
+    out.append("    }\n");
   }
 }

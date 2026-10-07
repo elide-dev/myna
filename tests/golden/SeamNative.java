@@ -10,10 +10,75 @@ import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CConst;
 import org.graalvm.nativeimage.c.type.CLongPointer;
+import org.graalvm.word.Pointer;
+import org.graalvm.word.PointerBase;
 
 public final class SeamNative {
     private SeamNative() {}
-    public static final String ABI_FINGERPRINT = "7662bb31a02f7f7b753df3d135114daa4c9102b5355d7629f02a1e332d408706";
+    public static final String ABI_FINGERPRINT = "833c9c4355813400466776e8c0b7e51f3203b0dc81a41f22631a671aa5695dfc";
+    public static final class BufferView {
+        private BufferView() {}
+        public static final int SIZE = 24;
+        public static final int ALIGNMENT = 8;
+        public static CCharPointer data(PointerBase record) {
+            return ((Pointer) record).readWord(0);
+        }
+        public static void data(PointerBase record, CCharPointer value) {
+            ((Pointer) record).writeWord(0, value);
+        }
+        public static long length(PointerBase record) {
+            return ((Pointer) record).readLong(8);
+        }
+        public static void length(PointerBase record, long value) {
+            ((Pointer) record).writeLong(8, value);
+        }
+        public static int flags(PointerBase record) {
+            return ((Pointer) record).readInt(16);
+        }
+        public static void flags(PointerBase record, int value) {
+            ((Pointer) record).writeInt(16, value);
+        }
+    }
+    public static final class Pair {
+        private Pair() {}
+        public static final int SIZE = 16;
+        public static final int ALIGNMENT = 8;
+        public static long left(PointerBase record) {
+            return ((Pointer) record).readLong(0);
+        }
+        public static void left(PointerBase record, long value) {
+            ((Pointer) record).writeLong(0, value);
+        }
+        public static int right(PointerBase record) {
+            return ((Pointer) record).readInt(8);
+        }
+        public static void right(PointerBase record, int value) {
+            ((Pointer) record).writeInt(8, value);
+        }
+    }
+    public static final class Triple {
+        private Triple() {}
+        public static final int SIZE = 24;
+        public static final int ALIGNMENT = 8;
+        public static long a(PointerBase record) {
+            return ((Pointer) record).readLong(0);
+        }
+        public static void a(PointerBase record, long value) {
+            ((Pointer) record).writeLong(0, value);
+        }
+        public static long b(PointerBase record) {
+            return ((Pointer) record).readLong(8);
+        }
+        public static void b(PointerBase record, long value) {
+            ((Pointer) record).writeLong(8, value);
+        }
+        public static long c(PointerBase record) {
+            return ((Pointer) record).readLong(16);
+        }
+        public static void c(PointerBase record, long value) {
+            ((Pointer) record).writeLong(16, value);
+        }
+    }
     public interface Reducer extends CFunctionPointer {
         @InvokeCFunctionPointer
         long invoke(long left, long right);
@@ -54,6 +119,20 @@ public final class SeamNative {
     public static native byte lowUnsigned(int value);
     @CFunction(value = "seam_reducer")
     public static native Reducer reducer();
+    @CFunction(value = "seam_rotate_svmgen_ref")
+    public static native void rotate(PointerBase value, int times, PointerBase result);
+    @CEntryPoint(name = "seam_scale_svmgen_ref")
+    public static void scale(IsolateThread isolate_thread, @CConst PointerBase value, int factor, PointerBase result) {
+        fixture.BufferOps.scale(value, factor, result);
+    }
+    @CEntryPoint(name = "seam_spread_svmgen_ref")
+    public static void spread(IsolateThread isolate_thread, @CConst PointerBase value, PointerBase result) {
+        fixture.BufferOps.spread(value, result);
+    }
+    @CEntryPoint(name = "seam_struct_probe")
+    public static int structProbe(IsolateThread isolate_thread) {
+        return fixture.BufferOps.structProbe();
+    }
     @CEntryPoint(name = "seam_sum")
     public static long sum(IsolateThread isolate_thread, @CConst CCharPointer data, long length) {
         try {
@@ -62,6 +141,8 @@ public final class SeamNative {
             return -1L;
         }
     }
+    @CFunction(value = "seam_swap_pair_svmgen_ref")
+    public static native void swapPair(PointerBase value, PointerBase result);
     @CEntryPoint(name = "seam_visit")
     public static int visit(IsolateThread isolate_thread, long value) {
         return fixture.BufferOps.visit(value);

@@ -5,6 +5,7 @@ import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
+import org.graalvm.word.PointerBase;
 
 /** End-to-end fixture: Rust caller -> Native Image sum -> Rust inspect. */
 public final class BufferOps {
@@ -55,5 +56,38 @@ public final class BufferOps {
         SeamNative.forEach(
             SeamNative.Literals.visit.getFunctionPointer(), CurrentIsolate.getCurrentThread(), 5);
     return SeamNative.reducer().invoke(visited, 7);
+  }
+
+  public static void scale(PointerBase value, int factor, PointerBase result) {
+    SeamNative.Pair.left(result, SeamNative.Pair.left(value) * factor);
+    SeamNative.Pair.right(result, SeamNative.Pair.right(value) * factor);
+  }
+
+  public static void spread(PointerBase value, PointerBase result) {
+    long a = SeamNative.Triple.a(value);
+    SeamNative.Triple.a(result, a);
+    SeamNative.Triple.b(result, a + SeamNative.Triple.b(value));
+    SeamNative.Triple.c(result, a + SeamNative.Triple.c(value));
+  }
+
+  /** Java -> Rust by-value imports through their reference-form shims; one bit per check. */
+  public static int structProbe() {
+    PointerBase pair = StackValue.get(SeamNative.Pair.SIZE);
+    PointerBase swapped = StackValue.get(SeamNative.Pair.SIZE);
+    SeamNative.Pair.left(pair, -5L);
+    SeamNative.Pair.right(pair, 1 << 30);
+    SeamNative.swapPair(pair, swapped);
+    int mask = 0;
+    if (SeamNative.Pair.left(swapped) == 1 << 30 && SeamNative.Pair.right(swapped) == -5) mask |= 1;
+    PointerBase triple = StackValue.get(SeamNative.Triple.SIZE);
+    PointerBase rotated = StackValue.get(SeamNative.Triple.SIZE);
+    SeamNative.Triple.a(triple, 1);
+    SeamNative.Triple.b(triple, 2);
+    SeamNative.Triple.c(triple, Long.MIN_VALUE);
+    SeamNative.rotate(triple, 1, rotated);
+    if (SeamNative.Triple.a(rotated) == 2
+        && SeamNative.Triple.b(rotated) == Long.MIN_VALUE
+        && SeamNative.Triple.c(rotated) == 1) mask |= 2;
+    return mask;
   }
 }

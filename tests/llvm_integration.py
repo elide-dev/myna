@@ -164,6 +164,30 @@ unsafe extern "C" { fn seam_widen(a: i8, b: u8, c: i16, d: u16, e: bool) -> i32;
         result = self.apply(rlib, self.work / "bad.rlib", flipped, ok=False)
         self.assertIn("ABI extension mismatch", result.stdout + result.stderr)
 
+    def test_by_value_wrappers_call_annotated_reference_forms(self):
+        source = self.work / "byvalue.rs"
+        source.write_text("""#![crate_type = "rlib"]
+#[allow(dead_code, non_snake_case)]
+mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }
+#[unsafe(no_mangle)]
+pub fn scale_probe(thread: *mut core::ffi::c_void) -> i64 {
+    let pair = seam::Pair { left: 3, right: 4, seamPadding0: [0; 4] };
+    unsafe { seam::scale(thread, pair, 10).left }
+}
+""")
+        rlib = self.work / "libbyvalue.rlib"
+        os.environ["SEAM_GENERATED"] = str(self.work / "generated")
+        run("rustc", "--edition=2024", "-O", "-Clinker-plugin-lto", "--target", TARGET, source, "-o", rlib)
+        self.assertIn("1 direct calls", self.apply(rlib, self.work / "byvalue.seam.rlib").stdout)
+        members = self.work / "members"
+        members.mkdir()
+        run(llvm("llvm-ar"), "x", self.work / "byvalue.seam.rlib", cwd=members)
+        ir = "".join(self.ir(m) for m in members.iterdir() if m.suffix == ".o")
+        call = next(l for l in ir.splitlines() if "call" in l and "@seam_scale_svmgen_ref" in l)
+        for fact in ("readonly", "writeonly", "captures(none)", "dereferenceable(16)", "align 8"):
+            self.assertIn(fact, call)
+        self.assertNotIn("declare i64 @seam_swap_pair", self.contracts.read_text())
+
     def test_rejects_wrong_abi_stale_contracts_and_native_objects(self):
         original = self.c_object()
         annotated = self.work / "annotated.o"

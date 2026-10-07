@@ -21,6 +21,11 @@ fn main() {
         assert!(!bindings::isHigh(thread, 5));
         assert_eq!(bindings::echo(thread, 200), 200);
         assert_eq!(bindings::exercise(thread), 207);
+        assert_eq!(bindings::structProbe(thread), 3, "by-value import mask");
+        let scaled = bindings::scale(thread, bindings::Pair { left: 3, right: -4, seamPadding0: [0; 4] }, 10);
+        assert_eq!((scaled.left, scaled.right), (30, -40));
+        let spread = bindings::spread(thread, bindings::Triple { a: 100, b: 2, c: 3 });
+        assert_eq!((spread.a, spread.b, spread.c), (100, 102, 103));
         assert_eq!(graal_tear_down_isolate(thread), 0);
     }
     println!("Rust -> Native Image -> Rust ABI round trip passed");

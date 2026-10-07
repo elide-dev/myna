@@ -1,5 +1,6 @@
 """Run against the built native CLI, never an in-process generator."""
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -9,7 +10,7 @@ from support import BINARY, ROOT, TARGET, main, run
 class NativeCliTests(unittest.TestCase):
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.3.0")
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.4.0")
         with tempfile.TemporaryDirectory(prefix="svmgen e2e ") as tmp:
             out = Path(tmp)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET)
@@ -24,6 +25,7 @@ class NativeCliTests(unittest.TestCase):
             run("rustc", "--edition=2024", "--crate-type=lib", out / "seam.rs", "-o", out / "libseam.rlib")
             run("javac", "-d", out / "classes", out / "SeamFFM.java")
             library = out / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
+            os.environ["SEAM_GENERATED"] = str(out)
             run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
             (out / "FfmCheck.java").write_text('''import dev.elide.seam.generated.SeamFFM;
 import java.lang.foreign.*;

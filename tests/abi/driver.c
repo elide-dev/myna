@@ -15,6 +15,13 @@ int main(void) {
     printf("narrow returns: classify=%d is_high=%d echo=%d\n", signed_result, bool_result, unsigned_result);
     return 1;
   }
+  struct Pair scaled = seam_scale(thread, (struct Pair){.left = 3, .right = -4}, 10);
+  struct Triple spread = seam_spread(thread, (struct Triple){.a = 100, .b = 2, .c = 3});
+  if (scaled.left != 30 || scaled.right != -40 || spread.b != 102 || spread.c != 103) {
+    printf("by-value exports: scaled=%lld,%d spread=%lld,%lld\n", (long long)scaled.left, scaled.right,
+           (long long)spread.b, (long long)spread.c);
+    return 1;
+  }
   graal_tear_down_isolate(thread);
   puts("C -> Native Image narrow returns passed");
   return 0;

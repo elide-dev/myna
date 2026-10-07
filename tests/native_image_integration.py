@@ -60,6 +60,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         classes.mkdir(exist_ok=True)
         run("javac", "-cp", sdk, "-d", classes, generated / "SeamFFM.java", generated / "SeamForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
+        os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
         run("native-image", "--no-fallback", "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
             "--features=dev.elide.seam.generated.SeamForeignFeature", "FfmMain", "-o", work / "ffm-app")
@@ -77,6 +78,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         classes.mkdir(exist_ok=True)
         run("javac", "-cp", sdk, "-d", classes, generated / "SeamNative.java", ROOT / "tests/abi/BufferOps.java")
         inspector = work / "inspect.o"
+        os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)
         feature = ROOT / "build/dist/svmgen-feature.jar"
         # The hosted Feature consumes the exact same target-adjusted DSL as the generator.

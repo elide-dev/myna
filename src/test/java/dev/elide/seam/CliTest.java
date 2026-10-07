@@ -25,7 +25,7 @@ class CliTest {
   void helpVersionAndBadUsage() {
     assertEquals(0, run().code());
     assertTrue(run("--help").out().contains("svmgen apply"));
-    assertEquals("0.3.0\n", run("--version").out());
+    assertEquals("0.4.0\n", run("--version").out());
     for (String[] args :
         List.of(
             new String[] {"bad"},
