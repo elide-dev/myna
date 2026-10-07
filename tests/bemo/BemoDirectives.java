@@ -5,6 +5,6 @@ import org.graalvm.nativeimage.c.CContext;
 
 public final class BemoDirectives implements CContext.Directives {
   public List<String> getLibraryPaths() {
-    return List.of(System.getProperty("svmgen.bemo.libraryPath"));
+    return List.of(System.getProperty("myna.bemo.libraryPath"));
   }
 }

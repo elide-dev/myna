@@ -174,8 +174,11 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
     return fail("target mismatch: " + M.getTargetTriple().str() + " versus " + C.getTargetTriple().str());
   if (!M.getDataLayoutStr().empty() && M.getDataLayout().getPointerSizeInBits() != 64)
     return fail("expected 64-bit pointers");
-  if (M.getNamedMetadata("svmgen.applied")) {
-    auto Old = fingerprint(M, "svmgen.applied");
+  // Old applied objects must not be treated as fresh after the metadata namespace rename.
+  if (M.getNamedMetadata("svmgen.applied"))
+    return fail("legacy applied contracts; rebuild from original compiler output before using myna");
+  if (M.getNamedMetadata("myna.applied")) {
+    auto Old = fingerprint(M, "myna.applied");
     if (!Old) return Old.takeError();
     if (*Old != Hash) return fail("object already has different seam contracts; rebuild from original compiler output");
   }
@@ -206,8 +209,8 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
     }
   }
   if (Changed) {
-    if (!M.getNamedMetadata("svmgen.applied"))
-      M.getOrInsertNamedMetadata("svmgen.applied")->addOperand(MDNode::get(M.getContext(), MDString::get(M.getContext(), Hash)));
+    if (!M.getNamedMetadata("myna.applied"))
+      M.getOrInsertNamedMetadata("myna.applied")->addOperand(MDNode::get(M.getContext(), MDString::get(M.getContext(), Hash)));
     if (verifyModule(M, &errs())) return fail("rewritten module failed LLVM verification");
     ++Modules;
   }
@@ -241,9 +244,9 @@ static Error run() {
   if (!ContractBuffer) return errorCodeToError(ContractBuffer.getError());
   auto Contract = parseIR((*ContractBuffer)->getMemBufferRef(), Diagnostic, Context);
   std::string ContentHash = toHex(SHA256::hash(arrayRefFromStringRef((*ContractBuffer)->getBuffer())), true);
-  if (!Contract) { Diagnostic.print("svmgen-llvm", errs()); return fail("cannot parse contracts"); }
+  if (!Contract) { Diagnostic.print("myna-llvm", errs()); return fail("cannot parse contracts"); }
   if (verifyModule(*Contract, &errs())) return fail("invalid contract IR");
-  auto Hash = fingerprint(*Contract, "svmgen.contract");
+  auto Hash = fingerprint(*Contract, "myna.contract");
   if (!Hash) return Hash.takeError();
   if (auto E = validateContracts(*Contract)) return E;
   auto Buffer = MemoryBuffer::getFile(Input);
@@ -294,7 +297,7 @@ static Error run() {
   return Error::success();
 }
 int main(int argc, char **argv) {
-  cl::ParseCommandLineOptions(argc, argv, "svmgen LLVM 23 seam contract applicator\n");
-  if (auto E = run()) { logAllUnhandledErrors(std::move(E), errs(), "svmgen-llvm: "); return 2; }
+  cl::ParseCommandLineOptions(argc, argv, "myna LLVM 23 seam contract applicator\n");
+  if (auto E = run()) { logAllUnhandledErrors(std::move(E), errs(), "myna-llvm: "); return 2; }
   return 0;
 }

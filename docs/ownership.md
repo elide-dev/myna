@@ -33,7 +33,7 @@ Confined owners are neither `Send` nor `Sync`; shared owners explicitly implemen
 
 ### Native Image: consumer-implemented lifecycle
 
-A module with ownership declarations also generates `<NativeClass>Ownership.java` (`SeamOwnership.java` with default naming). Its API includes:
+A module with ownership declarations also generates `<NativeClass>Ownership.java` (`MynaOwnership.java` with default naming). Its API includes:
 
 ```java
 @FunctionalInterface

@@ -10,13 +10,13 @@ import unittest
 from support import BINARY, ROOT, TARGET, main, run
 
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
-HELPER = Path(os.environ.get("SVMGEN_LLVM", ROOT / "build/llvm/svmgen-llvm"))
+HELPER = Path(os.environ.get("MYNA_LLVM", ROOT / "build/llvm/myna-llvm"))
 
 def llvm(tool): return LLVM / tool
 
 class LlvmIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="svmgen-llvm-")
+        self.temp = tempfile.TemporaryDirectory(prefix="myna-llvm-")
         self.addCleanup(self.temp.cleanup)
         self.work = Path(self.temp.name)
         run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", self.work / "generated", "--target", TARGET)
@@ -113,10 +113,23 @@ unsafe extern "C" { fn seam_inspect(p: *const i64) -> i64; }
             self.assertEqual((a / name).read_bytes(), (b / name).read_bytes())
         bitcode_name = next(n for n in names if n.endswith(".o") and n != "extra.o")
         run(llvm("llvm-ar"), "x", rewritten, bitcode_name, cwd=self.work)
-        self.assertIn("!svmgen.applied", self.ir(self.work / bitcode_name))
+        self.assertIn("!myna.applied", self.ir(self.work / bitcode_name))
         reapply = self.work / "twice.rlib"
         self.apply(rewritten, reapply)
         self.assertEqual(rewritten.read_bytes(), reapply.read_bytes())
+
+    def test_rejects_objects_annotated_before_project_rename(self):
+        original = self.c_object()
+        annotated = self.work / "annotated.o"
+        self.apply(original, annotated)
+        legacy = self.work / "legacy.ll"
+        legacy.write_text(self.ir(annotated).replace("myna.applied", "svmgen.applied"))
+        run(llvm("llvm-as"), legacy, "-o", self.work / "legacy.o")
+        output = self.work / "reapplied.o"
+        result = self.apply(self.work / "legacy.o", output, ok=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("rebuild from original compiler output", result.stdout)
+        self.assertFalse(output.exists())
 
     def test_rejects_hidden_abi_attributes_and_changed_contract_content(self):
         original = self.c_object()
@@ -183,7 +196,7 @@ pub fn scale_probe(thread: *mut core::ffi::c_void) -> i64 {
         members.mkdir()
         run(llvm("llvm-ar"), "x", self.work / "byvalue.seam.rlib", cwd=members)
         ir = "".join(self.ir(m) for m in members.iterdir() if m.suffix == ".o")
-        call = next(l for l in ir.splitlines() if "call" in l and "@seam_scale_svmgen_ref" in l)
+        call = next(l for l in ir.splitlines() if "call" in l and "@seam_scale_myna_ref" in l)
         for fact in ("readonly", "writeonly", "captures(none)", "dereferenceable(16)", "align 8"):
             self.assertIn(fact, call)
         self.assertNotIn("declare i64 @seam_swap_pair", self.contracts.read_text())

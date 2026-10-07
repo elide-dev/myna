@@ -10,8 +10,8 @@ from support import BINARY, ROOT, TARGET, main, run
 class NativeCliTests(unittest.TestCase):
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.4.0")
-        with tempfile.TemporaryDirectory(prefix="svmgen e2e ") as tmp:
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.5.0")
+        with tempfile.TemporaryDirectory(prefix="myna e2e ") as tmp:
             out = Path(tmp)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET, "--check")
@@ -23,25 +23,25 @@ class NativeCliTests(unittest.TestCase):
             run(out / "check")
             run("c++", "-std=c++17", "-x", "c++", "-fsyntax-only", out / "check.c")
             run("rustc", "--edition=2024", "--crate-type=lib", out / "seam.rs", "-o", out / "libseam.rlib")
-            run("javac", "-d", out / "classes", out / "SeamFFM.java")
+            run("javac", "-d", out / "classes", out / "MynaFFM.java")
             library = out / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
             os.environ["SEAM_GENERATED"] = str(out)
             run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
-            (out / "FfmCheck.java").write_text('''import dev.elide.seam.generated.SeamFFM;
+            (out / "FfmCheck.java").write_text('''import dev.elide.myna.generated.MynaFFM;
 import java.lang.foreign.*;
 import java.nio.file.Path;
 public class FfmCheck { public static void main(String[] args) throws Throwable {
- if (SeamFFM.BufferView_LAYOUT.byteSize() != 24 || SeamFFM.BufferView_flags_OFFSET != 16) throw new AssertionError();
- if (SeamFFM.sum_DESCRIPTOR.argumentLayouts().size() != 3) throw new AssertionError();
+ if (MynaFFM.BufferView_LAYOUT.byteSize() != 24 || MynaFFM.BufferView_flags_OFFSET != 16) throw new AssertionError();
+ if (MynaFFM.sum_DESCRIPTOR.argumentLayouts().size() != 3) throw new AssertionError();
  try (var arena = Arena.ofConfined()) {
    var lookup = SymbolLookup.libraryLookup(Path.of(args[0]), arena);
    var value = arena.allocate(ValueLayout.JAVA_LONG);
    value.set(ValueLayout.JAVA_LONG, 0, 42L);
-   long result = (long) SeamFFM.inspect(lookup).invokeExact(value);
+   long result = (long) MynaFFM.inspect(lookup).invokeExact(value);
    if (result != 42L) throw new AssertionError("FFM -> Rust result");
    System.load(Path.of(args[0]).toAbsolutePath().toString());
    for (int i = 0; i < 100; i++) {
-     if (SeamFFM.inspect(value) != 42L) throw new AssertionError("typed FFM -> Rust result");
+     if (MynaFFM.inspect(value) != 42L) throw new AssertionError("typed FFM -> Rust result");
    }
  }
 }}''')

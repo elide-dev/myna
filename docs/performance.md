@@ -43,10 +43,10 @@ Generate LLVM-importable wrappers only when they perform useful work: ABI adapta
 
 ## Build-time FFM support
 
-The optional generated `SeamForeignFeature.java` registers all downcall descriptors with `RuntimeForeignAccess` during hosted setup. Compile it alongside `SeamFFM.java`, then enable it with:
+The optional generated `MynaForeignFeature.java` registers all downcall descriptors with `RuntimeForeignAccess` during hosted setup. Compile it alongside `MynaFFM.java`, then enable it with:
 
 ```text
---features=dev.elide.seam.generated.SeamForeignFeature
+--features=dev.elide.myna.generated.MynaForeignFeature
 --enable-native-access=ALL-UNNAMED
 ```
 

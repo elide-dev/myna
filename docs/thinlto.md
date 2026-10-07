@@ -8,7 +8,7 @@ flowchart LR
     IR --> Contracts[seam.ll]
     Rust[Rust linker-plugin-lto] --> Objects[Bitcode objects / rlibs]
     C[Clang flto=thin] --> Objects
-    Contracts --> Apply[svmgen apply]
+    Contracts --> Apply[myna apply]
     Objects --> Apply
     Apply --> Annotated[Annotated bitcode + rebuilt summaries/hash]
     Annotated --> Link[LLVM 23 / LLD ThinLTO]
@@ -31,7 +31,7 @@ This revises the briefing's expectation that a separate declaration module in th
 
 ## Implemented applicator
 
-`svmgen apply` invokes `svmgen-llvm`, a small C++ executable linked against LLVM 23. A separate helper keeps LLVM out of the Java native executable and binds the bitcode reader/writer to the production LLVM toolchain.
+`myna apply` invokes `myna-llvm`, a small C++ executable linked against LLVM 23. A separate helper keeps LLVM out of the Java native executable and binds the bitcode reader/writer to the production LLVM toolchain.
 
 The helper:
 
@@ -39,7 +39,7 @@ The helper:
 2. Reads LLVM bitcode regardless of `.bc`/`.o` suffix. For regular `.a`/`.rlib` archives, rewrites bitcode members and preserves other member payloads, names, and order. Rebuilds the archive symbol table deterministically.
 3. Matches exact symbols and checks target architecture/OS/environment/object format, function type, calling convention, and existing attribute compatibility.
 4. Adds approved parameter/function contracts to matching definitions/declarations and their direct call/invoke sites. Indirect calls are not guessed from signature similarity.
-5. Verifies modified IR, embeds `!svmgen.applied` with a SHA-256 of the actual contract bytes, rebuilds the module summary, and recomputes the module hash.
+5. Verifies modified IR, embeds `!myna.applied` with a SHA-256 of the actual contract bytes, rebuilds the module summary, and recomputes the module hash.
 6. Commits a separate output file only after validation succeeds. No-match inputs fail, so an ineffective pipeline integration cannot pass silently.
 
 Same-contract application is idempotent. Reapplying a different contract set to already annotated input is rejected: rebuild from the original compiler output to avoid retaining attributes that were removed or weakened. Version 1 expects one consolidated contract module per object/archive.
@@ -53,21 +53,21 @@ Use the **same LLVM 23 toolchain** for Rust/C/C++, the applicator, and LLD. Matc
 ```sh
 # Generator and applicator
 LLVM_CONFIG=/hermetic/llvm/bin/llvm-config scripts/build.sh --llvm
-build/dist/svmgen generate bindings.seam --out build/seam \
+build/dist/myna generate bindings.seam --out build/seam \
   --target x86_64-unknown-linux-gnu
 
 # C/C++ inputs
 /hermetic/llvm/bin/clang -O2 -flto=thin -c caller.c -o build/caller.o
-build/dist/svmgen apply --contracts build/seam/seam.ll \
+build/dist/myna apply --contracts build/seam/seam.ll \
   --input build/caller.o --output build/caller.seam.o \
-  --llvm-tool build/dist/svmgen-llvm
+  --llvm-tool build/dist/myna-llvm
 
 # Rust input, including regular rlibs/static archives containing bitcode
 rustc --crate-type=rlib -Clinker-plugin-lto -Cpanic=abort \
   src/lib.rs -o build/libcaller.rlib
-build/dist/svmgen apply --contracts build/seam/seam.ll \
+build/dist/myna apply --contracts build/seam/seam.ll \
   --input build/libcaller.rlib --output build/libcaller.seam.rlib \
-  --llvm-tool build/dist/svmgen-llvm
+  --llvm-tool build/dist/myna-llvm
 
 # Actual final inputs: annotated bitcode and the real native implementation
 /hermetic/llvm/bin/clang -flto=thin -fuse-ld=lld main.o \

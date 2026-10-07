@@ -1,10 +1,12 @@
-# svmgen
+# Myna
 
 A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, `@CFunction` imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
 
-**`svmgen apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
+**`myna apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
 
 **Substrate VM is the primary runtime.** Fixed symbols use direct generated C API bindings; explicitly contracted native leaf calls can elide VM transitions. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
+
+Version 0.5.0 introduces the project rename; see [the migration guide](docs/rename.md) for consumer changes.
 
 ## Build and use
 
@@ -14,9 +16,9 @@ Requirements: Elide 1.5.4+, GraalVM JDK 25 with `native-image`, and a native C t
 scripts/build.sh                     # native executable, generator JAR, Feature JAR
 LLVM_CONFIG=/path/to/llvm-config scripts/build.sh --llvm
 
-build/dist/svmgen generate examples/buffer.seam --out build/seam
-build/dist/svmgen validate examples/buffer.seam
-build/dist/svmgen generate examples/buffer.seam --out build/seam --check
+build/dist/myna generate examples/buffer.seam --out build/seam
+build/dist/myna validate examples/buffer.seam
+build/dist/myna generate examples/buffer.seam --out build/seam --check
 ```
 
 Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` supplies conventional JVM test/coverage tooling and a JAR build (`mvn verify`). The Java generator has no runtime dependencies. Native compilation uses Elide's external Native Image driver.
@@ -26,10 +28,10 @@ The descriptor target is explicit. Use `--target x86_64-unknown-linux-gnu` to ov
 ```sh
 # Compile Rust for linker-driven ThinLTO, then annotate its real archive.
 rustc --crate-type=rlib -Clinker-plugin-lto src/lib.rs -o build/libapp.rlib
-build/dist/svmgen apply \
+build/dist/myna apply \
   --contracts build/seam/seam.ll \
   --input build/libapp.rlib --output build/libapp.seam.rlib \
-  --llvm-tool build/dist/svmgen-llvm
+  --llvm-tool build/dist/myna-llvm
 ```
 
 Use the rewritten archive/object in the final LLVM 23 / LLD link. A contract-only `.ll` file is an interchange artifact; simply adding it to a link is insufficient. Keep the original object: changed contracts must be applied to fresh compiler output.
@@ -47,9 +49,9 @@ end
 
 Every generation produces:
 
-- `seam.h`, `seam.rs`, `SeamFFM.java`, `SeamNative.java`, `SeamForeignFeature.java`
+- `seam.h`, `seam.rs`, `MynaFFM.java`, `MynaNative.java`, `MynaForeignFeature.java`
 - `seam.json` with optimizer-fact provenance, `seam.abi` with a SHA-256 fingerprint
-- `seam.ll`, consumed by `svmgen apply` or assembled by LLVM 23's `llvm-as`
+- `seam.ll`, consumed by `myna apply` or assembled by LLVM 23's `llvm-as`
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.
 
@@ -71,7 +73,7 @@ The full suite additionally needs Python 3, Rust using LLVM 23, and LLD 23. Set 
 Individual integration tests can run against existing builds:
 
 ```sh
-SVMGEN_BIN=build/dist/svmgen python3 tests/e2e.py
+MYNA_BIN=build/dist/myna python3 tests/e2e.py
 LLVM_BIN=/path/to/llvm/bin python3 tests/llvm_integration.py
 python3 tests/native_image_integration.py
 ```
@@ -92,9 +94,9 @@ CI runs JVM tests and native integration on Linux and macOS, retaining the XML r
 Two Docker targets are provided:
 
 ```sh
-docker build --target generator -t svmgen:local .
-docker build --target llvm23 -t svmgen:local-llvm23 .
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:local \
+docker build --target generator -t myna:local .
+docker build --target llvm23 -t myna:local-llvm23 .
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:local \
   generate bindings.seam --out generated --target x86_64-unknown-linux-gnu
 ```
 
@@ -104,12 +106,12 @@ The container workflow builds and smoke-tests both variants on pull requests. Pu
 
 ## Native Image Feature
 
-Pre-generate and compile the Java glue before building the image. Add `svmgen-feature.jar` to the image builder's classpath and pass:
+Pre-generate and compile the Java glue before building the image. Add `myna-feature.jar` to the image builder's classpath and pass:
 
 ```text
---features=dev.elide.seam.nativeimage.SeamFeature
--Dsvmgen.input=/absolute/path/bindings.seam
--Dsvmgen.output=/absolute/path/build/seam
+--features=dev.elide.myna.nativeimage.MynaFeature
+-Dmyna.input=/absolute/path/bindings.seam
+-Dmyna.output=/absolute/path/build/seam
 ```
 
 The Feature exports the validated descriptors during `beforeAnalysis`; it does not compile newly emitted Java during image analysis. It currently consumes explicit DSL facts. Annotation scanning and Graal-proven enrichment are future frontend work.
@@ -122,4 +124,4 @@ Typed FFM calls and Native Image downcall-stub registration are implemented. Ful
 
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets passed by pointer or by value, and isolate-thread exports with include predicates and abort/integer/null exception translation.
 
-Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](elide-seam-generator-briefing.md) describes the broader roadmap.
+Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.

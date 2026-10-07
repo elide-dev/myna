@@ -17,23 +17,23 @@ WORKDIR /build
 COPY src/main/java/ src/main/java/
 RUN find src/main/java -name '*.java' > sources.txt \
     && javac --release 25 -d classes @sources.txt \
-    && jar --create --file svmgen.jar --main-class dev.elide.seam.cli.Main -C classes . \
-    && native-image --no-fallback -O2 -jar svmgen.jar -o svmgen
+    && jar --create --file myna.jar --main-class dev.elide.myna.cli.Main -C classes . \
+    && native-image --no-fallback -O2 -jar myna.jar -o myna
 
 # Full variant: includes the LLVM 23 tools used to read, annotate, and inspect objects.
 FROM llvm-build AS llvm23
-COPY --from=java-build /build/svmgen /usr/local/bin/svmgen
-COPY --from=java-build /build/svmgen.jar /opt/svmgen/svmgen.jar
+COPY --from=java-build /build/myna /usr/local/bin/myna
+COPY --from=java-build /build/myna.jar /opt/myna/myna.jar
 ENV PATH="/usr/lib/llvm-23/bin:${PATH}"
 WORKDIR /work
-ENTRYPOINT ["/usr/local/bin/svmgen"]
+ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]
 
 FROM ubuntu:24.04 AS generator
 RUN apt-get update && apt-get install -y --no-install-recommends zlib1g \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=java-build /build/svmgen /usr/local/bin/svmgen
-COPY --from=java-build /build/svmgen.jar /opt/svmgen/svmgen.jar
+COPY --from=java-build /build/myna /usr/local/bin/myna
+COPY --from=java-build /build/myna.jar /opt/myna/myna.jar
 WORKDIR /work
-ENTRYPOINT ["/usr/local/bin/svmgen"]
+ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]

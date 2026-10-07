@@ -8,7 +8,7 @@ A module starts with:
 module moduleName abi=1 target=aarch64-apple-darwin
 ```
 
-Optional `java_package=dev.example.io` and `java_class=IoNatives` name the generated Java: the Native Image class becomes `IoNatives`, the FFM class `IoNativesFFM`, and the Feature `IoNativesForeignFeature`, each named `<class>.java`. Defaults are `dev.elide.seam.generated` and `SeamNative`/`SeamFFM`/`SeamForeignFeature`. Naming is part of the canonical JSON and fingerprint only when set.
+Optional `java_package=dev.example.io` and `java_class=IoNatives` name the generated Java: the Native Image class becomes `IoNatives`, the FFM class `IoNativesFFM`, and the Feature `IoNativesForeignFeature`, each named `<class>.java`. Defaults are `dev.elide.myna.generated` and `MynaNative`/`MynaFFM`/`MynaForeignFeature`. Naming is part of the canonical JSON and fingerprint only when set.
 
 Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-gnu`. Their layouts are modeled explicitly as 64-bit little-endian targets; no global assumption about other ABIs is made. The CLI's `--target` overrides the descriptor target before validation/fingerprinting.
 
@@ -36,7 +36,7 @@ end
 
 `fn<Name>` is a C function pointer to a declared callback: a nested `CFunctionPointer` interface with `@InvokeCFunctionPointer invoke(...)` in Java, `Option<unsafe extern "C" fn(...)>` in Rust, and a `typedef` in C. An export with `callback=Name` must match the signature (including its isolate parameter); the generated `<Class>.Literals` holds its `CEntryPointLiteral`. `CEntryPointLiteral.create` only runs during the image build, so initialize `<Class>$Literals` at build time. Callback parameters carry no contracts, and unsigned sub-32-bit callback parameters are rejected.
 
-Sub-32-bit values (`bool`, `i8/u8`, `i16/u16`) follow each target's C extension rule, as clang and rustc emit it: parameters are `signext`/`zeroext` on x86-64 and Apple arm64 and unextended on AAPCS64 Linux. Returns carry no extension contract because the producers disagree on x86-64 Linux. `svmgen apply` verifies extension against the compiler's and never adds it. Native Image extends a narrow Java value by its signed Java type, so unsigned imports go through a `<name>Native` `int` binding behind a typed wrapper, and exports return an explicitly extended `int`. `void` cannot be a parameter/field. Unsigned Java carriers preserve raw bits in the same-width signed primitive.
+Sub-32-bit values (`bool`, `i8/u8`, `i16/u16`) follow each target's C extension rule, as clang and rustc emit it: parameters are `signext`/`zeroext` on x86-64 and Apple arm64 and unextended on AAPCS64 Linux. Returns carry no extension contract because the producers disagree on x86-64 Linux. `myna apply` verifies extension against the compiler's and never adds it. Native Image extends a narrow Java value by its signed Java type, so unsigned imports go through a `<name>Native` `int` binding behind a typed wrapper, and exports return an explicitly extended `int`. `void` cannot be a parameter/field. Unsigned Java carriers preserve raw bits in the same-width signed primitive.
 
 ```text
 opaque Buffer
@@ -51,7 +51,7 @@ Fields are scalar/pointer values in ascending, non-overlapping, naturally aligne
 
 ### Records by value
 
-A declared `struct` may be a function parameter or return type (`param p type=Pt`, `return=Pt`). C, Rust and FFM use the real by-value C ABI. Native Image's C interface carries only primitives and words, so that boundary uses a reference form, `<symbol>_svmgen_ref`, taking `const T *` for each record and returning a record through a trailing `T *result`:
+A declared `struct` may be a function parameter or return type (`param p type=Pt`, `return=Pt`). C, Rust and FFM use the real by-value C ABI. Native Image's C interface carries only primitives and words, so that boundary uses a reference form, `<symbol>_myna_ref`, taking `const T *` for each record and returning a record through a trailing `T *result`:
 
 - Imports: the native side implements the by-value symbol; the implementing Rust crate invokes `native_image_shims!(path::to::seam)` beside it to define the reference forms, which Java's `@CFunction`s bind. ThinLTO inlines each shim into its implementation.
 - Exports: Native Image exports only the reference form, and the Java target takes `PointerBase` records plus `result`. `seam.rs` adds an `#[inline]` by-value wrapper and `seam.h` a `static inline` one, so Rust and C call by value.

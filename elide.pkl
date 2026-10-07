@@ -3,10 +3,10 @@ import "elide:Jvm.pkl" as Jvm
 import "elide:Sources.pkl" as Sources
 import "elide:NativeImage.pkl" as Native
 
-name = "svmgen"
-version = "0.4.0"
+name = "myna"
+version = "0.5.0"
 jvm {
-  main = "dev.elide.seam.cli.Main"
+  main = "dev.elide.myna.cli.Main"
   target = 25
 }
 sources {
@@ -24,18 +24,18 @@ sources {
 }
 artifacts {
   ["jar"] = new Jvm.Jar {
-    name = "svmgen"
-    main = "dev.elide.seam.cli.Main"
+    name = "myna"
+    main = "dev.elide.myna.cli.Main"
     sources { "main" }
   }
   ["feature-jar"] = new Jvm.Jar {
-    name = "svmgen-feature"
+    name = "myna-feature"
     sources { "main"; "feature" }
   }
   ["native"] = new Native.NativeImage {
-    name = "svmgen"
+    name = "myna"
     from { "jar" }
-    entrypoint = "dev.elide.seam.cli.Main"
+    entrypoint = "dev.elide.myna.cli.Main"
     options {
       optimization = "2"
       driverMode = "external"

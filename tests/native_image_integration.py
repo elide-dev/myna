@@ -1,5 +1,6 @@
 """Build and execute real Native Image C API glue and the hosted Feature."""
 import os
+import shutil
 from pathlib import Path
 import sys
 import unittest
@@ -19,13 +20,16 @@ class NativeImageIntegrationTests(unittest.TestCase):
         run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
-        classes.mkdir(exist_ok=True)
+        # Renamed/removed entry-point classes must not survive an earlier fixture build.
+        if classes.exists():
+            shutil.rmtree(classes)
+        classes.mkdir()
         run("javac", "-cp", sdk, "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
         app = work / "bemo-app"
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         run("native-image", "--no-fallback", "-O1", "-cp", classes,
             "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
-            f"-Dsvmgen.bemo.libraryPath={work}", "fixture.bemo.BemoMain", "-o", app)
+            f"-Dmyna.bemo.libraryPath={work}", "fixture.bemo.BemoMain", "-o", app)
         self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
 
     def test_consumer_ownership_and_off_heap_buffers(self):
@@ -62,7 +66,10 @@ class NativeImageIntegrationTests(unittest.TestCase):
         run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
-        classes.mkdir(exist_ok=True)
+        # Renamed/removed entry-point classes must not survive an earlier fixture build.
+        if classes.exists():
+            shutil.rmtree(classes)
+        classes.mkdir()
         run("javac", "-cp", sdk, "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
         app = work / "ownership-app"
         run("native-image", "--no-fallback", "-O1", "-cp", classes,
@@ -78,13 +85,16 @@ class NativeImageIntegrationTests(unittest.TestCase):
         run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
-        classes.mkdir(exist_ok=True)
-        run("javac", "-cp", sdk, "-d", classes, generated / "SeamFFM.java", generated / "SeamForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        # Renamed/removed entry-point classes must not survive an earlier fixture build.
+        if classes.exists():
+            shutil.rmtree(classes)
+        classes.mkdir()
+        run("javac", "-cp", sdk, "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
         run("native-image", "--no-fallback", "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
-            "--features=dev.elide.seam.generated.SeamForeignFeature", "FfmMain", "-o", work / "ffm-app")
+            "--features=dev.elide.myna.generated.MynaForeignFeature", "FfmMain", "-o", work / "ffm-app")
         self.assertIn("AOT FFM -> Rust passed", run(work / "ffm-app", library).stdout)
 
     def test_rust_native_image_rust(self):
@@ -96,19 +106,22 @@ class NativeImageIntegrationTests(unittest.TestCase):
         run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
-        classes.mkdir(exist_ok=True)
-        run("javac", "-cp", sdk, "-d", classes, generated / "SeamNative.java", ROOT / "tests/abi/BufferOps.java")
+        # Renamed/removed entry-point classes must not survive an earlier fixture build.
+        if classes.exists():
+            shutil.rmtree(classes)
+        classes.mkdir()
+        run("javac", "-cp", sdk, "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
         inspector = work / "inspect.o"
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)
-        feature = ROOT / "build/dist/svmgen-feature.jar"
+        feature = ROOT / "build/dist/myna-feature.jar"
         # The hosted Feature consumes the exact same target-adjusted DSL as the generator.
         source = work / "buffer.seam"
         source.write_text((ROOT / "examples/buffer.seam").read_text().replace("aarch64-apple-darwin", TARGET))
         feature_output = work / "feature-output"
         run("native-image", "--shared", "--no-fallback", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
-            "--initialize-at-build-time=dev.elide.seam.generated.SeamNative$Literals",
-            "--features=dev.elide.seam.nativeimage.SeamFeature", f"-Dsvmgen.input={source}", f"-Dsvmgen.output={feature_output}",
+            "--initialize-at-build-time=dev.elide.myna.generated.MynaNative$Literals",
+            "--features=dev.elide.myna.nativeimage.MynaFeature", f"-Dmyna.input={source}", f"-Dmyna.output={feature_output}",
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={inspector}", "-H:-UnlockExperimentalVMOptions",
             "-o", work / "libseamfixture")
         self.assertEqual((generated / "seam.json").read_bytes(), (feature_output / "seam.json").read_bytes())

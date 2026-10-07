@@ -48,21 +48,21 @@ jobs:
           target: ${{ matrix.target }}
           load: true
           push: false
-          tags: svmgen:test
+          tags: myna:test
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
       - name: Smoke-test container
         run: |
-          docker run --rm svmgen:test --version
+          docker run --rm myna:test --version
           mkdir -p build/container
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu --check
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu --check
       - name: Smoke-test object application
         if: matrix.target == 'llvm23'
         run: |
           printf '%s\n' 'extern long seam_inspect(const long*); long f(void) { long x=42; seam_inspect(&x); return x; }' > build/container/caller.c
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint clang svmgen:test -O1 -flto=thin -c build/container/caller.c -o build/container/caller.o
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" svmgen:test apply --contracts build/container/seam.ll --input build/container/caller.o --output build/container/caller.seam.o
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint clang myna:test -O1 -flto=thin -c build/container/caller.c -o build/container/caller.o
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test apply --contracts build/container/seam.ll --input build/container/caller.o --output build/container/caller.seam.o
       - uses: docker/build-push-action@v6
         if: startsWith(github.ref, 'refs/tags/v')
         with:

@@ -8,7 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = Path(os.environ.get("SVMGEN_BIN", ROOT / "build/dist/svmgen")).resolve()
+BINARY = Path(os.environ.get("MYNA_BIN", ROOT / "build/dist/myna")).resolve()
 TARGET = {("Darwin", "arm64"): "aarch64-apple-darwin", ("Darwin", "x86_64"): "x86_64-apple-darwin",
           ("Linux", "aarch64"): "aarch64-unknown-linux-gnu", ("Linux", "x86_64"): "x86_64-unknown-linux-gnu"}.get((platform.system(), platform.machine()))
 
