@@ -20,6 +20,15 @@ public final class RustFfi implements Backend {
     out.append("const _: () = assert!(core::mem::size_of::<*const ()>() == 8);\n");
     for (String name : m.opaqueTypes())
       out.append("#[repr(C)]\npub struct ").append(name).append(" { _private: [u8; 0] }\n");
+    for (Signature c : m.callbacks()) {
+      out.append("pub type ")
+          .append(c.name())
+          .append(" = Option<unsafe extern \"C\" fn(")
+          .append(String.join(", ", c.parameters().stream().map(Types::rust).toList()))
+          .append(')');
+      if (c.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(c.returns()));
+      out.append(">;\n");
+    }
     for (Struct s : m.structs()) {
       out.append("#[repr(C)]\npub struct ").append(s.name()).append(" {\n");
       long offset = 0;
@@ -91,6 +100,17 @@ public final class RustFfi implements Backend {
       out.append(";\n");
     }
     out.append("}\n");
+    // Function-pointer types for callers that resolve symbols dynamically (dlsym/GetProcAddress).
+    for (Function f : m.functions()) {
+      out.append("pub type ")
+          .append(Character.toUpperCase(f.name().charAt(0)))
+          .append(f.name().substring(1))
+          .append("Fn = unsafe extern \"C\" fn(")
+          .append(String.join(", ", f.abiParameters().stream().map(Types::rust).toList()))
+          .append(')');
+      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+      out.append(";\n");
+    }
     var imports = m.functions().stream().filter(f -> f.direction() == Direction.IMPORT).toList();
     if (!imports.isEmpty()) {
       out.append(

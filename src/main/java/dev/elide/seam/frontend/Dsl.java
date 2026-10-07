@@ -15,6 +15,7 @@ public final class Dsl {
     var opaque = new ArrayList<String>();
     var structs = new ArrayList<Struct>();
     var functions = new ArrayList<Function>();
+    var callbacks = new ArrayList<Signature>();
     String[] header = null;
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
@@ -30,6 +31,7 @@ public final class Dsl {
             if (name != null
                 || header != null
                 || !functions.isEmpty()
+                || !callbacks.isEmpty()
                 || !structs.isEmpty()
                 || !opaque.isEmpty())
               throw new IllegalArgumentException("module must be declared once, first");
@@ -48,7 +50,7 @@ public final class Dsl {
                 "expected opaque NAME outside a block");
             opaque.add(words[1]);
           }
-          case "struct", "import", "export" -> {
+          case "struct", "import", "export", "callback" -> {
             require(
                 name != null && header == null && words.length >= 2,
                 "expected a named top-level block");
@@ -84,7 +86,11 @@ public final class Dsl {
           }
           case "end" -> {
             require(header != null && words.length == 1, "unexpected end");
-            if (header[0].equals("struct")) {
+            if (header[0].equals("callback")) {
+              callbacks.add(
+                  new Signature(header[1], Seam.type(takeRequired(options, "return")), parameters));
+              empty(options);
+            } else if (header[0].equals("struct")) {
               structs.add(
                   new Struct(
                       header[1],
@@ -102,6 +108,7 @@ public final class Dsl {
                 sentinel = new java.math.BigInteger(sentinel).toString();
               String javaTarget = take(options, "java", null);
               String include = take(options, "include", null);
+              String callback = take(options, "callback", null);
               String isolate = take(options, "isolate", "none");
               require(
                   isolate.equals("none") || isolate.equals("thread"),
@@ -119,6 +126,7 @@ public final class Dsl {
                       sentinel,
                       javaTarget,
                       include,
+                      callback,
                       isolate.equals("thread"),
                       facts(options)));
             }
@@ -133,7 +141,8 @@ public final class Dsl {
     }
     require(name != null, "missing module");
     require(header == null, "unterminated block");
-    return new Module(name, abi, target, javaPackage, javaClass, opaque, structs, functions);
+    return new Module(
+        name, abi, target, javaPackage, javaClass, opaque, structs, callbacks, functions);
   }
 
   private static Map<String, String> options(String[] words, int start) {

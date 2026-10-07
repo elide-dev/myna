@@ -38,3 +38,24 @@ end
 export echo symbol=seam_echo return=u8 java=fixture.BufferOps.echo isolate=thread error=abort
   param value type=u8
 end
+# Callbacks: Java hands Rust an entry point plus its isolate thread; Rust hands Java a function pointer.
+callback Visitor return=i32
+  param isolate type=isolate_thread
+  param value type=i64
+end
+callback Reducer return=i64
+  param left type=i64
+  param right type=i64
+end
+export visit symbol=seam_visit return=i32 java=fixture.BufferOps.visit isolate=thread error=abort callback=Visitor
+  param value type=i64
+end
+import forEach symbol=seam_for_each return=i32 error=no_failure
+  param visitor type=fn<Visitor>
+  param isolate type=isolate_thread
+  param count type=i64
+end
+import reducer symbol=seam_reducer return=fn<Reducer> error=no_failure
+end
+export exercise symbol=seam_exercise return=i64 java=fixture.BufferOps.exercise isolate=thread error=abort
+end

@@ -15,7 +15,7 @@ public final class Main {
 
   private static final String HELP =
       """
-      svmgen 0.2.0 — Native Image / Rust ABI generator
+      svmgen 0.3.0 — Native Image / Rust ABI generator
       Usage:
         svmgen generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check]
         svmgen validate INPUT.seam [--target TRIPLE] [--relaxed]

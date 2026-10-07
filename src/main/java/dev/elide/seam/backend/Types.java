@@ -6,12 +6,17 @@ final class Types {
   private Types() {}
 
   static String c(Type type) {
+    if (type instanceof FunctionPointer f) return f.signature();
+    if (type == Isolate.THREAD) return "void *";
     if (type instanceof Pointer p) return c(p.pointee()) + " *";
     if (type instanceof Named n) return "struct " + n.name();
     Scalar s = (Scalar) type;
     return switch (s) {
       case VOID -> "void";
       case BOOL -> "bool";
+      case CHAR -> "char";
+      case USIZE -> "size_t";
+      case ISIZE -> "ptrdiff_t";
       case F32 -> "float";
       case F64 -> "double";
       default -> (s.text().startsWith("u") ? "uint" : "int") + s.bytes * 8 + "_t";
@@ -25,9 +30,13 @@ final class Types {
   }
 
   static String rust(Type type) {
+    if (type instanceof FunctionPointer f) return f.signature();
+    if (type == Isolate.THREAD) return "*mut core::ffi::c_void";
     if (type instanceof Pointer p) return "*mut " + rust(p.pointee());
     if (type instanceof Named n) return n.name();
-    return type == Scalar.VOID ? "core::ffi::c_void" : type.text();
+    if (type == Scalar.VOID) return "core::ffi::c_void";
+    if (type == Scalar.CHAR) return "core::ffi::c_char";
+    return type.text();
   }
 
   static String rust(Parameter p) {
@@ -38,13 +47,16 @@ final class Types {
 
   /** Native Image word carriers; typed C pointers where the pointee has one. */
   static String java(Type type) {
+    if (type instanceof FunctionPointer f) return f.signature();
+    if (type == Isolate.THREAD) return "IsolateThread";
     if (type instanceof Pointer p) {
       if (p.pointee() instanceof Pointer inner && inner.pointee() instanceof Scalar s)
-        if (s == Scalar.I8 || s == Scalar.U8) return "CCharPointerPointer";
+        if (s == Scalar.I8 || s == Scalar.U8 || s == Scalar.CHAR) return "CCharPointerPointer";
       if (!(p.pointee() instanceof Scalar s)) return "PointerBase";
       return switch (s) {
         case VOID -> "VoidPointer";
-        case BOOL, I8, U8 -> "CCharPointer";
+        case BOOL, CHAR, I8, U8 -> "CCharPointer";
+        case USIZE, ISIZE -> "WordPointer";
         case I16, U16 -> "CShortPointer";
         case I32, U32 -> "CIntPointer";
         case I64, U64 -> "CLongPointer";
@@ -55,27 +67,27 @@ final class Types {
     return switch ((Scalar) type) {
       case VOID -> "void";
       case BOOL -> "boolean";
-      case I8, U8 -> "byte";
+      case CHAR, I8, U8 -> "byte";
       case I16, U16 -> "short";
       case I32, U32 -> "int";
-      case I64, U64 -> "long";
+      case I64, U64, USIZE, ISIZE -> "long";
       case F32 -> "float";
       case F64 -> "double";
     };
   }
 
   static String ffmCarrier(Type type) {
-    return type instanceof Pointer ? "MemorySegment" : java(type);
+    return type instanceof Scalar ? java(type) : "MemorySegment";
   }
 
   static String layout(Type type) {
-    if (type instanceof Pointer) return "ValueLayout.ADDRESS";
+    if (!(type instanceof Scalar)) return "ValueLayout.ADDRESS";
     return switch ((Scalar) type) {
       case BOOL -> "ValueLayout.JAVA_BOOLEAN";
-      case I8, U8 -> "ValueLayout.JAVA_BYTE";
+      case CHAR, I8, U8 -> "ValueLayout.JAVA_BYTE";
       case I16, U16 -> "ValueLayout.JAVA_SHORT";
       case I32, U32 -> "ValueLayout.JAVA_INT";
-      case I64, U64 -> "ValueLayout.JAVA_LONG";
+      case I64, U64, USIZE, ISIZE -> "ValueLayout.JAVA_LONG";
       case F32 -> "ValueLayout.JAVA_FLOAT";
       case F64 -> "ValueLayout.JAVA_DOUBLE";
       case VOID -> throw new IllegalArgumentException("void has no FFM layout");
@@ -83,7 +95,7 @@ final class Types {
   }
 
   static String llvm(Type type) {
-    if (type instanceof Pointer) return "ptr";
+    if (!(type instanceof Scalar)) return "ptr";
     return switch ((Scalar) type) {
       case VOID -> "void";
       case BOOL -> "i1";
@@ -102,7 +114,7 @@ final class Types {
     if (!(type instanceof Scalar s) || s.bytes >= 4 || s == Scalar.VOID) return "";
     if (target.equals("aarch64-unknown-linux-gnu")) return "";
     return switch (s) {
-      case I8, I16 -> "signext";
+      case CHAR, I8, I16 -> "signext";
       default -> "zeroext";
     };
   }

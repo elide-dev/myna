@@ -49,6 +49,19 @@ public final class SeamJson {
                                     .toList())
                             + "}")
                 .toList())
+        + ",\n  \"callbacks\": "
+        + array(
+            m.callbacks().stream()
+                .map(
+                    c ->
+                        "{\"name\":"
+                            + quote(c.name())
+                            + ",\"returnType\":"
+                            + quote(c.returns().text())
+                            + ",\"parameters\":"
+                            + array(c.parameters().stream().map(SeamJson::parameter).toList())
+                            + "}")
+                .toList())
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
         + "\n}\n";
@@ -80,6 +93,7 @@ public final class SeamJson {
         + ",\"javaTarget\":"
         + quote(f.javaTarget())
         + (f.include() == null ? "" : ",\"include\":" + quote(f.include()))
+        + (f.callback() == null ? "" : ",\"callback\":" + quote(f.callback()))
         + ",\"isolateThread\":"
         + f.isolateThread()
         + ",\"parameters\":"

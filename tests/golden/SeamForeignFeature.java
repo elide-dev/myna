@@ -11,6 +11,10 @@ public final class SeamForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$classify_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.echo_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$echo_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.exercise_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$exercise_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.forEach_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$forEach_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.inspect_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$inspect_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.isHigh_DESCRIPTOR);
@@ -19,8 +23,12 @@ public final class SeamForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$lowSigned_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.lowUnsigned_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$lowUnsigned_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.reducer_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$reducer_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.sum_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$sum_Binding");
+        RuntimeForeignAccess.registerForDowncall(SeamFFM.visit_DESCRIPTOR);
+        RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$visit_Binding");
         RuntimeForeignAccess.registerForDowncall(SeamFFM.widen_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.seam.generated.SeamFFM$widen_Binding");
     }

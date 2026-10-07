@@ -16,7 +16,30 @@ public final class NativeImage implements Backend {
   }
 
   private static String carrier(Parameter p) {
-    return p.name().equals("isolate_thread") ? "IsolateThread" : Types.java(p.type());
+    return Types.java(p.type());
+  }
+
+  private static final Map<String, String> WORD_TYPES =
+      Map.of(
+          "IsolateThread", "org.graalvm.nativeimage",
+          "PointerBase", "org.graalvm.word",
+          "VoidPointer", "org.graalvm.nativeimage.c.type",
+          "WordPointer", "org.graalvm.nativeimage.c.type");
+
+  private static void carrierImport(Set<String> imports, Type type) {
+    if (type instanceof FunctionPointer) return; // nested in the generated class
+    String c = Types.java(type);
+    if (WORD_TYPES.containsKey(c)) imports.add(WORD_TYPES.get(c) + "." + c);
+    else if (type instanceof Pointer) imports.add("org.graalvm.nativeimage.c.type." + c);
+  }
+
+  private static String params(List<Parameter> ps) {
+    return String.join(", ", ps.stream().map(p -> carrier(p) + " " + p.name()).toList());
+  }
+
+  /** {@code @CConst} reaches the C headers Native Image writes for entry points. */
+  private static boolean readOnlyPointer(Parameter p) {
+    return p.type() instanceof Pointer && p.access() == Access.READ;
   }
 
   private static boolean unsignedSmall(Type t) {
@@ -41,22 +64,33 @@ public final class NativeImage implements Backend {
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
+    if (!m.callbacks().isEmpty()) {
+      imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
+      imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
+    }
+    for (Signature c : m.callbacks()) {
+      carrierImport(imports, c.returns());
+      c.parameters().forEach(p -> carrierImport(imports, p.type()));
+    }
     for (Function f : m.functions()) {
       if (f.direction() == Direction.IMPORT) imports.add("org.graalvm.nativeimage.c.function.CFunction");
       else {
-        imports.add("org.graalvm.nativeimage.IsolateThread");
         imports.add("org.graalvm.nativeimage.c.function.CEntryPoint");
         if (f.error() == ErrorConvention.NULL_SENTINEL) imports.add("org.graalvm.word.WordFactory");
+        if (f.callback() != null)
+          imports.add("org.graalvm.nativeimage.c.function.CEntryPointLiteral");
+        if (f.parameters().stream().anyMatch(NativeImage::readOnlyPointer))
+          imports.add("org.graalvm.nativeimage.c.type.CConst");
       }
-      var carriers = new ArrayList<String>();
-      carriers.add(Types.java(f.returns()));
-      f.parameters().forEach(p -> carriers.add(Types.java(p.type())));
-      for (String c : carriers)
-        if (c.equals("PointerBase")) imports.add("org.graalvm.word.PointerBase");
-        else if (c.equals("VoidPointer") || c.startsWith("C"))
-          imports.add("org.graalvm.nativeimage.c.type." + c);
+      carrierImport(imports, f.returns());
+      f.abiParameters().forEach(p -> carrierImport(imports, p.type()));
     }
     return imports;
+  }
+
+  /** Class literal for {@code CEntryPointLiteral.create}; nested callback types are qualified. */
+  private static String classLiteral(Module m, Type type) {
+    return (type instanceof FunctionPointer ? m.nativeClass() + "." : "") + Types.java(type) + ".class";
   }
 
   public String generate(Module m) {
@@ -75,6 +109,36 @@ public final class NativeImage implements Backend {
     out.append("    public static final String ABI_FINGERPRINT = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
+    for (Signature c : m.callbacks())
+      out.append("    public interface ")
+          .append(c.name())
+          .append(" extends CFunctionPointer {\n        @InvokeCFunctionPointer\n        ")
+          .append(Types.java(c.returns()))
+          .append(" invoke(")
+          .append(params(c.parameters()))
+          .append(");\n    }\n");
+    if (m.functions().stream().anyMatch(f -> f.callback() != null)) {
+      out.append(
+              "    /** Entry-point addresses; CEntryPointLiteral.create is hosted-only, so initialize"
+                  + " this class at image build time. */\n"
+                  + "    public static final class Literals {\n        private Literals() {}\n");
+      for (Function f : m.functions())
+        if (f.callback() != null)
+          out.append("        public static final CEntryPointLiteral<")
+              .append(f.callback())
+              .append("> ")
+              .append(f.name())
+              .append(" =\n            CEntryPointLiteral.create(")
+              .append(m.nativeClass())
+              .append(".class, ")
+              .append(SeamJson.quote(f.name()))
+              .append(
+                  f.abiParameters().stream()
+                      .map(p -> ", " + classLiteral(m, p.type()))
+                      .reduce("", String::concat))
+              .append(");\n");
+      out.append("    }\n");
+    }
     for (Function f : m.functions()) {
       boolean lowered =
           f.direction() == Direction.IMPORT && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
@@ -121,7 +185,8 @@ public final class NativeImage implements Backend {
               f.abiParameters().stream()
                   .map(
                       p ->
-                          (lowered && unsignedSmall(p.type()) ? "int" : carrier(p))
+                          (f.direction() == Direction.EXPORT && readOnlyPointer(p) ? "@CConst " : "")
+                              + (lowered && unsignedSmall(p.type()) ? "int" : carrier(p))
                               + " "
                               + p.name())
                   .toList()));

@@ -3,13 +3,31 @@ package dev.elide.seam.generated;
 
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunction;
+import org.graalvm.nativeimage.c.function.CFunctionPointer;
+import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
 import org.graalvm.nativeimage.c.type.CCharPointer;
+import org.graalvm.nativeimage.c.type.CConst;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 
 public final class SeamNative {
     private SeamNative() {}
-    public static final String ABI_FINGERPRINT = "8a92ad19a5b593ca7a44354722924acef6f9c93e26bfbe9a55005c04cad53583";
+    public static final String ABI_FINGERPRINT = "7662bb31a02f7f7b753df3d135114daa4c9102b5355d7629f02a1e332d408706";
+    public interface Reducer extends CFunctionPointer {
+        @InvokeCFunctionPointer
+        long invoke(long left, long right);
+    }
+    public interface Visitor extends CFunctionPointer {
+        @InvokeCFunctionPointer
+        int invoke(IsolateThread isolate, long value);
+    }
+    /** Entry-point addresses; CEntryPointLiteral.create is hosted-only, so initialize this class at image build time. */
+    public static final class Literals {
+        private Literals() {}
+        public static final CEntryPointLiteral<Visitor> visit =
+            CEntryPointLiteral.create(SeamNative.class, "visit", IsolateThread.class, long.class);
+    }
     @CEntryPoint(name = "seam_classify")
     public static int classify(IsolateThread isolate_thread, short value, boolean strict) {
         return fixture.BufferOps.classify(value, strict);
@@ -18,6 +36,12 @@ public final class SeamNative {
     public static int echo(IsolateThread isolate_thread, byte value) {
         return fixture.BufferOps.echo(value) & 0xff;
     }
+    @CEntryPoint(name = "seam_exercise")
+    public static long exercise(IsolateThread isolate_thread) {
+        return fixture.BufferOps.exercise();
+    }
+    @CFunction(value = "seam_for_each")
+    public static native int forEach(Visitor visitor, IsolateThread isolate, long count);
     @CFunction(value = "seam_inspect", transition = CFunction.Transition.NO_TRANSITION)
     public static native long inspect(CLongPointer value);
     @CEntryPoint(name = "seam_is_high")
@@ -28,13 +52,19 @@ public final class SeamNative {
     public static native byte lowSigned(int value);
     @CFunction(value = "seam_low_unsigned", transition = CFunction.Transition.NO_TRANSITION)
     public static native byte lowUnsigned(int value);
+    @CFunction(value = "seam_reducer")
+    public static native Reducer reducer();
     @CEntryPoint(name = "seam_sum")
-    public static long sum(IsolateThread isolate_thread, CCharPointer data, long length) {
+    public static long sum(IsolateThread isolate_thread, @CConst CCharPointer data, long length) {
         try {
             return fixture.BufferOps.sum(data, length);
         } catch (Throwable failure) {
             return -1L;
         }
+    }
+    @CEntryPoint(name = "seam_visit")
+    public static int visit(IsolateThread isolate_thread, long value) {
+        return fixture.BufferOps.visit(value);
     }
     public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) {
         return widenNative(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);

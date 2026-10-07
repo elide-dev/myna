@@ -20,6 +20,7 @@ fn main() {
         assert!(bindings::isHigh(thread, 200));
         assert!(!bindings::isHigh(thread, 5));
         assert_eq!(bindings::echo(thread, 200), 200);
+        assert_eq!(bindings::exercise(thread), 207);
         assert_eq!(graal_tear_down_isolate(thread), 0);
     }
     println!("Rust -> Native Image -> Rust ABI round trip passed");

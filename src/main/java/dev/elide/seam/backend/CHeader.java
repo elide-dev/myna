@@ -40,6 +40,19 @@ public final class CHeader implements Backend {
         .append('\n');
     out.append("SEAM_ASSERT(sizeof(void *) == 8, \"seam target requires 64-bit pointers\");\n\n");
     for (String name : m.opaqueTypes()) out.append("struct ").append(name).append(";\n");
+    for (Struct s : m.structs()) out.append("struct ").append(s.name()).append(";\n");
+    for (Signature c : m.callbacks())
+      out.append("typedef ")
+          .append(Types.c(c.returns()))
+          .append(" (*")
+          .append(c.name())
+          .append(")(")
+          .append(
+              c.parameters().isEmpty()
+                  ? "void"
+                  : String.join(
+                      ", ", c.parameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
+          .append(");\n");
     for (Struct s : m.structs()) {
       out.append("struct ").append(s.name()).append(" {\n");
       long offset = 0;

@@ -6,7 +6,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.2.0";
+  public static final String VERSION = "0.3.0";
 
   public enum Direction {
     IMPORT,
@@ -55,13 +55,15 @@ public final class Seam {
     }
   }
 
-  public sealed interface Type permits Scalar, Pointer, Named {
+  public sealed interface Type permits Scalar, Pointer, Named, FunctionPointer, Isolate {
     String text();
   }
 
   public enum Scalar implements Type {
     VOID("void", 0),
     BOOL("bool", 1),
+    /** C {@code char}: signed on x86-64 and Apple arm64, unsigned on AAPCS64 Linux. */
+    CHAR("char", 1),
     I8("i8", 1),
     U8("u8", 1),
     I16("i16", 2),
@@ -70,6 +72,9 @@ public final class Seam {
     U32("u32", 4),
     I64("i64", 8),
     U64("u64", 8),
+    /** Pointer-sized; every supported target is 64-bit. */
+    USIZE("usize", 8),
+    ISIZE("isize", 8),
     F32("f32", 4),
     F64("f64", 8);
     private final String text;
@@ -97,8 +102,27 @@ public final class Seam {
     }
   }
 
+  /** A C function pointer whose signature is a declared {@link Signature}. */
+  public record FunctionPointer(String signature) implements Type {
+    public String text() {
+      return "fn<" + signature + ">";
+    }
+  }
+
+  /** The Native Image isolate thread, carried through native code as an opaque pointer. */
+  public enum Isolate implements Type {
+    THREAD;
+
+    public String text() {
+      return "isolate_thread";
+    }
+  }
+
   public static Type type(String text) {
     for (Scalar s : Scalar.values()) if (s.text().equals(text)) return s;
+    if (text.equals(Isolate.THREAD.text())) return Isolate.THREAD;
+    if (text.startsWith("fn<") && text.endsWith(">"))
+      return new FunctionPointer(text.substring(3, text.length() - 1));
     if (text.startsWith("ptr<") && text.endsWith(">"))
       return new Pointer(type(text.substring(4, text.length() - 1)));
     if (!text.matches("[A-Za-z][A-Za-z0-9_]*"))
@@ -128,6 +152,7 @@ public final class Seam {
       String sentinel,
       String javaTarget,
       String include,
+      String callback,
       boolean isolateThread,
       SortedMap<String, Fact> facts) {
     public Function {
@@ -142,13 +167,20 @@ public final class Seam {
       lowered.add(
           new Parameter(
               "isolate_thread",
-              new Pointer(Scalar.VOID),
+              Isolate.THREAD,
               false,
               Ownership.BORROWED,
               Access.UNSPECIFIED,
               new TreeMap<>()));
       lowered.addAll(parameters);
       return List.copyOf(lowered);
+    }
+  }
+
+  /** A callback signature, referenced as {@code fn<name>}. */
+  public record Signature(String name, Type returns, List<Parameter> parameters) {
+    public Signature {
+      parameters = List.copyOf(parameters);
     }
   }
 
@@ -171,16 +203,19 @@ public final class Seam {
       String javaClass,
       List<String> opaqueTypes,
       List<Struct> structs,
+      List<Signature> callbacks,
       List<Function> functions) {
     public Module {
       opaqueTypes = opaqueTypes.stream().sorted().toList();
+      callbacks = callbacks.stream().sorted(Comparator.comparing(Signature::name)).toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();
       functions = functions.stream().sorted(Comparator.comparing(Function::symbol)).toList();
     }
 
     public Module withTarget(String target) {
       return new Module(
-          name, abiVersion, target, javaPackage, javaClass, opaqueTypes, structs, functions);
+          name, abiVersion, target, javaPackage, javaClass, opaqueTypes, structs, callbacks,
+          functions);
     }
 
     public String javaPackageName() {

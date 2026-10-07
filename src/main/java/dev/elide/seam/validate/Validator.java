@@ -66,7 +66,12 @@ public final class Validator {
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
-        type(field.type(), types, false);
+        type(
+            field.type(),
+            types,
+            new HashSet<>(module.callbacks().stream().map(Signature::name).toList()),
+            false);
+        require(field.type() != Isolate.THREAD, "isolate_thread is a parameter type");
         int size = size(field.type());
         int align = size;
         naturalAlignment = Math.max(naturalAlignment, align);
@@ -84,13 +89,38 @@ public final class Validator {
           struct.size() >= end && struct.size() % struct.alignment() == 0,
           "incomplete struct layout: " + struct.name());
     }
+    Set<String> signatures = new HashSet<>();
+    for (Signature signature : module.callbacks()) {
+      identifier(signature.name());
+      require(types.add(signature.name()), "duplicate type: " + signature.name());
+      require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
+      signatures.add(signature.name());
+    }
+    for (Signature signature : module.callbacks()) {
+      type(signature.returns(), types, signatures, true);
+      require(signature.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
+      Set<String> params = new HashSet<>();
+      for (Parameter parameter : signature.parameters()) {
+        identifier(parameter.name());
+        require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
+        type(parameter.type(), types, signatures, false);
+        require(parameter.facts().isEmpty(), "contracts on callback parameters are not supported");
+        // Native Image invokes with signed Java carriers; see NativeImage#widened.
+        require(
+            parameter.type() != Scalar.U8 && parameter.type() != Scalar.U16,
+            "unsigned sub-32-bit callback parameters are not supported; use u32");
+      }
+    }
     Set<String> symbols = new HashSet<>(), logicalNames = new HashSet<>();
     for (Function function : module.functions()) {
       identifier(function.name());
       identifier(function.symbol());
       require(logicalNames.add(function.name()), "duplicate logical name: " + function.name());
+      String rustAlias = Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
+      require(!types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
       require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
-      type(function.returns(), types, true);
+      type(function.returns(), types, signatures, true);
+      require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
       require(
@@ -117,6 +147,19 @@ public final class Validator {
                 && function.javaTarget().matches("(?:[a-zA-Z][\\w]*\\.)+[a-zA-Z][\\w]*"),
             "export requires java=qualified.Class.method");
         for (String part : function.javaTarget().split("\\.")) identifier(part);
+        if (function.callback() != null) {
+          var signature =
+              module.callbacks().stream()
+                  .filter(c -> c.name().equals(function.callback()))
+                  .findFirst()
+                  .orElseThrow(
+                      () -> new IllegalArgumentException("unknown callback: " + function.callback()));
+          require(
+              signature.returns().equals(function.returns())
+                  && signature.parameters().stream().map(Parameter::type).toList()
+                      .equals(function.abiParameters().stream().map(Parameter::type).toList()),
+              "export " + function.name() + " does not match callback " + signature.name());
+        }
         if (function.include() != null) {
           require(
               function.include().matches("(?:[a-zA-Z][\\w]*\\.)+[a-zA-Z][\\w]*"),
@@ -129,6 +172,7 @@ public final class Validator {
       } else {
         require(function.javaTarget() == null, "java target is only valid on exports");
         require(function.include() == null, "include is only valid on exports");
+        require(function.callback() == null, "callback is only valid on exports");
         if (function.parameters().stream()
             .anyMatch(p -> p.type() == Scalar.U8 || p.type() == Scalar.U16))
           require(
@@ -162,7 +206,7 @@ public final class Validator {
       for (Parameter parameter : function.parameters()) {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
-        type(parameter.type(), types, false);
+        type(parameter.type(), types, signatures, false);
         functionScalar(parameter.type());
         facts(parameter.facts(), PARAM_FACTS, strict);
         boolean pointer = parameter.type() instanceof Pointer;
@@ -219,12 +263,18 @@ public final class Validator {
   /** Small values cross with each target's extension rule ({@code Types.extension}). */
   private static void functionScalar(Type type) {}
 
-  private static void type(Type type, Set<String> names, boolean allowVoid) {
+  private static void type(
+      Type type, Set<String> names, Set<String> signatures, boolean allowVoid) {
     if (type instanceof Pointer p) {
+      require(
+          !(p.pointee() instanceof FunctionPointer) && p.pointee() != Isolate.THREAD,
+          "pointers to function pointers or isolates are not supported");
       if (p.pointee() instanceof Named n)
         require(names.contains(n.name()), "unknown pointee: " + n.name());
-      else if (p.pointee() instanceof Pointer) type(p.pointee(), names, false);
-    } else if (type instanceof Named)
+      else if (p.pointee() instanceof Pointer) type(p.pointee(), names, signatures, false);
+    } else if (type instanceof FunctionPointer f)
+      require(signatures.contains(f.signature()), "unknown callback: " + f.signature());
+    else if (type instanceof Named)
       throw new IllegalArgumentException("by-value records are not supported; use ptr<T>");
     else require(allowVoid || type != Scalar.VOID, "void parameter or field");
   }
@@ -249,7 +299,7 @@ public final class Validator {
   }
 
   public static int size(Type type) {
-    return type instanceof Pointer ? 8 : ((Scalar) type).bytes;
+    return type instanceof Scalar s ? s.bytes : 8;
   }
 
   private static long positive(String text) {

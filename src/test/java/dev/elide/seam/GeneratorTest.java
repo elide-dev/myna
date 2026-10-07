@@ -129,7 +129,7 @@ class GeneratorTest {
         ni.contains("@CEntryPoint(name = \"x_open\", include = fixture.ImageOnly.class)"), ni);
     assertTrue(
         ni.contains(
-            "open(IsolateThread isolate_thread, CCharPointer path, CCharPointerPointer argv,"
+            "open(IsolateThread isolate_thread, @CConst CCharPointer path, CCharPointerPointer argv,"
                 + " VoidPointer any, CIntPointer ints, PointerBase handle)"),
         ni);
     assertTrue(ni.contains("return fixture.Ops.open(path, argv, any, ints, handle);"));
@@ -178,6 +178,63 @@ class GeneratorTest {
             generate(
                 source.replace("TARGET", "x86_64-unknown-linux-gnu")
                     + "import putNative return=void error=no_failure\nend\n"));
+  }
+
+  @Test
+  void wordsAndCCharsMapToTargetTypes() {
+    var output =
+        generate(
+            MODULE
+                + "import lookup return=usize error=no_failure\n"
+                + "  param name type=ptr<char> access=read\n  param out type=ptr<usize>\n"
+                + "  param delta type=isize\n  param tag type=char\nend\n");
+    assertTrue(
+        output.get("seam.rs").contains(
+            "pub fn lookup(name: *const core::ffi::c_char, out: *mut usize, delta: isize, tag:"
+                + " core::ffi::c_char) -> usize;"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("seam.h").contains(
+            "size_t lookup(char const * name, size_t * out, ptrdiff_t delta, char tag);"),
+        output.get("seam.h"));
+    String ni = output.get("SeamNative.java");
+    assertTrue(
+        ni.contains("long lookup(CCharPointer name, WordPointer out, long delta, byte tag);"), ni);
+    assertTrue(ni.contains("import org.graalvm.nativeimage.c.type.WordPointer;"));
+    assertTrue(output.get("seam.ll").contains("declare i64 @lookup(ptr %name, ptr %out, i64 %delta, i8 signext %tag)"));
+    assertTrue(output.get("seam.rs").contains("pub type LookupFn = unsafe extern \"C\" fn("));
+  }
+
+  @Test
+  void callbacksAndIsolateThreadsAreValidated() {
+    String base =
+        MODULE
+            + "callback Sink return=i32\n  param isolate type=isolate_thread\n  param n type=i64\nend\n"
+            + "export sink return=i32 java=fixture.Ops.sink isolate=thread error=abort callback=Sink\n"
+            + "  param n type=i64\nend\n"
+            + "import run return=void error=no_failure\n  param cb type=fn<Sink>\n"
+            + "  param isolate type=isolate_thread\nend\n";
+    var output = generate(base);
+    String ni = output.get("SeamNative.java");
+    assertTrue(ni.contains("public interface Sink extends CFunctionPointer {"), ni);
+    assertTrue(ni.contains("int invoke(IsolateThread isolate, long n);"), ni);
+    assertTrue(
+        ni.contains("CEntryPointLiteral.create(SeamNative.class, \"sink\", IsolateThread.class, long.class)"),
+        ni);
+    assertTrue(output.get("seam.h").contains("typedef int32_t (*Sink)(void * isolate, int64_t n);"));
+    assertTrue(output.get("seam.json").contains("\"callback\":\"Sink\""));
+    for (String bad :
+        List.of(
+            base.replace("callback=Sink", "callback=Missing"),
+            base.replace("export sink return=i32", "export sink return=i64"),
+            base.replace("param cb type=fn<Sink>", "param cb type=fn<Missing>"),
+            base.replace("param n type=i64\nend\nexport", "param n type=u8\nend\nexport"),
+            base.replace("import run return=void", "import run return=isolate_thread"),
+            base.replace("import run return=void error=no_failure", "import run return=void error=no_failure callback=Sink"),
+            base + "struct Holder size=8 align=8\n  field t type=isolate_thread offset=0\nend\n",
+            base + "opaque SinkFn\n",
+            base.replace("param cb type=fn<Sink>", "param cb type=ptr<fn<Sink>>")))
+      assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
   }
 
   @Test

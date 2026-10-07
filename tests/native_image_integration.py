@@ -42,6 +42,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         source.write_text((ROOT / "examples/buffer.seam").read_text().replace("aarch64-apple-darwin", TARGET))
         feature_output = work / "feature-output"
         run("native-image", "--shared", "--no-fallback", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
+            "--initialize-at-build-time=dev.elide.seam.generated.SeamNative$Literals",
             "--features=dev.elide.seam.nativeimage.SeamFeature", f"-Dsvmgen.input={source}", f"-Dsvmgen.output={feature_output}",
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={inspector}", "-H:-UnlockExperimentalVMOptions",
             "-o", work / "libseamfixture")

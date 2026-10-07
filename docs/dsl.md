@@ -14,7 +14,27 @@ Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unkno
 
 ## Types and layouts
 
-Scalars are `void`, `bool`, `i8/u8`, `i16/u16`, `i32/u32`, `i64/u64`, `f32/f64`. `ptr<T>` supports scalar, opaque, record, and nested-pointer pointees.
+Scalars are `void`, `bool`, `char`, `i8/u8`, `i16/u16`, `i32/u32`, `i64/u64`, `usize/isize`, `f32/f64`. `char` is C `char` (Rust `core::ffi::c_char`, signed or unsigned by target). `usize/isize` are pointer-sized (`size_t`/`ptrdiff_t`, Java `long`, `ptr<usize>` → `WordPointer`). `ptr<T>` supports scalar, opaque, record, and nested-pointer pointees.
+
+`isolate_thread` is a parameter type for the Native Image isolate thread passed through native code (Java `IsolateThread`, Rust/C `void *`); every export's prepended isolate parameter has this type.
+
+## Callbacks
+
+```text
+callback Visitor return=i32
+  param isolate type=isolate_thread
+  param value type=i64
+end
+export visit return=i32 java=fixture.Ops.visit isolate=thread error=abort callback=Visitor
+  param value type=i64
+end
+import forEach return=i32 error=no_failure
+  param visitor type=fn<Visitor>
+  param isolate type=isolate_thread
+end
+```
+
+`fn<Name>` is a C function pointer to a declared callback: a nested `CFunctionPointer` interface with `@InvokeCFunctionPointer invoke(...)` in Java, `Option<unsafe extern "C" fn(...)>` in Rust, and a `typedef` in C. An export with `callback=Name` must match the signature (including its isolate parameter); the generated `<Class>.Literals` holds its `CEntryPointLiteral`. `CEntryPointLiteral.create` only runs during the image build, so initialize `<Class>$Literals` at build time. Callback parameters carry no contracts, and unsigned sub-32-bit callback parameters are rejected.
 
 Sub-32-bit values (`bool`, `i8/u8`, `i16/u16`) follow each target's C extension rule, as clang and rustc emit it: parameters are `signext`/`zeroext` on x86-64 and Apple arm64 and unextended on AAPCS64 Linux. Returns carry no extension contract because the producers disagree on x86-64 Linux. `svmgen apply` verifies extension against the compiler's and never adds it. Native Image extends a narrow Java value by its signed Java type, so unsigned imports go through a `<name>Native` `int` binding behind a typed wrapper, and exports return an explicitly extended `int`. `void` cannot be a parameter/field. Unsigned Java carriers preserve raw bits in the same-width signed primitive.
 
@@ -45,7 +65,7 @@ end
 
 Imports default to the normal `@CFunction` transition and require `error=no_failure`, describing an ABI where language exceptions do not cross the boundary. This does **not** infer `nounwind` or mean an operation cannot return an application error code.
 
-Exports require `isolate=thread` and a public static `java=qualified.Class.method`. An `isolate_thread` pointer is prepended to the normalized ABI and all backend signatures. The implementation method receives only the declared parameters. The caller creates/attaches an isolate before invoking an export. Pointer carriers are typed where Native Image has one (`ptr<u8>`/`ptr<i8>` → `CCharPointer`, `ptr<ptr<u8>>` → `CCharPointerPointer`, `ptr<void>` → `VoidPointer`, `ptr<i32>` → `CIntPointer`, …) and `org.graalvm.word.PointerBase` otherwise. `include=qualified.Predicate` sets `@CEntryPoint(include = …)`, a `BooleanSupplier` that decides per image whether the export is built.
+Exports require `isolate=thread` and a public static `java=qualified.Class.method`. An `isolate_thread` pointer is prepended to the normalized ABI and all backend signatures. The implementation method receives only the declared parameters. The caller creates/attaches an isolate before invoking an export. Pointer carriers are typed where Native Image has one (`ptr<u8>`/`ptr<i8>` → `CCharPointer`, `ptr<ptr<u8>>` → `CCharPointerPointer`, `ptr<void>` → `VoidPointer`, `ptr<i32>` → `CIntPointer`, …) and `org.graalvm.word.PointerBase` otherwise. `include=qualified.Predicate` sets `@CEntryPoint(include = …)`, a `BooleanSupplier` that decides per image whether the export is built. Read-only pointer parameters of exports carry `@CConst`, which reaches the C headers Native Image writes. `seam.rs` also defines `<Name>Fn` function-pointer types for every function, for callers that resolve symbols dynamically.
 
 Supported export error conventions:
 

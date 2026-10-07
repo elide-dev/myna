@@ -1,6 +1,7 @@
 package fixture;
 
 import dev.elide.seam.generated.SeamNative;
+import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
@@ -42,5 +43,17 @@ public final class BufferOps {
 
   public static byte echo(byte value) {
     return value;
+  }
+
+  public static int visit(long value) {
+    return (int) value * 2;
+  }
+
+  /** Rust calls back into {@link #visit} five times (sum 20), then Java calls Rust's reducer. */
+  public static long exercise() {
+    int visited =
+        SeamNative.forEach(
+            SeamNative.Literals.visit.getFunctionPointer(), CurrentIsolate.getCurrentThread(), 5);
+    return SeamNative.reducer().invoke(visited, 7);
   }
 }
