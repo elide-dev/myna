@@ -142,4 +142,44 @@ class OwnershipTest {
     assertThrows(
         IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), false));
   }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "NativeBuffer",
+        "NativeDestructor",
+        "ResourceFactory",
+        "java",
+        "org",
+        "core",
+        "Option"
+      })
+  void rejectsReservedNativeClassNamesInOwnershipScope(String reserved) throws Exception {
+    assertTrue(source().contains("java_class=NativeApi"), "fixture must name a java_class");
+    String changed = source().replace("java_class=NativeApi", "java_class=" + reserved);
+    var relaxed =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(changed), false),
+            "relaxed mode must reject reserved java_class=" + reserved);
+    assertEquals("reserved native/ownership class name", relaxed.getMessage());
+    var strict =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(changed), true),
+            "strict mode must reject reserved java_class=" + reserved);
+    assertEquals("reserved native/ownership class name", strict.getMessage());
+  }
+
+  @Test
+  void reservedNameGuardSkipsBareModulesWithoutOwnership() {
+    String bare =
+        "module demo target=aarch64-apple-darwin java_class=java\n"
+            + "import inspect return=i64 error=no_failure\n"
+            + "  param value type=ptr<i64> nullable=false ownership=borrowed access=read\n"
+            + "end\n";
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), false));
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), true));
+    assertTrue(Generator.generate(Dsl.parse(bare), true).containsKey("java.java"));
+  }
 }

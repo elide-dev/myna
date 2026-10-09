@@ -23,8 +23,8 @@ final class OwnershipValidator {
                   "org",
                   "core",
                   "Option")
-              .contains(m.ownershipClass()),
-          "reserved ownership class name");
+              .contains(m.nativeClass()),
+          "reserved native/ownership class name");
     }
     var functions = new HashMap<String, Function>();
     m.functions().forEach(f -> functions.put(f.name(), f));
