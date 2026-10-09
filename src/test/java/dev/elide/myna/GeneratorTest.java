@@ -283,6 +283,52 @@ class GeneratorTest {
   }
 
   @Test
+  void byValueExportRefIdentifierMustNotCollide() {
+    String struct =
+        "struct Pair size=16 align=8\n  field left type=i64 offset=0\n  field right type=i32 offset=8\nend\n";
+    String byValueScale =
+        "export scale symbol=seam_scale return=Pair java=fixture.Ops.scale isolate=thread"
+            + " error=abort\n  param value type=Pair\nend\n";
+    String byValueScaleRef =
+        "export scaleRef symbol=seam_scaleref return=Pair java=fixture.Ops.scaleref isolate=thread"
+            + " error=abort\n  param value type=Pair\nend\n";
+    String scalarImportScaleRef =
+        "import scaleRef return=i64 error=no_failure\n  param v type=ptr<i64> nullable=false"
+            + " ownership=borrowed access=read\nend\n";
+    // Extern-block duplicate: by-value export's synthesised `pub fn scaleRef` vs an import of that name.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + struct + byValueScale + scalarImportScaleRef),
+        "import named <name>Ref must clash with a by-value export's synthesised extern");
+    // Module-level duplicate: by-value export of `<name>Ref` wrapper vs another export's synthesised extern.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + struct + byValueScale + byValueScaleRef),
+        "by-value export of <name>Ref must clash with another by-value export's synthesised extern");
+    // A by-value import named scaleRef synthesises no Ref extern, so it must remain valid.
+    String byValueImportScaleRef =
+        "import scaleRef symbol=seam_scaleref return=Pair error=no_failure\n  param value type=Pair\nend\n";
+    assertTrue(
+        generate(MODULE + struct + byValueImportScaleRef).get("seam.rs").contains("pub fn scaleRef("),
+        "a by-value import keeps its own extern name and is not rejected");
+    // An unrelated `Ref`-suffixed name does not trigger the guard.
+    assertDoesNotThrow(
+        () ->
+            generate(
+                MODULE
+                    + struct
+                    + byValueScale
+                    + "import spreadRef return=i64 error=no_failure\n  param v type=ptr<i64>"
+                    + " nullable=false ownership=borrowed access=read\nend\n"));
+    // Happy path: a single by-value export emits exactly one `pub fn scaleRef` extern item.
+    String rust = generate(MODULE + struct + byValueScale).get("seam.rs");
+    assertEquals(
+        1,
+        java.util.regex.Pattern.compile("pub fn scaleRef\\(").matcher(rust).results().count(),
+        "by-value export enumerates its synthesised extern exactly once");
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())
