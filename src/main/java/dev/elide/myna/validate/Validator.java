@@ -141,6 +141,10 @@ public final class Validator {
             module.functions().stream()
                 .noneMatch(o -> o.symbol().equals(function.symbol() + "_myna_ref")),
             "symbol collides with the by-value reference form of " + function.name());
+        if (function.direction() == Direction.EXPORT)
+          require(
+              module.functions().stream().noneMatch(o -> o.name().equals(function.name() + "Ref")),
+              "logical name collides with the Rust reference form of " + function.name());
       }
       String rustAlias =
           Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
