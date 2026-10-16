@@ -171,6 +171,29 @@ class OwnershipTest {
     assertEquals("reserved native/ownership class name", strict.getMessage());
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "opaque ownership",
+        "struct ownership size=8 align=8\nfield a type=i64 offset=0\nend",
+        "callback ownership return=void\nend"
+      })
+  void rejectsOwnershipNameReservedForWrappers(String declaration) throws Exception {
+    String source = source() + "\n" + declaration + "\n";
+    var relaxed =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(source), false),
+            "relaxed mode must reject reserved name for: " + declaration);
+    assertEquals("ownership is reserved when wrappers are generated", relaxed.getMessage());
+    var strict =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(source), true),
+            "strict mode must reject reserved name for: " + declaration);
+    assertEquals("ownership is reserved when wrappers are generated", strict.getMessage());
+  }
+
   @Test
   void reservedNameGuardSkipsBareModulesWithoutOwnership() {
     String bare =
@@ -181,5 +204,19 @@ class OwnershipTest {
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), false));
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), true));
     assertTrue(Generator.generate(Dsl.parse(bare), true).containsKey("java.java"));
+  }
+
+  @Test
+  void reservedNameGuardAllowsCallbackOwnershipInBareModules() {
+    String bare =
+        "module demo target=aarch64-apple-darwin\n"
+            + "callback ownership return=void\nend\n"
+            + "import inspect return=i64 error=no_failure\n"
+            + "  param value type=ptr<i64> nullable=false ownership=borrowed access=read\n"
+            + "end\n";
+    var relaxed = assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), false));
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), true));
+    assertTrue(relaxed.get("seam.rs").contains("pub type ownership = "));
+    assertFalse(relaxed.get("seam.rs").contains("pub mod ownership"));
   }
 }

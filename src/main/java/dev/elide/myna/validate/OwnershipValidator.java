@@ -12,7 +12,8 @@ final class OwnershipValidator {
     if (!m.resources().isEmpty() || !m.borrows().isEmpty()) {
       require(
           !m.opaqueTypes().contains("ownership")
-              && m.structs().stream().noneMatch(s -> s.name().equals("ownership")),
+              && m.structs().stream().noneMatch(s -> s.name().equals("ownership"))
+              && m.callbacks().stream().noneMatch(c -> c.name().equals("ownership")),
           "ownership is reserved when wrappers are generated");
       require(
           !Set.of(
