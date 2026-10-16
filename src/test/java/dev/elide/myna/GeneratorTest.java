@@ -235,7 +235,8 @@ class GeneratorTest {
             base + "opaque SinkFn\n",
             base.replace("param cb type=fn<Sink>", "param cb type=ptr<fn<Sink>>"),
             base.replace("param cb type=fn<Sink>", "param cb type=ptr<Sink>"),
-            base + "struct Holder size=8 align=8\n  field cb type=ptr<Sink> offset=0\nend\n"))
+            base + "struct Holder size=8 align=8\n  field cb type=ptr<Sink> offset=0\nend\n",
+            base.replace("callback Sink", "callback i64")))
       assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
   }
 
