@@ -70,6 +70,14 @@ public final class Validator {
       require(types.add(struct.name()), "duplicate type: " + struct.name());
       require(!isScalarName(struct.name()), "type shadows scalar: " + struct.name());
     }
+    Set<String> signatures = new HashSet<>();
+    for (Signature signature : module.callbacks()) {
+      identifier(signature.name());
+      if (signature.javaType() != null) qualifiedType(signature.javaType());
+      require(types.add(signature.name()), "duplicate type: " + signature.name());
+      require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
+      signatures.add(signature.name());
+    }
     for (Struct struct : module.structs()) {
       require(!struct.fields().isEmpty(), "empty structs have no portable C ABI");
       require(struct.size() > 0 && struct.size() <= Integer.MAX_VALUE, "invalid struct size");
@@ -79,11 +87,7 @@ public final class Validator {
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
-        type(
-            field.type(),
-            types,
-            new HashSet<>(module.callbacks().stream().map(Signature::name).toList()),
-            false);
+        type(field.type(), types, signatures, false);
         require(field.type() != Isolate.THREAD, "isolate_thread is a parameter type");
         int size = size(field.type());
         int align = size;
@@ -101,14 +105,6 @@ public final class Validator {
       require(
           struct.size() >= end && struct.size() % struct.alignment() == 0,
           "incomplete struct layout: " + struct.name());
-    }
-    Set<String> signatures = new HashSet<>();
-    for (Signature signature : module.callbacks()) {
-      identifier(signature.name());
-      if (signature.javaType() != null) qualifiedType(signature.javaType());
-      require(types.add(signature.name()), "duplicate type: " + signature.name());
-      require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
-      signatures.add(signature.name());
     }
     for (Signature signature : module.callbacks()) {
       type(signature.returns(), types, signatures, true);
@@ -320,9 +316,11 @@ public final class Validator {
       require(
           !(p.pointee() instanceof FunctionPointer) && p.pointee() != Isolate.THREAD,
           "pointers to function pointers or isolates are not supported");
-      if (p.pointee() instanceof Named n)
+      if (p.pointee() instanceof Named n) {
         require(names.contains(n.name()), "unknown pointee: " + n.name());
-      else if (p.pointee() instanceof Pointer) type(p.pointee(), names, signatures, false);
+        require(!signatures.contains(n.name()),
+            "pointers to callbacks are not supported; use fn<" + n.name() + ">");
+      } else if (p.pointee() instanceof Pointer) type(p.pointee(), names, signatures, false);
     } else if (type instanceof FunctionPointer f)
       require(signatures.contains(f.signature()), "unknown callback: " + f.signature());
     else if (type instanceof Named)
