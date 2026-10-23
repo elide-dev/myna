@@ -236,7 +236,12 @@ class GeneratorTest {
             base.replace("param cb type=fn<Sink>", "param cb type=ptr<fn<Sink>>"),
             base.replace("param cb type=fn<Sink>", "param cb type=ptr<Sink>"),
             base + "struct Holder size=8 align=8\n  field cb type=ptr<Sink> offset=0\nend\n",
-            base.replace("callback Sink", "callback i64")))
+            base.replace("callback Sink", "callback i64"),
+            base
+                + "import collide symbol=Sink return=i32 error=no_failure\n  param n type=i64\nend\n",
+            base
+                + "export Sink return=i32 java=fixture.Ops.sink isolate=thread error=abort\n"
+                + "  param n type=i64\nend\n"))
       assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
   }
 

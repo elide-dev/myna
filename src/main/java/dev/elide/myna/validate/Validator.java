@@ -147,6 +147,9 @@ public final class Validator {
       require(
           !types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
       require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
+      require(
+          !signatures.contains(function.symbol()),
+          "symbol collides with callback: " + function.symbol());
       record(module, function.returns());
       if (!(function.returns() instanceof Named)) type(function.returns(), types, signatures, true);
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
