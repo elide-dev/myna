@@ -94,6 +94,7 @@ final class OwnershipValidator {
       require(
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
           "call buffer requires borrowed ptr<u8>");
+      require(!p.nullable(), "call buffer requires non-null ptr<u8>");
       require(
           p.access() == Access.READ || p.access() == Access.READ_WRITE,
           "call buffer requires read or read_write access");
