@@ -123,6 +123,8 @@ class OwnershipTest {
         "access=read nocapture|access=write nocapture",
         "readonly=true@explicit_contract|readonly=true@heuristic",
         "type=ptr<u8>|type=ptr<i64>",
+        "nullable=false ownership=borrowed|ownership=borrowed",
+        "nullable=false ownership=borrowed|nullable=true ownership=borrowed",
         "readonly=true@explicit_contract|readonly=true@explicit_contract"
             + " noalias=true@explicit_contract",
         "param count type=u64|param count type=u64\nparam extra type=ptr<u8>",
@@ -141,6 +143,49 @@ class OwnershipTest {
     String changed = original.replace(parts[0], parts[1]);
     assertThrows(
         IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), false));
+  }
+
+  @Test
+  void rejectsNullableBorrowBufferInBothModes() throws Exception {
+    assertTrue(
+        source().contains("nullable=false ownership=borrowed"),
+        "fixture must hold nullable=false on a borrow buffer");
+    String message = "call buffer requires non-null ptr<u8>";
+
+    // DSL default is nullable=true: omitting nullable=false silently yields nullable=true.
+    String defaulted = source().replace("nullable=false ownership=borrowed", "ownership=borrowed");
+    var relaxedDefault =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(defaulted), false),
+            "relaxed mode must reject defaulted-nullable borrow buffer");
+    assertEquals(message, relaxedDefault.getMessage());
+    var strictDefault =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(defaulted), true),
+            "strict mode must reject defaulted-nullable borrow buffer");
+    assertEquals(message, strictDefault.getMessage());
+
+    // Explicit nullable=true must also be rejected.
+    String explicit =
+        source().replace("nullable=false ownership=borrowed", "nullable=true ownership=borrowed");
+    var relaxedExplicit =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(explicit), false),
+            "relaxed mode must reject explicit nullable=true borrow buffer");
+    assertEquals(message, relaxedExplicit.getMessage());
+    var strictExplicit =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(explicit), true),
+            "strict mode must reject explicit nullable=true borrow buffer");
+    assertEquals(message, strictExplicit.getMessage());
+
+    // Control: the original non-nullable fixture still generates in both modes.
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source()), false));
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source()), true));
   }
 
   @ParameterizedTest
