@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build only the requested target: generator (default) or llvm23 (object rewriting).
 FROM ubuntu:24.04 AS llvm-build
-ARG LLVM_APT_SUITE=llvm-toolchain-noble
+ARG LLVM_APT_SUITE=llvm-toolchain-noble-23
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake g++ make gnupg \
     && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /usr/share/keyrings/llvm.asc \
     && echo "deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/noble/ ${LLVM_APT_SUITE} main" > /etc/apt/sources.list.d/llvm.list \
