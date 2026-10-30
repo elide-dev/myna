@@ -32,7 +32,7 @@ public final class Validator {
                + " uses provides with transitive crate as Self macro macro_rules alignas alignof"
                + " constexpr consteval constinit delete friend inline namespace operator noexcept"
                + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
-               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT MynaFFM"
+               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT Literals MynaFFM"
                + " MynaNative MynaForeignFeature getClass hashCode equals toString clone finalize"
                + " wait notify notifyAll")
               .split(" "));
