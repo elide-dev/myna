@@ -36,9 +36,9 @@ final class RustOwnership {
       if (r.shared())
         out.append(
                 "    // Explicit shared resource contract includes destruction on any thread.\n"
-                    + "    unsafe impl Send for ")
+                    + "    unsafe impl core::marker::Send for ")
             .append(n)
-            .append(" {}\n    unsafe impl Sync for ")
+            .append(" {}\n    unsafe impl core::marker::Sync for ")
             .append(n)
             .append(" {}\n");
       out.append("    impl ")
@@ -78,7 +78,7 @@ final class RustOwnership {
           .append("Borrow<'_> {\n            ")
           .append(n)
           .append("Borrow { owner: self }\n        }\n    }\n")
-          .append("    impl Drop for ")
+          .append("    impl core::ops::Drop for ")
           .append(n)
           .append(" {\n        fn drop(&mut self) { unsafe { super::")
           .append(r.destroy())
