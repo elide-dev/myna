@@ -26,7 +26,7 @@ class NativeCliTests(unittest.TestCase):
             run("javac", "-d", out / "classes", out / "MynaFFM.java")
             library = out / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
             os.environ["SEAM_GENERATED"] = str(out)
-            run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
+            run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
             (out / "FfmCheck.java").write_text('''import dev.elide.myna.generated.MynaFFM;
 import java.lang.foreign.*;
 import java.nio.file.Path;
@@ -39,12 +39,16 @@ public class FfmCheck { public static void main(String[] args) throws Throwable 
    value.set(ValueLayout.JAVA_LONG, 0, 42L);
    long result = (long) MynaFFM.inspect(lookup).invokeExact(value);
    if (result != 42L) throw new AssertionError("FFM -> Rust result");
-   System.load(Path.of(args[0]).toAbsolutePath().toString());
-   for (int i = 0; i < 100; i++) {
-     if (MynaFFM.inspect(value) != 42L) throw new AssertionError("typed FFM -> Rust result");
-   }
+    System.load(Path.of(args[0]).toAbsolutePath().toString());
+    for (int i = 0; i < 100; i++) {
+      if (MynaFFM.inspect(value) != 42L) throw new AssertionError("typed FFM -> Rust result");
+    }
+    if (MynaFFM.widen((byte) 0, (byte) 200, (short) 0, (short) 0, false) != 200) throw new AssertionError("ffm u8 zero-extend");
+    if (MynaFFM.widen((byte) 0, (byte) 0, (short) 0, (short) 0xFFFF, false) != 65535) throw new AssertionError("ffm u16 zero-extend");
+    if (MynaFFM.widen((byte) -1, (byte) 255, (short) -2, (short) 65535, true) != 66787) throw new AssertionError("ffm narrow aggregate");
+  }
  }
-}}''')
+}''')
             run("javac", "-cp", out / "classes", "-d", out / "classes", out / "FfmCheck.java")
             run("java", "--enable-native-access=ALL-UNNAMED", "-cp", out / "classes", "FfmCheck", library)
             (out / "seam.h").write_text("drift")

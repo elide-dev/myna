@@ -21,6 +21,14 @@ public final class FfmMain {
       if (rotated.get(ValueLayout.JAVA_LONG, MynaFFM.Triple_a_OFFSET) != 2
           || rotated.get(ValueLayout.JAVA_LONG, MynaFFM.Triple_c_OFFSET) != 1)
         throw new AssertionError("by-value FFM record");
+      // Sub-32-bit unsigned parameters must arrive zero-extended (zeroext), not sign-extended;
+      // an optimized callee trusts the caller's extension and reads the full register.
+      if (MynaFFM.widen((byte) 0, (byte) 200, (short) 0, (short) 0, false) != 200)
+        throw new AssertionError("ffm u8 zero-extend");
+      if (MynaFFM.widen((byte) 0, (byte) 0, (short) 0, (short) 0xFFFF, false) != 65535)
+        throw new AssertionError("ffm u16 zero-extend");
+      if (MynaFFM.widen((byte) -1, (byte) 255, (short) -2, (short) 65535, true) != 66787)
+        throw new AssertionError("ffm narrow aggregate");
     }
     System.out.println("AOT FFM -> Rust passed");
   }
