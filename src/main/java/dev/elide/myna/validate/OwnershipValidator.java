@@ -8,6 +8,19 @@ import java.util.*;
 final class OwnershipValidator {
   private OwnershipValidator() {}
 
+  private static final Set<String> RESERVED =
+      Set.of(
+          "NativeBuffer",
+          "NativeDestructor",
+          "ResourceFactory",
+          "java",
+          "org",
+          "core",
+          "Option",
+          "Drop",
+          "Send",
+          "Sync");
+
   static void validate(Module m) {
     if (!m.resources().isEmpty() || !m.borrows().isEmpty()) {
       require(
@@ -15,17 +28,7 @@ final class OwnershipValidator {
               && m.structs().stream().noneMatch(s -> s.name().equals("ownership"))
               && m.callbacks().stream().noneMatch(c -> c.name().equals("ownership")),
           "ownership is reserved when wrappers are generated");
-      require(
-          !Set.of(
-                  "NativeBuffer",
-                  "NativeDestructor",
-                  "ResourceFactory",
-                  "java",
-                  "org",
-                  "core",
-                  "Option")
-              .contains(m.nativeClass()),
-          "reserved native/ownership class name");
+      require(!RESERVED.contains(m.nativeClass()), "reserved native/ownership class name");
     }
     var functions = new HashMap<String, Function>();
     m.functions().forEach(f -> functions.put(f.name(), f));
@@ -39,17 +42,7 @@ final class OwnershipValidator {
           rustTypes.add(r.name()) && rustTypes.add(r.name() + "Borrow"),
           "resource names collide with generated borrow types");
       require(!r.name().equals(m.nativeClass()), "resource shadows native API class");
-      require(
-          !Set.of(
-                  "NativeBuffer",
-                  "NativeDestructor",
-                  "ResourceFactory",
-                  "java",
-                  "org",
-                  "core",
-                  "Option")
-              .contains(r.name()),
-          "reserved resource name");
+      require(!RESERVED.contains(r.name()), "reserved resource name");
       require(!r.name().equals(m.ownershipClass()), "resource shadows generated ownership class");
       var create = functions.get(r.create());
       var destroy = functions.get(r.destroy());

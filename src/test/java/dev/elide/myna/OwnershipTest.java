@@ -27,8 +27,9 @@ class OwnershipTest {
     assertTrue(java.contains("DESTRUCTOR.destroy(address)"));
     assertTrue(java.contains(".acquire(true)"));
     assertTrue(java.contains(".release(false)"));
-    assertTrue(rust.contains("unsafe impl Send for Ticket"));
-    assertTrue(rust.contains("impl Drop for Ticket"));
+    assertTrue(rust.contains("unsafe impl core::marker::Send for Ticket"));
+    assertTrue(rust.contains("unsafe impl core::marker::Sync for Ticket"));
+    assertTrue(rust.contains("impl core::ops::Drop for Ticket"));
     assertTrue(rust.contains("TicketBorrow<'owner>"));
     assertTrue(rust.contains("core::mem::ManuallyDrop"));
     assertTrue(rust.contains("checksum(bytes: &[u8]) -> u64"));
@@ -40,7 +41,7 @@ class OwnershipTest {
     var confined =
         Generator.generate(
             Dsl.parse(source().replace("threading=shared", "threading=confined")), true);
-    assertFalse(confined.get("seam.rs").contains("unsafe impl Send"));
+    assertFalse(confined.get("seam.rs").contains("unsafe impl core::marker::Send"));
     assertTrue(
         confined
             .get("NativeApiOwnership.java")
@@ -197,7 +198,10 @@ class OwnershipTest {
         "java",
         "org",
         "core",
-        "Option"
+        "Option",
+        "Drop",
+        "Send",
+        "Sync"
       })
   void rejectsReservedNativeClassNamesInOwnershipScope(String reserved) throws Exception {
     assertTrue(source().contains("java_class=NativeApi"), "fixture must name a java_class");
@@ -214,6 +218,43 @@ class OwnershipTest {
             () -> Generator.generate(Dsl.parse(changed), true),
             "strict mode must reject reserved java_class=" + reserved);
     assertEquals("reserved native/ownership class name", strict.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "Drop",
+        "Send",
+        "Sync",
+        "Option",
+        "core"
+      })
+  void rejectsReservedResourceNamesInOwnershipScope(String reserved) throws Exception {
+    assertTrue(source().contains("opaque Ticket"), "fixture must name a resource Ticket");
+    String changed = source().replace("Ticket", reserved);
+    var relaxed =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(changed), false),
+            "relaxed mode must reject reserved resource name=" + reserved);
+    assertEquals("reserved resource name", relaxed.getMessage());
+    var strict =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(changed), true),
+            "strict mode must reject reserved resource name=" + reserved);
+    assertEquals("reserved resource name", strict.getMessage());
+  }
+
+  @Test
+  void ownershipTraitsAreEmittedFullyQualified() throws Exception {
+    String rust = Generator.generate(Dsl.parse(source()), true).get("seam.rs");
+    assertTrue(rust.contains("impl core::ops::Drop for Ticket"));
+    assertTrue(rust.contains("unsafe impl core::marker::Send for Ticket"));
+    assertTrue(rust.contains("unsafe impl core::marker::Sync for Ticket"));
+    assertFalse(rust.contains("impl Drop for Ticket"));
+    assertFalse(rust.contains("unsafe impl Send for Ticket"));
+    assertFalse(rust.contains("unsafe impl Sync for Ticket"));
   }
 
   @ParameterizedTest
