@@ -246,6 +246,31 @@ class GeneratorTest {
   }
 
   @Test
+  void reservedLiteralsHolderNameIsNotUsableByUserTypes() {
+    String base =
+        MODULE
+            + "callback Visitor return=i32\n  param isolate type=isolate_thread\n"
+            + "  param code type=i32\nend\n"
+            + "export visit symbol=visit return=i32 java=fixture.Ops.visit isolate=thread"
+            + " error=abort callback=Visitor\n  param code type=i32\nend\n";
+    String ni =
+        generate(base + "struct Box size=8 align=8\n  field value type=i64 offset=0\nend\n")
+            .get("MynaNative.java");
+    assertEquals(
+        1,
+        java.util.regex.Pattern.compile("class Literals \\{").matcher(ni).results().count(),
+        ni);
+    for (String bad :
+        List.of(
+            base + "struct Literals size=8 align=8\n  field value type=i64 offset=0\nend\n",
+            base
+                .replace("callback Visitor", "callback Literals")
+                .replace("callback=Visitor", "callback=Literals"),
+            base + "opaque Literals\n"))
+      assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
+  }
+
+  @Test
   void byValueRecordsLowerOnlyAtTheNativeImageBoundary() {
     String base =
         MODULE
