@@ -78,6 +78,16 @@ public final class Validator {
       require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
       signatures.add(signature.name());
     }
+    // The JDK FFM linker rejects by-value struct layouts that are not the natural C ABI, so
+    // imports (which keep the real by-value layout, unlike _myna_ref-lowered exports) need
+    // canonical structs or the generated <clinit> downcallHandle throws ExceptionInInitializerError.
+    Set<String> byValueImportStructs = new HashSet<>();
+    for (Function function : module.functions()) {
+      if (function.direction() != Direction.IMPORT) continue;
+      if (function.returns() instanceof Named n) byValueImportStructs.add(n.name());
+      for (Parameter p : function.parameters())
+        if (p.type() instanceof Named n) byValueImportStructs.add(n.name());
+    }
     for (Struct struct : module.structs()) {
       require(!struct.fields().isEmpty(), "empty structs have no portable C ABI");
       require(struct.size() > 0 && struct.size() <= Integer.MAX_VALUE, "invalid struct size");
@@ -105,6 +115,10 @@ public final class Validator {
       require(
           struct.size() >= end && struct.size() % struct.alignment() == 0,
           "incomplete struct layout: " + struct.name());
+      require(
+          !byValueImportStructs.contains(struct.name()) || canonical(struct),
+          "by-value import struct must match the natural C layout (the FFM linker rejects reserved"
+              + " gaps and over-declared sizes): " + struct.name());
     }
     for (Signature signature : module.callbacks()) {
       type(signature.returns(), types, signatures, true);
@@ -353,6 +367,26 @@ public final class Validator {
 
   public static int size(Type type) {
     return type instanceof Scalar s ? s.bytes : 8;
+  }
+
+  /**
+   * Natural C layout: every field sits at its naturally aligned offset (no reserved interior gap)
+   * and the struct size is the minimal multiple of alignment covering the fields (no trailing
+   * slack). The JDK FFM linker requires this shape for by-value struct layouts.
+   */
+  private static boolean canonical(Struct struct) {
+    long offset = 0;
+    for (Field field : struct.fields()) {
+      int size = size(field.type());
+      long expected = alignUp(offset, size);
+      if (field.offset() != expected) return false;
+      offset = expected + size;
+    }
+    return struct.size() == alignUp(offset, struct.alignment());
+  }
+
+  private static long alignUp(long value, int align) {
+    return (value + align - 1) / align * align;
   }
 
   private static long positive(String text) {

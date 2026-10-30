@@ -291,6 +291,88 @@ class GeneratorTest {
   }
 
   @Test
+  void byValueImportStructsMustUseNaturalLayout() {
+    // The JDK FFM linker (downcallHandle) rejects by-value struct layouts that are not the
+    // natural C ABI; imports keep the real by-value layout, so non-canonical structs would throw
+    // ExceptionInInitializerError at first use. Exports are lowered to the _myna_ref pointer form
+    // and never feed a struct layout to the linker, so gaps there remain valid (as in C/Rust).
+    String dense = "struct Pt size=8 align=4\n  field x type=i32 offset=0\n  field y type=i32 offset=4\nend\n";
+    String denseImport = "import flip symbol=pt_flip return=Pt error=no_failure\n  param p type=Pt\nend\n";
+    var ok = generate(MODULE + dense + denseImport);
+    assertTrue(
+        ok.get("MynaFFM.java").contains("FunctionDescriptor.of(Pt_LAYOUT, Pt_LAYOUT)"),
+        ok.get("MynaFFM.java"));
+    // Natural trailing alignment padding is canonical and accepted by the linker.
+    String mix = "struct Mix size=16 align=8\n  field a type=i64 offset=0\n  field b type=i32 offset=8\nend\n";
+    var okMix =
+        generate(MODULE + mix + "import takeMix return=i64 error=no_failure\n  param m type=Mix\nend\n");
+    assertTrue(okMix.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(4)"), okMix.get("MynaFFM.java"));
+    // Reserved interior gap (u32 at 0 and 8, leaving a 4-byte hole) in a by-value import
+    // parameter -> rejected.
+    String gap = "struct Gap size=12 align=4\n  field kind type=u32 offset=0\n  field flags type=u32 offset=8\nend\n";
+    var gapParam =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> generate(MODULE + gap + "import takeGap return=void error=no_failure\n  param m type=Gap\nend\n"));
+    assertTrue(gapParam.getMessage().contains("Gap"), gapParam.getMessage());
+    assertTrue(gapParam.getMessage().contains("natural C layout"), gapParam.getMessage());
+    // Reserved interior gap reached via a by-value import RETURN is rejected too.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + gap + "import makeGap return=Gap error=no_failure\nend\n"));
+    // Over-declared trailing size in a by-value import -> rejected.
+    String over = "struct Over size=16 align=4\n  field a type=i32 offset=0\n  field b type=i32 offset=4\nend\n";
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            generate(MODULE + over + "import takeOver return=void error=no_failure\n  param o type=Over\nend\n"));
+    // Leading gap (first field not at offset 0) in a by-value import -> rejected.
+    String lead = "struct Lead size=16 align=8\n  field a type=i64 offset=8\nend\n";
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            generate(MODULE + lead + "import takeLead return=void error=no_failure\n  param l type=Lead\nend\n"));
+    // The same non-canonical struct used by value only in an EXPORT is accepted: FFM lowers it to
+    // the _myna_ref pointer form (no by-value layout reaches the linker), and C/Rust still honor
+    // the declared gap with explicit padding fields.
+    var overExport =
+        generate(
+            MODULE
+                + over
+                + "export scaleOver symbol=seam_scale_over return=Over java=fixture.Ops.scale"
+                + " isolate=thread error=abort\n  param o type=Over\nend\n");
+    assertTrue(
+        overExport.get("MynaFFM.java").contains("seam_scale_over_myna_ref"),
+        overExport.get("MynaFFM.java"));
+    assertTrue(
+        overExport.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(8)"),
+        overExport.get("MynaFFM.java"));
+    assertTrue(
+        overExport.get("seam.rs").contains("seamPadding0: [u8; 8]"), overExport.get("seam.rs"));
+    // A non-canonical struct never used by value in an import is accepted and still emits its
+    // declared trailing padding in FFM (C/Rust support for explicit gaps is preserved).
+    var unused =
+        generate(
+            MODULE
+                + over
+                + "import probe return=i64 error=no_failure\n  param v type=ptr<i64> nullable=false"
+                + " ownership=borrowed access=read\nend\n");
+    assertTrue(
+        unused.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(8)"),
+        unused.get("MynaFFM.java"));
+    // A struct used by value in BOTH an import and an export is rejected because of the import.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            generate(
+                MODULE
+                    + over
+                    + "import takeOver return=void error=no_failure\n  param o type=Over\nend\n"
+                    + "export scaleOver symbol=seam_scale_over return=Over java=fixture.Ops.scale"
+                    + " isolate=thread error=abort\n  param o type=Over\nend\n"));
+  }
+
+  @Test
   void byValueExportRefIdentifierMustNotCollide() {
     String struct =
         "struct Pair size=16 align=8\n  field left type=i64 offset=0\n  field right type=i32 offset=8\nend\n";
