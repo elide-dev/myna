@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.serialize.SeamJson;
 import java.nio.file.*;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class OwnershipTest {
@@ -304,5 +307,69 @@ class OwnershipTest {
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(bare), true));
     assertTrue(relaxed.get("seam.rs").contains("pub type ownership = "));
     assertFalse(relaxed.get("seam.rs").contains("pub mod ownership"));
+  }
+
+  static Stream<Arguments> coreAndOptionAcrossDeclaredKinds() {
+    return Stream.of(
+        Arguments.of("opaque", "core"),
+        Arguments.of("opaque", "Option"),
+        Arguments.of("struct", "core"),
+        Arguments.of("struct", "Option"),
+        Arguments.of("callback", "core"),
+        Arguments.of("callback", "Option"));
+  }
+
+  static String reservedDeclaration(String kind, String name) {
+    return switch (kind) {
+      case "opaque" -> "opaque " + name;
+      case "struct" -> "struct " + name + " size=8 align=8\nfield a type=i64 offset=0\nend";
+      case "callback" -> "callback " + name + " return=void\nend";
+      default -> throw new IllegalArgumentException(kind);
+    };
+  }
+
+  @ParameterizedTest
+  @MethodSource("coreAndOptionAcrossDeclaredKinds")
+  void rejectsCoreOrOptionDeclaredTypesInBareModules(String kind, String reserved) {
+    String source =
+        "module demo target=aarch64-apple-darwin\n"
+            + reservedDeclaration(kind, reserved)
+            + "\nimport inspect return=i64 error=no_failure\n"
+            + "  param value type=ptr<i64> nullable=false ownership=borrowed access=read\n"
+            + "end\n";
+    String message = "type shadows generated name: " + reserved;
+    var relaxed =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(source), false),
+            "relaxed mode must reject " + kind + " '" + reserved + "'");
+    assertEquals(message, relaxed.getMessage());
+    var strict =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Generator.generate(Dsl.parse(source), true),
+            "strict mode must reject " + kind + " '" + reserved + "'");
+    assertEquals(message, strict.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "NativeBuffer",
+        "NativeDestructor",
+        "ResourceFactory",
+        "java",
+        "org"
+      })
+  void keepsOwnershipReservedNamesAllowedForDeclaredTypesInBareModules(String name) {
+    String source =
+        "module demo target=aarch64-apple-darwin\n"
+            + "opaque " + name + "\n"
+            + "import inspect return=i64 error=no_failure\n"
+            + "  param value type=ptr<i64> nullable=false ownership=borrowed access=read\n"
+            + "end\n";
+    assertDoesNotThrow(
+        () -> Generator.generate(Dsl.parse(source), false), "relaxed: " + name);
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), true), "strict: " + name);
   }
 }

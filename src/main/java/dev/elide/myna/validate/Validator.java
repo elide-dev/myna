@@ -37,6 +37,16 @@ public final class Validator {
                + " wait notify notifyAll")
               .split(" "));
 
+  /**
+   * Names that declared types (opaque, struct, callback) may not take because they are emitted as
+   * crate-root Rust type names beside generated code that depends on them: {@code core} backs the
+   * unconditional {@code core::mem::...} ABI assertions, and {@code Option} backs the
+   * {@code Option<...>} callback alias and the {@code Option<Self>} ownership API. Function and
+   * parameter names live in Rust's value namespace and do not collide, so they stay governed by
+   * {@link #identifier(String)}.
+   */
+  private static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
+
   public static void validate(Module module, boolean strict) {
     identifier(module.name());
     if (module.javaPackage() != null)
@@ -64,11 +74,16 @@ public final class Validator {
       identifier(opaque);
       require(types.add(opaque), "duplicate type: " + opaque);
       require(!isScalarName(opaque), "type shadows scalar: " + opaque);
+      require(
+          !RESERVED_TYPE_NAMES.contains(opaque), "type shadows generated name: " + opaque);
     }
     for (Struct struct : module.structs()) {
       identifier(struct.name());
       require(types.add(struct.name()), "duplicate type: " + struct.name());
       require(!isScalarName(struct.name()), "type shadows scalar: " + struct.name());
+      require(
+          !RESERVED_TYPE_NAMES.contains(struct.name()),
+          "type shadows generated name: " + struct.name());
     }
     Set<String> signatures = new HashSet<>();
     for (Signature signature : module.callbacks()) {
@@ -76,6 +91,9 @@ public final class Validator {
       if (signature.javaType() != null) qualifiedType(signature.javaType());
       require(types.add(signature.name()), "duplicate type: " + signature.name());
       require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
+      require(
+          !RESERVED_TYPE_NAMES.contains(signature.name()),
+          "type shadows generated name: " + signature.name());
       signatures.add(signature.name());
     }
     // The JDK FFM linker rejects by-value struct layouts that are not the natural C ABI, so
