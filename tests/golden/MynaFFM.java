@@ -35,7 +35,7 @@ public final class MynaFFM {
     public static MethodHandle classify(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_classify").orElseThrow(() -> new UnsatisfiedLinkError("seam_classify")), classify_DESCRIPTOR);
     }
-    public static final FunctionDescriptor echo_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_BYTE);
+    public static final FunctionDescriptor echo_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
     public static MethodHandle echo(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_echo").orElseThrow(() -> new UnsatisfiedLinkError("seam_echo")), echo_DESCRIPTOR);
     }
@@ -51,7 +51,7 @@ public final class MynaFFM {
     public static MethodHandle inspect(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_inspect").orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), inspect_DESCRIPTOR);
     }
-    public static final FunctionDescriptor isHigh_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BOOLEAN, ValueLayout.ADDRESS, ValueLayout.JAVA_BYTE);
+    public static final FunctionDescriptor isHigh_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BOOLEAN, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
     public static MethodHandle isHigh(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_is_high").orElseThrow(() -> new UnsatisfiedLinkError("seam_is_high")), isHigh_DESCRIPTOR);
     }
@@ -95,7 +95,7 @@ public final class MynaFFM {
     public static MethodHandle visit(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_visit").orElseThrow(() -> new UnsatisfiedLinkError("seam_visit")), visit_DESCRIPTOR);
     }
-    public static final FunctionDescriptor widen_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_BOOLEAN);
+    public static final FunctionDescriptor widen_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_INT, ValueLayout.JAVA_BOOLEAN);
     public static MethodHandle widen(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), widen_DESCRIPTOR);
     }
@@ -111,7 +111,7 @@ public final class MynaFFM {
         static final MethodHandle HANDLE = MynaFFM.echo(SymbolLookup.loaderLookup());
     }
     public static byte echo(MemorySegment isolate_thread, byte value) throws Throwable {
-        return (byte) MynaFFM.echo_Binding.HANDLE.invokeExact(isolate_thread, value);
+        return (byte) MynaFFM.echo_Binding.HANDLE.invokeExact(isolate_thread, value & 0xff);
     }
     // Load the library in this class loader before first use. One handle per symbol.
     private static final class exercise_Binding {
@@ -139,7 +139,7 @@ public final class MynaFFM {
         static final MethodHandle HANDLE = MynaFFM.isHigh(SymbolLookup.loaderLookup());
     }
     public static boolean isHigh(MemorySegment isolate_thread, byte value) throws Throwable {
-        return (boolean) MynaFFM.isHigh_Binding.HANDLE.invokeExact(isolate_thread, value);
+        return (boolean) MynaFFM.isHigh_Binding.HANDLE.invokeExact(isolate_thread, value & 0xff);
     }
     // Load the library in this class loader before first use. One handle per symbol.
     private static final class lowSigned_Binding {
@@ -216,6 +216,6 @@ public final class MynaFFM {
         static final MethodHandle HANDLE = MynaFFM.widen(SymbolLookup.loaderLookup());
     }
     public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
-        return (int) MynaFFM.widen_Binding.HANDLE.invokeExact(signedByte, unsignedByte, signedShort, unsignedShort, flag);
+        return (int) MynaFFM.widen_Binding.HANDLE.invokeExact(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
     }
 }

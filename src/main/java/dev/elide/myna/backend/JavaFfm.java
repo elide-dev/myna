@@ -62,7 +62,7 @@ public final class JavaFfm implements Backend {
     for (Function f : m.functions().stream().map(d -> ffmForm(m, d)).toList()) {
       var args = new ArrayList<String>();
       if (f.returns() != Scalar.VOID) args.add(Types.layout(f.returns()));
-      f.abiParameters().forEach(p -> args.add(Types.layout(p.type())));
+      f.abiParameters().forEach(p -> args.add(paramLayout(p.type())));
       out.append("    public static final FunctionDescriptor ")
           .append(f.name())
           .append("_DESCRIPTOR = FunctionDescriptor.")
@@ -113,7 +113,7 @@ public final class JavaFfm implements Backend {
           .append(f.name())
           .append("_Binding.HANDLE.invokeExact(")
           .append(f.returns() instanceof Named ? "allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
-          .append(String.join(", ", f.abiParameters().stream().map(Parameter::name).toList()))
+          .append(String.join(", ", f.abiParameters().stream().map(p -> widened(p.type(), p.name())).toList()))
           .append(");\n    }\n");
     }
     return out.append("}\n").toString();
@@ -125,5 +125,20 @@ public final class JavaFfm implements Backend {
    */
   private static Function ffmForm(Module m, Function f) {
     return f.direction() == Direction.EXPORT ? ByValue.lower(m, f) : f;
+  }
+
+  private static boolean unsignedSmall(Type t) {
+    return t == Scalar.U8 || t == Scalar.U16;
+  }
+
+  /** A downcall sign-extends narrow signed carriers, so u8/u16 pass as a zero-extended int. */
+  private static String paramLayout(Type type) {
+    return unsignedSmall(type) ? "ValueLayout.JAVA_INT" : Types.layout(type);
+  }
+
+  private static String widened(Type t, String value) {
+    if (t == Scalar.U8) return value + " & 0xff";
+    if (t == Scalar.U16) return value + " & 0xffff";
+    return value;
   }
 }

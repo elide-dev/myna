@@ -92,7 +92,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         run("javac", "-cp", sdk, "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
-        run("rustc", "--edition=2024", "--crate-type=cdylib", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
+        run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
         run("native-image", "--no-fallback", "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
             "--features=dev.elide.myna.generated.MynaForeignFeature", "FfmMain", "-o", work / "ffm-app")
         self.assertIn("AOT FFM -> Rust passed", run(work / "ffm-app", library).stdout)

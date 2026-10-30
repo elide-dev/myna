@@ -181,6 +181,45 @@ class GeneratorTest {
   }
 
   @Test
+  void ffmZeroExtendsUnsignedSmallParametersButNotReturnsOrSigned() {
+    String source =
+        "module small target=aarch64-apple-darwin\n"
+            + "import put return=u8 error=no_failure\n"
+            + "  param a type=i8\n  param b type=u8\n  param c type=u16\n  param d type=bool\n"
+            + "  param e type=i32\n  param f type=u32\nend\n"
+            + "export get symbol=x_get return=u16 java=fixture.Ops.get isolate=thread error=abort\n"
+            + "  param a type=i16\nend\n";
+    String ffm = generate(source).get("MynaFFM.java");
+    // Unsigned u8/u16 parameters are zero-extended to a JAVA_INT slot and masked at the downcall;
+    // the public wrapper keeps the typed byte/short carriers, mirroring NativeImage.widened.
+    assertTrue(
+        ffm.contains(
+            "put_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE,"
+                + " ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,"
+                + " ValueLayout.JAVA_BOOLEAN, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "public static byte put(byte a, byte b, short c, boolean d, int e, int f)"
+                + " throws Throwable {"),
+        ffm);
+    assertTrue(ffm.contains("invokeExact(a, b & 0xff, c & 0xffff, d, e, f)"), ffm);
+    // Signed (i8/i16), bool, 32-bit parameters, isolate, and returns are NOT widened or masked.
+    assertTrue(
+        ffm.contains(
+            "get_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_SHORT,"
+                + " ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT)"),
+        ffm);
+    assertTrue(
+        ffm.contains("public static short get(MemorySegment isolate_thread, short a) throws Throwable {"),
+        ffm);
+    assertTrue(ffm.contains("invokeExact(isolate_thread, a)"), ffm);
+    assertFalse(ffm.contains("a & 0xff"), ffm);
+    assertFalse(ffm.contains("a & 0xffff"), ffm);
+    assertFalse(ffm.contains("JAVA_CHAR"), ffm);
+  }
+
+  @Test
   void wordsAndCCharsMapToTargetTypes() {
     var output =
         generate(
