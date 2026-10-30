@@ -337,6 +337,54 @@ class GeneratorTest {
   }
 
   @Test
+  void rustAliasCollisionsAcrossFunctionsAreRejected() {
+    // The dynamic-resolution `<Name>Fn` alias capitalises the function's first letter, so two
+    // functions whose names differ only in that case (parseX / ParseX) both map to ParseXFn and
+    // would emit duplicate `pub type ParseXFn` items that rustc rejects with E0428.
+    String importPair =
+        MODULE
+            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n  param x type=i64\nend\n"
+            + "import ParseX symbol=myna_parse_x_upper return=i64 error=no_failure\n  param x type=i64\nend\n";
+    var collision =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> generate(importPair),
+            "case-colliding imports must be rejected");
+    assertEquals(
+        "Rust alias ParseXFn collides with another function's alias", collision.getMessage());
+    // Exports lower through the isolate-thread path but keep the same name derivation, so they collide too.
+    String exportPair =
+        MODULE
+            + "export parseX symbol=myna_parse_x_lower return=i64 java=fixture.Ops.px isolate=thread"
+            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n"
+            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX isolate=thread"
+            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n";
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(exportPair),
+        "case-colliding exports must be rejected");
+    // The alias set is shared across directions in one module.
+    String mixedPair =
+        MODULE
+            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n  param x type=i64\nend\n"
+            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX isolate=thread"
+            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n";
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(mixedPair),
+        "a mixed-direction alias collision must be rejected");
+    // The check is case-sensitive on the derived alias: parseX / PARSEX map to ParseXFn / PARSEXFn,
+    // both distinct, so both must remain valid (guards against an over-eager case-insensitive fix).
+    String caseSensitive =
+        MODULE
+            + "import parseX symbol=myna_parse_x return=i64 error=no_failure\n  param x type=i64\nend\n"
+            + "import PARSEX symbol=myna_parse_upper return=i64 error=no_failure\n  param x type=i64\nend\n";
+    var rust = generate(caseSensitive).get("seam.rs");
+    assertTrue(rust.contains("pub type ParseXFn ="), "parseX emits ParseXFn");
+    assertTrue(rust.contains("pub type PARSEXFn ="), "PARSEX emits PARSEXFn, distinct from ParseXFn");
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
     for (var output : actual.entrySet())

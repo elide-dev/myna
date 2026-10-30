@@ -121,7 +121,7 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
-    Set<String> symbols = new HashSet<>(), logicalNames = new HashSet<>();
+    Set<String> symbols = new HashSet<>(), logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
     for (Function function : module.functions()) {
       identifier(function.name());
       identifier(function.symbol());
@@ -146,6 +146,9 @@ public final class Validator {
           Character.toUpperCase(function.name().charAt(0)) + function.name().substring(1) + "Fn";
       require(
           !types.contains(rustAlias), "Rust alias " + rustAlias + " collides with a declared type");
+      require(
+          rustAliases.add(rustAlias),
+          "Rust alias " + rustAlias + " collides with another function's alias");
       require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
       require(
           !signatures.contains(function.symbol()),
