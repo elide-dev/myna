@@ -1,0 +1,23 @@
+name: Release
+
+"on":
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  containers:
+    name: Containers
+    uses: ./.github/workflows/job.container.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      publish: ${{ startsWith(github.ref, 'refs/tags/v') }}

@@ -46,7 +46,7 @@ artifacts {
 
 dependencies {
   maven {
-    compileOnly { "org.graalvm.sdk:nativeimage:25.0.1" }
-    testPackages { "org.junit.jupiter:junit-jupiter:5.13.4"; "org.graalvm.sdk:nativeimage:25.0.1" }
+    compileOnly { "org.graalvm.sdk:nativeimage:25.4.4.1.1" }
+    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.4.4.1.1" }
   }
 }

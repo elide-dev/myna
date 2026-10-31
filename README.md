@@ -1,6 +1,6 @@
 ![Myna](./docs/banner.png)
 
-[![CI](https://github.com/elide-dev/myna/actions/workflows/ci.yml/badge.svg)](https://github.com/elide-dev/myna/actions/workflows/ci.yml)
+[![CI](https://github.com/elide-dev/myna/actions/workflows/on.push.yml/badge.svg)](https://github.com/elide-dev/myna/actions/workflows/on.push.yml)
 [![codecov](https://codecov.io/gh/elide-dev/myna/graph/badge.svg?token=LynXFKjtbf)](https://codecov.io/gh/elide-dev/myna)
 [![Discord](https://img.shields.io/discord/1119121740161884252?b2&logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
 ![Java 25+](https://img.shields.io/badge/-Java%2025%2B-blue.svg?logo=openjdk&logoColor=white)
@@ -18,7 +18,7 @@ Version 0.5.0 introduces the project rename; see [the migration guide](docs/rena
 
 ## Build and use
 
-Requirements: Elide 1.5.4+, GraalVM JDK 25 with `native-image`, and a native C toolchain. Building the object applicator also requires CMake and LLVM 23 development libraries.
+Requirements: Elide 1.6.1+, GraalVM 25.4 (JDK 25) with `native-image`, and a native C toolchain. Building the object applicator also requires CMake and LLVM 23 development libraries.
 
 ```sh
 scripts/build.sh                     # native executable, generator JAR, Feature JAR
@@ -76,7 +76,7 @@ mvn -B verify                  # JVM unit/golden/negative tests and coverage gat
 scripts/test.sh                # also builds and tests the native CLI, LLVM integration, Native Image ABI
 ```
 
-The full suite additionally needs Python 3, Rust using LLVM 23, and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
+The full suite additionally needs Python 3, Rust 1.99.1 (pinned in `rust-toolchain.toml`, using LLVM 23), and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
 
 Individual integration tests can run against existing builds:
 

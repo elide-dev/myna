@@ -1,0 +1,49 @@
+name: PR
+
+"on":
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "pr-${{ github.event.number }}"
+  cancel-in-progress: true
+
+jobs:
+  jvm:
+    name: JVM
+    uses: ./.github/workflows/check.jvm.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  native:
+    name: Native
+    uses: ./.github/workflows/check.native.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  containers:
+    name: Containers
+    uses: ./.github/workflows/job.container.yml
+    permissions:
+      contents: read
+
+  gate:
+    name: Gate
+    if: always()
+    needs: [jvm, native, containers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: "Setup: Harden Runner"
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - name: Require all checks to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"

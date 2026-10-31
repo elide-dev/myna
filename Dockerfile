@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build only the requested target: generator (default) or llvm23 (object rewriting).
-FROM ubuntu:24.04 AS llvm-build
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS llvm-build
 ARG LLVM_APT_SUITE=llvm-toolchain-noble-23
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake g++ make gnupg \
     && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /usr/share/keyrings/llvm.asc \
@@ -12,7 +12,7 @@ COPY llvm/ llvm/
 RUN cmake -S llvm -B output -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release \
     && cmake --build output --parallel 4 && cmake --install output
 
-FROM ghcr.io/graalvm/native-image-community:25 AS java-build
+FROM ghcr.io/graalvm/native-image-community:25i4@sha256:287f82eefd5d631865302df00a8555bcf80e3c0291da171fb7f72d594a542315 AS java-build
 WORKDIR /build
 COPY src/main/java/ src/main/java/
 RUN find src/main/java -name '*.java' > sources.txt \
@@ -29,7 +29,7 @@ WORKDIR /work
 ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]
 
-FROM ubuntu:24.04 AS generator
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS generator
 RUN apt-get update && apt-get install -y --no-install-recommends zlib1g \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=java-build /build/myna /usr/local/bin/myna
