@@ -15,9 +15,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            elide_asset: linux-amd64
           - os: macos-15
-            elide_asset: macos-arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -30,21 +28,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
-        with:
-          version: '25.4'
-          distribution: graalvm-community
-          cache: maven
-      - uses: elide-dev/setup-elide@10fbf30cebffd3538c428369950dc2094137f02b # v4.2.0
-        with:
-          version: '1.6.1'
-          channel: stable
-          custom_url: https://github.com/elide-dev/elide/releases/download/v1.6.1/elide.${{ matrix.elide_asset }}.txz
-          telemetry: 'false'
-      - name: Install pinned Rust
-        run: |
-          rustup show active-toolchain
-          rustc -vV
+      - name: Setup tools
+        uses: ./.github/actions/setup
       - name: Install LLVM 23 on Linux
         if: runner.os == 'Linux'
         run: |
@@ -68,10 +53,10 @@ jobs:
           test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
-        run: scripts/build.sh --llvm
-      - run: python3 tests/e2e.py
-      - run: python3 tests/llvm_integration.py
-      - run: python3 tests/native_image_integration.py
+        run: mise run build:llvm
+      - run: mise run test:e2e
+      - run: mise run test:llvm
+      - run: mise run test:native-image
       - name: Upload native test results to Codecov
         if: ${{ !cancelled() && hashFiles('build/reports/*.xml') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1

@@ -18,6 +18,17 @@ def run(*args, cwd=ROOT, ok=True):
         raise AssertionError(f"Command failed ({result.returncode}): {args}\n{result.stdout}\n{result.stderr}")
     return result
 
+def native_image(*args):
+    # Keep the direct driver's argument dump inside ignored build output.
+    work = ROOT / "build"
+    work.mkdir(exist_ok=True)
+    return run("elide", "native-image", "--",
+               "-J--enable-native-access=ALL-UNNAMED",
+               # Elide 1.6.1 inference initialization fails: runtime#2692.
+               "-H:+UnlockExperimentalVMOptions", "-H:-MLProfileInference",
+               "-H:-UnlockExperimentalVMOptions", *args, cwd=work)
+
+
 class XmlResult(unittest.TextTestResult):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
