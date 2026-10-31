@@ -1,0 +1,62 @@
+min_version = "2026.10.25"
+
+[tools]
+rust = "1.99.1"
+cmake = "4.4.5"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
+
+[tools."github:elide-dev/elide"]
+version = "1.6.1"
+bin_path = "bin"
+
+[tools."github:elide-dev/elide".platforms]
+linux-x64 = { asset_pattern = "elide.linux-amd64.txz" }
+linux-arm64 = { asset_pattern = "elide.linux-arm64.txz" }
+macos-arm64 = { asset_pattern = "elide.macos-arm64.txz" }
+
+[env]
+# macOS LLVM and LLD are separate Homebrew formulae; allow explicit overrides.
+LLVM_BIN = "{% if env.LLVM_BIN is defined %}{{ env.LLVM_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin{% else %}/usr/lib/llvm-23/bin{% endif %}"
+LLVM_CONFIG = "{% if env.LLVM_CONFIG is defined %}{{ env.LLVM_CONFIG }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin/llvm-config{% else %}/usr/lib/llvm-23/bin/llvm-config{% endif %}"
+_.path = [
+  "{% if env.LLVM_BIN is defined %}{{ env.LLVM_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin{% else %}/usr/lib/llvm-23/bin{% endif %}",
+  "{% if env.LLD_BIN is defined %}{{ env.LLD_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/lld/bin{% else %}/usr/lib/llvm-23/bin{% endif %}",
+]
+
+[tasks.setup]
+description = "Install Elide's matching Python component and project dependencies"
+run = ["elide setup python --channel release", "elide install"]
+
+[tasks."build:jvm"]
+description = "Build the CLI and hosted Feature JARs with Elide"
+run = "elide build :jar :feature-jar"
+
+[tasks.build]
+description = "Build the native CLI and JARs"
+run = "scripts/build.sh"
+
+[tasks."build:llvm"]
+description = "Build the native CLI and LLVM object applicator"
+run = "scripts/build.sh --llvm"
+
+[tasks."test:jvm"]
+description = "Run Elide JVM tests and enforce coverage thresholds"
+run = "scripts/test-jvm.sh"
+
+[tasks."test:e2e"]
+run = "scripts/python.sh tests/e2e.py"
+
+[tasks."test:llvm"]
+run = "scripts/python.sh tests/llvm_integration.py"
+
+[tasks."test:native-image"]
+run = "scripts/python.sh tests/native_image_integration.py"
+
+[tasks.test]
+description = "Build and run all JVM and native tests"
+run = "scripts/test.sh"
+
+[tasks.lint]
+description = "Validate GitHub Actions workflows"
+run = "actionlint"

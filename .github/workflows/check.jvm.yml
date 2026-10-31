@@ -22,36 +22,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-      - run: mvn -B verify
+      - name: Setup tools
+        uses: ./.github/actions/setup
+      - name: Validate workflows
+        run: mise run lint
+      - name: Build JVM artifacts
+        run: mise run build:jvm
+      - name: Run JVM tests and coverage gate
+        run: mise run test:jvm
       - name: Upload coverage to Codecov
-        if: ${{ !cancelled() && hashFiles('target/site/jacoco/jacoco.xml') != '' }}
+        if: ${{ !cancelled() && hashFiles('.dev/reports/coverage/jvm/jvm-test/jvm-test.xml') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true
           plugins: noop
-          files: target/site/jacoco/jacoco.xml
+          files: .dev/reports/coverage/jvm/jvm-test/jvm-test.xml
           disable_search: true
           flags: jvm
           fail_ci_if_error: true
       - name: Upload JVM test results to Codecov
-        if: ${{ !cancelled() && hashFiles('target/surefire-reports/TEST-*.xml') != '' }}
+        if: ${{ !cancelled() && hashFiles('.dev/reports/tests/jvm/test/TEST-*.xml') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           use_oidc: true
           plugins: noop
-          directory: target/surefire-reports
+          directory: .dev/reports/tests/jvm/test
           flags: jvm
           fail_ci_if_error: true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: jvm-reports
+          include-hidden-files: true
           path: |
-            target/surefire-reports/
-            target/site/jacoco/
+            .dev/reports/tests/jvm/
+            .dev/reports/coverage/jvm/

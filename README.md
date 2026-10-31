@@ -18,18 +18,21 @@ Version 0.5.0 introduces the project rename; see [the migration guide](docs/rena
 
 ## Build and use
 
-Requirements: Elide 1.6.1+, GraalVM 25.4 (JDK 25) with `native-image`, and a native C toolchain. Building the object applicator also requires CMake and LLVM 23 development libraries.
+Requirements: mise 2026.10.25+ and a native C toolchain. mise installs the pinned Elide 1.6.1, Rust, CMake, and workflow linters. Elide supplies Java compilation, JVM execution, Native Image, and Python; no standalone JDK or Python installation is needed. Building the object applicator also requires LLVM 23 development libraries and LLD 23 (Homebrew `llvm` and `lld` on macOS).
 
 ```sh
-scripts/build.sh                     # native executable, generator JAR, Feature JAR
-LLVM_CONFIG=/path/to/llvm-config scripts/build.sh --llvm
+mise trust
+mise install --locked
+mise run setup                      # Elide Python component and dependencies
+mise run build                      # native executable, generator JAR, Feature JAR
+LLVM_CONFIG=/path/to/llvm-config mise run build:llvm
 
 build/dist/myna generate examples/buffer.seam --out build/seam
 build/dist/myna validate examples/buffer.seam
 build/dist/myna generate examples/buffer.seam --out build/seam --check
 ```
 
-Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` supplies conventional JVM test/coverage tooling and a JAR build (`mvn verify`). The Java generator has no runtime dependencies. Native compilation uses Elide's external Native Image driver.
+Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` remains an optional Maven compatibility build. The Java generator has no runtime dependencies. Native compilation uses Elide's embedded Native Image driver.
 
 The descriptor target is explicit. Use `--target x86_64-unknown-linux-gnu` to override the example's macOS ARM64 target. The CLI never guesses an ABI from its own host.
 
@@ -72,30 +75,30 @@ Explicit `resource` and `borrow` declarations generate Rust owners/lifetimes and
 ## Tests and reports
 
 ```sh
-mvn -B verify                  # JVM unit/golden/negative tests and coverage gate
-scripts/test.sh                # also builds and tests the native CLI, LLVM integration, Native Image ABI
+mise run test:jvm              # Elide JVM tests, coverage reports, and thresholds
+mise run test                  # also builds and tests native CLI, LLVM, and Native Image ABI
 ```
 
-The full suite additionally needs Python 3, Rust 1.99.1 (pinned in `rust-toolchain.toml`, using LLVM 23), and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
+The full suite uses Elide's Python component, Rust 1.99.1 (pinned in `mise.toml`, using LLVM 23), and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
 
 Individual integration tests can run against existing builds:
 
 ```sh
-MYNA_BIN=build/dist/myna python3 tests/e2e.py
-LLVM_BIN=/path/to/llvm/bin python3 tests/llvm_integration.py
-python3 tests/native_image_integration.py
+MYNA_BIN=build/dist/myna mise run test:e2e
+LLVM_BIN=/path/to/llvm/bin mise run test:llvm
+mise run test:native-image
 ```
 
 | Report | Location |
 | --- | --- |
-| JVM test XML | `target/surefire-reports/TEST-*.xml` |
-| JaCoCo coverage XML | `target/site/jacoco/jacoco.xml` |
-| JaCoCo HTML | `target/site/jacoco/index.html` |
+| JVM test XML | `.dev/reports/tests/jvm/**/*.xml` |
+| JaCoCo coverage XML | `.dev/reports/coverage/jvm/jvm-test/jvm-test.xml` |
+| JaCoCo HTML | `.dev/reports/coverage/jvm/jvm-test/html/index.html` |
 | Native CLI / LLVM / Native Image test XML | `build/reports/*.xml` |
 
 Coverage gates are 85% line coverage and 70% branch coverage. Golden outputs are checked in under `tests/golden/`. The LLVM suite proves load elimination in both C and Rust, checks attributes in LLD's saved ThinLTO output, preserves archive metadata/native members, and rejects stale contracts and incompatible ABIs. The Native Image suite runs Rust → Native Image → Rust and tests exception translation and a leaf call with no VM transition. It also builds and runs the generated FFM bindings as a Native Image executable.
 
-CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It pins a Rust nightly and requires LLVM major 23; update both together when upgrading the toolchain.
+CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It uses the same mise tasks and lockfile as local development and requires LLVM major 23; update Rust and LLVM together. See [CI maintenance and Elide compatibility notes](docs/ci.md).
 
 ## Downstream distribution
 

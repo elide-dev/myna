@@ -12,13 +12,25 @@ COPY llvm/ llvm/
 RUN cmake -S llvm -B output -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release \
     && cmake --build output --parallel 4 && cmake --install output
 
-FROM ghcr.io/graalvm/native-image-community:25i4@sha256:287f82eefd5d631865302df00a8555bcf80e3c0291da171fb7f72d594a542315 AS java-build
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS java-build
+ARG TARGETARCH
+ARG ELIDE_VERSION=1.6.1
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils gcc g++ zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/elide \
+    && cd /tmp \
+    && curl -fsSLO "https://github.com/elide-dev/elide/releases/download/v${ELIDE_VERSION}/elide.linux-${TARGETARCH}.txz" \
+    && curl -fsSLO "https://github.com/elide-dev/elide/releases/download/v${ELIDE_VERSION}/elide.linux-${TARGETARCH}.txz.sha256" \
+    && sha256sum -c "elide.linux-${TARGETARCH}.txz.sha256" \
+    && tar -xJf "elide.linux-${TARGETARCH}.txz" -C /opt/elide \
+    && rm elide.linux-*.txz*
+ENV PATH="/opt/elide/bin:${PATH}"
 WORKDIR /build
-COPY src/main/java/ src/main/java/
-RUN find src/main/java -name '*.java' > sources.txt \
-    && javac --release 25 -d classes @sources.txt \
-    && jar --create --file myna.jar --main-class dev.elide.myna.cli.Main -C classes . \
-    && native-image --no-fallback -O2 -jar myna.jar -o myna
+COPY elide.pkl ./
+COPY src/ src/
+RUN elide build :jar :native \
+    && cp .dev/artifacts/jar/myna/myna.jar myna.jar \
+    && cp .dev/artifacts/native-image/myna myna
 
 # Full variant: includes the LLVM 23 tools used to read, annotate, and inspect objects.
 FROM llvm-build AS llvm23

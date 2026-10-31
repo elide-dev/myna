@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 import sys
 import unittest
-from support import BINARY, ROOT, TARGET, main, run
+from support import BINARY, ROOT, TARGET, main, native_image, run
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
@@ -17,17 +17,15 @@ class NativeImageIntegrationTests(unittest.TestCase):
         obj = work / "bemo.o"
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Crelocation-model=pic", fixture / "native.rs", "-o", obj)
         run("ar", "rcs", work / "libbemofixture.a", obj)
-        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
-        sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-cp", sdk, "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
+        run("elide", "javac", "--", "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
         app = work / "bemo-app"
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
-        run("native-image", "--no-fallback", "-O1", "-cp", classes,
+        native_image( "-O1", "-cp", classes,
             "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
             f"-Dmyna.bemo.libraryPath={work}", "fixture.bemo.BemoMain", "-o", app)
         self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
@@ -63,16 +61,14 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot be sent between threads safely", rejected.stderr)
-        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
-        sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-cp", sdk, "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
+        run("elide", "javac", "--", "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
         app = work / "ownership-app"
-        run("native-image", "--no-fallback", "-O1", "-cp", classes,
+        native_image( "-O1", "-cp", classes,
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={fixture}", "-H:-UnlockExperimentalVMOptions",
             "OwnershipMain", "-o", app)
         self.assertIn("Native Image consumer ownership and off-heap buffers passed", run(app).stdout)
@@ -82,18 +78,16 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
         run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
-        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
-        sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-cp", sdk, "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        run("elide", "javac", "--", "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
-        run("native-image", "--no-fallback", "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+        native_image( "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
             "--features=dev.elide.myna.generated.MynaForeignFeature", "FfmMain", "-o", work / "ffm-app")
         self.assertIn("AOT FFM -> Rust passed", run(work / "ffm-app", library).stdout)
 
@@ -102,15 +96,13 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
         run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
-        # Resolve pinned SDK dependencies from the test build for javac. Graal supplies them to its builder.
-        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
-        sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
+        # Elide supplies the Graal SDK to its compiler and native-image builder.
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-cp", sdk, "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
+        run("elide", "javac", "--", "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
         inspector = work / "inspect.o"
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)
@@ -119,7 +111,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         source = work / "buffer.seam"
         source.write_text((ROOT / "examples/buffer.seam").read_text().replace("aarch64-apple-darwin", TARGET))
         feature_output = work / "feature-output"
-        run("native-image", "--shared", "--no-fallback", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
+        native_image( "--shared", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
             "--initialize-at-build-time=dev.elide.myna.generated.MynaNative$Literals",
             "--features=dev.elide.myna.nativeimage.MynaFeature", f"-Dmyna.input={source}", f"-Dmyna.output={feature_output}",
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={inspector}", "-H:-UnlockExperimentalVMOptions",

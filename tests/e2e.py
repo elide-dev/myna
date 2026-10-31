@@ -23,7 +23,7 @@ class NativeCliTests(unittest.TestCase):
             run(out / "check")
             run("c++", "-std=c++17", "-x", "c++", "-fsyntax-only", out / "check.c")
             run("rustc", "--edition=2024", "--crate-type=lib", out / "seam.rs", "-o", out / "libseam.rlib")
-            run("javac", "-d", out / "classes", out / "MynaFFM.java")
+            run("elide", "javac", "--", "-d", out / "classes", out / "MynaFFM.java")
             library = out / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
             os.environ["SEAM_GENERATED"] = str(out)
             run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -49,8 +49,8 @@ public class FfmCheck { public static void main(String[] args) throws Throwable 
   }
  }
 }''')
-            run("javac", "-cp", out / "classes", "-d", out / "classes", out / "FfmCheck.java")
-            run("java", "--enable-native-access=ALL-UNNAMED", "-cp", out / "classes", "FfmCheck", library)
+            run("elide", "javac", "--", "-cp", out / "classes", "-d", out / "classes", out / "FfmCheck.java")
+            run("elide", "java", "--", "--enable-native-access=ALL-UNNAMED", "-cp", out / "classes", "FfmCheck", library)
             (out / "seam.h").write_text("drift")
             result = run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET, "--check", ok=False)
             self.assertEqual(result.returncode, 1)
