@@ -9,6 +9,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -224,29 +225,29 @@ class OwnershipTest {
   }
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "Drop",
-        "Send",
-        "Sync",
-        "Option",
-        "core"
-      })
-  void rejectsReservedResourceNamesInOwnershipScope(String reserved) throws Exception {
+  @CsvSource({
+    "Drop, reserved resource name",
+    "Send, reserved resource name",
+    "Sync, reserved resource name",
+    "Option, type shadows generated name: Option",
+    "core, type shadows generated name: core"
+  })
+  void rejectsReservedResourceNamesInOwnershipScope(String reserved, String message) throws Exception {
     assertTrue(source().contains("opaque Ticket"), "fixture must name a resource Ticket");
     String changed = source().replace("Ticket", reserved);
+    // Globally reserved type names are rejected before ownership-specific validation.
     var relaxed =
         assertThrows(
             IllegalArgumentException.class,
             () -> Generator.generate(Dsl.parse(changed), false),
             "relaxed mode must reject reserved resource name=" + reserved);
-    assertEquals("reserved resource name", relaxed.getMessage());
+    assertEquals(message, relaxed.getMessage());
     var strict =
         assertThrows(
             IllegalArgumentException.class,
             () -> Generator.generate(Dsl.parse(changed), true),
             "strict mode must reject reserved resource name=" + reserved);
-    assertEquals("reserved resource name", strict.getMessage());
+    assertEquals(message, strict.getMessage());
   }
 
   @Test
