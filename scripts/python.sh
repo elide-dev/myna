@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 args=()
-for key in PATH HOME USER TMPDIR RUSTUP_HOME CARGO_HOME LLVM_BIN LLVM_CONFIG MYNA_BIN SDKROOT; do
+for key in PATH HOME USER TMPDIR RUSTUP_HOME CARGO_HOME LLVM_BIN LLVM_CONFIG MYNA_BIN MYNA_LLVM SDKROOT; do
   value="${!key-}"
   if [[ -n "$value" ]]; then
     args+=(--env "$key" "$value")
