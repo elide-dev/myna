@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build only the requested target: generator (default) or llvm23 (object rewriting).
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS llvm-build
+FROM ubuntu:25.10@sha256:7cc5e35f6567ee8c66d2abb4aab0fd866669e6207c237c3a8f0947a5c7f17092 AS llvm-build
 ARG LLVM_APT_SUITE=llvm-toolchain-noble-23
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake g++ make gnupg \
     && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /usr/share/keyrings/llvm.asc \
@@ -12,7 +12,7 @@ COPY llvm/ llvm/
 RUN cmake -S llvm -B output -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release \
     && cmake --build output --parallel 4 && cmake --install output
 
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS java-build
+FROM ubuntu:25.10@sha256:7cc5e35f6567ee8c66d2abb4aab0fd866669e6207c237c3a8f0947a5c7f17092 AS java-build
 ARG TARGETARCH
 ARG ELIDE_VERSION=1.6.1
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils gcc g++ zlib1g-dev \
@@ -41,7 +41,7 @@ WORKDIR /work
 ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]
 
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS generator
+FROM ubuntu:25.10@sha256:7cc5e35f6567ee8c66d2abb4aab0fd866669e6207c237c3a8f0947a5c7f17092 AS generator
 RUN apt-get update && apt-get install -y --no-install-recommends zlib1g \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=java-build /build/myna /usr/local/bin/myna
