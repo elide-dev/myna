@@ -1,49 +1,14 @@
-name: CI
-on:
-  push:
-  pull_request:
+name: "Check - Native"
+
+"on":
+  workflow_call:
   workflow_dispatch:
+
 permissions:
   contents: read
   id-token: write
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+
 jobs:
-  jvm:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-      - run: mvn -B verify
-      - name: Upload coverage to Codecov
-        if: ${{ !cancelled() && hashFiles('target/site/jacoco/jacoco.xml') != '' }}
-        uses: codecov/codecov-action@v5
-        with:
-          use_oidc: true
-          files: target/site/jacoco/jacoco.xml
-          disable_search: true
-          flags: jvm
-          fail_ci_if_error: true
-      - name: Upload JVM test results to Codecov
-        if: ${{ !cancelled() && hashFiles('target/surefire-reports/TEST-*.xml') != '' }}
-        uses: codecov/test-results-action@v1
-        with:
-          use_oidc: true
-          directory: target/surefire-reports
-          flags: jvm
-          fail_ci_if_error: true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jvm-reports
-          path: |
-            target/surefire-reports/
-            target/site/jacoco/
   native:
     strategy:
       fail-fast: false
@@ -54,22 +19,31 @@ jobs:
           - os: macos-15
             elide_asset: macos-arm64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: graalvm/setup-graalvm@v1
+      - name: "Setup: Harden Runner"
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
-          java-version: '25'
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
+        with:
+          version: '25.4'
           distribution: graalvm-community
           cache: maven
-      - uses: elide-dev/setup-elide@v4
+      - uses: elide-dev/setup-elide@10fbf30cebffd3538c428369950dc2094137f02b # v4.2.0
         with:
-          version: '1.5.4+20260921'
-          custom_url: https://github.com/elide-dev/elide/releases/download/1.5.4%2B20260921/elide.${{ matrix.elide_asset }}.txz
+          version: '1.6.1'
+          channel: stable
+          custom_url: https://github.com/elide-dev/elide/releases/download/v1.6.1/elide.${{ matrix.elide_asset }}.txz
           telemetry: 'false'
-      - name: Install matching Rust
+      - name: Install pinned Rust
         run: |
-          rustup toolchain install nightly-2026-09-16 --profile minimal
-          rustup override set nightly-2026-09-16
+          rustup show active-toolchain
           rustc -vV
       - name: Install LLVM 23 on Linux
         if: runner.os == 'Linux'
@@ -88,6 +62,11 @@ jobs:
           echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
           echo "LLVM_BIN=$(brew --prefix llvm)/bin" >> "$GITHUB_ENV"
           echo "LLVM_CONFIG=$(brew --prefix llvm)/bin/llvm-config" >> "$GITHUB_ENV"
+      - name: Verify LLVM compatibility
+        shell: bash
+        run: |
+          test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
+          test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
         run: scripts/build.sh --llvm
       - run: python3 tests/e2e.py
@@ -95,14 +74,16 @@ jobs:
       - run: python3 tests/native_image_integration.py
       - name: Upload native test results to Codecov
         if: ${{ !cancelled() && hashFiles('build/reports/*.xml') != '' }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
+          report_type: test_results
           use_oidc: true
+          plugins: noop
           files: build/reports/native-e2e.xml,build/reports/llvm-integration.xml,build/reports/native-image-integration.xml
           disable_search: true
           flags: native-${{ matrix.os }}
           fail_ci_if_error: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: native-${{ matrix.os }}

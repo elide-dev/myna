@@ -1,0 +1,57 @@
+name: "Check - JVM"
+
+"on":
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  jvm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: "Setup: Harden Runner"
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - run: mvn -B verify
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() && hashFiles('target/site/jacoco/jacoco.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          plugins: noop
+          files: target/site/jacoco/jacoco.xml
+          disable_search: true
+          flags: jvm
+          fail_ci_if_error: true
+      - name: Upload JVM test results to Codecov
+        if: ${{ !cancelled() && hashFiles('target/surefire-reports/TEST-*.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          directory: target/surefire-reports
+          flags: jvm
+          fail_ci_if_error: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: jvm-reports
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/

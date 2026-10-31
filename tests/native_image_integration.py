@@ -17,7 +17,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         obj = work / "bemo.o"
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Crelocation-model=pic", fixture / "native.rs", "-o", obj)
         run("ar", "rcs", work / "libbemofixture.a", obj)
-        run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
+        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
@@ -63,7 +63,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot be sent between threads safely", rejected.stderr)
-        run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
+        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
@@ -82,7 +82,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
         run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
-        run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
+        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
@@ -103,7 +103,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         generated = work / "generated"
         run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
         # Resolve pinned SDK dependencies from the test build for javac. Graal supplies them to its builder.
-        run("mvn", "-q", "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
+        run("mvn", "-q", "dependency:build-classpath", "-Dmdep.outputFile=build/sdk-classpath.txt", "-DincludeScope=compile")
         sdk = (ROOT / "build/sdk-classpath.txt").read_text().strip()
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
