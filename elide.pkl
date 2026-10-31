@@ -6,7 +6,7 @@ import "elide:Testing.pkl" as Testing
 import "elide:Coverage.pkl" as Coverage
 
 name = "myna"
-version = "0.5.0"
+version = "0.6.0"
 jvm {
   main = "dev.elide.myna.cli.Main"
   target = 25

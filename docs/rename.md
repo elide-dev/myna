@@ -1,6 +1,6 @@
-# Migrating to Myna 0.5.0
+# Migrating to Myna 0.6.0
 
-The project formerly named `svmgen` is now **Myna**. Version 0.5.0 renames its public integration points:
+The project formerly named `svmgen` is now **Myna**. Version 0.6.0 renames its public integration points:
 
 | Previous | Myna |
 | --- | --- |

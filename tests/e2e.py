@@ -10,7 +10,7 @@ from support import BINARY, ROOT, TARGET, main, run
 class NativeCliTests(unittest.TestCase):
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.5.0")
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.6.0")
         with tempfile.TemporaryDirectory(prefix="myna e2e ") as tmp:
             out = Path(tmp)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET)

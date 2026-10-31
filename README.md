@@ -14,7 +14,7 @@ A Native Image command-line generator for Rust / Substrate VM seams. One typed S
 
 **Substrate VM is the primary runtime.** Fixed symbols use direct generated C API bindings; explicitly contracted native leaf calls can elide VM transitions. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
 
-Version 0.5.0 introduces the project rename; see [the migration guide](docs/rename.md) for consumer changes.
+Version 0.6.0 introduces the project rename; see [the migration guide](docs/rename.md) for consumer changes.
 
 ## Build and use
 
