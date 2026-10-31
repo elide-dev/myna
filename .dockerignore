@@ -1,5 +1,6 @@
 *
 !Dockerfile
+!elide.pkl
 !src
 !src/main
 !src/main/java
