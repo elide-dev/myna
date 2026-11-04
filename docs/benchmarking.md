@@ -219,3 +219,19 @@ checked-in Gradle initialization script when building ARM benchmark artifacts.
 
 See `benchmarks/comparison/evidence/` for the scalar direct-call instruction
 comparison and [operations](operations.md) for symbol-sidecar publication.
+
+
+## Performance charts
+
+The maintained chart uses `benchmarks/comparison/baselines/hosted-arm64-0.7.2.json`, a five-process Linux ARM run with CPU features and source hashes verified against release commit `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. Its raw process samples and report are checked in. Source/build identities are retained rather than rewritten to pretend the data came from a later commit.
+
+```sh
+python3 -m venv build/charts-venv
+build/charts-venv/bin/pip install --require-hashes -r benchmarks/comparison/requirements.txt
+build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/hosted-arm64-0.7.2.json
+python3 scripts/check-hygiene.py
+```
+
+The plot separates normal transitions, native leaves, and AOT FFM. Diamonds are medians of process medians; dots and ranges show the individual processes and min–max. The runtime-bound diagnostic panel uses an explicitly labeled logarithmic axis. Shared-host measurements remain advisory. SVG and PNG exports plus a manifest of input/output hashes live under `docs/charts/`; changing a baseline, chart script, or dependency lock requires regenerating them. CI verifies the manifest and renders fresh artifacts without inventing a performance threshold.
+
+To update the baseline, run the complete comparison workflow, verify workload correctness and hardware/toolchain provenance, retain its JSON, and regenerate its table and charts in the same PR. `compare.py` rejects mismatched profiles and incomplete CPU identities. Refresh `requirements.txt` from `requirements.in` with `uv pip compile --generate-hashes --output-file benchmarks/comparison/requirements.txt benchmarks/comparison/requirements.in` when upgrading plotting dependencies.

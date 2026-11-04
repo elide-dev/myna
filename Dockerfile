@@ -19,6 +19,7 @@ ENV PATH="/opt/elide-toolchain/bin:${PATH}" \
     LLVM_BIN=/opt/elide-toolchain/bin ELIDE_TOOLCHAIN_HOME=/opt/elide-toolchain
 
 FROM native-toolchain AS llvm-build
+COPY LICENSE LICENSE-APACHE LICENSE-MIT /usr/share/licenses/myna/
 WORKDIR /build
 COPY llvm/ llvm/
 RUN cmake -S llvm -B output -DLLVM_DIR=/opt/elide-toolchain/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release \
@@ -44,7 +45,7 @@ RUN python3 scripts/setup-graalvm.py
 ENV GRAALVM_HOME=/build/.dev/toolchains/graalvm JAVA_HOME=/build/.dev/toolchains/graalvm
 ENV PATH="/build/.dev/toolchains/graalvm/bin:${PATH}"
 COPY scripts/build.sh scripts/symbols.sh scripts/
-COPY elide.pkl ./
+COPY elide.pkl LICENSE LICENSE-APACHE LICENSE-MIT ./
 COPY src/ src/
 RUN scripts/build.sh \
     && cp build/dist/myna.jar myna.jar \
@@ -60,6 +61,7 @@ ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]
 
 FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS generator
+COPY LICENSE LICENSE-APACHE LICENSE-MIT /usr/share/licenses/myna/
 RUN apt-get update && apt-get install -y --no-install-recommends zlib1g \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=java-build /build/myna /usr/local/bin/myna

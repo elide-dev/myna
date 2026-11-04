@@ -2,6 +2,8 @@
 name = "myna-values"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Allocator-aware Serde value tapes for Myna / Substrate VM"
 
 [dependencies]

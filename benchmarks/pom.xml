@@ -9,6 +9,10 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.elide</groupId><artifactId>myna-benchmarks</artifactId><version>0.7.2</version>
+  <!-- Consumers may choose either license; these are alternatives. -->
+  <licenses>
+    <license><name>Apache-2.0 OR MIT</name><url>https://github.com/elide-dev/myna/blob/main/LICENSE</url><distribution>repo</distribution></license>
+  </licenses>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

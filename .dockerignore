@@ -19,3 +19,7 @@
 !src/feature
 !src/feature/java
 !src/feature/java/**
+
+!LICENSE
+!LICENSE-APACHE
+!LICENSE-MIT

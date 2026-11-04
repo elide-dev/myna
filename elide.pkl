@@ -29,15 +29,30 @@ sources {
 artifacts {
   ["jar"] = new Jvm.Jar {
     name = "myna"
+    resources {
+      new { from = "LICENSE"; into = "META-INF" }
+      new { from = "LICENSE-APACHE"; into = "META-INF" }
+      new { from = "LICENSE-MIT"; into = "META-INF" }
+    }
     main = "dev.elide.myna.cli.Main"
     sources { "main" }
   }
   ["values-jar"] = new Jvm.Jar {
     name = "myna-values"
+    resources {
+      new { from = "LICENSE"; into = "META-INF" }
+      new { from = "LICENSE-APACHE"; into = "META-INF" }
+      new { from = "LICENSE-MIT"; into = "META-INF" }
+    }
     sources { "values" }
   }
   ["feature-jar"] = new Jvm.Jar {
     name = "myna-feature"
+    resources {
+      new { from = "LICENSE"; into = "META-INF" }
+      new { from = "LICENSE-APACHE"; into = "META-INF" }
+      new { from = "LICENSE-MIT"; into = "META-INF" }
+    }
     sources { "main"; "feature" }
   }
 

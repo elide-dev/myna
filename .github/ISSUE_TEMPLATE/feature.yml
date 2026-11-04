@@ -1,0 +1,10 @@
+name: Feature proposal
+description: Propose a concrete capability or performance improvement.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case and proposed behavior
+      description: Include the relevant ABI, ownership, or SVM performance constraints and any measured baseline.
+    validations:
+      required: true

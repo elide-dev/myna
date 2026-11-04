@@ -13,6 +13,7 @@ if stage.exists():
     shutil.rmtree(stage)
 stage.mkdir(parents=True)
 files = {
+    **{root / name: name for name in ("LICENSE", "LICENSE-APACHE", "LICENSE-MIT", "THIRD_PARTY.md")},
     root / ".dev/artifacts/jar/myna-values/myna-values.jar": "myna-values.jar",
     root / f"target/package/{name}.crate": f"{name}.crate",
     root / "docs/values.md": "docs/values.md",

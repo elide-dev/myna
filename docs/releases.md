@@ -1,0 +1,38 @@
+# Release artifacts and verification
+
+Myna's own code is available under **Apache-2.0 OR MIT**, at the recipient's option. New source archives, portable SDK builds, JAR resources, and container images carry the license texts. Third-party packages retain their own terms; see [THIRD_PARTY.md](../THIRD_PARTY.md).
+
+## Release process
+
+1. Update the version and regenerate versioned golden outputs. Merge the reviewed change after required checks pass.
+2. Create a signed `v<version>` tag on the release commit. Version tags are immutable under repository rules; correct an unsuccessful candidate with a new tag rather than moving an existing one.
+3. The artifact workflow builds the portable SDK and an exact `git archive` source archive, generates checksums and a source SBOM, and attests the bytes produced in that workflow. Tag runs create or populate a **draft** release and refuse to replace existing assets or write into an already published release. Manual branch runs retain verification artifacts without modifying a release.
+4. Check Linux/macOS validation, container publication, and symbol receipts. Review the draft notes and assets, then publish the draft. Do not publish before artifact jobs have attached their outputs.
+
+The Docker release job smoke-tests each image before publication, records BuildKit provenance, scans the immutable pushed digest, and attaches signed provenance and SBOM attestations to that digest. Source and image inventories are distinct: the source SBOM covers first-party declared dependencies, including development/build dependencies; vendored benchmark submodules and generated build trees are excluded. Inherited workspace license declarations are resolved from Cargo metadata; this does not alter dependency licenses or claim license conclusions. An image SBOM inventories detected packages in that image and cannot prove that every statically linked component was identified.
+
+## Consumer verification
+
+Check checksums before using downloaded files. For artifacts produced by the provenance workflow:
+
+```sh
+gh attestation verify myna-values-VERSION.tar.gz --repo elide-dev/myna
+gh attestation verify myna-source-VERSION.tar.gz --repo elide-dev/myna
+gh attestation verify oci://ghcr.io/elide-dev/myna@sha256:DIGEST --repo elide-dev/myna
+```
+
+Verify the attestation's source revision, workflow identity, and artifact digest against the intended release. A signature alone is not an assertion that a build was audited or vulnerability-free. Do not substitute a similarly named manual-run artifact for the published release asset.
+
+The GitHub-generated source archive and the workflow's attested `git archive` asset are separate byte streams with separate checksums. Existing v0.7.2 SDK bytes and hashes remain unchanged; CI provenance is not retroactively claimed for that locally packaged artifact. Its license texts and recovered Linux/macOS symbol receipts are attached to the release. Later CI-built releases use the provenance workflow above.
+
+## Symbols and recovery
+
+See [operations](operations.md) for the managed staging connection. Build IDs/UUIDs must be nonempty and match the executable and sidecar. Native Image on macOS supplies method symbols rather than full source DWARF.
+
+The publisher retries transient failures only for replayable reads, content-addressed uploads, and symbol publication. It retains each successful receipt immediately. To recover a failed publication without rebuilding, download the original workflow's artifact, verify its source commit and platform, and run:
+
+```sh
+python3 scripts/publish-symbols.py --revision FULL_SOURCE_COMMIT --target linux-x86_64 path/to/symbols/*.debug
+```
+
+Use `darwin-arm64` and `.dsym` files for macOS. Preserve the original artifact bytes; never relabel a newly built binary as an earlier release's symbols. Credentials come from the authorized environment and must not appear in receipts, logs, or source control.

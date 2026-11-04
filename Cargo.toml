@@ -5,6 +5,8 @@ members = ["crates/myna-values", "tests/values"]
 [workspace.package]
 version = "0.7.2"
 edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/elide-dev/myna"
 
 [profile.release]
 lto = "thin"
