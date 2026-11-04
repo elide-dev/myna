@@ -40,6 +40,6 @@ if before.keys() != after.keys():
     raise RuntimeError("Mismatched case sets")
 print("| Mode | Case | Baseline ns/op | Candidate ns/op | Change |")
 print("|---|---|---:|---:|---:|")
-for key, old in sorted(before.items()):
+for key, old in sorted(before.items(), key=lambda item: ({"native": 0, "ffm-aot": 1, "jvm": 2}[item[0][0]], item[0][1])):
     new = after[key]
     print(f"| {key[0]} | {key[1]} | {old:.3f} | {new:.3f} | {(new/old-1)*100:+.2f}% |")

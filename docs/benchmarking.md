@@ -6,6 +6,20 @@ under explicit runtime and ownership contracts. Neither system treats results
 from different hardware, execution tiers, or instrumentation modes as directly
 comparable.
 
+SVM is the performance acceptance target. Generated direct C calls should meet
+or beat equivalent handwritten Native Image `@CFunction` calls with the same
+transition contract, native target, compiler settings and workload. Evaluate
+normal transitions and transition-free leaves independently. AOT FFM is an
+additional SVM adapter; improving it does not substitute for direct C API parity.
+JVM FFM and JNI measurements are secondary diagnostics.
+
+Do not declare parity from overlapping noisy intervals alone. Retain repeated
+controlled measurements and inspect generated call sites for extra instructions,
+indirection, allocations or transitions. Investigate a reproducible regression
+against the handwritten C API before accepting a performance change. When both
+paths compile to the same call sequence, parity is the expected result; beating
+the baseline requires a real optimization available under the same contract.
+
 ## Toolchain and execution modes
 
 Pin Elide 1.6.2, the native toolchain 2026.11.1, and GraalVM

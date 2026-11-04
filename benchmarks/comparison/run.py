@@ -163,7 +163,7 @@ def report(path):
              "Each row summarizes process medians. Modes and transition policies are separate comparisons.",
              "Control is shown without subtraction. This is a dependent scalar latency workload.", "",
              "| Mode | Case | Median ns/op | Min–max process median | Bootstrap 95% CI |", "|---|---|---:|---:|---:|"]
-    for (mode, case), values in sorted(groups.items()):
+    for (mode, case), values in sorted(groups.items(), key=lambda item: ({"native": 0, "ffm-aot": 1, "jvm": 2}[item[0][0]], item[0][1])):
         rng = random.Random(data["seed"])
         boot = sorted(statistics.median(rng.choices(values, k=len(values))) for _ in range(10000))
         ci = f"{boot[249]:.3f}–{boot[9749]:.3f}" if len(values) >= 5 else "insufficient forks"
