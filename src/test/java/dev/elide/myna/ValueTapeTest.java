@@ -42,6 +42,27 @@ final class ValueTapeTest {
     assertThrows(IllegalArgumentException.class, () -> tape(nodes).validate());
   }
 
+  @Test void descriptorLimitsAndDirectTextValidation() {
+    class EmptyValue extends ValueTape {
+      EmptyValue(long count, long bytes) { super(count, bytes); }
+      @Override protected int readInt(long offset) { return 0; }
+      @Override protected long readLong(long offset) { return offset == 16 ? 1 : 0; }
+      @Override protected byte readByte(long offset) { throw new AssertionError("No text allocation"); }
+    }
+    new EmptyValue(1, 0).validate();
+    assertThrows(IllegalArgumentException.class, () -> new EmptyValue(Long.MAX_VALUE, 0));
+    assertThrows(IllegalArgumentException.class, () -> new EmptyValue(1, -1));
+    var malformed = tape(node(STRING | 0x200, 0, 0, 1));
+    assertThrows(IllegalArgumentException.class, () -> malformed.stringValue(0));
+    var negativeOffset = new Tape(new long[][]{node(STRING, 17, -1, 1)}, "", 2);
+    assertThrows(IllegalArgumentException.class, () -> negativeOffset.stringValue(0));
+    var oldInline = new Tape(new long[][]{node(STRING, 1, 0, 1)}, "x", 2);
+    oldInline.validate();
+    assertEquals("x", oldInline.stringValue(0));
+    var differingSuffix = new Tape(new long[][]{node(STRING, 9, 0, 1)}, "12345678x");
+    assertFalse(differingSuffix.stringEquals(0, Utf8Key.of("12345678y")));
+  }
+
   @Test void exactNumbersAndBorrowedRegions() {
     for (String token : new String[]{"-0", "18446744073709551615", "1.234567890123456789012345678901", "1e-999999999999"}) {
       var t = new Tape(new long[][]{node(DECIMAL, token.length(), 0, 1)}, token);

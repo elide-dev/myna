@@ -1,0 +1,6 @@
+# These two readers execute raw Graal word operations and CFunction calls, which
+# cannot run on a stock JVM. tests/native_image_integration.py executes both in
+# real Native Images on Linux and macOS. The shared ValueTape remains measured.
+ignore:
+  - "src/values/java/dev/elide/myna/values/NativeValueTape.java"
+  - "src/values/java/dev/elide/myna/values/SimdNativeValueTape.java"
