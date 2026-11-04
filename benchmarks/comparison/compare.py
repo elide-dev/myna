@@ -13,6 +13,10 @@ baseline, candidate = [json.loads(p.read_text()) for p in (args.baseline, args.c
 
 def profile(data):
     build = data["build"]
+    cpu = data["host"]["cpu"]
+    if not cpu.strip() or (":" in cpu and not any(
+            line.partition(":")[2].strip() for line in cpu.splitlines())):
+        raise RuntimeError("Missing CPU identity; this run is diagnostic only")
     return {"schema": build["schema"], "workload": build["workload"],
             "target": build["target"], "execution_profile": build.get("execution_profile"), "versions": build["versions"], "graalvm": build["graalvm"],
             "host": data["host"], "iterations": data["iterations"],

@@ -4,7 +4,8 @@ These five-process runs preserve raw per-process samples, commands, binary hashe
 compiler evidence and runtime metadata. They were measured on a shared Apple M5
 Max workstation with substantial concurrent activity. Treat them as diagnostic
 baselines; the wide process ranges prohibit small percentage performance claims.
-Use the separate `Boundary comparisons` CI workflow for dedicated-hardware data.
+Use the separate `Boundary comparisons` CI workflow for rerunnable hosted ARM data;
+configure a compatible controlled runner before treating timing changes as gates.
 
 `before-unbound-arm64` records the runtime-bound FFM adapter. `unbound-arm64`
 records the generated build-time adapter, an equivalently optimized handwritten

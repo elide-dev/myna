@@ -85,16 +85,31 @@ def build():
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
+def linux_cpu_identity(cpuinfo):
+    # ARM exposes different keys from x86. Retain all distinct core identities
+    # on heterogeneous hosts, excluding frequency/load and processor indices.
+    keys = ("vendor_id", "model name", "cpu family", "model", "stepping", "microcode", "flags",
+            "CPU implementer", "CPU architecture", "CPU variant", "CPU part", "CPU revision", "Features")
+    identities = set()
+    for block in cpuinfo.strip().split("\n\n"):
+        fields = dict(line.split(":", 1) for line in block.splitlines() if ":" in line)
+        fields = {k.strip(): v.strip() for k, v in fields.items()}
+        identity = {key: fields[key] for key in keys if fields.get(key)}
+        if not (identity.get("model name") or
+                (identity.get("CPU implementer") and identity.get("CPU part"))):
+            continue
+        identities.add(json.dumps(identity, sort_keys=True))
+    if not identities:
+        raise RuntimeError("Cannot establish CPU identity for repeatable measurements")
+    return "\n".join(sorted(identities))
+
 def cpu_identity():
     if sys.platform == "darwin":
         return run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
-    fields = dict(line.split(":", 1) for line in Path("/proc/cpuinfo").read_text().split("\n\n", 1)[0].splitlines() if ":" in line)
-    fields = {k.strip(): v.strip() for k, v in fields.items()}
-    # Keep frequency/load samples out of the compatibility identity.
-    return "\n".join(f"{key}: {fields.get(key, '')}" for key in
-                     ("vendor_id", "model name", "cpu family", "model", "stepping", "microcode", "flags"))
+    return linux_cpu_identity(Path("/proc/cpuinfo").read_text())
 
 def measure(args):
+    cpu = cpu_identity()  # Fail before a long measurement if provenance is missing.
     metadata = json.loads((WORK / "build.json").read_text())
     for name, expected in metadata["sources"].items():
         if digest(ROOT / name) != expected:
@@ -148,7 +163,7 @@ def measure(args):
             samples.append({"compilation_evidence": evidence,"mode": mode, "case": name, "fork": fork,
                             "command": list(map(str, command)), "samples": parsed})
     result = {"build": metadata, "host": {"platform": platform.platform(), "machine": platform.machine(),
-              "cpu": cpu_identity()},
+              "cpu": cpu},
               "seed": args.seed, "forks": args.forks, "iterations": args.iterations,
               "smoke": args.forks < 5 or args.iterations < 1_000_000, "results": samples}
     args.output.write_text(json.dumps(result, indent=2) + "\n")
