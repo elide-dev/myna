@@ -9,15 +9,19 @@ llvm=${LLVM_BIN:-${ELIDE_TOOLCHAIN_HOME:?Pinned LLVM toolchain required}/bin}
 case "$(uname -s)" in
   Darwin)
     original=$("$llvm/llvm-dwarfdump" --uuid "$binary" | awk '{print $2}')
+    test -n "$original"
     "$llvm/dsymutil" --flat --out="$output/$name.dsym" "$binary"
     "$llvm/llvm-strip" --discard-all "$binary"
     companion=$("$llvm/llvm-dwarfdump" --uuid "$output/$name.dsym" | awk '{print $2}')
     stripped=$("$llvm/llvm-dwarfdump" --uuid "$binary" | awk '{print $2}')
-    test -n "$original" && test "$original" = "$companion" && test "$original" = "$stripped"
+    test -n "$original"
+    test "$original" = "$companion"
+    test "$original" = "$stripped"
     echo "$name UUID: $original"
     ;;
   Linux)
     original=$("$llvm/llvm-readelf" --notes "$binary" | sed -n 's/.*Build ID: //p')
+    test -n "$original"
     "$llvm/llvm-objcopy" --only-keep-debug "$binary" "$output/$name.debug"
     case "$("$llvm/llvm-readelf" --sections "$output/$name.debug")" in
       *".debug_info"*) ;;
@@ -27,7 +31,9 @@ case "$(uname -s)" in
     "$llvm/llvm-objcopy" --add-gnu-debuglink="$output/$name.debug" "$binary"
     companion=$("$llvm/llvm-readelf" --notes "$output/$name.debug" | sed -n 's/.*Build ID: //p')
     stripped=$("$llvm/llvm-readelf" --notes "$binary" | sed -n 's/.*Build ID: //p')
-    test -n "$original" && test "$original" = "$companion" && test "$original" = "$stripped"
+    test -n "$original"
+    test "$original" = "$companion"
+    test "$original" = "$stripped"
     echo "$name build ID: $original"
     ;;
   *) echo "Unsupported symbol platform" >&2; exit 1 ;;
