@@ -1,4 +1,5 @@
 #include <myna/values.hpp>
+#include <cstdlib>
 #include <core.h>
 #include <chrono>
 #include <iostream>

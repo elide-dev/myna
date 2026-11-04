@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import random
 import statistics
+import shutil
 import subprocess
 import sys
 
@@ -27,14 +28,22 @@ def digest(path):
 def build():
     WORK.mkdir(parents=True, exist_ok=True)
     generated = WORK / "generated"
-    execute(ROOT / "build/dist/myna", "generate", SOURCE / "boundary.seam", "--out", generated, "--target", TARGET)
+    generator_classes = WORK / "generator-classes"
+    shutil.rmtree(generator_classes, ignore_errors=True)
+    generator_classes.mkdir()
+    generator_sources = sorted((ROOT / "src/main/java").rglob("*.java"))
+    execute("javac", "-d", generator_classes, *generator_sources)
+    shutil.rmtree(generated, ignore_errors=True)
+    execute("java", "-cp", generator_classes, "dev.elide.myna.cli.Main",
+            "generate", SOURCE / "boundary.seam", "--out", generated, "--target", TARGET)
     home = Path(os.environ["GRAALVM_HOME"])
     flags = ["-O3", "-fPIC", "-I", home / "include", "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux")]
     execute(os.environ["CC"], *flags, "-c", SOURCE / "kernel.c", "-o", WORK / "kernel.o")
     library = WORK / ("libboundary.dylib" if sys.platform == "darwin" else "libboundary.so")
     execute(os.environ["CC"], "-shared", WORK / "kernel.o", "-o", library)
     classes = WORK / "classes"
-    classes.mkdir(exist_ok=True)
+    shutil.rmtree(classes, ignore_errors=True)
+    classes.mkdir()
     execute("javac", "-d", classes, *sorted(SOURCE.glob("*.java")), *sorted(generated.glob("*.java")))
     # Record actual builder commands including its driver flags in build metadata.
     native_args = ["-O3", "-cp", str(classes), "-H:+UnlockExperimentalVMOptions",
@@ -53,13 +62,13 @@ def build():
     COMMANDS.append([str(home / "bin/native-image"), "-J--enable-native-access=ALL-UNNAMED",
                      "-H:+UnlockExperimentalVMOptions", "-H:-CheckToolchain",
                      f"-H:CCompilerPath={os.environ['CC']}", "-H:-UnlockExperimentalVMOptions", *ffm_args])
-    sources = [*SOURCE.glob("*"), ROOT / "mise.lock", ROOT / "tools/graalvm.json"]
+    sources = [*SOURCE.glob("*"), *generator_sources, ROOT / "tests/support.py", ROOT / "mise.lock", ROOT / "tools/graalvm.json"]
     binaries = [WORK / "native", WORK / "ffm-aot", library, *classes.rglob("*.class")]
     versions = {}
     for tool, command in {
         "java": ("java", "-version"), "clang": (os.environ["CC"], "--version"),
         "native-image": (home / "bin/native-image", "--version"),
-        "toolchain": ("elide-toolchain", "version"), "elide": ("elide", "--version")}.items():
+        "toolchain": ("elide-toolchain", "version")}.items():
         result = run(*command)
         versions[tool] = result.stdout + result.stderr
     metadata = {
@@ -73,6 +82,15 @@ def build():
         "build_commands": COMMANDS, "library": str(library),
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+def cpu_identity():
+    if sys.platform == "darwin":
+        return run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
+    fields = dict(line.split(":", 1) for line in Path("/proc/cpuinfo").read_text().split("\n\n", 1)[0].splitlines() if ":" in line)
+    fields = {k.strip(): v.strip() for k, v in fields.items()}
+    # Keep frequency/load samples out of the compatibility identity.
+    return "\n".join(f"{key}: {fields.get(key, '')}" for key in
+                     ("vendor_id", "model name", "cpu family", "model", "stepping", "microcode", "flags"))
 
 def measure(args):
     metadata = json.loads((WORK / "build.json").read_text())
@@ -128,7 +146,7 @@ def measure(args):
             samples.append({"compilation_evidence": evidence,"mode": mode, "case": name, "fork": fork,
                             "command": list(map(str, command)), "samples": parsed})
     result = {"build": metadata, "host": {"platform": platform.platform(), "machine": platform.machine(),
-              "cpu": run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip() if sys.platform == "darwin" else Path("/proc/cpuinfo").read_text()},
+              "cpu": cpu_identity()},
               "seed": args.seed, "forks": args.forks, "iterations": args.iterations,
               "smoke": args.forks < 5 or args.iterations < 1_000_000, "results": samples}
     args.output.write_text(json.dumps(result, indent=2) + "\n")

@@ -17,7 +17,7 @@ def profile(data):
             "target": build["target"], "versions": build["versions"], "graalvm": build["graalvm"],
             "host": data["host"], "iterations": data["iterations"],
             "workloads": {k: v for k, v in build["sources"].items()
-                          if Path(k).suffix in (".java", ".c", ".seam")}}
+                          if k.startswith("benchmarks/comparison/") and Path(k).suffix in (".java", ".c", ".seam")}}
 
 if baseline["smoke"] or candidate["smoke"]:
     raise RuntimeError("Smoke runs are not performance baselines")

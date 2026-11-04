@@ -204,6 +204,50 @@ unsafe extern "C" { fn seam_inspect(p: *const i64) -> i64; }
                 self.assertIn("readnone", self.ir(output))
                 output.unlink()
 
+    def test_contract_validation_surface_is_fail_closed(self):
+        original = self.c_object()
+        prefix = f'target triple = "{TARGET}"\n'
+        metadata = '!myna.contract = !{!0}\n!0 = !{!"' + 'a' * 64 + '"}\n'
+        cases = [
+            ("", metadata, "target triple"),
+            ("declare void @f(...)\n", prefix + metadata, "unsupported contract function"),
+            ("declare fastcc void @f()\n", prefix + metadata, "unsupported contract function"),
+            ("declare void @llvm.donothing()\n", prefix + metadata, "unsupported contract function"),
+            ("declare {i32, i32} @f()\n", prefix + metadata, "unsupported return ABI"),
+            ("declare nonnull ptr @f()\n", prefix + metadata, "return contracts"),
+            ("declare void @f({i32, i32})\n", prefix + metadata, "unsupported parameter ABI"),
+            ("declare void @f(ptr addrspace(1))\n", prefix + metadata, "unsupported parameter ABI"),
+            ('declare void @f() "arbitrary"\n', prefix + metadata, "string attributes"),
+            ('declare void @f(ptr "arbitrary")\n', prefix + metadata, "string attributes"),
+            ("declare void @f() noinline\n", prefix + metadata, "unsupported seam attribute"),
+            ("declare void @f(ptr noundef)\n", prefix + metadata, "unsupported seam attribute"),
+            ("declare void @f(i64 nonnull)\n", prefix + metadata, "invalid contract IR"),
+        ]
+        for bad in ['!myna.contract = !{}', '!myna.contract = !{!0}\n!0 = !{}',
+                    '!myna.contract = !{!0}\n!0 = !{i64 1}',
+                    '!myna.contract = !{!0}\n!0 = !{!"short"}',
+                    *['!myna.contract = !{!0}\n!0 = !{!"' + c * 64 + '"}' for c in ('/', ':', 'G', 'z')]]:
+            cases.append(("declare void @f()\n", prefix + bad + "\n", "fingerprint"))
+        for i, (declaration, rest, message) in enumerate(cases):
+            with self.subTest(case=i):
+                contract = self.work / f"invalid-{i}.ll"
+                contract.write_text(prefix + declaration + rest[len(prefix):] if rest.startswith(prefix) else declaration + rest)
+                output = self.work / f"invalid-{i}.o"
+                result = self.apply(original, output, contract, ok=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stdout + result.stderr)
+                self.assertFalse(output.exists())
+        for i, (body, expected) in enumerate([
+            ('target datalayout = "e-p:32:32"\ndeclare i64 @seam_inspect(ptr)\n', "64-bit pointers"),
+            ('declare i64 @seam_inspect(ptr)\ndefine i64 @caller(ptr %p) { %r = call fastcc i64 @seam_inspect(ptr %p)\n ret i64 %r }\n', "direct call ABI mismatch"),
+        ]):
+            source = self.work / f"abi-{i}.ll"
+            source.write_text(prefix + body)
+            obj = source.with_suffix(".o")
+            run(llvm("llvm-as"), source, "-o", obj)
+            result = self.apply(obj, self.work / f"abi-output-{i}.o", ok=False)
+            self.assertIn(expected, result.stdout + result.stderr)
+
     def test_merges_compiler_facts_to_the_stronger_one(self):
         # rustc/LLVM may already infer weaker or stronger versions of contracted facts; both hold.
         source = self.work / "inferred.ll"

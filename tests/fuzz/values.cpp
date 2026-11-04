@@ -1,4 +1,5 @@
 #include <myna/values.hpp>
+#include <cstdlib>
 #include <cassert>
 #include <cstdint>
 #include <string>

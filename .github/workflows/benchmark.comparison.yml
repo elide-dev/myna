@@ -1,0 +1,40 @@
+name: Boundary comparisons
+
+"on":
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comparison-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    # Reuse dedicated measurement hardware, without CodSpeed instrumentation or
+    # uploading cross-library comparisons into Myna's own regression series.
+    runs-on: codspeed-macro
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          version: '2026.10.25'
+      - run: mise exec -- python3 scripts/setup-graalvm.py
+      - name: Build from current generator sources with pinned javac and Native Image
+        run: mise exec -- python3 benchmarks/comparison/run.py build
+      - name: Measure five fresh processes per case
+        run: mise exec -- python3 benchmarks/comparison/run.py run
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: boundary-comparison
+          path: |
+            build/comparison/**/*.json
+            build/comparison/**/*.jsonl
+            build/comparison/**/*.md
+            build/comparison/**/*.log

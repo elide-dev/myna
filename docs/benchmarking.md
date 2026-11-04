@@ -177,3 +177,13 @@ ThinLTO tests retain before/after optimized C and Rust IR, final linker IR,
 disassembly and artifact/tool hashes under `build/reports/thinlto/<target>/`.
 These tests prove load elimination across the opaque call without pretending that
 LLVM can inline Java Native Image machine code.
+
+
+The `Boundary comparisons` workflow runs the standalone harness on dedicated
+macro hardware without CodSpeed instrumentation or performance-series uploads.
+It compiles the generator from current Java sources with pinned `javac`, so the
+comparison does not depend on a stale local CLI executable or the macro runner's
+ability to execute the Elide CLI. Build/run/report commands remain usable locally.
+Historical local before/after data is checked in under
+`benchmarks/comparison/baselines`; it is explicitly advisory because this shared
+workstation experienced substantial concurrent load.

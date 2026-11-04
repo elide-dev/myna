@@ -23,6 +23,7 @@ if sys.platform == "darwin":
     flags += ["-isysroot", os.environ["SDKROOT"], "-fuse-ld=/usr/bin/ld"]
 work = ROOT / "build/sanitizers" / args.mode
 work.mkdir(parents=True, exist_ok=True)
+(ROOT / "build/reports").mkdir(parents=True, exist_ok=True)
 source = ROOT / "tests/fuzz"
 canary = work / "canary"
 run(compiler, *flags, *(["-DMYNA_RACE_CANARY"] if args.mode == "tsan" else []), source / "canary.cpp", "-o", canary)
