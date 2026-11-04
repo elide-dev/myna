@@ -37,7 +37,8 @@ def build():
     execute("java", "-cp", generator_classes, "dev.elide.myna.cli.Main",
             "generate", SOURCE / "boundary.seam", "--out", generated, "--target", TARGET)
     home = Path(os.environ["GRAALVM_HOME"])
-    flags = ["-O3", "-fPIC", "-I", home / "include", "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux")]
+    cpu_flags = ["-march=armv8-a"] if sys.platform == "linux" and platform.machine() == "aarch64" else []
+    flags = ["-O3", *cpu_flags, "-fPIC", "-I", home / "include", "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux")]
     execute(os.environ["CC"], *flags, "-c", SOURCE / "kernel.c", "-o", WORK / "kernel.o")
     library = WORK / ("libboundary.dylib" if sys.platform == "darwin" else "libboundary.so")
     execute(os.environ["CC"], "-shared", WORK / "kernel.o", "-o", library)
@@ -46,7 +47,7 @@ def build():
     classes.mkdir()
     execute("javac", "-d", classes, *sorted(SOURCE.glob("*.java")), *sorted(generated.glob("*.java")))
     # Record actual builder commands including its driver flags in build metadata.
-    native_args = ["-O3", "-cp", str(classes), "-H:+UnlockExperimentalVMOptions",
+    native_args = ["-O3", "-march=compatibility", "-cp", str(classes), "-H:+UnlockExperimentalVMOptions",
                    f"-H:NativeLinkerOption={WORK / 'kernel.o'}", "-H:-UnlockExperimentalVMOptions",
                    "bench.Native", "-o", str(WORK / "native")]
     result = native_image(*native_args)
@@ -54,7 +55,7 @@ def build():
     COMMANDS.append([str(home / "bin/native-image"), "-J--enable-native-access=ALL-UNNAMED",
                      "-H:+UnlockExperimentalVMOptions", "-H:-CheckToolchain",
                      f"-H:CCompilerPath={os.environ['CC']}", "-H:-UnlockExperimentalVMOptions", *native_args])
-    ffm_args = ["-O3", "--enable-native-access=ALL-UNNAMED", "-cp", str(classes),
+    ffm_args = ["-O3", "-march=compatibility", "--enable-native-access=ALL-UNNAMED", "-cp", str(classes),
                 "--initialize-at-run-time=bench.Jvm", "--initialize-at-build-time=bench.Jvm$Unbound", "--features=bench.GeneratedForeignFeature",
                 "bench.Jvm", "-o", str(WORK / "ffm-aot")]
     result = native_image(*ffm_args)
@@ -73,6 +74,7 @@ def build():
         versions[tool] = result.stdout + result.stderr
     metadata = {
         "schema": 1, "workload": "scalar-recurrence-v2", "target": TARGET,
+        "execution_profile": {"native_image_cpu": "compatibility", "c_cpu_flags": cpu_flags},
         "revision": execute("git", "rev-parse", "HEAD").strip(),
         "dirty": execute("git", "status", "--porcelain"),
         "sources": {str(p.relative_to(ROOT)): digest(p) for p in sources if p.is_file()},
@@ -118,7 +120,7 @@ def measure(args):
             if mode == "native":
                 command = [WORK / "native", result_option, name, args.iterations]
             else:
-                options = [result_option, f"-Dmyna.bench.library={metadata['library']}"]
+                options = [result_option, f"-Dmyna.bench.library={WORK / Path(metadata['library']).name}"]
                 if mode == "jvm":
                     command = ["java", "--enable-native-access=ALL-UNNAMED", "-Xbatch",
                                "-XX:+UseJVMCICompiler", "-XX:-TieredCompilation", "-XX:+PrintCompilation",

@@ -7,7 +7,7 @@ mkdir -p build/dist
 case "$(uname -s)" in Linux) native_debug=-g ;; *) native_debug= ;; esac
 "${GRAALVM_HOME:?Run through mise after mise run setup}/bin/native-image" \
   -J--enable-native-access=ALL-UNNAMED -O2 ${native_debug:+"$native_debug"} --initialize-at-run-time \
-  -H:+UnlockExperimentalVMOptions -H:-DeleteLocalSymbols -H:-CheckToolchain "-H:CCompilerPath=${CC:?Pinned compiler required}" \
+  -H:+UnlockExperimentalVMOptions -H:-DeleteLocalSymbols -H:-StripDebugInfo -H:-CheckToolchain "-H:CCompilerPath=${CC:?Pinned compiler required}" \
   -H:-UnlockExperimentalVMOptions \
   -jar .dev/artifacts/jar/myna/myna.jar -o build/dist/myna
 scripts/symbols.sh build/dist/myna

@@ -14,7 +14,7 @@ baseline, candidate = [json.loads(p.read_text()) for p in (args.baseline, args.c
 def profile(data):
     build = data["build"]
     return {"schema": build["schema"], "workload": build["workload"],
-            "target": build["target"], "versions": build["versions"], "graalvm": build["graalvm"],
+            "target": build["target"], "execution_profile": build.get("execution_profile"), "versions": build["versions"], "graalvm": build["graalvm"],
             "host": data["host"], "iterations": data["iterations"],
             "workloads": {k: v for k, v in build["sources"].items()
                           if k.startswith("benchmarks/comparison/") and Path(k).suffix in (".java", ".c", ".seam")}}

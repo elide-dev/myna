@@ -15,8 +15,27 @@ jobs:
   sdk:
     uses: ./.github/workflows/job.benchmark-sdk.yml
 
-  compare:
+  build:
     needs: sdk
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          version: '2026.10.25'
+      - uses: ./.github/actions/setup-graalvm
+      - run: mise exec -- python3 benchmarks/comparison/run.py build
+      - run: tar -czf build/comparison.tar.gz build/comparison
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: comparison-binaries
+          path: build/comparison.tar.gz
+
+  compare:
+    needs: build
     # Reuse dedicated measurement hardware, without CodSpeed instrumentation or
     # uploading cross-library comparisons into Myna's own regression series.
     runs-on: codspeed-macro
@@ -29,8 +48,11 @@ jobs:
         with:
           version: '2026.10.25'
       - uses: ./.github/actions/setup-graalvm
-      - name: Build from current generator sources with pinned javac and Native Image
-        run: mise exec -- python3 benchmarks/comparison/run.py build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: comparison-binaries
+          path: build
+      - run: tar -xzf build/comparison.tar.gz
       - name: Measure five fresh processes per case
         run: mise exec -- python3 benchmarks/comparison/run.py run
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

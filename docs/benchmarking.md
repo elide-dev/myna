@@ -201,3 +201,14 @@ ability to execute the Elide CLI. Build/run/report commands remain usable locall
 Historical local before/after data is checked in under
 `benchmarks/comparison/baselines`; it is explicitly advisory because this shared
 workstation experienced substantial concurrent load.
+
+Dedicated ARM measurements use binaries built with the pinned toolchain on hosted
+ARM builders. The measurement runner's older CPU cannot execute the distributed
+Clang binary. C/C++ benchmark code targets ARMv8-A and Native Image uses
+`-march=compatibility`; execution-profile metadata prevents comparing this profile
+with earlier incompatible builds. Build and measurement provenance remain separate.
+The pinned CodSpeed JMH fork's x86-only native-library target is overridden by the
+checked-in Gradle initialization script when building ARM benchmark artifacts.
+
+See `benchmarks/comparison/evidence/` for the scalar direct-call instruction
+comparison and [operations](operations.md) for symbol-sidecar publication.

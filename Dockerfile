@@ -15,7 +15,8 @@ RUN case "$TARGETARCH" in \
     && printf '#!/bin/sh\nexec /opt/elide-toolchain/bin/%s-clang++ "$@"\n' "$triple" > /opt/myna-cxx \
     && chmod +x /opt/myna-cc /opt/myna-cxx
 ENV PATH="/opt/elide-toolchain/bin:${PATH}" \
-    CC=/opt/myna-cc CXX=/opt/myna-cxx LLVM_CONFIG=/opt/elide-toolchain/bin/llvm-config
+    CC=/opt/myna-cc CXX=/opt/myna-cxx LLVM_CONFIG=/opt/elide-toolchain/bin/llvm-config \
+    LLVM_BIN=/opt/elide-toolchain/bin ELIDE_TOOLCHAIN_HOME=/opt/elide-toolchain
 
 FROM native-toolchain AS llvm-build
 WORKDIR /build
