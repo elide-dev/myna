@@ -1,0 +1,4 @@
+#!/bin/sh
+MYNA_CPP=1
+export MYNA_CPP
+exec "$(dirname "$0")/native-cc" "$@"

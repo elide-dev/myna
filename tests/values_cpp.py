@@ -47,6 +47,9 @@ class CppValueTests(unittest.TestCase):
         app = work / "test"
         run(os.environ.get("CXX", "c++"), "-std=c++17", "-O1", "-g",
             "-fsanitize=address,undefined", "-DMYNA_STANDALONE_TEST",
+            # LLVM 23.1.4 ld64.lld + ASan loses C++ exception catches on macOS.
+            # Keep pinned Clang/compiler-rt; Apple's linker preserves unwinding.
+            *(["-fuse-ld=/usr/bin/ld"] if sys.platform == "darwin" else []),
             "-I", ROOT / "include", "-I", upstream,
             ROOT / "tests/values/cpp/producer.cpp", upstream / "simdjson.cpp", "-o", app)
         self.assertIn("conformance passed", run(app).stdout)

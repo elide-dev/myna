@@ -13,7 +13,13 @@ TARGET = {("Darwin", "arm64"): "aarch64-apple-darwin", ("Darwin", "x86_64"): "x8
           ("Linux", "aarch64"): "aarch64-unknown-linux-gnu", ("Linux", "x86_64"): "x86_64-unknown-linux-gnu"}.get((platform.system(), platform.machine()))
 
 def run(*args, cwd=ROOT, ok=True):
-    result = subprocess.run([str(a) for a in args], cwd=cwd, text=True, capture_output=True, timeout=300)
+    if str(args[0]) in ("cc", "c++"):
+        args = (os.environ["CC" if str(args[0]) == "cc" else "CXX"], *args[1:])
+    if str(args[0]) == "rustc":
+        args = (*args, "-C", f"linker={os.environ['CC']}")
+    if platform.system() == "Darwin" and Path(args[0]).name in ("clang", "clang++"):
+        args = (*args, "-isysroot", os.environ["SDKROOT"])
+    result = subprocess.run([str(a) for a in args], cwd=cwd, env=dict(os.environ), text=True, capture_output=True, timeout=300)
     if ok and result.returncode:
         raise AssertionError(f"Command failed ({result.returncode}): {args}\n{result.stdout}\n{result.stderr}")
     return result
@@ -22,10 +28,9 @@ def native_image(*args):
     # Keep the direct driver's argument dump inside ignored build output.
     work = ROOT / "build"
     work.mkdir(exist_ok=True)
-    return run("elide", "native-image", "--",
+    return run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image",
                "-J--enable-native-access=ALL-UNNAMED",
-               # Elide 1.6.1 inference initialization fails: runtime#2692.
-               "-H:+UnlockExperimentalVMOptions", "-H:-MLProfileInference",
+               "-H:+UnlockExperimentalVMOptions", "-H:-CheckToolchain", f"-H:CCompilerPath={os.environ['CC']}",
                "-H:-UnlockExperimentalVMOptions", *args, cwd=work)
 
 

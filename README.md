@@ -154,3 +154,7 @@ Typed FFM calls and Native Image downcall-stub registration are implemented. Ful
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets passed by pointer or by value, and isolate-thread exports with include predicates and abort/integer/null exception translation.
 
 Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.
+
+Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.1,
+and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
+for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.

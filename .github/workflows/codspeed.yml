@@ -29,18 +29,41 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: "Setup: Java"
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: "25"
+      - uses: ./.github/actions/setup
       - name: Install CodSpeed JMH fork
         working-directory: third-party/codspeed-jvm
-        run: ./gradlew -p jmh-fork publishToMavenLocal --no-daemon -q
+        run: mise exec -- ./gradlew -p jmh-fork publishToMavenLocal --no-daemon -q
       - name: Build benchmark JAR
-        run: benchmarks/mvnw -B -q -f benchmarks/pom.xml package
+        run: mise exec -- benchmarks/mvnw -B -q -f benchmarks/pom.xml package
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
         with:
           mode: walltime
-          run: java -jar benchmarks/target/benchmarks.jar
+          run: mise exec -- java -jar benchmarks/target/benchmarks.jar
+
+  native-values:
+    name: Native values (${{ matrix.mode }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: simulation
+            runner: ubuntu-24.04
+          - mode: walltime
+            runner: codspeed-macro
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: ./.github/actions/setup
+      - run: mise run bench:native-build
+      - uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
+        with:
+          mode: ${{ matrix.mode }}
+          run: benchmarks/native/run.sh

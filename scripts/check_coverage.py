@@ -1,4 +1,4 @@
-"""Enforce Myna's coverage floor on Elide's aggregate JaCoCo XML report.
+"""Enforce Myna's coverage floor on the production-only JaCoCo XML report.
 
 Remove this compatibility gate when elide-dev/runtime#2691 is available.
 """
@@ -6,8 +6,8 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-THRESHOLDS = {"LINE": 85, "BRANCH": 70}
-DEFAULT_REPORT = Path(".dev/reports/coverage/jvm/jvm-test/jvm-test.xml")
+THRESHOLDS = {"LINE": 99, "BRANCH": 93}
+DEFAULT_REPORT = Path("build/reports/jvm-production.xml")
 
 
 def check_coverage(report):

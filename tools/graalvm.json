@@ -1,0 +1,9 @@
+{
+  "version": "25.5.5-elide.24",
+  "edition": "ce",
+  "platforms": {
+    "Darwin-arm64": {"archive": "macos-aarch64", "sha256": "8b03207cb35ab5b9bec6422b4266178315f7a056ae88e90f57cc22b2362c44a6"},
+    "Linux-x86_64": {"archive": "linux-amd64", "sha256": "83bd7b3b78e76de00bb3879eeae79a8b439f9356fefd3bf3b84d2818af8961e7"},
+    "Linux-aarch64": {"archive": "linux-aarch64", "sha256": "f89eb4bdc6596b8aa7acdf063997c69ab06aa9a488e8f98cff07865b0261618f"}
+  }
+}

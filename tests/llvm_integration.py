@@ -148,6 +148,45 @@ unsafe extern "C" { fn seam_inspect(p: *const i64) -> i64; }
         wrong_target.write_text(self.contracts.read_text().replace(TARGET, other))
         self.assertIn("target mismatch", self.apply(original, self.work / "bad.o", wrong_target, ok=False).stdout)
 
+    def test_malformed_contracts_conflicting_facts_and_output_alias(self):
+        original = self.c_object()
+        output = self.work / "rejected.o"
+        contract = self.contracts.read_text()
+        mutations = [
+            (re.sub(r'!myna\.contract = !\{!0\}', '', contract), "fingerprint"),
+            (contract + "\n@unexpected = global i32 0\n", "function declarations"),
+            (contract + "\ndefine i32 @unexpected() { ret i32 0 }\n", "unsupported contract function"),
+            (contract + "\ndeclare void @unexpected(i64 signext)\n", "non-narrow"),
+        ]
+        for i, (text, expected) in enumerate(mutations):
+            with self.subTest(expected=expected):
+                path = self.work / f"malformed-{i}.ll"
+                path.write_text(text)
+                output.unlink(missing_ok=True)
+                result = self.apply(original, output, path, ok=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stdout + result.stderr)
+                self.assertFalse(output.exists())
+        before = original.read_bytes()
+        alias = self.work / "alias.o"
+        alias.hardlink_to(original)
+        result = self.apply(original, alias, ok=False)
+        self.assertIn("same file", result.stdout + result.stderr)
+        self.assertEqual(before, original.read_bytes())
+        for attribute in ("writeonly", "readnone"):
+            path = self.work / f"{attribute}.ll"
+            path.write_text(f'target triple = "{TARGET}"\ndeclare i64 @seam_inspect(ptr {attribute})\n')
+            obj = path.with_suffix(".o")
+            run(llvm("llvm-as"), path, "-o", obj)
+            result = self.apply(obj, output, ok=False)
+            if attribute == "writeonly":
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("contradict", result.stdout + result.stderr)
+            else:
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("readnone", self.ir(output))
+                output.unlink()
+
     def test_merges_compiler_facts_to_the_stronger_one(self):
         # rustc/LLVM may already infer weaker or stronger versions of contracted facts; both hold.
         source = self.work / "inferred.ll"

@@ -20,13 +20,13 @@ class NativeImageIntegrationTests(unittest.TestCase):
             shutil.rmtree(classes)
         classes.mkdir(parents=True)
         runtime = ROOT / "src/values/java/dev/elide/myna/values"
-        run("elide", "javac", "--", "-d", classes, generated / "ValueApi.java",
+        run("javac", "-d", classes, generated / "ValueApi.java",
             *sorted(runtime.glob("*.java")), fixture / "ValuesMain.java")
         archive = ROOT / "target/release/libmyna_values_fixture.a"
         objects = build_cpp(work)
         linker = [f"-H:NativeLinkerOption={archive}", *[f"-H:NativeLinkerOption={obj}" for obj in objects]]
         if sys.platform != "darwin":
-            linker += ["-H:NativeLinkerOption=-ldl", "-H:NativeLinkerOption=-lpthread", "-H:NativeLinkerOption=-lm", "-H:NativeLinkerOption=-lstdc++"]
+            linker += ["-H:NativeLinkerOption=-ldl", "-H:NativeLinkerOption=-lpthread", "-H:NativeLinkerOption=-lm", "-H:NativeLinkerOption=-lc++"]
         else:
             linker += ["-H:NativeLinkerOption=-lc++"]
         app = work / "values-app"
@@ -50,7 +50,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("elide", "javac", "--", "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
+        run("javac", "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
         app = work / "bemo-app"
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         native_image( "-O1", "-cp", classes,
@@ -94,7 +94,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("elide", "javac", "--", "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
+        run("javac", "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
         app = work / "ownership-app"
         native_image( "-O1", "-cp", classes,
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={fixture}", "-H:-UnlockExperimentalVMOptions",
@@ -111,7 +111,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("elide", "javac", "--", "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        run("javac", "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -130,7 +130,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("elide", "javac", "--", "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
+        run("javac", "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
         inspector = work / "inspect.o"
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)

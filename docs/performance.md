@@ -61,3 +61,5 @@ The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer 
 ## Performance acceptance
 
 The current evidence is executable ABI correctness and inspected LLVM optimization results, not measured minimum latency. Future performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
+
+See [repeatable benchmarks and comparisons](benchmarking.md) for the measurement strategy.
