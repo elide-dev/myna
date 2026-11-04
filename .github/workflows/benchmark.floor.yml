@@ -5,6 +5,7 @@ name: Native call floor
   pull_request:
     paths:
       - 'benchmarks/floor/**'
+      - 'examples/leaf-pointer/**'
       - 'benchmarks/comparison/kernel.c'
       - 'benchmarks/comparison/Measure.java'
       - '.github/workflows/benchmark.floor.yml'

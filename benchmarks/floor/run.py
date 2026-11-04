@@ -35,7 +35,7 @@ def build():
         shutil.rmtree(p,ignore_errors=True);p.mkdir()
     generator_sources=sorted((ROOT/'src/main/java').rglob('*.java'))
     execute('javac','-d',genclasses,*generator_sources)
-    for seam in (ROOT/'benchmarks/comparison/boundary.seam', SOURCE/'batch.seam',SOURCE/'identity.seam'):
+    for seam in (ROOT/'benchmarks/comparison/boundary.seam', SOURCE/'batch.seam',SOURCE/'identity.seam',ROOT/'examples/leaf-pointer/leaf-pointer.seam'):
         destination=generated/seam.stem
         execute('java','-cp',genclasses,'dev.elide.myna.cli.Main','generate',seam,'--out',destination,'--target',TARGET)
     cpu_flags=['-march=armv8-a'] if sys.platform=='linux' and platform.machine()=='aarch64' else []
@@ -45,7 +45,7 @@ def build():
         execute(cc,*flags,'-c',source,'-o',WORK/output)
     execute(cc,WORK/'caller.o',WORK/'kernel.o',WORK/'batch.o','-o',WORK/'native')
     # Generator names its direct binding according to java_class, not the filename suffix.
-    java_sources=[SOURCE/'Floor.java',SOURCE/'FloorMeasure.java',ROOT/'benchmarks/comparison/Measure.java',generated/'boundary/Generated.java',generated/'batch/Batch.java',generated/'identity/Identity.java']
+    java_sources=[SOURCE/'Floor.java',SOURCE/'FloorMeasure.java',ROOT/'benchmarks/comparison/Measure.java',generated/'boundary/Generated.java',generated/'batch/Batch.java',generated/'identity/Identity.java',generated/'leaf-pointer/LeafBindings.java',ROOT/'examples/leaf-pointer/LongLeaf.java']
     execute('javac','-cp',shared,'-d',classes,*java_sources)
     args=['-O3','-march=compatibility','--initialize-at-build-time=bench.Generated','-cp',str(classes),
           '-H:+UnlockExperimentalVMOptions','-H:-DeleteLocalSymbols',
@@ -59,10 +59,12 @@ def build():
     for binary in ('native','svm'):
         disassembly=execute('llvm-objdump','--disassemble',WORK/binary)
         (WORK/f'{binary}.asm').write_text(disassembly.stdout)
-    files=[*SOURCE.glob('*'),ROOT/'benchmarks/comparison/kernel.c',ROOT/'benchmarks/comparison/Measure.java',
+    stress=execute(WORK/'svm','stress')
+    (WORK/'stress.log').write_text(stress.stdout+stress.stderr)
+    files=[*SOURCE.glob('*'),*sorted((ROOT/'examples/leaf-pointer').glob('*')),ROOT/'benchmarks/comparison/kernel.c',ROOT/'benchmarks/comparison/Measure.java',
            ROOT/'benchmarks/comparison/boundary.seam',ROOT/'benchmarks/comparison/run.py',ROOT/'tests/support.py',
            ROOT/'mise.lock',ROOT/'tools/graalvm.json',*generator_sources]
-    versions={name:execute(*command).stdout+'' for name,command in {
+    versions={name:execute(*command).stdout for name,command in {
         'clang':(cc,'--version'),'graalvm':(home/'bin/native-image','--version')}.items()}
     metadata={'workload':'leaf-floor-v1','revision':execute('git','rev-parse','HEAD').stdout.strip(),
               'dirty':execute('git','status','--porcelain').stdout,'target':TARGET,'commands':commands,'versions':versions,
@@ -78,7 +80,7 @@ def measure(args):
         for name,expected in metadata[group].items():
             if digest(ROOT/name)!=expected: raise RuntimeError('Changed since build: '+name)
     batches=['batch-'+str(n) for n in (4,16,64,256)]
-    cases={'native':['control','direct','indirect','identity-direct','identity-indirect',*batches],
+    cases={'native':['control','direct','indirect','identity-direct','identity-indirect','identity-direct-unrolled4','identity-indirect-unrolled4',*batches],
            'svm':['control','generated-normal','generated-leaf','manual-leaf','inline-pointer','identity-generated','identity-manual','identity-inline-pointer',*batches,*['java-'+b for b in batches]]}
     results=[];schedule=[(mode,name) for mode,names in cases.items() for name in names]
     random.Random(args.seed).shuffle(schedule)
@@ -115,12 +117,13 @@ def report(path):
         groups.setdefault((r['mode'],r['case'],r['batch']),[]).append(statistics.median(s['ns']/s['iterations'] for s in r['samples']))
     lines=['# Native call floor and bounded batching','',f"Source: `{data['build']['revision']}`; {data['forks']} processes/case; smoke: {data['smoke']}.",'',
            'One operation is one scalar call (identity or recurrence, as labeled). Batches retain each noinline native scalar call; no control subtraction.',
-           'Native and SVM execute identical linked kernel objects. Java batches use an experimental internal Graal annotation and fixed bounds.', '',
+           'Native and SVM execute identical linked kernel objects. Inlineable pointers and bounded Java batches are opt-in internal Graal API experiments.', '',
            '| Runtime | Case | Batch | Median ns/op | Process min–max | ns/boundary including work |',
            '|---|---|---:|---:|---:|---:|']
     for (mode,name,batch),values in sorted(groups.items()):
         median=statistics.median(values)
-        lines.append(f'| {mode} | {name} | {batch} | {median:.3f} | {min(values):.3f}–{max(values):.3f} | {median*batch:.3f} |')
+        boundary=f'{median*batch:.3f}' if name!='control' else '—'
+        lines.append(f'| {mode} | {name} | {batch} | {median:.3f} | {min(values):.3f}–{max(values):.3f} | {boundary} |')
     path.with_suffix('.md').write_text('\n'.join(lines)+'\n')
 
 if __name__=='__main__':
@@ -131,7 +134,7 @@ if __name__=='__main__':
     parser.add_argument('--iterations',type=int,default=16777216)
     parser.add_argument('--seed',type=int,default=1729)
     args=parser.parse_args()
-    if args.forks<1 or args.iterations<=0 or args.iterations%256: parser.error('Positive forks and iterations divisible by 256 required')
+    if args.forks<1 or args.iterations<=0 or args.iterations>2147483647 or args.iterations%256: parser.error('Positive forks and iterations divisible by 256 required')
     if args.command=='build': build()
     elif args.command=='run': measure(args)
     else: report(args.output)

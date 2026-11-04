@@ -1,9 +1,8 @@
 package bench;
 import org.graalvm.nativeimage.c.function.CFunction;
 import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.AlwaysInline;
-import org.graalvm.nativeimage.c.function.CFunctionPointer;
-import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
+import example.leaf.LongLeaf;
+import example.leaf.LeafBindings;
 
 /** Bounded uninterruptible caller experiments remain separate from the portable generated API. */
 public final class Floor {
@@ -17,26 +16,47 @@ public final class Floor {
   static long javaBatch64(long x) { for(int i=0;i<64;i++) x=Generated.leaf(x); return x; }
   @Uninterruptible(reason="Fixed 256-call batch of explicit bounded native leaves")
   static long javaBatch256(long x) { for(int i=0;i<256;i++) x=Generated.leaf(x); return x; }
-  interface InlineLeaf extends CFunctionPointer {
-    @AlwaysInline("Primitive-only bounded leaf pointer call")
-    @Uninterruptible(reason="Atomic primitive-only native call with no managed references", mayBeInlined=true)
-    @InvokeCFunctionPointer(transition=CFunction.Transition.NO_TRANSITION)
-    long invoke(long x);
-  }
-  static InlineLeaf pointer;
-  @CFunction("myna_bench_leaf_address") static native InlineLeaf leafAddress();
-  @CFunction("myna_bench_identity_address") static native InlineLeaf identityAddress();
+  static LongLeaf pointer;
+  @CFunction("myna_bench_identity_address") static native LongLeaf identityAddress();
   @CFunction(value="myna_bench_identity", transition=CFunction.Transition.NO_TRANSITION)
   static native long identity(long value);
+  static volatile byte[] allocation;
+  static void stress() throws Exception {
+    LongLeaf fn=LeafBindings.resolve();
+    long before=java.lang.management.ManagementFactory.getGarbageCollectorMXBeans().stream()
+        .mapToLong(b -> Math.max(0,b.getCollectionCount())).sum();
+    var failure=new java.util.concurrent.atomic.AtomicReference<Throwable>();
+    var ready=new java.util.concurrent.CountDownLatch(1);
+    Thread collector=new Thread(() -> {
+      try {
+        ready.countDown();
+        for(int i=0;i<512;i++) { allocation=new byte[65536]; if(i%16==0) System.gc(); }
+      } catch(Throwable t) { failure.set(t); }
+    });
+    collector.start(); ready.await();
+    long x=123456789L, expected=x;
+    for(int i=0;i<1048576 || collector.isAlive();i++) {
+      x=fn.invoke(x); expected=expected*1664525L+1013904223L;
+      if(x!=expected) throw new AssertionError("leaf during GC");
+      if(i%256==0 && javaBatch256(x)!=Measure.reference(256,x)) throw new AssertionError("bounded batch during GC");
+    }
+    collector.join();
+    if(failure.get()!=null) throw new AssertionError(failure.get());
+    long after=java.lang.management.ManagementFactory.getGarbageCollectorMXBeans().stream()
+        .mapToLong(b -> Math.max(0,b.getCollectionCount())).sum();
+    if(after<=before) throw new AssertionError("No GC observed during stress test");
+    System.out.println("Leaf and bounded-batch GC stress passed; collections="+(after-before));
+  }
   public static void main(String[] args) throws Throwable {
+    if(args[0].equals("stress")) { stress(); return; }
     String name=args[0]; int count=Integer.parseInt(args[1]);
     if (count <= 0 || count % 256 != 0) throw new IllegalArgumentException("count must be a positive multiple of 256");
-    pointer=name.startsWith("identity-") ? identityAddress() : leafAddress();
+    pointer=name.startsWith("identity-") ? identityAddress() : LeafBindings.resolve();
     Measure.Loop loop = switch(name) {
-      case "inline-pointer" -> (n,x) -> { InlineLeaf fn=pointer; for(int i=0;i<n;i++) x=fn.invoke(x); return x; };
+      case "inline-pointer" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i++) x=fn.invoke(x); return x; };
       case "identity-generated" -> (n,x) -> { for(int i=0;i<n;i++) x=Identity.leaf(x); return x; };
       case "identity-manual" -> (n,x) -> { for(int i=0;i<n;i++) x=identity(x); return x; };
-      case "identity-inline-pointer" -> (n,x) -> { InlineLeaf fn=pointer; for(int i=0;i<n;i++) x=fn.invoke(x); return x; };
+      case "identity-inline-pointer" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i++) x=fn.invoke(x); return x; };
       case "control" -> Measure::reference;
       case "generated-normal" -> (n,x) -> { for(int i=0;i<n;i++) x=Generated.step(x); return x; };
       case "generated-leaf" -> (n,x) -> { for(int i=0;i<n;i++) x=Generated.leaf(x); return x; };
