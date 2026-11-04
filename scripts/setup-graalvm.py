@@ -22,11 +22,14 @@ if not (destination / ".myna-sha256").exists():
     archive = cache / f"{name}.tar.gz"
     def digest(path):
         with path.open("rb") as source:
-            return hashlib.file_digest(source, "sha256").hexdigest()
+            result = hashlib.sha256()
+            while chunk := source.read(1024 * 1024):
+                result.update(chunk)
+            return result.hexdigest()
     if not archive.exists() or digest(archive) != target["sha256"]:
         url = f"https://maven.elide.dev/gvm-elide/{spec['version']}/dist/{name}.tar.gz"
         print(f"Downloading {url}", flush=True)
-        subprocess.run(["curl", "--fail", "--location", "--retry", "3", "--connect-timeout", "30", "--max-time", "900", "--silent",
+        subprocess.run(["curl", "--http1.1", "--fail", "--location", "--retry-all-errors", "--retry", "3", "--connect-timeout", "30", "--max-time", "900", "--silent",
                         "--show-error", "--output", str(archive), url], check=True)
     if digest(archive) != target["sha256"]:
         raise RuntimeError("GraalVM archive checksum mismatch")
