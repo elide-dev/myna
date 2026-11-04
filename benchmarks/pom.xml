@@ -11,8 +11,7 @@
   <groupId>dev.elide</groupId><artifactId>myna-benchmarks</artifactId><version>0.7.2</version>
   <!-- Consumers may choose either license; these are alternatives. -->
   <licenses>
-    <license><name>Apache License, Version 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0</url><distribution>repo</distribution></license>
-    <license><name>MIT License</name><url>https://opensource.org/license/mit</url><distribution>repo</distribution></license>
+    <license><name>Apache-2.0 OR MIT</name><url>https://github.com/elide-dev/myna/blob/main/LICENSE</url><distribution>repo</distribution></license>
   </licenses>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>

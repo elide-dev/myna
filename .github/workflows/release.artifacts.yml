@@ -45,6 +45,8 @@ jobs:
           output-file: build/dist/myna-source.spdx.json
           upload-artifact: false
           upload-release-assets: false
+      - name: Resolve inherited workspace license declarations
+        run: mise exec -- python3 scripts/sbom-metadata.py build/dist/myna-source.spdx.json
       - name: Attest artifacts built in this workflow
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:

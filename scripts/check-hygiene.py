@@ -20,7 +20,7 @@ for name in ('LICENSE-APACHE', 'LICENSE-MIT'):
     assert (ROOT / name).read_bytes() == (ROOT / 'crates/myna-values' / name).read_bytes(), name
 for name in ('pom.xml', 'benchmarks/pom.xml'):
     root = ET.parse(ROOT / name).getroot()
-    assert len(root.findall('{*}licenses/{*}license')) == 2, name
+    assert [entry.findtext("{*}name") for entry in root.findall("{*}licenses/{*}license")] == ["Apache-2.0 OR MIT"], name
 
 # Local targets only: external link availability should not make PR gates flaky.
 files = subprocess.check_output(['git', 'ls-files', '-z', '*.md'], cwd=ROOT).decode().split('\0')

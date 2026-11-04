@@ -15,3 +15,7 @@ CodSpeed tracks Myna's own simulation and wall-time workloads. Keep cross-librar
 Extract matching symbol sidecars before stripping release executables. macOS Native Image currently supplies method symbols, not source-level DWARF; do not describe its dSYM as complete source debugging. Keep symbols tied to the executable UUID/build ID.
 
 Regenerate golden seam outputs together when changing the generator version: versioned canonical descriptors affect their fingerprints. Preserve unrelated work in downstream checkouts, including TruffleData.
+
+Myna is dual-licensed under Apache-2.0 OR MIT. Preserve both license texts in packaged artifacts and keep crate copies synchronized. Run `python3 scripts/check-hygiene.py` for licensing, local documentation links, and performance-chart manifests. Regenerate charts from retained raw measurements with the hash-locked plotting dependencies; do not hand-edit plotted values.
+
+Keep CodeQL disabled unless explicitly requested. Scorecard reports are evidence to review, not a reason to broaden credentials or weaken repository rules. Changes to rulesets, CODEOWNERS, release provenance, or symbol publication belong in reviewed PRs. Attest only artifacts actually produced by the identified build workflow; do not retroactively claim CI provenance for historical local builds. Preserve published artifact bytes, checksums, and version tags.
