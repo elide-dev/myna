@@ -1,0 +1,45 @@
+# Myna value ABI v3: native-endian, read-only, call-scoped descriptor.
+module values abi=1 target=aarch64-apple-darwin java_package=fixture.values java_class=ValueApi
+# For strings <=16 UTF-8 bytes, payload/next hold packed text; the logical
+# subtree end is index+1. Use ValueTape.next or Rust Node::subtree_end.
+struct ValueNode size=24 align=8
+  field tag type=u32 offset=0
+  field length type=u32 offset=4
+  field payload type=u64 offset=8
+  field next type=u64 offset=16
+end
+struct ValueRegion size=16 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+end
+struct ValueView size=56 align=8
+  field version type=u32 offset=0
+  field flags type=u32 offset=4
+  field nodes type=ptr<ValueNode> offset=8
+  field nodeCount type=u64 offset=16
+  field bytes type=ptr<u8> offset=24
+  field byteCount type=u64 offset=32
+  field regions type=ptr<ValueRegion> offset=40
+  field regionCount type=u64 offset=48
+end
+callback ValueConsumer return=i64
+  param isolate type=isolate_thread
+  param view type=ptr<ValueView> nullable=false ownership=borrowed access=read
+  param mode type=i32
+end
+export consume symbol=myna_value_consume return=i64 java=fixture.values.ValuesMain.consume isolate=thread error=integer_sentinel sentinel=-999 callback=ValueConsumer
+  param view type=ptr<ValueView> nullable=false ownership=borrowed access=read
+  param mode type=i32
+end
+# Allocates and calls Java: this is deliberately a normal-transition call.
+import drive symbol=myna_value_drive return=i64 error=no_failure
+  param consumer type=fn<ValueConsumer>
+  param isolate type=isolate_thread
+  param iterations type=u32
+  param mode type=i32
+end
+
+import cppDrive symbol=myna_cpp_values return=i64 error=no_failure
+  param consumer type=fn<ValueConsumer>
+  param isolate type=isolate_thread
+end

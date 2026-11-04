@@ -25,12 +25,12 @@ _.path = [
 ]
 
 [tasks.setup]
-description = "Install Elide's matching Python component and project dependencies"
-run = ["elide setup python --channel release", "elide install"]
+description = "Install Rust check tools, Elide Python, and project dependencies"
+run = ["rustup component add rustfmt clippy", "elide setup python --channel release", "elide install"]
 
 [tasks."build:jvm"]
 description = "Build the CLI and hosted Feature JARs with Elide"
-run = "elide build :jar :feature-jar"
+run = "elide build :jar :feature-jar :values-jar"
 
 [tasks.build]
 description = "Build the native CLI and JARs"
@@ -53,6 +53,14 @@ run = "scripts/python.sh tests/llvm_integration.py"
 [tasks."test:native-image"]
 run = "scripts/python.sh tests/native_image_integration.py"
 
+[tasks."test:rust"]
+description = "Test allocator-aware Serde value mapping"
+run = ["cargo fmt --all --check", "cargo clippy --workspace --all-targets --locked -- -D warnings", "cargo test --workspace --locked"]
+
+[tasks."bench:values"]
+description = "Benchmark value tape encoding against Serde JSON representations"
+run = "cargo bench --locked -p myna-values --bench encode"
+
 [tasks.test]
 description = "Build and run all JVM and native tests"
 run = "scripts/test.sh"
@@ -60,3 +68,11 @@ run = "scripts/test.sh"
 [tasks.lint]
 description = "Validate GitHub Actions workflows"
 run = "actionlint"
+
+[tasks."test:cpp"]
+description = "Sanitize the direct C++ producer and pinned simdjson adapter"
+run = "scripts/python.sh tests/values_cpp.py"
+
+[tasks."package:values"]
+description = "Build and verify the portable Rust, C++, and SVM value SDK"
+run = "scripts/package-values.sh"

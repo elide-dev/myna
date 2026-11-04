@@ -4,10 +4,38 @@ import shutil
 from pathlib import Path
 import sys
 import unittest
+from values_cpp import build_cpp
 from support import BINARY, ROOT, TARGET, main, native_image, run
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
+    def test_serde_value_tape(self):
+        work = ROOT / "build/values-test"
+        generated = work / "generated"
+        fixture = ROOT / "tests/values"
+        run(BINARY, "generate", ROOT / "examples/values.seam", "--out", generated, "--target", TARGET)
+        run("cargo", "build", "--locked", "--release", "-p", "myna-values-fixture")
+        classes = work / "classes"
+        if classes.exists():
+            shutil.rmtree(classes)
+        classes.mkdir(parents=True)
+        runtime = ROOT / "src/values/java/dev/elide/myna/values"
+        run("elide", "javac", "--", "-d", classes, generated / "ValueApi.java",
+            *sorted(runtime.glob("*.java")), fixture / "ValuesMain.java")
+        archive = ROOT / "target/release/libmyna_values_fixture.a"
+        objects = build_cpp(work)
+        linker = [f"-H:NativeLinkerOption={archive}", *[f"-H:NativeLinkerOption={obj}" for obj in objects]]
+        if sys.platform != "darwin":
+            linker += ["-H:NativeLinkerOption=-ldl", "-H:NativeLinkerOption=-lpthread", "-H:NativeLinkerOption=-lm", "-H:NativeLinkerOption=-lstdc++"]
+        else:
+            linker += ["-H:NativeLinkerOption=-lc++"]
+        app = work / "values-app"
+        native_image("-O2", "-cp", classes,
+            "--initialize-at-build-time=fixture.values.ValueApi$Literals",
+            "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
+            "fixture.values.ValuesMain", "-o", app)
+        self.assertIn("Serde Rust -> SVM value mapping passed", run(app).stdout)
+
     def test_bemo_static_linkage_and_handwritten_callbacks(self):
         work = ROOT / "build/bemo-test"
         work.mkdir(parents=True, exist_ok=True)

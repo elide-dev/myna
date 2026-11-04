@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+mise run test:rust
+mise run test:cpp
 scripts/test-jvm.sh
 scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py

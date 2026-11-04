@@ -1,0 +1,24 @@
+[package]
+name = "myna-values"
+version.workspace = true
+edition.workspace = true
+description = "Allocator-aware Serde value tapes for Myna / Substrate VM"
+
+[dependencies]
+# bumpalo's stable allocator integration implements the 0.2 trait.
+allocator-api2 = "0.2.21"
+bumpalo = { version = "3.20.3", features = ["allocator-api2"] }
+serde = "1.0"
+thiserror = "2"
+simdutf = "0.7"
+json-number = "0.4.10"
+
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+criterion = "0.8"
+proptest = "1"
+
+[[bench]]
+name = "encode"
+harness = false

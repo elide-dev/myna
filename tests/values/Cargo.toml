@@ -1,0 +1,12 @@
+[package]
+name = "myna-values-fixture"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+myna-values = { path = "../../crates/myna-values" }
+serde = { version = "1.0", features = ["derive"] }
