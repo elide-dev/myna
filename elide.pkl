@@ -1,12 +1,11 @@
 amends "elide:project.pkl"
 import "elide:Jvm.pkl" as Jvm
 import "elide:Sources.pkl" as Sources
-import "elide:NativeImage.pkl" as Native
 import "elide:Testing.pkl" as Testing
 import "elide:Coverage.pkl" as Coverage
 
 name = "myna"
-version = "0.7.0"
+version = "0.7.1"
 jvm {
   main = "dev.elide.myna.cli.Main"
   target = 25
@@ -41,29 +40,14 @@ artifacts {
     name = "myna-feature"
     sources { "main"; "feature" }
   }
-  ["native"] = new Native.NativeImage {
-    name = "myna"
-    from { "jar" }
-    entrypoint = "dev.elide.myna.cli.Main"
-    options {
-      optimization = "2"
-      driverMode = "embedded"
-      flags {
-        "-J--enable-native-access=ALL-UNNAMED"
-        // Elide 1.6.1 cannot initialize its inference engine: runtime#2692.
-        "-H:+UnlockExperimentalVMOptions"
-        "-H:-MLProfileInference"
-        "-H:-UnlockExperimentalVMOptions"
-      }
-      classInit { default = "runtime" }
-    }
-  }
+
 }
 
 dependencies {
   maven {
-    compileOnly { "org.graalvm.sdk:nativeimage:25.4.4.1.1" }
-    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.4.4.1.1" }
+    repositories { ["gvm-elide"] = "https://maven.elide.dev/gvm-elide/25.5.5-elide.24" }
+    compileOnly { "org.graalvm.sdk:nativeimage:25.5.5-elide.24" }
+    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.5.5-elide.24" }
   }
 }
 

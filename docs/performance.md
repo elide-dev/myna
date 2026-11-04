@@ -9,7 +9,7 @@ Substrate VM is the primary execution target. The generator should resolve ABI l
 | Native Image → known Rust symbol | Generated `@CFunction` with primitive/word carriers and direct linker symbol | Graal optimizes the Java caller; LLVM optimizes the Rust implementation. |
 | Native Image → proven short native leaf | The same binding with `Transition.NO_TRANSITION` | Removes the VM transition when the explicit leaf contract permits it. |
 | Rust → known Native Image target | Generated `@CEntryPoint` invoking a fixed Java method | Graal sees the adapter and Java target together; LLVM sees contracts on the real Rust callsite. |
-| Native Image → runtime-selected function through FFM | Typed `invokeExact`, constant descriptors, generated hosted downcall registration | Image builder generates ABI stubs ahead of time; addresses bind at runtime. |
+| Native Image → runtime-selected function through FFM | Typed `invokeExact`, build-time unbound adapters, runtime symbol addresses, hosted downcall registration | Image builder generates ABI stubs ahead of time; addresses bind at runtime. |
 | Future known FFM callback | Register the specific static Java target for a specialized direct upcall | Prefer target-specific generated code over descriptor-only generic dispatch. |
 | Future JNI compatibility | Explicit JNI adapter delegating to the raw seam | Adapter effects and JNI lifecycle remain separate from implementation contracts. |
 
@@ -61,3 +61,12 @@ The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer 
 ## Performance acceptance
 
 The current evidence is executable ABI correctness and inspected LLVM optimization results, not measured minimum latency. Future performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
+
+See [repeatable benchmarks and comparisons](benchmarking.md) for the measurement strategy.
+
+Generated FFM convenience calls split the unbound MethodHandle adapter from its
+runtime symbol binding. The generated Native Image feature initializes the adapter
+at build time and the address holder at runtime. This allows AOT specialization of
+the adapter while keeping native library loading and address ownership at runtime.
+The explicit `SymbolLookup` factory retains its original independently bound-handle
+semantics; benchmarks distinguish that path from the optimized convenience call.

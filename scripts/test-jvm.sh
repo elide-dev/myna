@@ -5,4 +5,6 @@ cd "$(dirname "$0")/.."
 rm -rf .dev/reports/tests/jvm .dev/reports/coverage/jvm
 elide test --coverage
 elide python tests/coverage_gate_test.py
+mkdir -p build/reports
+elide python scripts/production_coverage.py
 elide python scripts/check_coverage.py

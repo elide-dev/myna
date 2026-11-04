@@ -594,3 +594,81 @@ fn direct_builder_rejects_invalid_and_incomplete_values() {
     let r = limited.region(b"abc").unwrap();
     assert!(matches!(limited.string_ref(r, 0, 3), Err(Error::Limit)));
 }
+
+#[test]
+fn serde_forms_and_raw_view_contract() {
+    #[derive(Serialize)]
+    struct Unit;
+    #[derive(Serialize)]
+    struct Newtype(i32);
+    #[derive(Serialize)]
+    struct Tuple(u8, bool);
+    equivalent(&Unit);
+    equivalent(&Newtype(-7));
+    equivalent(&Tuple(255, true));
+    equivalent(&1.25_f32);
+    equivalent(&-42_i128);
+    struct Bytes;
+    impl Serialize for Bytes {
+        fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            assert!(s.is_human_readable());
+            s.serialize_bytes(&[0, 128, 255])
+        }
+    }
+    equivalent(&Bytes);
+    let mut doc = Document::new_in(Global);
+    let view = doc
+        .encode(&vec!["short", "a longer string in owned storage"])
+        .unwrap();
+    assert!(view.string(0).is_none());
+    assert!(view.string(99).is_none());
+    assert!(view.number_text(1).is_none());
+    assert!(view.number_text(99).is_none());
+    let raw = view.raw();
+    // SAFETY: descriptor and storage remain live under the view borrow.
+    let raw = unsafe { &*raw.as_ptr() };
+    assert_eq!(raw.version, ABI_VERSION);
+    assert_eq!(raw.node_count, 3);
+    assert_eq!(raw.nodes, view.nodes().as_ptr());
+    assert_eq!(raw.bytes, view.bytes().as_ptr());
+    assert_eq!(raw.byte_count, 32);
+    assert_eq!(raw.region_count, 0);
+    struct Custom;
+    impl Serialize for Custom {
+        fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom("intentional failure"))
+        }
+    }
+    assert!(matches!(doc.encode(&Custom), Err(Error::Custom(s)) if s == "intentional failure"));
+    assert!(doc.view().is_none());
+    assert_eq!(decode(doc.encode(&42).unwrap(), 0), json!(42));
+}
+
+#[test]
+fn native_unicode_bridge_checks_extents_and_unicode() {
+    use myna_values::text::myna_utf8_to_utf16_v2 as convert;
+    let mut output = [0_u16; 256];
+    // SAFETY: valid buffers for successful conversions; invalid extents below
+    // must be rejected before any pointer is dereferenced.
+    unsafe {
+        assert_eq!(convert(std::ptr::null(), 0, std::ptr::null_mut(), 0), 0);
+        for value in ["hello", "🦀\0é", &"🦀é".repeat(30)] {
+            let written = convert(value.as_ptr(), value.len() as u64, output.as_mut_ptr(), 256);
+            assert_eq!(
+                &output[..written as usize],
+                value.encode_utf16().collect::<Vec<_>>()
+            );
+        }
+        assert_eq!(convert([255_u8].as_ptr(), 1, output.as_mut_ptr(), 256), -1);
+        assert_eq!(convert(std::ptr::null(), 1, output.as_mut_ptr(), 256), -2);
+        assert_eq!(convert(b"a".as_ptr(), 1, std::ptr::null_mut(), 256), -2);
+        let unaligned = output.as_mut_ptr().cast::<u8>().add(1).cast::<u16>();
+        assert_eq!(convert(b"a".as_ptr(), 1, unaligned, 256), -2);
+        assert_eq!(
+            convert(b"a".as_ptr(), u64::MAX, output.as_mut_ptr(), 256),
+            -2
+        );
+        assert_eq!(convert(b"a".as_ptr(), 1, output.as_mut_ptr(), u64::MAX), -2);
+        assert_eq!(convert(b"ab".as_ptr(), 2, output.as_mut_ptr(), 1), -2);
+    }
+}

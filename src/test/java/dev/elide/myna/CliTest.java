@@ -25,7 +25,7 @@ class CliTest {
   void helpVersionAndBadUsage() {
     assertEquals(0, run().code());
     assertTrue(run("--help").out().contains("myna apply"));
-    assertEquals("0.7.0\n", run("--version").out());
+    assertEquals("0.7.1\n", run("--version").out());
     for (String[] args :
         List.of(
             new String[] {"bad"},

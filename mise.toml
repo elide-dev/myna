@@ -5,9 +5,10 @@ rust = "1.99.1"
 cmake = "4.4.5"
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
+"github:taiki-e/cargo-llvm-cov" = "0.8.7"
 
 [tools."github:elide-dev/elide"]
-version = "1.6.1"
+version = "1.6.2"
 bin_path = "bin"
 
 [tools."github:elide-dev/elide".platforms]
@@ -15,18 +16,22 @@ linux-x64 = { asset_pattern = "elide.linux-amd64.txz" }
 linux-arm64 = { asset_pattern = "elide.linux-arm64.txz" }
 macos-arm64 = { asset_pattern = "elide.macos-arm64.txz" }
 
+[tools."github:elide-dev/toolchain"]
+version = "2026.11.1"
+bin_path = "elide-toolchain/bin"
+
+[tools."github:elide-dev/toolchain".platforms]
+linux-x64 = { asset_pattern = "elide-toolchain-2026.11.1-linux-amd64.tar.xz" }
+linux-arm64 = { asset_pattern = "elide-toolchain-2026.11.1-linux-arm64.tar.xz" }
+macos-arm64 = { asset_pattern = "elide-toolchain-2026.11.1-darwin-arm64.tar.xz" }
+
 [env]
-# macOS LLVM and LLD are separate Homebrew formulae; allow explicit overrides.
-LLVM_BIN = "{% if env.LLVM_BIN is defined %}{{ env.LLVM_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin{% else %}/usr/lib/llvm-23/bin{% endif %}"
-LLVM_CONFIG = "{% if env.LLVM_CONFIG is defined %}{{ env.LLVM_CONFIG }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin/llvm-config{% else %}/usr/lib/llvm-23/bin/llvm-config{% endif %}"
-_.path = [
-  "{% if env.LLVM_BIN is defined %}{{ env.LLVM_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/llvm/bin{% else %}/usr/lib/llvm-23/bin{% endif %}",
-  "{% if env.LLD_BIN is defined %}{{ env.LLD_BIN }}{% elif os() == 'macos' %}/opt/homebrew/opt/lld/bin{% else %}/usr/lib/llvm-23/bin{% endif %}",
-]
+MYNA_ROOT = "{{ config_root }}"
+_.source = { path = "scripts/toolchain-env.sh", tools = true }
 
 [tasks.setup]
 description = "Install Rust check tools, Elide Python, and project dependencies"
-run = ["rustup component add rustfmt clippy", "elide setup python --channel release", "elide install"]
+run = ["rustup component add rustfmt clippy llvm-tools-preview", "elide setup python --channel release", "scripts/python.sh scripts/setup-graalvm.py", "elide install"]
 
 [tasks."build:jvm"]
 description = "Build the CLI and hosted Feature JARs with Elide"
@@ -76,3 +81,28 @@ run = "scripts/python.sh tests/values_cpp.py"
 [tasks."package:values"]
 description = "Build and verify the portable Rust, C++, and SVM value SDK"
 run = "scripts/package-values.sh"
+
+[tasks."test:rust-coverage"]
+description = "Measure production Rust coverage without stale or empty test binaries"
+run = ["cargo llvm-cov clean --workspace", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
+
+[tasks."test:asan"]
+run = "scripts/python.sh tests/sanitizers.py asan"
+
+[tasks."test:tsan"]
+run = "scripts/python.sh tests/sanitizers.py tsan"
+
+[tasks."bench:comparison-build"]
+run = "scripts/python.sh benchmarks/comparison/run.py build"
+
+[tasks."bench:comparison"]
+run = "scripts/python.sh benchmarks/comparison/run.py run"
+
+[tasks."bench:comparison-smoke"]
+run = "scripts/python.sh benchmarks/comparison/run.py run --forks 1 --iterations 10000"
+
+[tasks."bench:native-build"]
+run = "scripts/python.sh benchmarks/native/build.py"
+
+[tasks."test:llvm-coverage"]
+run = "scripts/python.sh scripts/native-coverage.py"

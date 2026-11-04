@@ -1,0 +1,7 @@
+module boundary abi=1 target=aarch64-apple-darwin java_package=bench java_class=Generated
+import step symbol=myna_bench_step return=i64 error=no_failure
+  param value type=i64
+end
+import leaf symbol=myna_bench_leaf return=i64 error=no_failure native_leaf=true@explicit_contract
+  param value type=i64
+end

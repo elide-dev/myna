@@ -19,21 +19,21 @@ Version 0.6.0 introduces the project rename; see [the migration guide](docs/rena
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and a native C toolchain. mise installs the pinned Elide 1.6.1, Rust, CMake, and workflow linters. Elide supplies Java compilation, JVM execution, Native Image, and Python; no standalone JDK or Python installation is needed. Building the object applicator also requires LLVM 23 development libraries and LLD 23 (Homebrew `llvm` and `lld` on macOS).
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.1 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 ```sh
 mise trust
 mise install --locked
 mise run setup                      # Elide Python component and dependencies
 mise run build                      # native executable, generator JAR, Feature JAR
-LLVM_CONFIG=/path/to/llvm-config mise run build:llvm
+mise run build:llvm
 
 build/dist/myna generate examples/buffer.seam --out build/seam
 build/dist/myna validate examples/buffer.seam
 build/dist/myna generate examples/buffer.seam --out build/seam --check
 ```
 
-Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` remains an optional Maven compatibility build. The Java generator has no runtime dependencies. Native compilation uses Elide's embedded Native Image driver.
+Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` remains an optional Maven compatibility build. The Java generator has no runtime dependencies. Native compilation uses the pinned external elide-dev/graal Native Image driver.
 
 The descriptor target is explicit. Use `--target x86_64-unknown-linux-gnu` to override the example's macOS ARM64 target. The CLI never guesses an ABI from its own host.
 
@@ -92,18 +92,19 @@ Individual integration tests can run against existing builds:
 
 ```sh
 MYNA_BIN=build/dist/myna mise run test:e2e
-LLVM_BIN=/path/to/llvm/bin mise run test:llvm
+mise run test:llvm
 mise run test:native-image
 ```
 
 | Report | Location |
 | --- | --- |
 | JVM test XML | `.dev/reports/tests/jvm/**/*.xml` |
+| Production JVM coverage XML | `build/reports/jvm-production.xml` |
 | JaCoCo coverage XML | `.dev/reports/coverage/jvm/jvm-test/jvm-test.xml` |
 | JaCoCo HTML | `.dev/reports/coverage/jvm/jvm-test/html/index.html` |
 | Native CLI / LLVM / Native Image test XML | `build/reports/*.xml` |
 
-Coverage gates are 85% line coverage and 70% branch coverage. Golden outputs are checked in under `tests/golden/`. The LLVM suite proves load elimination in both C and Rust, checks attributes in LLD's saved ThinLTO output, preserves archive metadata/native members, and rejects stale contracts and incompatible ABIs. The Native Image suite runs Rust → Native Image → Rust and tests exception translation and a leaf call with no VM transition. It also builds and runs the generated FFM bindings as a Native Image executable.
+Production JVM coverage gates are 99% lines and 93% branches. Rust integration coverage requires 97.5% lines; native C/C++ and LLVM coverage require 98% lines. Native-only Java readers are exercised in SVM integration tests. Golden outputs are checked in under `tests/golden/`. The LLVM suite proves load elimination in both C and Rust, checks attributes in LLD's saved ThinLTO output, preserves archive metadata/native members, and rejects stale contracts and incompatible ABIs. The Native Image suite runs Rust → Native Image → Rust and tests exception translation and a leaf call with no VM transition. It also builds and runs the generated FFM bindings as a Native Image executable.
 
 CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It uses the same mise tasks and lockfile as local development and requires LLVM major 23; update Rust and LLVM together. See [CI maintenance and Elide compatibility notes](docs/ci.md).
 
@@ -154,3 +155,7 @@ Typed FFM calls and Native Image downcall-stub registration are implemented. Ful
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets passed by pointer or by value, and isolate-thread exports with include predicates and abort/integer/null exception translation.
 
 Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.
+
+Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.1,
+and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
+for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.

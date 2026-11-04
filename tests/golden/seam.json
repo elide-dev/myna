@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatorVersion": "0.7.0",
+  "generatorVersion": "0.7.1",
   "name": "buffer",
   "abiVersion": 1,
   "targetTriple": "aarch64-apple-darwin",

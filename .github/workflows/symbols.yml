@@ -1,0 +1,39 @@
+name: Publish symbol sidecars
+
+"on":
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: symbols-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: mise run build:llvm
+      - name: Publish through the Myna Cloud connection
+        env:
+          ELIDE_CLOUD_API_KEY: ${{ secrets.ELIDE_CLOUD_API_KEY }}
+        run: python3 scripts/publish-symbols.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: symbols-${{ matrix.os }}
+          path: |
+            build/dist/
+            build/reports/symbol-publication.json

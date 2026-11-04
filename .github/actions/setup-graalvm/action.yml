@@ -1,0 +1,17 @@
+name: Setup pinned Elide GraalVM
+description: Verify and cache the external GraalVM distribution independently of the Elide CLI
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: sdk
+      with:
+        path: .dev/toolchains/graalvm*
+        key: myna-graalvm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/graalvm.json') }}
+    - shell: bash
+      run: mise exec -- python3 scripts/setup-graalvm.py
+    - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      if: steps.sdk.outputs.cache-hit != 'true'
+      with:
+        path: .dev/toolchains/graalvm*
+        key: myna-graalvm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/graalvm.json') }}

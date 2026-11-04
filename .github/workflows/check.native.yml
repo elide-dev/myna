@@ -17,7 +17,7 @@ jobs:
           - os: ubuntu-24.04
           - os: macos-15
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: "Setup: Harden Runner"
         if: runner.os == 'Linux'
@@ -30,26 +30,11 @@ jobs:
           persist-credentials: false
       - name: Setup tools
         uses: ./.github/actions/setup
-      - name: Install LLVM 23 on Linux
-        if: runner.os == 'Linux'
-        run: |
-          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
-          sudo bash /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev lld-23
-          echo /usr/lib/llvm-23/bin >> "$GITHUB_PATH"
-          echo LLVM_BIN=/usr/lib/llvm-23/bin >> "$GITHUB_ENV"
-          echo LLVM_CONFIG=/usr/lib/llvm-23/bin/llvm-config >> "$GITHUB_ENV"
-      - name: Install LLVM 23 on macOS
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm lld
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
-          echo "LLVM_BIN=$(brew --prefix llvm)/bin" >> "$GITHUB_ENV"
-          echo "LLVM_CONFIG=$(brew --prefix llvm)/bin/llvm-config" >> "$GITHUB_ENV"
       - name: Verify LLVM compatibility
         shell: bash
         run: |
+          eval "$(mise env -s bash)"
+          test "$(elide-toolchain version)" = 2026.11.1
           test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
@@ -57,9 +42,27 @@ jobs:
       - run: mise run test:rust
       - name: C++ value ABI and simdjson conformance
         run: mise run test:cpp
+      - run: mise run test:rust-coverage
+        if: runner.os == 'Linux'
+      - run: mise run test:asan
+      - run: mise run test:tsan
       - run: mise run test:e2e
-      - run: mise run test:llvm
+      - run: mise run test:llvm-coverage
       - run: mise run test:native-image
+      - run: mise run bench:comparison-build
+        if: runner.os == 'Linux'
+      - run: mise run bench:comparison-smoke
+        if: runner.os == 'Linux'
+      - name: Upload native production coverage
+        if: ${{ !cancelled() && hashFiles('build/reports/*.lcov') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          plugins: noop
+          files: build/reports/rust.lcov,build/reports/cpp.lcov,build/reports/llvm.lcov
+          disable_search: true
+          flags: native-coverage-${{ matrix.os }}
+          fail_ci_if_error: true
       - name: Upload native test results to Codecov
         if: ${{ !cancelled() && hashFiles('build/reports/*.xml') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -78,3 +81,10 @@ jobs:
           path: |
             build/dist/
             build/reports/
+            build/sanitizers/**/*.log
+            build/sanitizers/**/command.json
+            build/sanitizers/**/crash-*
+            build/comparison/**/*.json
+            build/comparison/**/*.jsonl
+            build/comparison/**/*.md
+            build/comparison/**/*.log

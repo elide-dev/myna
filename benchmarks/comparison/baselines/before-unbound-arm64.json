@@ -1,0 +1,6092 @@
+{
+  "build": {
+    "schema": 1,
+    "workload": "scalar-recurrence-v1",
+    "target": "aarch64-apple-darwin",
+    "revision": "ad9019ceba5916e3c7ac11bdcbfdd7974491273c",
+    "dirty": " M .github/workflows/check.jvm.yml\n M .github/workflows/check.native.yml\n M .github/workflows/codspeed.yml\n M Dockerfile\n M benchmarks/pom.xml\n M crates/myna-values/tests/values.rs\n M docs/performance.md\n M elide.pkl\n M llvm/CMakeLists.txt\n M mise.lock\n M mise.toml\n M pom.xml\n M scripts/build.sh\n M scripts/check_coverage.py\n M scripts/python.sh\n M scripts/test-jvm.sh\n M tests/coverage_gate_test.py\n M tests/e2e.py\n M tests/native_image_integration.py\n M tests/support.py\n M tests/values_cpp.py\n?? benchmarks/comparison/\n?? benchmarks/native/\n?? docs/benchmarking.md\n?? scripts/native-cc\n?? scripts/native-coverage.py\n?? scripts/native-cxx\n?? scripts/production_coverage.py\n?? scripts/setup-graalvm.py\n?? scripts/toolchain-env.sh\n?? src/test/java/dev/elide/myna/CompatibilityTest.java\n?? tests/fuzz/\n?? tests/sanitizers.py\n?? tools/\n",
+    "sources": {
+      "benchmarks/comparison/run.py": "794db7b8923e98d2fd5a39c997aaf0dad57a0fdc5d0b3a7909ef1dbe2f5385f7",
+      "benchmarks/comparison/kernel.c": "781043c56d8a80f6525b5343a62604966d03ab0d30d6e2d324a509cfad710ebe",
+      "benchmarks/comparison/boundary.seam": "377220a3de2bd2f78149e8c63aa486eccd7933756ff7c9d1b0b2f32fff8591a4",
+      "benchmarks/comparison/Native.java": "6c7bb7be9b231d12987dab911a700b32580e0eb5ce5fdff6ea0bcadfedf213be",
+      "benchmarks/comparison/Measure.java": "a11f5589a6e81be16b192c33553fb17268d0889e0dc5b0d06e7a7d8cef4b5b2a",
+      "benchmarks/comparison/Jvm.java": "b3dbbaa49f9b7a9a855fe73a1999f6b54861b6988b9198e289b7f8a6180907f7",
+      "mise.lock": "86a84783bbd988ca9fd8e69242175b17f669b455e3903a1e43b83be55403ee4a",
+      "tools/graalvm.json": "c2bfbb719e54b2a46158c8c294f06c39409829754b08e41dc851add034c5c84c"
+    },
+    "binaries": {
+      "build/comparison/native": "21cac7ed81c7e3681c046edaf0d4f29fddc1839bf85ebe241a3dc6b824e96018",
+      "build/comparison/ffm-aot": "05a1bcbf6e8dbba1b5d2e394fd5951e4f1315503b8da742c099e406554b2907c",
+      "build/comparison/libboundary.dylib": "755570f8fe75144bd77326874f80d7f696f57c0f9a65ac416026e65bedd3a17d",
+      "build/comparison/classes/bench/GeneratedForeignFeature.class": "1a61fc7fcc5ddf8d59057c8ca09c593d4082692bf284f0294d4d010eca08c254",
+      "build/comparison/classes/bench/Measure$Loop.class": "ac2aa6cc9a24f3f1a0dff4bca35880bec76891dc4edef962b8023d38b531937e",
+      "build/comparison/classes/bench/Native.class": "696d3c84220833678b5ea8d6bc01fd50ab20574b2fe0f79ee00b0b4f76f53623",
+      "build/comparison/classes/bench/GeneratedFFM$step_Binding.class": "0f07030cc9688802f03a4aff852bc1fba4d503f848b0161a0d3ec8845bf62e58",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_Binding.class": "cb134b313ff383455f8901d4f5203311717bb811431a2070e4f2edb6334a696b",
+      "build/comparison/classes/bench/Measure.class": "d5fa10c03d76ceb4c0baa62c8d89b00335c8b755feef6aba2a8d7a3350964f80",
+      "build/comparison/classes/bench/GeneratedFFM.class": "b991f3150a087bba45e297c7b0d03969d588673114614509bf1fbbb6567ec929",
+      "build/comparison/classes/bench/Jvm.class": "d22aec20df75f9f386722fcb388fc62daa06eca48fce356f7cf6ee42e9f78224",
+      "build/comparison/classes/bench/Generated.class": "feceb3252814bc971e61bffad83755c36a5b2f9d268331179760b5d4dabef41d"
+    },
+    "versions": {
+      "java": "openjdk version \"25.0.4.1.1\" 2026-08-18\nOpenJDK Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nOpenJDK 64-Bit Server VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24, mixed mode, sharing)\n",
+      "clang": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: arm64-apple-darwin\nThread model: posix\nInstalledDir: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin\nConfiguration file: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/arm64-apple-darwin.cfg\n",
+      "native-image": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n",
+      "toolchain": "2026.11.1\n",
+      "elide": "1.6.2+1e15613\n"
+    },
+    "graalvm": {
+      "version": "25.5.5-elide.24",
+      "edition": "ce",
+      "platforms": {
+        "Darwin-arm64": {
+          "archive": "macos-aarch64",
+          "sha256": "8b03207cb35ab5b9bec6422b4266178315f7a056ae88e90f57cc22b2362c44a6"
+        },
+        "Linux-x86_64": {
+          "archive": "linux-amd64",
+          "sha256": "83bd7b3b78e76de00bb3879eeae79a8b439f9356fefd3bf3b84d2818af8961e7"
+        },
+        "Linux-aarch64": {
+          "archive": "linux-aarch64",
+          "sha256": "f89eb4bdc6596b8aa7acdf063997c69ab06aa9a488e8f98cff07865b0261618f"
+        }
+      }
+    },
+    "build_commands": [
+      [
+        "/Users/sam/workspace/myna/build/dist/myna",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/comparison/boundary.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/comparison/generated",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/comparison/kernel.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-shared",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+      ],
+      [
+        "javac",
+        "-d",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Jvm.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Measure.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Native.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/Generated.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedFFM.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedForeignFeature.java"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:NativeLinkerOption=/Users/sam/workspace/myna/build/comparison/kernel.o",
+        "-H:-UnlockExperimentalVMOptions",
+        "bench.Native",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/native"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "--enable-native-access=ALL-UNNAMED",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "--initialize-at-run-time=bench.Jvm",
+        "--features=bench.GeneratedForeignFeature",
+        "bench.Jvm",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot"
+      ],
+      [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    ],
+    "library": "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+  },
+  "host": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu": "Apple M5 Max"
+  },
+  "seed": 1729,
+  "forks": 5,
+  "iterations": 1000000,
+  "smoke": false,
+  "results": [
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-leaf",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-native-manual-leaf.jsonl",
+        "manual-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1078875,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 997167,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 961458,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 953750,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 953792,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 954917,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1021958,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1020917,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1041042,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 991708,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 22
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-normal",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-native-manual-normal.jsonl",
+        "manual-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 5613000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4427834,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4698208,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4968542,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4554500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4523709,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3981750,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3982125,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3968167,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4514292,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 56
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-leaf",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-native-generated-leaf.jsonl",
+        "generated-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 953708,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 985250,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1036584,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 986959,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 954208,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 953791,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1026792,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1030958,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1049833,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 996041,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "control",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-ffm-aot-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 984708,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 995292,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1049166,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 951375,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 939041,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1092792,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1102833,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 997125,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 995459,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1000666,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "manual-ffm",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-ffm-aot-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1775420583,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1791126625,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2001401833,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2310003542,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2537245042,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2590383042,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2867057625,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2901834875,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2885619333,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 18142
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2817231958,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 18142
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "164  204 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "166  205    b        bench.Measure::reference (29 bytes)",
+        "169  206 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "170  207    b        bench.Measure::reference (29 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "control",
+      "fork": 0,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-jvm-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 914000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1014042,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 914542,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 919709,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 915625,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 919417,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 915916,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 914125,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 914333,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 193
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 913584,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 193
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-normal",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-native-generated-normal.jsonl",
+        "generated-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4653625,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4782458,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 5370875,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4969917,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4760625,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 5333292,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4728875,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4665792,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4658875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 58
+        },
+        {
+          "case": "generated-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4651792,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 58
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "219  236 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "221  237    b        bench.Jvm::lambda$main$1 (23 bytes)",
+        "242  240 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "244  241    b        bench.Jvm::lambda$main$1 (23 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "manual-ffm",
+      "fork": 0,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-jvm-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2802959,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 3326375,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3068042,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3129833,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3007708,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2966166,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3317000,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3408583,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2865792,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 282
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2858833,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 282
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "214  207 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "215  208    b        bench.Jvm::lambda$main$2 (20 bytes)",
+        "230  211 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "231  212    b        bench.Jvm::lambda$main$2 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "jni",
+      "fork": 0,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-jvm-jni.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "jni",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "jni",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 3496500,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 3736291,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3451625,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3601292,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3473500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3770500,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3902833,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3457834,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3451458,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 276
+        },
+        {
+          "case": "jni",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 3457083,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 276
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "230  234 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "232  235    b        bench.Jvm::lambda$main$0 (20 bytes)",
+        "253  238 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "255  239    b        bench.Jvm::lambda$main$0 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "generated-ffm",
+      "fork": 0,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-jvm-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2960792,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2961375,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3441750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3015958,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3298417,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2927125,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2974959,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2986000,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2935875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 296
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2943667,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 296
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "control",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-native-control.jsonl",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1037917,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1040542,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1446709,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1034333,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1033500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1031958,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1032000,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1032125,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1032000,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1032084,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 22
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "generated-ffm",
+      "fork": 0,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/0-ffm-aot-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1858870500,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1812964042,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1822330167,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1820461834,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1810315917,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1823557791,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1922892625,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1808701083,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1855134958,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 23690
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1815528375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 23690
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-normal",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-native-manual-normal.jsonl",
+        "manual-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4761416,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4757708,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4782917,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4791625,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4740875,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4712625,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4773458,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4758417,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4763292,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 64
+        },
+        {
+          "case": "manual-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4788583,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 64
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-leaf",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-native-generated-leaf.jsonl",
+        "generated-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 946083,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1007833,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 937667,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 939000,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 937667,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 943125,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 943250,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 939834,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 943084,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 937750,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "control",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-ffm-aot-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 958834,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 947209,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 940917,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 933625,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 928584,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 942375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 20
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "manual-ffm",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-ffm-aot-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2817343916,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2737004667,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2523469792,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1806172375,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2219818042,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2170572791,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1849791875,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1934569625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1812216708,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 24182
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1852635917,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 24182
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "197  204 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "198  205    b        bench.Measure::reference (29 bytes)",
+        "201  206 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "202  207    b        bench.Measure::reference (29 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "control",
+      "fork": 1,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-jvm-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 929042,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 930208,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 931833,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 932708,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 930291,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 982333,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 932500,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 931542,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 932583,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 227
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 932667,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 227
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-normal",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-native-generated-normal.jsonl",
+        "generated-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4756333,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4806875,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4768125,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4737708,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4078000,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3922500,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4313917,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4756625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4130583,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 65
+        },
+        {
+          "case": "generated-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 3943000,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 65
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "129  236 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "130  237    b        bench.Jvm::lambda$main$1 (23 bytes)",
+        "146  240 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "147  241    b        bench.Jvm::lambda$main$1 (23 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "manual-ffm",
+      "fork": 1,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-jvm-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2645041,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2619834,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2616333,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2632000,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2610875,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2633417,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2607416,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2627708,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2632875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 180
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2673375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 180
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "114  207 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "115  208    b        bench.Jvm::lambda$main$2 (20 bytes)",
+        "125  211 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "126  212    b        bench.Jvm::lambda$main$2 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "jni",
+      "fork": 1,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-jvm-jni.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "jni",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "jni",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2907625,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2894541,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2882083,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2905917,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2906417,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2880333,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2894417,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2893459,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2892208,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 161
+        },
+        {
+          "case": "jni",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2915333,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 161
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "130  234 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "131  235    b        bench.Jvm::lambda$main$0 (20 bytes)",
+        "146  238 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "147  239    b        bench.Jvm::lambda$main$0 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "generated-ffm",
+      "fork": 1,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-jvm-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2621916,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2618625,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2650208,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2649500,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2665708,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2635708,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2622958,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2612250,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2619625,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2643708,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 181
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "control",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-native-control.jsonl",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 939083,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 933042,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 928583,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 929917,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 949667,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 937334,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 939167,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 931041,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 932750,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 20
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "generated-ffm",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-ffm-aot-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1824575750,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2261162542,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2424061666,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2545106125,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2486415125,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2552854333,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2574928750,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1840873333,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2138007500,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 18056
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1896452458,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 18056
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-leaf",
+      "fork": 1,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/1-native-manual-leaf.jsonl",
+        "manual-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1045083,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1042459,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1082750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1065291,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1045708,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1046416,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1048708,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1046917,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1052291,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 24
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1043250,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 24
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-leaf",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-native-generated-leaf.jsonl",
+        "generated-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1039250,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1036292,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1064625,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1049458,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1036792,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1059333,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1076333,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1090584,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1088792,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1061750,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "control",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-ffm-aot-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 979750,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1062250,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 974791,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1030208,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 999875,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1003500,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 984125,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 974750,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 974834,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1527375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "manual-ffm",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-ffm-aot-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1880427083,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1882522333,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1857573541,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1901479541,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1853364875,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2036450208,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2584882625,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3261635500,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3145967166,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19588
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 3305526625,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19588
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "324  204 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "326  205    b        bench.Measure::reference (29 bytes)",
+        "331  206 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "333  207    b        bench.Measure::reference (29 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "control",
+      "fork": 2,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-jvm-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1087333,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1270375,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1055875,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1206625,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1077625,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1049584,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1035500,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1046083,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1060083,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 366
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1070541,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 366
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-normal",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-native-generated-normal.jsonl",
+        "generated-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 5699875,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 5443833,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 5399417,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 5371291,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 5393750,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 5907167,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 5351583,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 6068917,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 5462083,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 76
+        },
+        {
+          "case": "generated-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 5490333,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 76
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "245  236 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "247  237    b        bench.Jvm::lambda$main$1 (23 bytes)",
+        "268  240 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "270  241    b        bench.Jvm::lambda$main$1 (23 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "manual-ffm",
+      "fork": 2,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-jvm-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 3175458,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2983125,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3158833,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2929833,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3013166,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3013750,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3395542,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3352083,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3242042,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2929666,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 312
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "202  207 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "203  208    b        bench.Jvm::lambda$main$2 (20 bytes)",
+        "219  211 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "220  212    b        bench.Jvm::lambda$main$2 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "jni",
+      "fork": 2,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-jvm-jni.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "jni",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "jni",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 3629167,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 3522875,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3641416,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3577709,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3503291,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3765125,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3549709,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3444458,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3649833,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 264
+        },
+        {
+          "case": "jni",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 3482375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 264
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "243  234 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "246  235    b        bench.Jvm::lambda$main$0 (20 bytes)",
+        "267  238 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "270  239    b        bench.Jvm::lambda$main$0 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "generated-ffm",
+      "fork": 2,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-jvm-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2978708,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2958125,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2912167,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2983041,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2870208,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2931292,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3183625,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2888875,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2939459,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 312
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2923750,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 312
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "control",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-native-control.jsonl",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1071292,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1125292,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1051541,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1031958,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1053792,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1179958,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1048417,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1038209,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1063625,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 22
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1054167,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 22
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "generated-ffm",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-ffm-aot-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1801917584,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1860816125,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1794775750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2104357417,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2309836500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2378297833,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1795676333,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1843687250,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1813055708,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 25397
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2145975708,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 25397
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-leaf",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-native-manual-leaf.jsonl",
+        "manual-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1054000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1059459,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1038834,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1014291,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1095500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1041333,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1036250,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1036250,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1043375,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1036250,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-normal",
+      "fork": 2,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/2-native-manual-normal.jsonl",
+        "manual-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 5026709,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4503791,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4484875,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4866542,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4066000,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4085542,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 3997417,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4625958,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4084375,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 57
+        },
+        {
+          "case": "manual-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4038375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 57
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "control",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-ffm-aot-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 934625,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 934708,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 934541,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 933709,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 937958,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 946041,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 941666,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 931250,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 928541,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 931709,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 20
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "manual-ffm",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-ffm-aot-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1858820291,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1915679458,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1849638583,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 1809605666,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1804185917,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1799133416,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1901295167,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1972601541,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1894311292,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21217
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1828344000,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21217
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "117  204 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "118  205    b        bench.Measure::reference (29 bytes)",
+        "121  206 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "121  207    b        bench.Measure::reference (29 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "control",
+      "fork": 3,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-jvm-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 942208,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 937833,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 935041,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 949791,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 946292,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 938833,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 940500,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 933917,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 933875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 144
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 933875,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 144
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-normal",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-native-generated-normal.jsonl",
+        "generated-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4496084,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4013750,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3960083,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3942958,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3977750,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4276416,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4007667,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3973458,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3969583,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 50
+        },
+        {
+          "case": "generated-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4092375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 50
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "148  236 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "149  237    b        bench.Jvm::lambda$main$1 (23 bytes)",
+        "166  240 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "167  241    b        bench.Jvm::lambda$main$1 (23 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "manual-ffm",
+      "fork": 3,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-jvm-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2736833,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2662542,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2634125,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2679125,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2726584,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2719209,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2872166,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2675667,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2623375,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 204
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2662542,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 204
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "122  207 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "123  208    b        bench.Jvm::lambda$main$2 (20 bytes)",
+        "134  211 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "134  212    b        bench.Jvm::lambda$main$2 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "jni",
+      "fork": 3,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-jvm-jni.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "jni",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "jni",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2941500,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 3342959,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 3005708,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2966375,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2926333,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2972458,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2912833,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2899792,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2905625,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 171
+        },
+        {
+          "case": "jni",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2908916,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 171
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "133  234 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "134  235    b        bench.Jvm::lambda$main$0 (20 bytes)",
+        "149  238 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "150  239    b        bench.Jvm::lambda$main$0 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "generated-ffm",
+      "fork": 3,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-jvm-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2614458,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2613041,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2631750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2663958,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2597416,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2610833,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2641875,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2637458,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2640792,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 184
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2663042,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 184
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "control",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-native-control.jsonl",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 942209,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 943500,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 933834,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 931917,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 947000,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 947625,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 928583,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 928625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 928709,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 934459,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "generated-ffm",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-ffm-aot-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 3267526417,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2912091167,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2929715500,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2851885750,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2832314417,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3014782417,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2860921166,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2987970500,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2973784917,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 30825
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2144808375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 30825
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-leaf",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-native-manual-leaf.jsonl",
+        "manual-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 938250,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 988500,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 984292,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 954792,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 940500,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 943416,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 937791,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 955833,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 945292,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 25
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 938041,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 25
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-normal",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-native-manual-normal.jsonl",
+        "manual-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4699958,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4829583,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4792875,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4750709,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3978167,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3967375,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4007542,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 3951291,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4066250,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 54
+        },
+        {
+          "case": "manual-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 3947292,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 54
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-leaf",
+      "fork": 3,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/3-native-generated-leaf.jsonl",
+        "generated-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 938500,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 938000,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 940541,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 937917,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1004208,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 993792,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 997791,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 946750,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 943167,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 949125,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 20
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "manual-ffm",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-ffm-aot-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1912938000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1994128292,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1803946042,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2084570583,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1795242333,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1887848292,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2411852833,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2334339958,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1785335417,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19133
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1969453916,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19133
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "262  204 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "264  205    b        bench.Measure::reference (29 bytes)",
+        "267  206 %  b        bench.Measure::reference @ 5 (29 bytes)",
+        "269  207    b        bench.Measure::reference (29 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "control",
+      "fork": 4,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-jvm-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1081167,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 916792,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 915708,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 925333,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 913834,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 918500,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 913459,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 918875,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 913958,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 297
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 913500,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 297
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-normal",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-native-generated-normal.jsonl",
+        "generated-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4928541,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4600041,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4418167,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 4308250,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4303584,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4292750,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4244500,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4353750,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 4482292,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 59
+        },
+        {
+          "case": "generated-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4705416,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 59
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "154  236 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "155  237    b        bench.Jvm::lambda$main$1 (23 bytes)",
+        "171  240 %  b        bench.Jvm::lambda$main$1 @ 2 (23 bytes)",
+        "173  241    b        bench.Jvm::lambda$main$1 (23 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "manual-ffm",
+      "fork": 4,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-jvm-manual-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "manual-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2781166,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2690708,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2713542,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2830542,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2851958,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2855750,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2834875,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2636917,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2629875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 207
+        },
+        {
+          "case": "manual-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2628375,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 207
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "130  207 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "131  208    b        bench.Jvm::lambda$main$2 (20 bytes)",
+        "143  211 %  b        bench.Jvm::lambda$main$2 @ 2 (20 bytes)",
+        "144  212    b        bench.Jvm::lambda$main$2 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "jni",
+      "fork": 4,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-jvm-jni.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "jni",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "jni",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 3028458,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2975292,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2992083,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3054625,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3031083,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 3044708,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2971333,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2924959,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2969583,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 181
+        },
+        {
+          "case": "jni",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2968708,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 181
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [
+        "175  234 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "177  235    b        bench.Jvm::lambda$main$0 (20 bytes)",
+        "193  238 %  b        bench.Jvm::lambda$main$0 @ 2 (20 bytes)",
+        "195  239    b        bench.Jvm::lambda$main$0 (20 bytes)"
+      ],
+      "mode": "jvm",
+      "case": "generated-ffm",
+      "fork": 4,
+      "command": [
+        "java",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Xbatch",
+        "-XX:+UseJVMCICompiler",
+        "-XX:-TieredCompilation",
+        "-XX:+PrintCompilation",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-jvm-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "bench.Jvm",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 2553625,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 2544833,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2861417,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2699833,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 2571917,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 2561709,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 2564209,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2582791,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 2825750,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 230
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 2632000,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 230
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "control",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-native-control.jsonl",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 915708,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 914958,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 919916,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 943541,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 916208,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 913291,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 920791,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 913625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 913792,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 913625,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "generated-ffm",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-ffm-aot-generated-ffm.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "generated-ffm",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-ffm",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1913534500,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1997389500,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 2093272500,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 2018798208,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 3111734916,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4117984833,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 5479366042,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 2278477625,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1868657083,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 19751
+        },
+        {
+          "case": "generated-ffm",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1813212583,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 19751
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-leaf",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-native-manual-leaf.jsonl",
+        "manual-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 993000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 993584,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1021791,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 995458,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 1009416,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1004666,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1037792,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 996875,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1008583,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 20
+        },
+        {
+          "case": "manual-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 995625,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 20
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "manual-normal",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-native-manual-normal.jsonl",
+        "manual-normal",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "manual-normal",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 4064625,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 4444041,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 4320750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 3957208,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 4264583,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 4104416,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 4822708,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 4371167,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 3984875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 56
+        },
+        {
+          "case": "manual-normal",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 4465750,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 56
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "native",
+      "case": "generated-leaf",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/native",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-native-generated-leaf.jsonl",
+        "generated-leaf",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "generated-leaf",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 1031000,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 997542,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 1021750,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 996709,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 994958,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1003625,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1001209,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 1042667,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1006875,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "generated-leaf",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1044708,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    },
+    {
+      "compilation_evidence": [],
+      "mode": "ffm-aot",
+      "case": "control",
+      "fork": 4,
+      "command": [
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot",
+        "-Dmyna.bench.results=/Users/sam/workspace/myna/build/comparison/results-logs/4-ffm-aot-control.jsonl",
+        "-Dmyna.bench.library=/Users/sam/workspace/myna/build/comparison/libboundary.dylib",
+        "control",
+        "1000000"
+      ],
+      "samples": [
+        {
+          "case": "control",
+          "sample": 0,
+          "iterations": 1000000,
+          "ns": 959667,
+          "checksum": 2442984032532270421,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 1,
+          "iterations": 1000000,
+          "ns": 1045917,
+          "checksum": 5931901652603930198,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 2,
+          "iterations": 1000000,
+          "ns": 970917,
+          "checksum": -9025924801033961641,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 3,
+          "iterations": 1000000,
+          "ns": 956459,
+          "checksum": -5537007180962301864,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 4,
+          "iterations": 1000000,
+          "ns": 947292,
+          "checksum": -2048089560890642087,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 5,
+          "iterations": 1000000,
+          "ns": 1001917,
+          "checksum": 1440828059181017690,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 6,
+          "iterations": 1000000,
+          "ns": 1063750,
+          "checksum": 4929745679252677467,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 7,
+          "iterations": 1000000,
+          "ns": 954667,
+          "checksum": 8418663299324337244,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 8,
+          "iterations": 1000000,
+          "ns": 1002958,
+          "checksum": -6539163154313554595,
+          "warmup_uptime_ms": 21
+        },
+        {
+          "case": "control",
+          "sample": 9,
+          "iterations": 1000000,
+          "ns": 1037166,
+          "checksum": -3050245534241894818,
+          "warmup_uptime_ms": 21
+        }
+      ]
+    }
+  ],
+  "verified_source_commit": "1fccb164adbc426b6fc6aa2f231e4ad053f7d9d8"
+}

@@ -31,12 +31,12 @@ jobs:
       - name: Run JVM tests and coverage gate
         run: mise run test:jvm
       - name: Upload coverage to Codecov
-        if: ${{ !cancelled() && hashFiles('.dev/reports/coverage/jvm/jvm-test/jvm-test.xml') != '' }}
+        if: ${{ !cancelled() && hashFiles('build/reports/jvm-production.xml') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true
           plugins: noop
-          files: .dev/reports/coverage/jvm/jvm-test/jvm-test.xml
+          files: build/reports/jvm-production.xml
           disable_search: true
           flags: jvm
           fail_ci_if_error: true
@@ -58,3 +58,4 @@ jobs:
           path: |
             .dev/reports/tests/jvm/
             .dev/reports/coverage/jvm/
+            build/reports/jvm-production.xml

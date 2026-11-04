@@ -83,17 +83,21 @@ public final class JavaFfm implements Backend {
     }
     for (Function f : m.functions().stream().map(d -> ffmForm(m, d)).toList()) {
       String carrier = Types.ffmCarrier(f.returns());
-      out.append(
-              "    // Load the library in this class loader before first use. One handle per"
-                  + " symbol.\n")
+      out.append("    // ABI adapters may be compiled into an image; addresses remain runtime-bound.\n")
+          .append("    private static final class ")
+          .append(f.name())
+          .append("_Downcall {\n")
+          .append("        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(")
+          .append(m.ffmClass()).append('.').append(f.name())
+          .append("_DESCRIPTOR);\n    }\n")
           .append("    private static final class ")
           .append(f.name())
           .append("_Binding {\n")
-          .append("        static final MethodHandle HANDLE = ")
-          .append(m.ffmClass())
-          .append('.')
-          .append(f.name())
-          .append("(SymbolLookup.loaderLookup());\n    }\n")
+          .append("        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find(")
+          .append(SeamJson.quote(f.symbol()))
+          .append(").orElseThrow(() -> new UnsatisfiedLinkError(")
+          .append(SeamJson.quote(f.symbol()))
+          .append("));\n    }\n")
           .append("    public static ")
           .append(carrier)
           .append(' ')
@@ -111,7 +115,9 @@ public final class JavaFfm implements Backend {
       out.append(m.ffmClass())
           .append('.')
           .append(f.name())
-          .append("_Binding.HANDLE.invokeExact(")
+          .append("_Downcall.HANDLE.invokeExact(")
+          .append(m.ffmClass()).append('.').append(f.name()).append("_Binding.ADDRESS")
+          .append(f.returns() instanceof Named || !f.abiParameters().isEmpty() ? ", " : "")
           .append(f.returns() instanceof Named ? "allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
           .append(String.join(", ", f.abiParameters().stream().map(p -> widened(p.type(), p.name())).toList()))
           .append(");\n    }\n");

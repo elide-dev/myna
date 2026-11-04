@@ -16,18 +16,18 @@ class CoverageGateTests(unittest.TestCase):
             return check_coverage(report)
 
     def test_accepts_exact_thresholds(self):
-        self.check('<report><counter type="LINE" missed="15" covered="85"/>'
-                   '<counter type="BRANCH" missed="30" covered="70"/></report>')
+        self.check('<report><counter type="LINE" missed="1" covered="99"/>'
+                   '<counter type="BRANCH" missed="7" covered="93"/></report>')
 
     def test_rejects_line_shortfall(self):
         with self.assertRaisesRegex(ValueError, "LINE"):
-            self.check('<report><counter type="LINE" missed="16" covered="84"/>'
+            self.check('<report><counter type="LINE" missed="2" covered="98"/>'
                        '<counter type="BRANCH" missed="0" covered="100"/></report>')
 
     def test_rejects_branch_shortfall(self):
         with self.assertRaisesRegex(ValueError, "BRANCH"):
             self.check('<report><counter type="LINE" missed="0" covered="100"/>'
-                       '<counter type="BRANCH" missed="31" covered="69"/></report>')
+                       '<counter type="BRANCH" missed="8" covered="92"/></report>')
 
     def test_rejects_missing_report(self):
         with self.assertRaises((OSError, ValueError)):

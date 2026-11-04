@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 import unittest
-import urllib.request
 from support import ROOT, main, run
 
 VERSION = "5.1.1"
@@ -19,8 +18,13 @@ def source():
     for name, digest in HASHES.items():
         path = destination / name
         if not path.exists():
-            with urllib.request.urlopen(f"https://raw.githubusercontent.com/simdjson/simdjson/v{VERSION}/singleheader/{name}", timeout=60) as response:
-                data = response.read()
+            temporary = path.with_suffix(path.suffix + ".download")
+            run("curl", "--fail", "--silent", "--show-error", "--location",
+                "--retry", "3", "--retry-all-errors", "--connect-timeout", "30",
+                "--max-time", "180", "--output", temporary,
+                f"https://raw.githubusercontent.com/simdjson/simdjson/v{VERSION}/singleheader/{name}")
+            data = temporary.read_bytes()
+            temporary.unlink()
             if hashlib.sha256(data).hexdigest() != digest:
                 raise AssertionError(f"simdjson checksum mismatch: {name}")
             path.write_bytes(data)
@@ -47,6 +51,9 @@ class CppValueTests(unittest.TestCase):
         app = work / "test"
         run(os.environ.get("CXX", "c++"), "-std=c++17", "-O1", "-g",
             "-fsanitize=address,undefined", "-DMYNA_STANDALONE_TEST",
+            # LLVM 23.1.4 ld64.lld + ASan loses C++ exception catches on macOS.
+            # Keep pinned Clang/compiler-rt; Apple's linker preserves unwinding.
+            *(["-fuse-ld=/usr/bin/ld"] if sys.platform == "darwin" else []),
             "-I", ROOT / "include", "-I", upstream,
             ROOT / "tests/values/cpp/producer.cpp", upstream / "simdjson.cpp", "-o", app)
         self.assertIn("conformance passed", run(app).stdout)

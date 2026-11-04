@@ -1,0 +1,20 @@
+// The pinned CodSpeed fork targets x86_64 by default. Build its JNI libraries
+// for the hosted ARM builder and dedicated ARM measurement runner instead.
+allprojects {
+    afterEvaluate {
+        if (!plugins.hasPlugin('cpp-library')) return
+        library.targetMachines.set([machines.linux.architecture('aarch64')])
+        toolChains {
+            mynaClang(org.gradle.nativeplatform.toolchain.Clang) {
+                eachPlatform {
+                    cCompiler.executable = System.getenv('CC')
+                    cppCompiler.executable = System.getenv('CXX')
+                    linker.executable = System.getenv('CXX')
+                }
+            }
+        }
+        tasks.withType(org.gradle.language.cpp.tasks.CppCompile).configureEach {
+            compilerArgs.add('-march=armv8-a')
+        }
+    }
+}

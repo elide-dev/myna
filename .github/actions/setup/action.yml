@@ -9,6 +9,7 @@ runs:
         version: '2026.10.25'
         cache_key_prefix: myna-${{ github.job }}
         cache_save_post: true
+    - uses: ./.github/actions/setup-graalvm
     - name: Setup Elide Python and project dependencies
       shell: bash
       run: mise run setup
