@@ -81,7 +81,7 @@ def measure(args):
             if digest(ROOT/name)!=expected: raise RuntimeError('Changed since build: '+name)
     batches=['batch-'+str(n) for n in (4,16,64,256)]
     cases={'native':['control','direct','indirect','identity-direct','identity-indirect','identity-direct-unrolled4','identity-indirect-unrolled4',*batches],
-           'svm':['control','generated-normal','generated-leaf','manual-leaf','inline-pointer','identity-generated','identity-manual','identity-inline-pointer',*batches,*['java-'+b for b in batches]]}
+           'svm':['control','generated-normal','generated-leaf','manual-leaf','inline-pointer','inline-pointer-u4','inline-pointer-u16','identity-inline-pointer-u4','identity-inline-pointer-u16','identity-generated','identity-manual','identity-inline-pointer',*batches,*['java-'+b for b in batches]]}
     results=[];schedule=[(mode,name) for mode,names in cases.items() for name in names]
     random.Random(args.seed).shuffle(schedule)
     logs=args.output.parent/(args.output.stem+'-logs');logs.mkdir(parents=True,exist_ok=True)

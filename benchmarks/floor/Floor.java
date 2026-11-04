@@ -57,6 +57,10 @@ public final class Floor {
       case "identity-generated" -> (n,x) -> { for(int i=0;i<n;i++) x=Identity.leaf(x); return x; };
       case "identity-manual" -> (n,x) -> { for(int i=0;i<n;i++) x=identity(x); return x; };
       case "identity-inline-pointer" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i++) x=fn.invoke(x); return x; };
+      case "inline-pointer-u4" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i+=4) { x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); } return x; };
+      case "identity-inline-pointer-u4" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i+=4) { x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); } return x; };
+      case "inline-pointer-u16" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i+=16) { x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); } return x; };
+      case "identity-inline-pointer-u16" -> (n,x) -> { LongLeaf fn=pointer; for(int i=0;i<n;i+=16) { x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); x=fn.invoke(x); } return x; };
       case "control" -> Measure::reference;
       case "generated-normal" -> (n,x) -> { for(int i=0;i<n;i++) x=Generated.step(x); return x; };
       case "generated-leaf" -> (n,x) -> { for(int i=0;i<n;i++) x=Generated.leaf(x); return x; };
