@@ -7,3 +7,14 @@
 !src/main/java/**
 !llvm
 !llvm/**
+!scripts
+!scripts/build.sh
+!scripts/setup-graalvm.py
+!tools
+!tools/graalvm.json
+!src/values
+!src/values/java
+!src/values/java/**
+!src/feature
+!src/feature/java
+!src/feature/java/**
