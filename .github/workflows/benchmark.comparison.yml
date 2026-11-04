@@ -36,9 +36,9 @@ jobs:
 
   compare:
     needs: build
-    # Reuse dedicated measurement hardware, without CodSpeed instrumentation or
-    # uploading cross-library comparisons into Myna's own regression series.
-    runs-on: codspeed-macro
+    # Use compatible ARM hardware. Shared-host timings are advisory; configure
+    # MYNA_ARM_BENCH_RUNNER for a controlled ARMv8.2+/SVE runner.
+    runs-on: ${{ vars.MYNA_ARM_BENCH_RUNNER || 'ubuntu-24.04-arm' }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

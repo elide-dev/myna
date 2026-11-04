@@ -193,21 +193,26 @@ These tests prove load elimination across the opaque call without pretending tha
 LLVM can inline Java Native Image machine code.
 
 
-The `Boundary comparisons` workflow runs the standalone harness on dedicated
-macro hardware without CodSpeed instrumentation or performance-series uploads.
-It compiles the generator from current Java sources with pinned `javac`, so the
-comparison does not depend on a stale local CLI executable or the macro runner's
-ability to execute the Elide CLI. Build/run/report commands remain usable locally.
-Historical local before/after data is checked in under
-`benchmarks/comparison/baselines`; it is explicitly advisory because this shared
-workstation experienced substantial concurrent load.
+The `Boundary comparisons` workflow runs the standalone harness without CodSpeed
+instrumentation or performance-series uploads. It compiles the generator from
+current Java sources with pinned `javac`. Build/run/report commands remain usable
+locally. Historical local before/after data is checked in under
+`benchmarks/comparison/baselines`; it is advisory because this shared workstation
+experienced substantial concurrent load.
 
-Dedicated ARM measurements use binaries built with the pinned toolchain on hosted
-ARM builders. The measurement runner's older CPU cannot execute the distributed
-Clang binary. C/C++ benchmark code targets ARMv8-A and Native Image uses
-`-march=compatibility`; execution-profile metadata prevents comparing this profile
-with earlier incompatible builds. Build and measurement provenance remain separate.
-The pinned CodSpeed JMH fork's x86-only native-library target is overridden by the
+ARM binaries are built on hosted ARM builders and measured on `ubuntu-24.04-arm`
+by default. Set the repository variable `MYNA_ARM_BENCH_RUNNER` to a compatible,
+controlled ARM runner label for repeatable timing gates. Shared-host wall-time
+results remain advisory. CodSpeed's older `codspeed-macro` ARMv8.0 CPU cannot run
+the pinned compiler/runtime libraries: both native and JNI benchmarks failed with
+illegal instructions there. Compiling workload sources with `-march=armv8-a`
+does not lower the instruction requirements of prebuilt runtime libraries. The
+replacement runner must support ARMv8.2 and SVE for the current linked artifacts.
+
+C/C++ benchmark sources target ARMv8-A and Native Image uses
+`-march=compatibility`; execution-profile and hardware metadata prevent comparing
+incompatible profiles. Build and measurement provenance remain separate. The
+pinned CodSpeed JMH fork's x86-only native-library target is overridden by the
 checked-in Gradle initialization script when building ARM benchmark artifacts.
 
 See `benchmarks/comparison/evidence/` for the scalar direct-call instruction
