@@ -1,0 +1,209 @@
+{
+  "target": "aarch64-apple-darwin",
+  "build_command": "import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path('tests').resolve()))\nfrom support import native_image\nroot=Path.cwd()\nr=native_image('-O3', '-cp', str(root/'build/comparison/classes'), '-H:+UnlockExperimentalVMOptions', '-H:-DeleteLocalSymbols', f'-H:NativeLinkerOption={root}/build/comparison/kernel.o', '-H:-UnlockExperimentalVMOptions', 'bench.Native', '-o', str(root/'build/comparison/native-debug'))\nprint(r.stdout)\nprint(r.stderr)\n",
+  "input_build": {
+    "schema": 1,
+    "workload": "scalar-recurrence-v2",
+    "target": "aarch64-apple-darwin",
+    "revision": "3fcef0829542e0ac7a3c3de2fbb7f46241ce30e7",
+    "dirty": "",
+    "sources": {
+      "benchmarks/comparison/run.py": "fde776dcbbff2411f7d39a90412beac2793acd45ac7af49bbdcdbbc2396a71f5",
+      "benchmarks/comparison/kernel.c": "781043c56d8a80f6525b5343a62604966d03ab0d30d6e2d324a509cfad710ebe",
+      "benchmarks/comparison/boundary.seam": "377220a3de2bd2f78149e8c63aa486eccd7933756ff7c9d1b0b2f32fff8591a4",
+      "benchmarks/comparison/Native.java": "6c7bb7be9b231d12987dab911a700b32580e0eb5ce5fdff6ea0bcadfedf213be",
+      "benchmarks/comparison/Measure.java": "a11f5589a6e81be16b192c33553fb17268d0889e0dc5b0d06e7a7d8cef4b5b2a",
+      "benchmarks/comparison/Jvm.java": "347eb658f94a4a395b3c2e095beb722cd669e500b320150b4f556493bc44bfb8",
+      "benchmarks/comparison/compare.py": "bb6ddf2dec1c5cb5e629ddb837b2490dfd2fb925635ccc6cb6270b9c7fec9871",
+      "src/main/java/dev/elide/myna/Generator.java": "f7d79d8d86acde968e95e447675dcb731aa6c20e5d70bf712c7832a6a2ea6a7d",
+      "src/main/java/dev/elide/myna/backend/Backend.java": "ed0559e3e5e46e6ea118f1d384075b44122e0115b7609aadb3689058d0f89935",
+      "src/main/java/dev/elide/myna/backend/ByValue.java": "3fddbfc2d697f5eb5f7983760ef5864a294b62bb681aa334b928e1bd42ce3fd1",
+      "src/main/java/dev/elide/myna/backend/CHeader.java": "3c7abb618a3749fd93d6e7a1e0e903899b659d9ed37cfa85b4b6ed21c08235b2",
+      "src/main/java/dev/elide/myna/backend/JavaFfm.java": "928e61685de4e0ff245c40818202d1d127691f0610894350a306f9e5955b6073",
+      "src/main/java/dev/elide/myna/backend/Llvm.java": "5de8d4f010d842cf819a83c2da9eb946ca539d2d2e68641b6674b8f1c6bc1359",
+      "src/main/java/dev/elide/myna/backend/NativeImage.java": "cc07d1e6b5f0c91a17234b2475add58e3ddadd4ed3aaa08be1c6c0e946190976",
+      "src/main/java/dev/elide/myna/backend/NativeImageForeign.java": "b86765d7f79fe37044a61b6527e7f8bc301d21f85f710cb9477413dc854e300b",
+      "src/main/java/dev/elide/myna/backend/NativeOwnership.java": "b498903c67680aa242d045c424c57d6d58428b8f536ec1be803954d087fe4f64",
+      "src/main/java/dev/elide/myna/backend/RustFfi.java": "c28fc3a05a2b9ce9acf345909d7280d60b07f21f38e9415fac7e6146bba80ddf",
+      "src/main/java/dev/elide/myna/backend/RustOwnership.java": "210ff5dfd278f32a8efec2c60f45f94370de43ba7ced3d7b553f68c157fd0f5a",
+      "src/main/java/dev/elide/myna/backend/Types.java": "35e4c047ff79576f2cfcec244ee1a0b57b6329641c248b511398e2adc239f402",
+      "src/main/java/dev/elide/myna/cli/Main.java": "057e1bcbdf186f3cd9c8742ce9521f04ff86c00175a396a0a011cf4dc03ccb0a",
+      "src/main/java/dev/elide/myna/frontend/Dsl.java": "0d1a423fa5946deb8d0fa3c9db7fdb691e0345e20fda2566acdfaa58c4afa024",
+      "src/main/java/dev/elide/myna/model/Seam.java": "effdfabbedb902b1f923c5e31031cf980f175b5c61d31f3207bfdba5ff044184",
+      "src/main/java/dev/elide/myna/serialize/SeamJson.java": "b0bbb9a95cf4d1a8f129acb3708407bbc8b73f7690f0b2a69ba51575e66cf687",
+      "src/main/java/dev/elide/myna/validate/OwnershipValidator.java": "0bee50f4e6f62da4d99896eb8692cdd2262162e16e610ce53558f53c53a0070f",
+      "src/main/java/dev/elide/myna/validate/Validator.java": "faea91e88b58e6eb1032dbbb53288146d98d35813798328047cbe3e2d72290b2",
+      "tests/support.py": "ddabfdb0ffabff20e3f50efcb08b134eedf8012efcb775d1ba541e333bf90efc",
+      "mise.lock": "86a84783bbd988ca9fd8e69242175b17f669b455e3903a1e43b83be55403ee4a",
+      "tools/graalvm.json": "c2bfbb719e54b2a46158c8c294f06c39409829754b08e41dc851add034c5c84c"
+    },
+    "binaries": {
+      "build/comparison/native": "2471570e39eef527a0e6e99eccb4fb140713a69737a0327f23bab180f478676f",
+      "build/comparison/ffm-aot": "16e69a222240c7aa49edd48f46e81b53f9d2cf0f8a5b7bb35d83fd869767d279",
+      "build/comparison/libboundary.dylib": "755570f8fe75144bd77326874f80d7f696f57c0f9a65ac416026e65bedd3a17d",
+      "build/comparison/classes/bench/GeneratedForeignFeature.class": "b859a3452e7b5bd1feff02e3aa829de98c53e055e8abf60404d5ce666f9e6d48",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_Downcall.class": "3512646efbbebecbd648f8dffab887aa3450f4be1849e73fd4ccdb85e15fbbe0",
+      "build/comparison/classes/bench/Measure$Loop.class": "ac2aa6cc9a24f3f1a0dff4bca35880bec76891dc4edef962b8023d38b531937e",
+      "build/comparison/classes/bench/Native.class": "696d3c84220833678b5ea8d6bc01fd50ab20574b2fe0f79ee00b0b4f76f53623",
+      "build/comparison/classes/bench/GeneratedFFM$step_Downcall.class": "d7e592022d53a7e3d7c0997eabf22c9559e4bca9299ca0a0a965b94aea37c978",
+      "build/comparison/classes/bench/GeneratedFFM$step_Binding.class": "7605bdd927cb688b1d8bb829aeb35c1c4b61be5a63b1583d77ac7746d22a0832",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_Binding.class": "fcd87976163651c6d004bedada539a2d9ad5ac590d3fe2574a517ff478d1c01a",
+      "build/comparison/classes/bench/Measure.class": "d5fa10c03d76ceb4c0baa62c8d89b00335c8b755feef6aba2a8d7a3350964f80",
+      "build/comparison/classes/bench/GeneratedFFM.class": "302d24633039d788b2636f109b7679ef9720bb175828ec816984b73ae6e03c44",
+      "build/comparison/classes/bench/Jvm$Unbound.class": "fb1af29b73630048b30d5eb06d32155e788658426b7e637acd7c837b20374e79",
+      "build/comparison/classes/bench/Jvm.class": "4b40084cb3579a1b96253866f915db62e8c5b27f63ab36b45ca75932995744bf",
+      "build/comparison/classes/bench/Generated.class": "feceb3252814bc971e61bffad83755c36a5b2f9d268331179760b5d4dabef41d"
+    },
+    "versions": {
+      "java": "openjdk version \"25.0.4.1.1\" 2026-08-18\nOpenJDK Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nOpenJDK 64-Bit Server VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24, mixed mode, sharing)\n",
+      "clang": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: arm64-apple-darwin\nThread model: posix\nInstalledDir: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin\nConfiguration file: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/arm64-apple-darwin.cfg\n",
+      "native-image": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n",
+      "toolchain": "2026.11.1\n"
+    },
+    "graalvm": {
+      "version": "25.5.5-elide.24",
+      "edition": "ce",
+      "platforms": {
+        "Darwin-arm64": {
+          "archive": "macos-aarch64",
+          "sha256": "8b03207cb35ab5b9bec6422b4266178315f7a056ae88e90f57cc22b2362c44a6"
+        },
+        "Linux-x86_64": {
+          "archive": "linux-amd64",
+          "sha256": "83bd7b3b78e76de00bb3879eeae79a8b439f9356fefd3bf3b84d2818af8961e7"
+        },
+        "Linux-aarch64": {
+          "archive": "linux-aarch64",
+          "sha256": "f89eb4bdc6596b8aa7acdf063997c69ab06aa9a488e8f98cff07865b0261618f"
+        }
+      }
+    },
+    "build_commands": [
+      [
+        "javac",
+        "-d",
+        "/Users/sam/workspace/myna/build/comparison/generator-classes",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/Generator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Backend.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/ByValue.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/CHeader.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/JavaFfm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Llvm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImage.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImageForeign.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustFfi.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Types.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/cli/Main.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/frontend/Dsl.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/model/Seam.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/serialize/SeamJson.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/OwnershipValidator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/Validator.java"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/comparison/boundary.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/comparison/generated",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/comparison/kernel.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-shared",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+      ],
+      [
+        "javac",
+        "-d",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Jvm.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Measure.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Native.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/Generated.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedFFM.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedForeignFeature.java"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:NativeLinkerOption=/Users/sam/workspace/myna/build/comparison/kernel.o",
+        "-H:-UnlockExperimentalVMOptions",
+        "bench.Native",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/native"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "--enable-native-access=ALL-UNNAMED",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "--initialize-at-run-time=bench.Jvm",
+        "--initialize-at-build-time=bench.Jvm$Unbound",
+        "--features=bench.GeneratedForeignFeature",
+        "bench.Jvm",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot"
+      ],
+      [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    ],
+    "library": "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+  },
+  "files": {
+    "native-debug": "5375c975c711e94e566a66fd4f460c48057fba96e45c6338c02b376d05a84516",
+    "native-debug.dsym": "ee7a46a8343bd9481dff6d57cce93324e3867f937dc6b97fbb26bcb981b7384f",
+    "normal-a.asm": "f01e85331d71e4eb8416c1aa0370c19e1bbd5616c87ce3dd51b209563859174e",
+    "normal-b.asm": "18018c320b82c278351370f6f18720252651059d32ed739859a5208758e989fb"
+  },
+  "findings": {
+    "normal_loop_instructions": 72,
+    "normal_loops_equal_after_relocation_normalization": true,
+    "leaf_stub_instructions": 8,
+    "leaf_stubs_equal_after_relocation_normalization": true
+  },
+  "limitations": "Scalar dependent-latency workload only. Local symbols preserved for inspection; no source-level DWARF from Native Image on macOS."
+}

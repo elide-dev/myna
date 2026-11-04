@@ -9,6 +9,7 @@
 !llvm/**
 !scripts
 !scripts/build.sh
+!scripts/symbols.sh
 !scripts/setup-graalvm.py
 !tools
 !tools/graalvm.json

@@ -12,7 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sdk:
+    uses: ./.github/workflows/job.benchmark-sdk.yml
+
   compare:
+    needs: sdk
     # Reuse dedicated measurement hardware, without CodSpeed instrumentation or
     # uploading cross-library comparisons into Myna's own regression series.
     runs-on: codspeed-macro

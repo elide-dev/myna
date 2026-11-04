@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 import unittest
-import urllib.request
 from support import ROOT, main, run
 
 VERSION = "5.1.1"
@@ -19,8 +18,13 @@ def source():
     for name, digest in HASHES.items():
         path = destination / name
         if not path.exists():
-            with urllib.request.urlopen(f"https://raw.githubusercontent.com/simdjson/simdjson/v{VERSION}/singleheader/{name}", timeout=60) as response:
-                data = response.read()
+            temporary = path.with_suffix(path.suffix + ".download")
+            run("curl", "--fail", "--silent", "--show-error", "--location",
+                "--retry", "3", "--retry-all-errors", "--connect-timeout", "30",
+                "--max-time", "180", "--output", temporary,
+                f"https://raw.githubusercontent.com/simdjson/simdjson/v{VERSION}/singleheader/{name}")
+            data = temporary.read_bytes()
+            temporary.unlink()
             if hashlib.sha256(data).hexdigest() != digest:
                 raise AssertionError(f"simdjson checksum mismatch: {name}")
             path.write_bytes(data)
