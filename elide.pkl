@@ -6,7 +6,7 @@ import "elide:Testing.pkl" as Testing
 import "elide:Coverage.pkl" as Coverage
 
 name = "myna"
-version = "0.6.0"
+version = "0.7.0"
 jvm {
   main = "dev.elide.myna.cli.Main"
   target = 25
@@ -15,12 +15,15 @@ sources {
   ["main"] = new Sources.SourceSetSpec {
     paths { "src/main/java/**/*.java" }
   }
+  ["values"] = new Sources.SourceSetSpec {
+    paths { "src/values/java/**/*.java" }
+  }
   ["feature"] = new Sources.SourceSetSpec {
     dependsOn { "main" }
     paths { "src/feature/java/**/*.java" }
   }
   ["test"] = new Sources.SourceSetSpec {
-    dependsOn { "main"; "feature" }
+    dependsOn { "main"; "feature"; "values" }
     paths { "src/test/java/**/*.java" }
   }
 }
@@ -29,6 +32,10 @@ artifacts {
     name = "myna"
     main = "dev.elide.myna.cli.Main"
     sources { "main" }
+  }
+  ["values-jar"] = new Jvm.Jar {
+    name = "myna-values"
+    sources { "values" }
   }
   ["feature-jar"] = new Jvm.Jar {
     name = "myna-feature"

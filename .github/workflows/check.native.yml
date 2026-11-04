@@ -54,6 +54,9 @@ jobs:
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
         run: mise run build:llvm
+      - run: mise run test:rust
+      - name: C++ value ABI and simdjson conformance
+        run: mise run test:cpp
       - run: mise run test:e2e
       - run: mise run test:llvm
       - run: mise run test:native-image
