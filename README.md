@@ -21,13 +21,28 @@ See [releases](https://github.com/elide-dev/myna/releases) for published SDKs an
 
 ## Call overhead
 
-**Direct SVM bindings perform on par with handwritten Native Image C calls in this scalar benchmark.** Normal transitions take about **13.3 ns/call**; explicitly contracted native leaves take about **1.5 ns/call**. Equivalent generated and handwritten direct-call paths also produce matching instruction sequences in the [retained machine-code comparison](benchmarks/comparison/evidence/).
+**Short native leaves can get close to the native-call floor.** On the pinned Linux ARM64 run, the opt-in inlineable leaf pointer takes **0.53 ns per identity call**, versus **1.50 ns** for ordinary generated or handwritten SVM leaves and **0.44 ns** for an unrolled native function-pointer caller.
 
-![Myna versus handwritten Native Image call overhead: normal C calls 13.30 vs 13.29 ns, native leaves 1.54 vs 1.56 ns, AOT FFM 15.77 vs 16.10 ns](docs/charts/svm-boundaries.svg)
+![Native leaf call latency compared with native function-pointer callers on Linux ARM64 and Apple M5 Max](docs/charts/leaf-floor.svg)
 
-These are measured scalar-call latencies, including the small callee and loop; the roughly 0.59 ns control is **not subtracted**. Compare each pair under its own transition contract. Five fresh processes on a shared Linux ARM64 host show comparable performance, not a small percentage win or a universal latency guarantee. Native leaves require an explicit nonblocking contract.
+The [typed leaf-pointer example](examples/leaf-pointer/README.md) uses Myna's existing signature mapping and resolves the address once at runtime. It removes the extra leaf adapter stub, uses **internal Graal API**, and requires short, bounded, nonblocking, primitive-only calls with **no Java reentry**. Ordinary generated bindings retain the portable Native Image API. Both paths are exercised with the pinned compiler; the opt-in path also passes concurrent allocation/GC stress.
 
-[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and additional interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun the benchmarks](docs/benchmarking.md) · [Regenerate this chart](docs/benchmarking.md#performance-charts)
+The chart measures an identity function plus its caller loop, with no control subtraction. Five fresh processes expose process variation. Compare within each host. In the Linux arithmetic workload, the inlineable pointer measures **0.76 ns/op**; a bounded 16-call Java batch reaches **0.59 ns/op**, close to the native arithmetic baseline. Explicit loop unrolling is measured separately: it helps the identity workload on the Mac but is not a universal improvement.
+
+[Linux raw measurements](benchmarks/comparison/baselines/leaf-floor-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/leaf-floor-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/leaf-floor-macos-arm64.md) · [Rerun the floor experiment](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
+
+<details>
+<summary>Portable normal-transition, native-leaf, and AOT FFM baseline</summary>
+
+Direct generated SVM bindings perform on par with handwritten Native Image C calls in the retained v0.7.2 scalar benchmark. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected generated and handwritten direct-call paths produce matching instruction sequences.
+
+![Portable Myna versus handwritten Native Image scalar call latency](docs/charts/svm-boundaries.svg)
+
+These latencies include the scalar callee and loop; the roughly 0.59 ns control is not subtracted. Transition contracts differ across pairs. These are shared-host measurements, not universal latency guarantees.
+
+[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun commands](docs/benchmarking.md) · [Regenerate charts](docs/benchmarking.md#performance-charts)
+
+</details>
 
 ## Build and use
 

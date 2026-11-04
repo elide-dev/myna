@@ -25,3 +25,5 @@ level; they do not establish a universal minimum or a portable percentage advant
 
 
 `hosted-arm64-0.7.2` is the maintained five-process CI baseline for release source `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. It includes full ARM CPU identity and points to the originating workflow. It drives the checked-in SVM charts; it is still a shared-host measurement, not a controlled-hardware timing gate.
+
+The `leaf-floor-linux-arm64` and `leaf-floor-macos-arm64` JSON/Markdown pairs add matched native direct/indirect calls, identity functions, inlineable typed pointers, explicit unrolling and bounded batches. They use the same linked kernel objects within each build, retain all measured variants, and include separate CPU/build provenance. These experiments are not comparable as absolute timings across hosts or with the earlier scalar-only baselines. See [the floor harness](../../floor/README.md).

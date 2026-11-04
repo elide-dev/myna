@@ -33,6 +33,14 @@ The same model can later drive FFM `critical` options, but that mapping is not e
 
 See the [Native Image transition contract](https://www.graalvm.org/sdk/javadoc/org/graalvm/nativeimage/c/function/CFunction.Transition.html). Long-running no-transition calls can delay safepoints and GC, so leaf eligibility is an implementation obligation, not a name-based heuristic.
 
+## Opt-in inlineable leaf pointers
+
+The [typed leaf-pointer example](../examples/leaf-pointer/README.md) maps an existing `CFunctionPointer` interface through Myna's `java_type` signature support. A generated resolver obtains the native address at runtime. The primitive-only interface uses the pinned Graal compiler's `@AlwaysInline` and `@Uninterruptible(mayBeInlined=true)` annotations with `@InvokeCFunctionPointer(NO_TRANSITION)`. This permits the pointer-call adapter to inline into an interruptible Java caller; no standalone adapter stub remains in the retained assembly. The outer loop retains safepoint checks. Library/address lifetime remains the consumer's responsibility.
+
+This is explicitly compiler-dependent and does not change the ordinary generated `@CFunction` API. It does not authorize managed references, Java callbacks, arbitrary by-value adapters, long work, or blocking calls. The benchmark compiles this exact example and runs concurrent allocation/GC stress with correctness checks and observed collections. The native annotation jar is a compile-time input, not an application runtime dependency to bundle.
+
+The [floor harness](../benchmarks/floor/README.md) compares identical linked kernel objects under ordinary generated/handwritten leaf calls, inlineable pointers, native direct/indirect calls, explicit caller unrolling, and fixed-size C/Java batches. It distinguishes identity-call cost from arithmetic dependency-chain latency. Bounded Java batches can also let Graal inline the ordinary leaf stubs within an uninterruptible caller, amortizing entry into that caller. The entire batch must satisfy the bounded-latency contract, and larger batches are not uniformly faster.
+
 ## Real cross-language optimization
 
 The implemented LLVM applicator rewrites matching definitions, declarations, and direct calls in compiler-produced objects before ThinLTO indexing. It regenerates summaries and hashes, so the optimizer sees the contracts in the actual modules it consumes. The tests demonstrate an optimization across an opaque foreign call in both Rust and C callers. See [ThinLTO integration](thinlto.md).
@@ -60,7 +68,7 @@ The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer 
 
 ## Performance acceptance
 
-The current evidence is executable ABI correctness and inspected LLVM optimization results, not measured minimum latency. Future performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
+The retained evidence includes executable ABI correctness, inspected LLVM/native code, and measured scalar call floors on Linux ARM64 and macOS ARM64. It does not establish a universal minimum for every ABI or workload. Performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
 
 See [repeatable benchmarks and comparisons](benchmarking.md) for the measurement strategy.
 

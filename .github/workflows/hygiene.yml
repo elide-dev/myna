@@ -31,6 +31,7 @@ jobs:
           python3 -m venv build/charts-venv
           build/charts-venv/bin/pip install --require-hashes -r benchmarks/comparison/requirements.txt
           build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/hosted-arm64-0.7.2.json --output build/charts/svm-boundaries
+          build/charts-venv/bin/python benchmarks/comparison/floor-chart.py --output build/charts/leaf-floor
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: performance-charts

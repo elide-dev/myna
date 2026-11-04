@@ -235,3 +235,18 @@ python3 scripts/check-hygiene.py
 The plot separates normal transitions, native leaves, and AOT FFM. Bars show medians of process medians on a shared linear axis starting at zero; whiskers show process min–max. The runtime-bound FFM diagnostic and JVM comparisons remain in the full results table rather than the README chart. Shared-host measurements remain advisory. SVG and PNG exports plus a manifest of input/output hashes live under `docs/charts/`; changing a baseline, chart script, or dependency lock requires regenerating them. CI verifies the manifest and renders fresh artifacts without inventing a performance threshold.
 
 To update the baseline, run the complete comparison workflow, verify workload correctness and hardware/toolchain provenance, retain its JSON, and regenerate its table and charts in the same PR. `compare.py` rejects mismatched profiles and incomplete CPU identities. Refresh `requirements.txt` from `requirements.in` with `uv pip compile --generate-hashes --output-file benchmarks/comparison/requirements.txt benchmarks/comparison/requirements.in` when upgrading plotting dependencies.
+
+## Native call floor
+
+Run `mise run bench:floor-build` and `mise run bench:floor` for matched native/SVM identity and arithmetic workloads. The [harness contract](../benchmarks/floor/README.md) specifies the exact calls, controls, unrolling, bounded batches, independent checksum oracle, and concurrent-GC test. The dedicated Native call floor workflow retains build commands, source/binary hashes, CPU identity, full assembly, sample logs and summaries. It is also manually dispatchable; the same controlled ARM runner variable applies.
+
+The checked-in [Linux baseline](../benchmarks/comparison/baselines/leaf-floor-linux-arm64.json) and [Mac baseline](../benchmarks/comparison/baselines/leaf-floor-macos-arm64.json) are separate experiments, not cross-host speedup comparisons. The hosted build's PR merge revision is preserved; `verified_source_commit` records the commit whose source hashes were independently checked. Use five or more processes and the default 16,777,216 calls/sample when refreshing them. Keep the slower cases, including nonmonotonic batch sizes, in the full report.
+
+The README's leaf chart compares identity calls, including native function-pointer callers explicitly unrolled four times. It shows the ordinary inlineable pointer separately from explicitly unrolled SVM variants in the full table. Regenerate it with:
+
+```sh
+build/charts-venv/bin/python benchmarks/comparison/floor-chart.py
+python3 scripts/check-hygiene.py
+```
+
+`benchmarks/comparison/inspect-floor.py ARTIFACT_DIRECTORY OUTPUT_PREFIX` extracts the ordinary leaf stubs, native baselines and SVM loops from the full workflow assembly, preserving hashes and build metadata. It fails if a standalone `LongLeaf.invoke` adapter remains. Both baseline files and both chart renderers are covered by input/output manifests and rerendered in the hygiene workflow. Do not silently replace an identity result with an arithmetic result or subtract independently timed controls to claim pure crossing cost.
