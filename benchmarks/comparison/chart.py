@@ -21,49 +21,51 @@ for result in data["results"]:
     groups.setdefault((result["mode"], result["case"]), []).append(
         statistics.median(s["ns"] / s["iterations"] for s in result["samples"]))
 
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10,
+plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11,
                      "svg.hashsalt": "myna-svm-boundaries", "svg.fonttype": "none"})
-fig, axes = plt.subplots(2, 2, figsize=(11, 6.5))
+fig, ax = plt.subplots(figsize=(11, 6), facecolor="#ffffff")
+fig.subplots_adjust(left=.27, right=.94, top=.72, bottom=.25)
+colors = ["#087f8c", "#94a3b8"]
 panels = [
-    ("Direct C: normal transition", "native", ["generated-normal", "manual-normal"], False),
-    ("Direct C: native leaf", "native", ["generated-leaf", "manual-leaf"], False),
-    ("AOT FFM: build-time adapters", "ffm-aot", ["generated-ffm", "manual-ffm"], False),
-    ("AOT FFM: adapter strategy", "ffm-aot", ["generated-ffm", "manual-bound-ffm"], True),
+    ("Direct C", "Normal VM transition", "native", ["generated-normal", "manual-normal"]),
+    ("Native leaf", "No VM transition¹", "native", ["generated-leaf", "manual-leaf"]),
+    ("AOT FFM", "Build-time adapters", "ffm-aot", ["generated-ffm", "manual-ffm"]),
 ]
-labels = {"generated-normal": "Generated", "manual-normal": "Handwritten",
-          "generated-leaf": "Generated", "manual-leaf": "Handwritten",
-          "generated-ffm": "Generated", "manual-ffm": "Handwritten",
-          "manual-bound-ffm": "Runtime-bound"}
-for ax, (title, mode, cases, logarithmic) in zip(axes.flat, panels):
-    for y, case in enumerate(cases):
+for group, (title, subtitle, mode, cases) in enumerate(panels):
+    center = 6 - group * 2.5
+    ax.text(-.035, center + .13, title, transform=ax.get_yaxis_transform(),
+            ha="right", va="center", fontsize=13, fontweight="bold", color="#172b3a")
+    ax.text(-.035, center - .40, subtitle, transform=ax.get_yaxis_transform(),
+            ha="right", va="center", fontsize=9, color="#526578")
+    for index, case in enumerate(cases):
         values = groups[(mode, case)]
         median = statistics.median(values)
-        color = "#176b91" if case.startswith("generated") else "#a75d23"
-        ax.errorbar(median, y, xerr=[[median - min(values)], [max(values) - median]],
-                    fmt="D", color=color, capsize=5, markersize=6)
-        offsets = [(i - (len(values) - 1) / 2) * .045 for i in range(len(values))]
-        ax.scatter(values, [y + offset for offset in offsets], color=color, s=14, alpha=.6)
-        ax.annotate(f"{median:,.2f} ns", (median, y), xytext=(0, 17),
-                    textcoords="offset points", ha="center", fontsize=10)
-    ax.set_yticks(range(len(cases)), [labels[c] for c in cases])
-    ax.set_ylim(-.55, 1.65)
-    ax.invert_yaxis()
-    ax.set_title(title, loc="left", fontweight="bold", fontsize=11)
-    ax.set_xlabel("Nanoseconds / call" + (" (log scale)" if logarithmic else ""))
-    if logarithmic:
-        ax.set_xscale("log")
-        ax.set_xlim(5, 20000)
-    else:
-        ax.set_xlim(0, max(max(groups[(mode, c)]) for c in cases) * 1.25)
-    ax.grid(axis="x", alpha=.2)
-    ax.spines[["top", "right"]].set_visible(False)
+        y = center + (.32 if index == 0 else -.32)
+        ax.barh(y, median, height=.44, color=colors[index], zorder=3)
+        ax.errorbar(median, y, xerr=[[median-min(values)], [max(values)-median]],
+                    fmt="none", ecolor="#243746", capsize=3, linewidth=1, zorder=4)
+        ax.text(max(values)+.35, y, f"{median:.2f}", va="center", fontsize=12,
+                fontweight="bold" if index == 0 else "normal", color="#172b3a")
+ax.set_xlim(0, 20)
+ax.set_ylim(-.05, 7.15)
+ax.set_xticks([0, 5, 10, 15, 20])
+ax.set_yticks([])
+ax.tick_params(axis="x", length=0, colors="#526578", labelsize=10, pad=8)
+ax.set_xlabel("Nanoseconds per call · lower is better", color="#526578", fontsize=10, labelpad=10)
+ax.grid(axis="x", color="#e7edf1", linewidth=.8, zorder=0)
+ax.spines[:].set_visible(False)
+fig.text(.055, .91, "Native Image call overhead", fontsize=23, fontweight="bold", color="#172b3a")
+fig.text(.055, .855, "Myna generated bindings vs. handwritten equivalents", fontsize=12, color="#526578")
+from matplotlib.patches import Patch
+fig.legend(handles=[Patch(color=colors[0], label="Myna"), Patch(color=colors[1], label="Handwritten")],
+           loc="upper left", bbox_to_anchor=(.05, .815), ncol=2, frameon=False, fontsize=11,
+           handlelength=1.2, columnspacing=2.5)
 revision = data["build"].get("verified_source_commit", data["build"]["revision"])
-fig.suptitle("Myna SVM scalar call latency", x=.04, ha="left", fontsize=17, fontweight="bold")
-fig.text(.04, .045,
-         f"Source {revision[:12]} · {data['host']['machine']} · {data['forks']} fresh processes per case\n"
-         "Diamonds: median of process medians. Dots/ranges: individual processes/min–max. "
-         "Shared-host results are advisory; lower is better.", fontsize=9)
-fig.tight_layout(rect=(.02, .12, .99, .95), h_pad=2.5, w_pad=3)
+fig.text(.055, .075,
+         f"{data['host']['machine']} · {data['forks']} fresh processes/case · Median latency; whiskers show process min–max\n"
+         f"Scalar workload, no control subtraction · Shared-host baseline · Source {revision[:7]}",
+         fontsize=9, color="#526578", linespacing=1.6)
+fig.text(.055, .015, "¹ Leaf calls require an explicit nonblocking native-leaf contract.", fontsize=8, color="#526578")
 args.output.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(args.output.with_suffix(".svg"), metadata={"Date": None})
 fig.savefig(args.output.with_suffix(".png"), dpi=160, metadata={"Software": "Myna chart.py"})

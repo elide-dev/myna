@@ -19,6 +19,16 @@ A Native Image command-line generator for Rust / Substrate VM seams. One typed S
 
 See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
 
+## Call overhead
+
+**Direct SVM bindings perform on par with handwritten Native Image C calls in this scalar benchmark.** Normal transitions take about **13.3 ns/call**; explicitly contracted native leaves take about **1.5 ns/call**. Equivalent generated and handwritten direct-call paths also produce matching instruction sequences in the [retained machine-code comparison](benchmarks/comparison/evidence/).
+
+![Myna versus handwritten Native Image call overhead: normal C calls 13.30 vs 13.29 ns, native leaves 1.54 vs 1.56 ns, AOT FFM 15.77 vs 16.10 ns](docs/charts/svm-boundaries.svg)
+
+These are measured scalar-call latencies, including the small callee and loop; the roughly 0.59 ns control is **not subtracted**. Compare each pair under its own transition contract. Five fresh processes on a shared Linux ARM64 host show comparable performance, not a small percentage win or a universal latency guarantee. Native leaves require an explicit nonblocking contract.
+
+[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and additional interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun the benchmarks](docs/benchmarking.md) · [Regenerate this chart](docs/benchmarking.md#performance-charts)
+
 ## Build and use
 
 Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.1 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
@@ -120,12 +130,6 @@ git submodule update --init --recursive third-party/codspeed-jvm
 mise run bench:comparison-build
 mise run bench:comparison
 ```
-
-The standalone harness compares SVM direct C and AOT FFM against equivalent handwritten calls, with JVM interop as a secondary diagnostic. See [benchmark contracts and rerun commands](docs/benchmarking.md), [raw baseline](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json), and [process statistics](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md).
-
-![SVM scalar latency with process variability](docs/charts/svm-boundaries.svg)
-
-The chart uses five fresh processes per case, shows process variability, and does not establish a small percentage performance win. [Regenerate the chart](docs/benchmarking.md#performance-charts) from the retained measurements; CodSpeed tracks Myna's own workloads separately.
 
 ## Downstream distribution
 
