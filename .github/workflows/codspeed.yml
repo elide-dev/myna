@@ -122,4 +122,9 @@ jobs:
       - uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
         with:
           mode: ${{ matrix.mode }}
-          run: benchmarks/native/run.sh
+          run: ${{ matrix.mode == 'walltime' && 'python3 benchmarks/native/walltime.py' || 'benchmarks/native/run.sh' }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && matrix.mode == 'walltime'
+        with:
+          name: native-wall-samples
+          path: build/bench-native/results/

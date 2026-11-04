@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 #include <string>
+#include <vector>
 #include <unistd.h>
 
 static volatile uint64_t observed;
@@ -35,16 +36,28 @@ int main(int argc, char **argv) {
     if (view.node_count != 33 || view.nodes[0].length != 32) std::abort();
     observed = view.node_count + view.nodes[32].length;
   };
-  encode(); // Reserve storage before the measured region.
+  bool walltime = std::getenv("MYNA_WALLTIME") != nullptr;
+  int warmup = walltime ? 10 : 1;
+  for (int i = 0; i < warmup; ++i) __codspeed_root_frame__values(encode);
+  std::vector<int64_t> samples(walltime ? 30 : 1);
   if (instrumented && (instrument_hooks_set_integration(hooks, "myna-native", "1.0.0") ||
                        instrument_hooks_start_benchmark_inline(hooks))) return 4;
-  auto start = std::chrono::steady_clock::now();
-  __codspeed_root_frame__values(encode);
-  auto elapsed = std::chrono::steady_clock::now() - start;
+  for (auto &sample : samples) {
+    auto start = std::chrono::steady_clock::now();
+    __codspeed_root_frame__values(encode);
+    sample = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - start).count();
+  }
   if (instrumented && (instrument_hooks_stop_benchmark_inline(hooks) ||
       instrument_hooks_set_executed_benchmark(hooks, getpid(), ("benchmarks/native/values.cpp::" + name).c_str()))) return 4;
   instrument_hooks_deinit(hooks);
   if (observed != 33 + text.size()) return 5;
-  std::cout << "{\"case\":\"" << name << "\",\"iterations\":1000,\"ns\":"
-            << std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count() << "}\n";
+  std::cout << "{\"case\":\"" << name << "\",\"pid\":" << getpid()
+            << ",\"iterations\":1000,\"warmup_iters\":" << warmup * 1000
+            << ",\"samples_ns\":[";
+  for (size_t i = 0; i < samples.size(); ++i) {
+    if (i) std::cout << ',';
+    std::cout << samples[i];
+  }
+  std::cout << "]}\n";
 }
