@@ -46,7 +46,7 @@ def build():
                      "-H:+UnlockExperimentalVMOptions", "-H:-CheckToolchain",
                      f"-H:CCompilerPath={os.environ['CC']}", "-H:-UnlockExperimentalVMOptions", *native_args])
     ffm_args = ["-O3", "--enable-native-access=ALL-UNNAMED", "-cp", str(classes),
-                "--initialize-at-run-time=bench.Jvm", "--features=bench.GeneratedForeignFeature",
+                "--initialize-at-run-time=bench.Jvm", "--initialize-at-build-time=bench.Jvm$Unbound", "--features=bench.GeneratedForeignFeature",
                 "bench.Jvm", "-o", str(WORK / "ffm-aot")]
     result = native_image(*ffm_args)
     (WORK / "ffm-build.log").write_text(result.stdout + result.stderr)
@@ -63,7 +63,7 @@ def build():
         result = run(*command)
         versions[tool] = result.stdout + result.stderr
     metadata = {
-        "schema": 1, "workload": "scalar-recurrence-v1", "target": TARGET,
+        "schema": 1, "workload": "scalar-recurrence-v2", "target": TARGET,
         "revision": execute("git", "rev-parse", "HEAD").strip(),
         "dirty": execute("git", "status", "--porcelain"),
         "sources": {str(p.relative_to(ROOT)): digest(p) for p in sources if p.is_file()},
@@ -83,8 +83,8 @@ def measure(args):
         if digest(ROOT / name) != expected:
             raise RuntimeError(f"Binary changed since build: {name}")
     cases = {"native": ["control", "generated-normal", "manual-normal", "generated-leaf", "manual-leaf"],
-             "jvm": ["control", "generated-ffm", "manual-ffm", "jni"],
-             "ffm-aot": ["control", "generated-ffm", "manual-ffm"]}
+             "jvm": ["control", "generated-ffm", "manual-ffm", "manual-bound-ffm", "jni"],
+             "ffm-aot": ["control", "generated-ffm", "manual-ffm", "manual-bound-ffm"]}
     schedule = [(mode, name) for mode, names in cases.items() for name in names]
     random.Random(args.seed).shuffle(schedule)
     samples = []
@@ -119,7 +119,7 @@ def measure(args):
             evidence = []
             if mode == "jvm":
                 method = {"control": "bench.Measure::reference", "generated-ffm": "bench.Jvm::lambda$main$0",
-                          "manual-ffm": "bench.Jvm::lambda$main$1", "jni": "bench.Jvm::lambda$main$2"}[name]
+                          "manual-ffm": "bench.Jvm::lambda$main$1", "manual-bound-ffm": "bench.Jvm::lambda$main$2", "jni": "bench.Jvm::lambda$main$3"}[name]
                 evidence = [line for line in result.stdout.splitlines() if method in line
                             and " b " in line and line.split()[0].isdigit()
                             and int(line.split()[0]) <= parsed[0]["warmup_uptime_ms"]]

@@ -12,6 +12,10 @@ public final class FfmMain {
       for (int i = 0; i < 100; i++) {
         if (MynaFFM.inspect(value) != 42) throw new AssertionError("typed FFM result");
       }
+      if (MynaFFM.reducer().address() == 0) throw new AssertionError("no-argument pointer return");
+      var independentlyBound = MynaFFM.inspect(java.lang.foreign.SymbolLookup.loaderLookup());
+      if ((long) independentlyBound.invokeExact(value) != 42)
+        throw new AssertionError("SymbolLookup factory compatibility");
       // Records by value: FFM lowers the C ABI itself, unlike Native Image @CFunction.
       var triple = arena.allocate(MynaFFM.Triple_LAYOUT);
       triple.set(ValueLayout.JAVA_LONG, MynaFFM.Triple_a_OFFSET, 1L);

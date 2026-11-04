@@ -1,5 +1,6 @@
 """Prove actual object/rlib changes, optimization effects, and final ThinLTO linkage."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -87,6 +88,22 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
         caller_irs = [self.ir(p) for p in saved if "@c_probe" in self.ir(p) or "@rust_probe" in self.ir(p)]
         self.assertTrue(any("captures(none)" in text for text in caller_irs), "attributes survive into ThinLTO backend")
         self.assertTrue(any("ret i64 42" in text for text in caller_irs))
+        evidence = ROOT / "build/reports/thinlto" / TARGET
+        evidence.mkdir(parents=True, exist_ok=True)
+        for label, obj in [("c-before", original), ("c-after", annotated),
+                           ("rust-before", rust_obj), ("rust-after", rust_annotated)]:
+            (evidence / f"{label}.ll").write_text(self.optimized(obj))
+        for i, text in enumerate(caller_irs):
+            (evidence / f"linked-{i}.ll").write_text(text)
+        (evidence / "linked.asm").write_text(run(llvm("llvm-objdump"), "-d", binary).stdout)
+        (evidence / "metadata.json").write_text(json.dumps({
+            "target": TARGET, "clang": run(llvm("clang"), "--version").stdout,
+            "rust": run("rustc", "-vV").stdout,
+            "sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                       for p in [original, annotated, rust_obj, rust_annotated, native_obj, binary]},
+            "linker": linker, "flags": ["-flto=thin", "-O2", save],
+        }, indent=2) + "\n")
+
 
     def test_rlib_members_and_native_archive_members(self):
         source = self.work / "lib.rs"

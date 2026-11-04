@@ -122,10 +122,12 @@ baseline and is not represented by invented estimates.
 
 JVM runs request synchronous Graal compilation with tiering disabled. They fail
 unless compilation logs establish that the measured loop compiled before warmup
-ended. AOT FFM remains a distinct execution mode: registration of ABI stubs does
-not guarantee that runtime-created MethodHandle adapter chains receive the same
-optimization as a JVM JIT callsite. Reports retain this cost rather than silently
-substituting direct C API calls.
+ended. Generated AOT FFM now initializes unbound downcall adapters at image build time,
+while addresses bind at runtime. This lets Graal compile the MethodHandle adapter
+chain without putting native addresses in the image heap. The handwritten FFM
+baseline uses the same technique; a separate `manual-bound-ffm` case retains the
+runtime-created bound-handle cost for comparison. The public SymbolLookup factory
+remains available for callers that need independently bound handles.
 
 Raw JSON, per-process JSONL, compilation logs, hashes and reports live under
 `build/comparison/`. Preserve that directory when recording a baseline. The runner
@@ -170,3 +172,8 @@ Compare two full saved runs with
 It rejects smoke runs and mismatched workload sources, hardware, runtime, compiler,
 iteration counts or case sets. Changes are advisory percentages; timing thresholds
 belong on controlled runners, not shared CI hosts.
+
+ThinLTO tests retain before/after optimized C and Rust IR, final linker IR,
+disassembly and artifact/tool hashes under `build/reports/thinlto/<target>/`.
+These tests prove load elimination across the opaque call without pretending that
+LLVM can inline Java Native Image machine code.

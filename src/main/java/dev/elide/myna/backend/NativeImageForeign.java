@@ -33,6 +33,9 @@ public final class NativeImageForeign implements Backend {
           .append('.')
           .append(function.name())
           .append("_DESCRIPTOR);\n");
+      out.append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
+          .append(pkg).append('.').append(ffm).append('$').append(function.name())
+          .append("_Downcall\");\n");
       out.append("        RuntimeClassInitialization.initializeAtRunTime(\"")
           .append(pkg)
           .append('.')

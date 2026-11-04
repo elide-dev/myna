@@ -77,7 +77,7 @@ class GeneratorTest {
     String nativeImage = output.get("IoNatives.java");
     assertTrue(nativeImage.contains("package dev.example.io;"));
     assertTrue(nativeImage.contains("public final class IoNatives {"));
-    assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Binding.HANDLE"));
+    assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Downcall.HANDLE"));
     assertTrue(
         output
             .get("IoNativesForeignFeature.java")
@@ -203,7 +203,7 @@ class GeneratorTest {
             "public static byte put(byte a, byte b, short c, boolean d, int e, int f)"
                 + " throws Throwable {"),
         ffm);
-    assertTrue(ffm.contains("invokeExact(a, b & 0xff, c & 0xffff, d, e, f)"), ffm);
+    assertTrue(ffm.contains("invokeExact(MynaFFM.put_Binding.ADDRESS, a, b & 0xff, c & 0xffff, d, e, f)"), ffm);
     // Signed (i8/i16), bool, 32-bit parameters, isolate, and returns are NOT widened or masked.
     assertTrue(
         ffm.contains(
@@ -213,7 +213,7 @@ class GeneratorTest {
     assertTrue(
         ffm.contains("public static short get(MemorySegment isolate_thread, short a) throws Throwable {"),
         ffm);
-    assertTrue(ffm.contains("invokeExact(isolate_thread, a)"), ffm);
+    assertTrue(ffm.contains("invokeExact(MynaFFM.get_Binding.ADDRESS, isolate_thread, a)"), ffm);
     assertFalse(ffm.contains("a & 0xff"), ffm);
     assertFalse(ffm.contains("a & 0xffff"), ffm);
     assertFalse(ffm.contains("JAVA_CHAR"), ffm);
@@ -576,10 +576,14 @@ class GeneratorTest {
     String ffm = output.get("MynaFFM.java");
     assertTrue(ffm.contains("static final MethodHandle HANDLE"));
     assertTrue(ffm.contains("public static long inspect(MemorySegment value) throws Throwable"));
-    assertTrue(ffm.contains("return (long) MynaFFM.inspect_Binding.HANDLE.invokeExact(value)"));
+    assertTrue(ffm.contains("return (long) MynaFFM.inspect_Downcall.HANDLE.invokeExact(MynaFFM.inspect_Binding.ADDRESS, value)"));
+    assertTrue(ffm.contains("static final MemorySegment ADDRESS = SymbolLookup.loaderLookup()"));
+    assertTrue(ffm.contains("downcallHandle(MynaFFM.inspect_DESCRIPTOR)"));
     assertFalse(ffm.contains("invokeWithArguments"));
     String feature = output.get("MynaForeignFeature.java");
     assertTrue(feature.contains("duringSetup"));
+    assertTrue(feature.contains(
+        "initializeAtBuildTime(\"dev.elide.myna.generated.MynaFFM$inspect_Downcall\")"));
     assertTrue(
         feature.contains("RuntimeForeignAccess.registerForDowncall(MynaFFM.inspect_DESCRIPTOR)"));
     assertTrue(

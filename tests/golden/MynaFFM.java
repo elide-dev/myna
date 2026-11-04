@@ -99,123 +99,174 @@ public final class MynaFFM {
     public static MethodHandle widen(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), widen_DESCRIPTOR);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class classify_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.classify_DESCRIPTOR);
+    }
     private static final class classify_Binding {
-        static final MethodHandle HANDLE = MynaFFM.classify(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_classify").orElseThrow(() -> new UnsatisfiedLinkError("seam_classify"));
     }
     public static byte classify(MemorySegment isolate_thread, short value, boolean strict) throws Throwable {
-        return (byte) MynaFFM.classify_Binding.HANDLE.invokeExact(isolate_thread, value, strict);
+        return (byte) MynaFFM.classify_Downcall.HANDLE.invokeExact(MynaFFM.classify_Binding.ADDRESS, isolate_thread, value, strict);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class echo_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.echo_DESCRIPTOR);
+    }
     private static final class echo_Binding {
-        static final MethodHandle HANDLE = MynaFFM.echo(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_echo").orElseThrow(() -> new UnsatisfiedLinkError("seam_echo"));
     }
     public static byte echo(MemorySegment isolate_thread, byte value) throws Throwable {
-        return (byte) MynaFFM.echo_Binding.HANDLE.invokeExact(isolate_thread, value & 0xff);
+        return (byte) MynaFFM.echo_Downcall.HANDLE.invokeExact(MynaFFM.echo_Binding.ADDRESS, isolate_thread, value & 0xff);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class exercise_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.exercise_DESCRIPTOR);
+    }
     private static final class exercise_Binding {
-        static final MethodHandle HANDLE = MynaFFM.exercise(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_exercise").orElseThrow(() -> new UnsatisfiedLinkError("seam_exercise"));
     }
     public static long exercise(MemorySegment isolate_thread) throws Throwable {
-        return (long) MynaFFM.exercise_Binding.HANDLE.invokeExact(isolate_thread);
+        return (long) MynaFFM.exercise_Downcall.HANDLE.invokeExact(MynaFFM.exercise_Binding.ADDRESS, isolate_thread);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class forEach_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.forEach_DESCRIPTOR);
+    }
     private static final class forEach_Binding {
-        static final MethodHandle HANDLE = MynaFFM.forEach(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_for_each").orElseThrow(() -> new UnsatisfiedLinkError("seam_for_each"));
     }
     public static int forEach(MemorySegment visitor, MemorySegment isolate, long count) throws Throwable {
-        return (int) MynaFFM.forEach_Binding.HANDLE.invokeExact(visitor, isolate, count);
+        return (int) MynaFFM.forEach_Downcall.HANDLE.invokeExact(MynaFFM.forEach_Binding.ADDRESS, visitor, isolate, count);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class inspect_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.inspect_DESCRIPTOR);
+    }
     private static final class inspect_Binding {
-        static final MethodHandle HANDLE = MynaFFM.inspect(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_inspect").orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect"));
     }
     public static long inspect(MemorySegment value) throws Throwable {
-        return (long) MynaFFM.inspect_Binding.HANDLE.invokeExact(value);
+        return (long) MynaFFM.inspect_Downcall.HANDLE.invokeExact(MynaFFM.inspect_Binding.ADDRESS, value);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class isHigh_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.isHigh_DESCRIPTOR);
+    }
     private static final class isHigh_Binding {
-        static final MethodHandle HANDLE = MynaFFM.isHigh(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_is_high").orElseThrow(() -> new UnsatisfiedLinkError("seam_is_high"));
     }
     public static boolean isHigh(MemorySegment isolate_thread, byte value) throws Throwable {
-        return (boolean) MynaFFM.isHigh_Binding.HANDLE.invokeExact(isolate_thread, value & 0xff);
+        return (boolean) MynaFFM.isHigh_Downcall.HANDLE.invokeExact(MynaFFM.isHigh_Binding.ADDRESS, isolate_thread, value & 0xff);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class lowSigned_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.lowSigned_DESCRIPTOR);
+    }
     private static final class lowSigned_Binding {
-        static final MethodHandle HANDLE = MynaFFM.lowSigned(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_low_signed").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed"));
     }
     public static byte lowSigned(int value) throws Throwable {
-        return (byte) MynaFFM.lowSigned_Binding.HANDLE.invokeExact(value);
+        return (byte) MynaFFM.lowSigned_Downcall.HANDLE.invokeExact(MynaFFM.lowSigned_Binding.ADDRESS, value);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class lowUnsigned_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.lowUnsigned_DESCRIPTOR);
+    }
     private static final class lowUnsigned_Binding {
-        static final MethodHandle HANDLE = MynaFFM.lowUnsigned(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_low_unsigned").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned"));
     }
     public static byte lowUnsigned(int value) throws Throwable {
-        return (byte) MynaFFM.lowUnsigned_Binding.HANDLE.invokeExact(value);
+        return (byte) MynaFFM.lowUnsigned_Downcall.HANDLE.invokeExact(MynaFFM.lowUnsigned_Binding.ADDRESS, value);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class reducer_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.reducer_DESCRIPTOR);
+    }
     private static final class reducer_Binding {
-        static final MethodHandle HANDLE = MynaFFM.reducer(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_reducer").orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer"));
     }
     public static MemorySegment reducer() throws Throwable {
-        return (MemorySegment) MynaFFM.reducer_Binding.HANDLE.invokeExact();
+        return (MemorySegment) MynaFFM.reducer_Downcall.HANDLE.invokeExact(MynaFFM.reducer_Binding.ADDRESS);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class rotate_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.rotate_DESCRIPTOR);
+    }
     private static final class rotate_Binding {
-        static final MethodHandle HANDLE = MynaFFM.rotate(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_rotate").orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate"));
     }
     public static MemorySegment rotate(SegmentAllocator allocator, MemorySegment value, int times) throws Throwable {
-        return (MemorySegment) MynaFFM.rotate_Binding.HANDLE.invokeExact(allocator, value, times);
+        return (MemorySegment) MynaFFM.rotate_Downcall.HANDLE.invokeExact(MynaFFM.rotate_Binding.ADDRESS, allocator, value, times);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class scale_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.scale_DESCRIPTOR);
+    }
     private static final class scale_Binding {
-        static final MethodHandle HANDLE = MynaFFM.scale(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_scale_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_scale_myna_ref"));
     }
     public static void scale(MemorySegment isolate_thread, MemorySegment value, int factor, MemorySegment result) throws Throwable {
-        MynaFFM.scale_Binding.HANDLE.invokeExact(isolate_thread, value, factor, result);
+        MynaFFM.scale_Downcall.HANDLE.invokeExact(MynaFFM.scale_Binding.ADDRESS, isolate_thread, value, factor, result);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class spread_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.spread_DESCRIPTOR);
+    }
     private static final class spread_Binding {
-        static final MethodHandle HANDLE = MynaFFM.spread(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_spread_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_spread_myna_ref"));
     }
     public static void spread(MemorySegment isolate_thread, MemorySegment value, MemorySegment result) throws Throwable {
-        MynaFFM.spread_Binding.HANDLE.invokeExact(isolate_thread, value, result);
+        MynaFFM.spread_Downcall.HANDLE.invokeExact(MynaFFM.spread_Binding.ADDRESS, isolate_thread, value, result);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class structProbe_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.structProbe_DESCRIPTOR);
+    }
     private static final class structProbe_Binding {
-        static final MethodHandle HANDLE = MynaFFM.structProbe(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_struct_probe").orElseThrow(() -> new UnsatisfiedLinkError("seam_struct_probe"));
     }
     public static int structProbe(MemorySegment isolate_thread) throws Throwable {
-        return (int) MynaFFM.structProbe_Binding.HANDLE.invokeExact(isolate_thread);
+        return (int) MynaFFM.structProbe_Downcall.HANDLE.invokeExact(MynaFFM.structProbe_Binding.ADDRESS, isolate_thread);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class sum_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.sum_DESCRIPTOR);
+    }
     private static final class sum_Binding {
-        static final MethodHandle HANDLE = MynaFFM.sum(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_sum").orElseThrow(() -> new UnsatisfiedLinkError("seam_sum"));
     }
     public static long sum(MemorySegment isolate_thread, MemorySegment data, long length) throws Throwable {
-        return (long) MynaFFM.sum_Binding.HANDLE.invokeExact(isolate_thread, data, length);
+        return (long) MynaFFM.sum_Downcall.HANDLE.invokeExact(MynaFFM.sum_Binding.ADDRESS, isolate_thread, data, length);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class swapPair_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.swapPair_DESCRIPTOR);
+    }
     private static final class swapPair_Binding {
-        static final MethodHandle HANDLE = MynaFFM.swapPair(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_swap_pair").orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair"));
     }
     public static MemorySegment swapPair(SegmentAllocator allocator, MemorySegment value) throws Throwable {
-        return (MemorySegment) MynaFFM.swapPair_Binding.HANDLE.invokeExact(allocator, value);
+        return (MemorySegment) MynaFFM.swapPair_Downcall.HANDLE.invokeExact(MynaFFM.swapPair_Binding.ADDRESS, allocator, value);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class visit_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.visit_DESCRIPTOR);
+    }
     private static final class visit_Binding {
-        static final MethodHandle HANDLE = MynaFFM.visit(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_visit").orElseThrow(() -> new UnsatisfiedLinkError("seam_visit"));
     }
     public static int visit(MemorySegment isolate_thread, long value) throws Throwable {
-        return (int) MynaFFM.visit_Binding.HANDLE.invokeExact(isolate_thread, value);
+        return (int) MynaFFM.visit_Downcall.HANDLE.invokeExact(MynaFFM.visit_Binding.ADDRESS, isolate_thread, value);
     }
-    // Load the library in this class loader before first use. One handle per symbol.
+    // ABI adapters may be compiled into an image; addresses remain runtime-bound.
+    private static final class widen_Downcall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.widen_DESCRIPTOR);
+    }
     private static final class widen_Binding {
-        static final MethodHandle HANDLE = MynaFFM.widen(SymbolLookup.loaderLookup());
+        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen"));
     }
     public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
-        return (int) MynaFFM.widen_Binding.HANDLE.invokeExact(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+        return (int) MynaFFM.widen_Downcall.HANDLE.invokeExact(MynaFFM.widen_Binding.ADDRESS, signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
     }
 }
