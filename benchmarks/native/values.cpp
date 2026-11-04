@@ -9,8 +9,8 @@
 
 static volatile uint64_t observed;
 template <class F>
-__attribute__((noinline)) void __codspeed_root_frame__values(F &encode) {
-  for (int i = 0; i < 1000; ++i) encode();
+__attribute__((noinline)) void __codspeed_root_frame__values(F &encode, int iterations) {
+  for (int i = 0; i < iterations; ++i) encode();
 }
 int main(int argc, char **argv) {
   if (argc < 2 || argc > 3) return 2;
@@ -38,13 +38,14 @@ int main(int argc, char **argv) {
   };
   bool walltime = std::getenv("MYNA_WALLTIME") != nullptr;
   int warmup = walltime ? 10 : 1;
-  for (int i = 0; i < warmup; ++i) __codspeed_root_frame__values(encode);
+  int iterations = walltime ? 100000 : 1000;
+  for (int i = 0; i < warmup; ++i) __codspeed_root_frame__values(encode, iterations);
   std::vector<int64_t> samples(walltime ? 30 : 1);
   if (instrumented && (instrument_hooks_set_integration(hooks, "myna-native", "1.0.0") ||
                        instrument_hooks_start_benchmark_inline(hooks))) return 4;
   for (auto &sample : samples) {
     auto start = std::chrono::steady_clock::now();
-    __codspeed_root_frame__values(encode);
+    __codspeed_root_frame__values(encode, iterations);
     sample = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - start).count();
   }
@@ -53,7 +54,7 @@ int main(int argc, char **argv) {
   instrument_hooks_deinit(hooks);
   if (observed != 33 + text.size()) return 5;
   std::cout << "{\"case\":\"" << name << "\",\"pid\":" << getpid()
-            << ",\"iterations\":1000,\"warmup_iters\":" << warmup * 1000
+            << ",\"iterations\":" << iterations << ",\"warmup_iters\":" << warmup * iterations
             << ",\"samples_ns\":[";
   for (size_t i = 0; i < samples.size(); ++i) {
     if (i) std::cout << ',';

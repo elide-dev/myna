@@ -155,7 +155,7 @@ CodSpeed's generator JMH wall series uses the PR #29 harness. Separate native
 wall and simulation jobs exercise inline, owned and borrowed value construction.
 These use its pinned instrument-hooks submodule and fail if instrumentation was
 requested but is absent. Native wall-time runs retain 30 raw measured rounds after
-10 warmup rounds (1,000 operations each), and emit the pinned integration's wall-time
+10 warmup rounds (100,000 operations each), and emit the pinned integration's wall-time
 result schema. Hooks alone provide profiles, not wall-time result statistics. Cross-library comparison runs do not use those jobs.
 
 ## Sanitizer and coverage boundaries
