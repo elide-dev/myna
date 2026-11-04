@@ -23,3 +23,26 @@ updates:
     groups:
       containers:
         patterns: ['*']
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      rust:
+        patterns: ['*']
+
+  - package-ecosystem: maven
+    directory: /benchmarks
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /benchmarks/comparison
+    schedule:
+      interval: weekly

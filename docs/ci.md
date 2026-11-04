@@ -6,7 +6,7 @@
 
 Actions are pinned to release commit SHAs; Docker base images include immutable digests. Linux jobs use runner hardening in audit mode. Checkout does not retain credentials. Codecov uses OIDC and the unified coverage/test-results action; uploads do not require a repository secret. Fork PR uploads use Codecov's public-repository tokenless behavior.
 
-Dependabot checks Actions daily and Maven/Docker weekly. Maven compatibility-build plugin versions live in `pom.xml`. When updating the GraalVM SDK or JUnit, update the matching coordinates in `elide.pkl` too. The GraalVM SDK must match the external distribution pinned in `tools/graalvm.json`. Update Elide in both `mise.toml` and the Dockerfile, and regenerate `mise.lock`.
+Dependabot checks Actions daily and Maven, Cargo, Docker, chart dependencies, and benchmark submodules weekly. Maven compatibility-build plugin versions live in `pom.xml`. When updating the GraalVM SDK or JUnit, update the matching coordinates in `elide.pkl` too. The GraalVM SDK must match the external distribution pinned in `tools/graalvm.json`. Update Elide in both `mise.toml` and the Dockerfile, and regenerate `mise.lock`.
 
 Elide, elide-dev/toolchain, Rust, CMake, and workflow linters are pinned in `mise.toml` and `mise.lock`. The shared setup action installs them with mise and installs Elide's Python component. No separate JDK or Python setup is required. Upgrade Rust only alongside verification that its LLVM major matches the LLVM 23 reader, writer, and linker; native CI checks this explicitly before building. The Ubuntu 24.04 and macOS 15 runners remain the supported platform baselines. Update OS baselines separately from library patches and verify both container libc compatibility and native linker behavior.
 
@@ -21,3 +21,10 @@ Python integration tests run through Elide's Python component using standard-lib
 The checksum-pinned elide-dev/graal 25.5.5-elide.24 Native Image driver compiles Myna and integration fixtures. Elide 1.6.2 embeds an older driver, so builds invoke the external driver explicitly. C/C++ and LLVM/LLD use elide-dev/toolchain 2026.11.1, including its sanitizer configurations. The SDK setup action caches verified distributions. Benchmark macro runners use host Python and pinned GraalVM directly because the Elide CLI currently faults on those ARM runners.
 
 CodSpeed maintains Myna simulation and wall-time workloads. The separate boundary-comparison workflow runs uninstrumented comparisons on dedicated hardware. SVM generated versus handwritten Native Image C calls is the primary performance target; JVM results are secondary. See [benchmarking](benchmarking.md) for rerun commands and measurement limits.
+
+
+`hygiene.yml` checks licensing metadata, local documentation links, chart input/output hashes, and workflow syntax. It renders the charts again using hash-locked dependencies. `dependency-review.yml` blocks newly introduced high/critical known vulnerabilities on pull requests. Scorecard runs on main and weekly, publishing its report and retaining the JSON. CodeQL is intentionally not configured.
+
+Repository rulesets require pull requests, an approving review, resolved review threads, linear history, and passing `Gate`, `Repository hygiene`, and `Dependency review` checks on up-to-date branches. Version tags cannot be updated or deleted. Rulesets are applied after these checks are available; see `.github/rulesets/` for the exact configurations. Performance timing is not a required check on shared runners. Administrators can manage repository rules through GitHub; no workflow gets an admin credential.
+
+Use [release verification](releases.md) for artifact attestations and SBOMs. Do not claim that a historical locally built artifact has CI build provenance simply by uploading it to CI.

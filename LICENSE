@@ -1,0 +1,9 @@
+Myna is dual-licensed under either of the following licenses, at your option:
+
+- Apache License, Version 2.0 (LICENSE-APACHE)
+- MIT License (LICENSE-MIT)
+
+SPDX-License-Identifier: Apache-2.0 OR MIT
+
+Third-party components retain their own licenses; this grant does not relicense
+vendored dependencies or toolchains. See THIRD_PARTY.md.

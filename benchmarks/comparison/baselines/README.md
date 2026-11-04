@@ -1,4 +1,4 @@
-# Local scalar baselines
+# Scalar baselines
 
 These five-process runs preserve raw per-process samples, commands, binary hashes,
 compiler evidence and runtime metadata. They were measured on a shared Apple M5
@@ -22,3 +22,6 @@ The optimized handwritten median was 6.08 ns/call, with overlapping process rang
 Generated direct leaf calls were about 1.06 ns/call. These establish the large AOT
 adapter improvement and absence of a demonstrated generator penalty at this noise
 level; they do not establish a universal minimum or a portable percentage advantage.
+
+
+`hosted-arm64-0.7.2` is the maintained five-process CI baseline for release source `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. It includes full ARM CPU identity and points to the originating workflow. It drives the checked-in SVM charts; it is still a shared-host measurement, not a controlled-hardware timing gate.

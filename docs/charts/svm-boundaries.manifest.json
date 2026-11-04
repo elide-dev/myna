@@ -1,0 +1,7 @@
+{
+  "benchmarks/comparison/baselines/hosted-arm64-0.7.2.json": "f506b0152d8c5ccd5df7506e5f80e540bd04bc7de0341b8def11b3c2ba204ae1",
+  "benchmarks/comparison/chart.py": "59a1adf69ae15690e57692ac79b4158c2a42f11406a59363b0d11a1a7534a8a8",
+  "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
+  "docs/charts/svm-boundaries.svg": "b24d28caf74ba961063fd828003f80aad7771cb4e485f73c4da7a38707e0d328",
+  "docs/charts/svm-boundaries.png": "64f568c250d9a4e08c6160062de471a2e942107f96244e6e7ea239f0fcc350aa"
+}

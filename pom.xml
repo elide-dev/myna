@@ -3,6 +3,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.elide</groupId><artifactId>myna</artifactId><version>0.7.2</version>
+  <!-- Consumers may choose either license; these are alternatives. -->
+  <licenses>
+    <license><name>Apache License, Version 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0</url><distribution>repo</distribution></license>
+    <license><name>MIT License</name><url>https://opensource.org/license/mit</url><distribution>repo</distribution></license>
+  </licenses>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -13,6 +18,7 @@
   </dependencies>
   <repositories><repository><id>gvm-elide</id><url>https://maven.elide.dev/gvm-elide/25.5.5-elide.24</url></repository></repositories>
   <build>
+    <resources><resource><directory>${project.basedir}</directory><targetPath>META-INF</targetPath><includes><include>LICENSE</include><include>LICENSE-APACHE</include><include>LICENSE-MIT</include></includes></resource></resources>
     <plugins>
       <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-clean-plugin</artifactId><version>3.5.0</version></plugin>
       <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.5.0</version></plugin>

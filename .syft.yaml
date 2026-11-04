@@ -1,0 +1,9 @@
+# Source dependency inventory: generated trees and benchmark submodules are not
+# the first-party source manifests being inventoried. Container scans override
+# this file so that installed image packages remain in scope.
+exclude:
+  - ./build/**
+  - ./target/**
+  - ./.git/**
+  - ./.dev/**
+  - ./third-party/**

@@ -3,6 +3,8 @@
 [![CI](https://github.com/elide-dev/myna/actions/workflows/on.push.yml/badge.svg)](https://github.com/elide-dev/myna/actions/workflows/on.push.yml)
 [![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/elide-dev/myna?utm_source=badge)
 [![codecov](https://codecov.io/gh/elide-dev/myna/graph/badge.svg?token=LynXFKjtbf)](https://codecov.io/gh/elide-dev/myna)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/elide-dev/myna/badge)](https://scorecard.dev/viewer/?uri=github.com/elide-dev/myna)
+[![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue)](LICENSE)
 [![Discord](https://img.shields.io/discord/1119121740161884252?b2&logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
 ![Java 25+](https://img.shields.io/badge/-Java%2025%2B-blue.svg?logo=openjdk&logoColor=white)
 ![Rust 2024](https://img.shields.io/badge/-Rust%202024-orange.svg?logo=rust&logoColor=white)
@@ -15,7 +17,7 @@ A Native Image command-line generator for Rust / Substrate VM seams. One typed S
 
 **Substrate VM is the primary runtime.** Fixed symbols use direct generated C API bindings; explicitly contracted native leaf calls can elide VM transitions. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
 
-Version 0.6.0 introduces the project rename; see [the migration guide](docs/rename.md) for consumer changes.
+See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
 
 ## Build and use
 
@@ -110,14 +112,20 @@ CI runs JVM tests and native integration on Linux and macOS, retaining the XML r
 
 ## Benchmarks
 
-JMH benchmarks in `benchmarks/` cover the generator pipeline (DSL parsing, validation, JSON canonicalization and fingerprinting, every backend, and end-to-end generation) on the repository's example seams plus a synthetic large module. They use the [CodSpeed](https://codspeed.io) JMH fork, vendored as the `third-party/codspeed-jvm` submodule, and run in CI on CodSpeed macro runners in walltime mode.
+JMH benchmarks in `benchmarks/` cover the generator pipeline (DSL parsing, validation, JSON canonicalization and fingerprinting, every backend, and end-to-end generation) on the repository's example seams plus a synthetic large module. They use the [CodSpeed](https://codspeed.io) JMH fork, vendored as the `third-party/codspeed-jvm` submodule, and run in CI on compatible hosted ARM runners in walltime mode. Configure `MYNA_ARM_BENCH_RUNNER` for controlled compatible hardware; shared-host timings remain advisory.
 
 ```sh
 git submodule update --init --recursive third-party/codspeed-jvm
-(cd third-party/codspeed-jvm && ./gradlew -p jmh-fork publishToMavenLocal)
-benchmarks/mvnw -f benchmarks/pom.xml package
-java -jar benchmarks/target/benchmarks.jar
+# The CI ARM build uses benchmarks/codspeed.init.gradle to select the JNI target.
+mise run bench:comparison-build
+mise run bench:comparison
 ```
+
+The standalone harness compares SVM direct C and AOT FFM against equivalent handwritten calls, with JVM interop as a secondary diagnostic. See [benchmark contracts and rerun commands](docs/benchmarking.md), [raw baseline](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json), and [process statistics](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md).
+
+![SVM scalar latency with process variability](docs/charts/svm-boundaries.svg)
+
+The chart uses five fresh processes per case, shows process variability, and does not establish a small percentage performance win. [Regenerate the chart](docs/benchmarking.md#performance-charts) from the retained measurements; CodSpeed tracks Myna's own workloads separately.
 
 ## Downstream distribution
 
@@ -130,9 +138,9 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:local \
   generate bindings.seam --out generated --target x86_64-unknown-linux-gnu
 ```
 
-The `llvm23` variant also supports `apply` and includes the LLVM tools. The default image contains the native generator and its JAR. The Feature JAR is available from `build/dist/` and CI build artifacts. For hermetic builds, build the helper inside your pinned LLVM toolchain image; the convenience LLVM image follows the official LLVM 23 package repository.
+The `llvm23` variant also supports `apply` and includes the LLVM tools. The default image contains the native generator and its JAR. The Feature JAR is available from `build/dist/` and CI build artifacts. Both container builds use the checksum-pinned `elide-dev/toolchain` bundle, including its LLVM libraries and compiler runtime.
 
-The container workflow builds and smoke-tests both variants on pull requests. Pushing a `v*` tag builds, tests, and publishes `ghcr.io/<owner>/<repo>:<tag>` and `<tag>-llvm23` using the repository's `GITHUB_TOKEN`. Images are Linux amd64 initially. No image has been published by this checkout; tag publication requires the repository's Actions/package settings to allow it. Downstream builds should pin an image digest.
+The container workflow builds and smoke-tests both variants on pull requests. Pushing a `v*` tag builds, tests, and publishes `ghcr.io/<owner>/<repo>:<tag>` and `<tag>-llvm23` using the repository's `GITHUB_TOKEN`. Images are Linux amd64 initially. Publication status is visible in the release workflow. Downstream builds should pin an image digest. See [release verification](docs/releases.md) for SBOM scope, provenance checks, symbols, and the draft-release process.
 
 ## Native Image Feature
 
