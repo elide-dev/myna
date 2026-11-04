@@ -106,7 +106,8 @@ public abstract class ValueTape {
     long start = stringOffset(node);
     int len = Math.toIntExact(length(node));
     java.util.Objects.checkFromIndexSize(outputOffset, len, output.length);
-    for (int i = 0; i < len; i++) output[outputOffset + i] = textByte(node, start, i);
+    if (start >= 0) copyRegionBytes(textRegion(node), start, output, outputOffset, len);
+    else for (int i = 0; i < len; i++) output[outputOffset + i] = textByte(node, start, i);
     return len;
   }
   /** Allocates only when the caller explicitly asks for a Java String. */
@@ -122,8 +123,12 @@ public abstract class ValueTape {
   }
   protected String decodeExternalUtf8(long region, long start, int len) {
     byte[] data = new byte[len];
-    for (int i = 0; i < len; i++) data[i] = readRegionByte(region, start + i);
+    copyRegionBytes(region, start, data, 0, len);
     return decodeUtf8(data);
+  }
+  /** Called only after source and destination extents have been checked. */
+  protected void copyRegionBytes(long region, long start, byte[] output, int offset, int len) {
+    for (int i = 0; i < len; i++) output[offset + i] = readRegionByte(region, start + i);
   }
   private static String decodeUtf8(byte[] data) {
     boolean ascii = true;

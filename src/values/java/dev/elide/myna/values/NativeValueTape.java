@@ -56,6 +56,10 @@ public class NativeValueTape extends ValueTape {
     if (len > 0 && address.isNull()) throw new IllegalArgumentException("Null text region");
     return address;
   }
+  @Override protected void copyRegionBytes(long region, long start, byte[] output, int offset, int len) {
+    Pointer source = regionAddress(region).add(WordFactory.signed(start));
+    for (int i = 0; i < len; i++) output[offset + i] = source.readByte(i);
+  }
   @Override protected byte readRegionByte(long region, long offset) {
     return regionAddress(region).readByte(WordFactory.signed(offset));
   }
