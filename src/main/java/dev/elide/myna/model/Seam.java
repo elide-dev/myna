@@ -6,7 +6,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.7.1";
+  public static final String VERSION = "0.7.2";
 
   public enum Direction {
     IMPORT,

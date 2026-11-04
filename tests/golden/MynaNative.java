@@ -15,7 +15,7 @@ import org.graalvm.word.PointerBase;
 
 public final class MynaNative {
     private MynaNative() {}
-    public static final String ABI_FINGERPRINT = "04982b6257542260c8f20280b4c76729aaf81bb9176214450dfe17dd079b8775";
+    public static final String ABI_FINGERPRINT = "6b8e8ac541b2eb4ddc22323831fc00204df7522807016d0a2926eb1a1ce94cde";
     public static final class BufferView {
         private BufferView() {}
         public static final int SIZE = 24;
