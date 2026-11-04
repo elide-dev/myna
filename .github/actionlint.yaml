@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # CodSpeed macro runners used by the benchmark workflow.
+  labels:
+    - codspeed-macro
