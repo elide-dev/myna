@@ -25,8 +25,8 @@ _.path = [
 ]
 
 [tasks.setup]
-description = "Install Elide's matching Python component and project dependencies"
-run = ["elide setup python --channel release", "elide install"]
+description = "Install Rust check tools, Elide Python, and project dependencies"
+run = ["rustup component add rustfmt clippy", "elide setup python --channel release", "elide install"]
 
 [tasks."build:jvm"]
 description = "Build the CLI and hosted Feature JARs with Elide"
