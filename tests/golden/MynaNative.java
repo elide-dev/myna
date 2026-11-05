@@ -199,7 +199,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static long inspect(CLongPointer value) {
-        return inspect_Binding.ADDRESS.invoke(value);
+        return MynaSymbols.inspect.get().invoke(value);
     }
     @CEntryPoint(name = "seam_is_high")
     public static int isHigh(IsolateThread isolate_thread, byte value) {
@@ -212,7 +212,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static byte lowSigned(int value) {
-        return lowSigned_Binding.ADDRESS.invoke(value);
+        return MynaSymbols.lowSigned.get().invoke(value);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
@@ -221,7 +221,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static byte lowUnsigned(int value) {
-        return lowUnsigned_Binding.ADDRESS.invoke(value);
+        return MynaSymbols.lowUnsigned.get().invoke(value);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
@@ -230,7 +230,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static Reducer reducer() {
-        return reducer_Binding.ADDRESS.invoke();
+        return MynaSymbols.reducer.get().invoke();
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
@@ -239,7 +239,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static void rotate(PointerBase value, int times, PointerBase result) {
-        rotate_Binding.ADDRESS.invoke(value, times, result);
+        MynaSymbols.rotate.get().invoke(value, times, result);
     }
     @CEntryPoint(name = "seam_scale_myna_ref")
     public static void scale(IsolateThread isolate_thread, @CConst PointerBase value, int factor, PointerBase result) {
@@ -268,7 +268,7 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static void swapPair(PointerBase value, PointerBase result) {
-        swapPair_Binding.ADDRESS.invoke(value, result);
+        MynaSymbols.swapPair.get().invoke(value, result);
     }
     @CEntryPoint(name = "seam_visit")
     public static int visit(IsolateThread isolate_thread, long value) {
@@ -281,6 +281,6 @@ public final class MynaNative {
     }
     @AlwaysInline("Myna native leaf call")
     public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) {
-        return widen_Binding.ADDRESS.invoke(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+        return MynaSymbols.widen.get().invoke(signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
     }
 }

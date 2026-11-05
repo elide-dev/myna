@@ -17,7 +17,7 @@ class BindingAbiTest {
     assertTrue(source.contains("mayBeInlined = true"));
     assertTrue(source.contains("@InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)"));
     assertTrue(source.contains("CGlobalDataFactory.forSymbol(\"native_read\")"));
-    assertTrue(source.contains("return read_Binding.ADDRESS.invoke(value);"));
+    assertTrue(source.contains("return MynaSymbols.read.get().invoke(value);"));
     assertTrue(source.contains("public static read_Leaf readLeafPointer()"));
     assertFalse(source.contains("@CFunction(value"));
     assertTrue(fast.get("seam.json").contains("\"schemaVersion\": 2"));

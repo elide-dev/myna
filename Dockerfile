@@ -44,7 +44,7 @@ COPY scripts/setup-graalvm.py scripts/setup-graalvm.py
 RUN python3 scripts/setup-graalvm.py
 ENV GRAALVM_HOME=/build/.dev/toolchains/graalvm JAVA_HOME=/build/.dev/toolchains/graalvm
 ENV PATH="/build/.dev/toolchains/graalvm/bin:${PATH}"
-COPY scripts/build.sh scripts/symbols.sh scripts/
+COPY scripts/build.sh scripts/symbols.sh scripts/compile-native-bindings.py scripts/
 COPY elide.pkl LICENSE LICENSE-APACHE LICENSE-MIT ./
 COPY src/ src/
 RUN scripts/build.sh \

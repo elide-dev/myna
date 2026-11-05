@@ -168,7 +168,7 @@ class GeneratorTest {
     assertTrue(output.get("seam.ll").contains("declare i8 @put(i8 %a, i8 %b, i16 %c, i1 %d)"));
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("public static byte put(byte a, byte b, short c, boolean d) {"), ni);
-    assertTrue(ni.contains("return put_Binding.ADDRESS.invoke(a, b & 0xff, c & 0xffff, d);"), ni);
+    assertTrue(ni.contains("return MynaSymbols.put.get().invoke(a, b & 0xff, c & 0xffff, d);"), ni);
     assertTrue(ni.contains("byte invoke(byte a, int b, int c, boolean d);"), ni);
     assertTrue(ni.contains("public static int get(IsolateThread isolate_thread, short a) {"), ni);
     assertTrue(ni.contains("return fixture.Ops.get(a) & 0xffff;"), ni);

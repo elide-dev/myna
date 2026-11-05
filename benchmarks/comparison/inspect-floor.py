@@ -19,7 +19,7 @@ for runtime in ('native','svm'):
         symbol=name.lstrip('_')
         wanted=(runtime=='native' and (symbol.startswith(('identity_','myna_bench_identity','direct','indirect')))) or (
             runtime=='svm' and ('Identity_leaf_' in symbol or 'Generated_leaf_' in symbol
-                               or 'Floor_javaBatch' in symbol or ('Floor$$' in symbol and '_run_' in symbol)))
+                               or 'Floor_leaf_' in symbol or 'Floor_identity_' in symbol or 'Floor_javaBatch' in symbol or ('Floor$$' in symbol and '_run_' in symbol)))
         if wanted:
             instructions=[l for l in block.splitlines()[1:] if re.match(r'\s*[0-9a-f]+:',l)]
             selected.append({'symbol':name,'instructions':len(instructions)})
@@ -27,10 +27,14 @@ for runtime in ('native','svm'):
     if not selected: raise SystemExit('Missing floor symbols in '+str(path))
     if runtime=='svm' and any('LongLeaf_invoke_' in name for _,name in functions):
         raise SystemExit('Inlineable leaf adapter unexpectedly retains a standalone invoke stub')
+    if runtime=='svm' and metadata.get('binding_abi', 1)>=2:
+        forbidden=('Identity_leaf_', 'Generated_leaf_', 'leaf_Leaf_invoke_')
+        if any(any(part in name for part in forbidden) for _,name in functions):
+            raise SystemExit('Binding ABI 2 unexpectedly retains a standalone generated leaf adapter')
     summary[runtime]={'full_disassembly_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'functions':selected}
 args.output.parent.mkdir(parents=True,exist_ok=True)
 args.output.with_suffix('.asm').write_text('\n'.join(retained)+'\n')
 summary['build']=metadata
 summary['retained_disassembly_sha256']=hashlib.sha256(args.output.with_suffix('.asm').read_bytes()).hexdigest()
 args.output.with_suffix('.json').write_text(json.dumps(summary,indent=2)+'\n')
-print('Retained native baselines, ordinary leaf stubs and SVM loops; no standalone LongLeaf invoke stub')
+print('Retained native baselines, handwritten leaf stubs and SVM loops; inlineable adapters have no standalone stub')

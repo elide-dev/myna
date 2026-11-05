@@ -166,7 +166,7 @@ public final class NativeImage implements Backend {
         .append(javaType(m, f.returns())).append(' ').append(f.name()).append('(')
         .append(params(m, f.abiParameters())).append(") {\n        ")
         .append(f.returns() == Scalar.VOID ? "" : "return ")
-        .append(f.name()).append("_Binding.ADDRESS.invoke(")
+        .append("MynaSymbols.").append(f.name()).append(".get().invoke(")
         .append(String.join(", ", f.abiParameters().stream().map(p ->
             unsignedSmall(p.type()) ? widened(p.type(), p.name()) : p.name()).toList()))
         .append(");\n    }\n");

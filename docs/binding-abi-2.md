@@ -28,7 +28,7 @@ Supply additional Java dependencies with `--classpath`. Repeat `--generated` for
 
 Equivalent Maven/Gradle integrations must supply those jars only for compilation and package the generated metadata. Do not bundle Graal implementation jars or add them to Native Image's application classpath. The metadata supplies the required builder module export and class-initialization policy automatically. The backend uses internal APIs of elide-dev/graal 25.5.5-elide.24; compiler changes require integration and performance tests.
 
-Native linking still uses the module's `c_context` / `c_library` configuration or explicit native linker inputs. Each reached leaf resolves its symbolic address into a lazy runtime holder. Addresses are never captured from the build process; unused imports do not require their symbols. Libraries must remain valid for every call.
+Native linking still uses the module's `c_context` / `c_library` configuration or explicit native linker inputs. Ordinary calls obtain the relocated address through Graal's symbolic-address intrinsic; the pointer accessor uses a separate lazy runtime holder. Addresses are never captured from the build process; unused imports do not require their symbols. Libraries must remain valid for every call.
 
 ## Specialized callers
 
