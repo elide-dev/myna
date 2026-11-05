@@ -1,5 +1,6 @@
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
@@ -17,6 +18,7 @@ public final class RustFfi implements Backend {
     out.append("pub const ABI_FINGERPRINT: &str = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
+    out.append("pub const BINDING_ABI_VERSION: u32 = ").append(Seam.BINDING_ABI_VERSION).append(";\n");
     out.append("const _: () = assert!(core::mem::size_of::<*const ()>() == 8);\n");
     for (String name : m.opaqueTypes())
       out.append("#[repr(C)]\npub struct ").append(name).append(" { _private: [u8; 0] }\n");

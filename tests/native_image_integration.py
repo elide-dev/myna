@@ -5,10 +5,26 @@ from pathlib import Path
 import sys
 import unittest
 from values_cpp import build_cpp
-from support import BINARY, ROOT, TARGET, main, native_image, run
+from support import BINARY, ROOT, TARGET, main, native_image, run, compile_native
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
+    def test_binding_abi2_default_leaf_static_linkage_and_gc(self):
+        work = ROOT / "build/fast-test"
+        fixture = ROOT / "tests/fast"
+        generated = work / "generated"
+        classes = work / "classes"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", fixture / "fast.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O3", "-fPIC", "-c", fixture / "native.c", "-o", work / "native.o")
+        run("ar", "rcs", work / "libfastfixture.a", work / "native.o")
+        compile_native(classes, generated, generated / "FastApi.java", *sorted(fixture.glob("*.java")))
+        app = work / "fast-app"
+        # Configuration travels with the compiled classes. No manual symbol/export/init flags.
+        native_image("-O2", "-cp", classes, f"-Dmyna.fast.libraryPath={work}", "fixture.fast.FastMain", "-o", app)
+        self.assertIn("Binding ABI 2 default leaf, static linkage, lazy symbols and GC passed", run(app).stdout)
+
     def test_serde_value_tape(self):
         work = ROOT / "build/values-test"
         generated = work / "generated"
@@ -20,7 +36,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
             shutil.rmtree(classes)
         classes.mkdir(parents=True)
         runtime = ROOT / "src/values/java/dev/elide/myna/values"
-        run("javac", "-d", classes, generated / "ValueApi.java",
+        compile_native(classes, generated, generated / "ValueApi.java",
             *sorted(runtime.glob("*.java")), fixture / "ValuesMain.java")
         archive = ROOT / "target/release/libmyna_values_fixture.a"
         objects = build_cpp(work)
@@ -50,7 +66,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-d", classes, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
+        compile_native(classes, generated, generated / "BemoImports.java", *sorted(fixture.glob("*.java")))
         app = work / "bemo-app"
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         native_image( "-O1", "-cp", classes,
@@ -94,7 +110,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-d", classes, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
+        compile_native(classes, generated, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
         app = work / "ownership-app"
         native_image( "-O1", "-cp", classes,
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={fixture}", "-H:-UnlockExperimentalVMOptions",
@@ -111,7 +127,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-d", classes, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        compile_native(classes, generated, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -130,7 +146,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        run("javac", "-d", classes, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
+        compile_native(classes, generated, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
         inspector = work / "inspect.o"
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)

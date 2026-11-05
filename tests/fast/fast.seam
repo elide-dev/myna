@@ -1,0 +1,9 @@
+module fast_fixture target=aarch64-apple-darwin java_package=fixture.fast java_class=FastApi c_context=fixture.fast.Directives c_library=fastfixture c_library_static=true
+# Binding ABI 2 defaults to inlineable, bounded leaves.
+import increment symbol=myna_fast_increment return=i64 error=no_failure
+  param value type=i64
+end
+# Deliberately undefined: unused imports must not create link dependencies.
+import unused symbol=myna_intentionally_missing return=i64 error=no_failure
+  param value type=i64
+end

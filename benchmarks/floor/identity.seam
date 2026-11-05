@@ -1,0 +1,4 @@
+module identity abi=1 target=aarch64-apple-darwin java_package=bench java_class=Identity
+import leaf symbol=myna_bench_identity return=i64 error=no_failure
+  param value type=i64
+end

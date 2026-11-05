@@ -1,5 +1,6 @@
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
@@ -38,6 +39,8 @@ public final class CHeader implements Backend {
         .append("_SEAM_ABI ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append('\n');
+    out.append("#define ").append(m.name().toUpperCase(Locale.ROOT)).append("_BINDING_ABI_VERSION ")
+        .append(Seam.BINDING_ABI_VERSION).append('\n');
     out.append("SEAM_ASSERT(sizeof(void *) == 8, \"seam target requires 64-bit pointers\");\n\n");
     for (String name : m.opaqueTypes()) out.append("struct ").append(name).append(";\n");
     for (Struct s : m.structs()) out.append("struct ").append(s.name()).append(";\n");

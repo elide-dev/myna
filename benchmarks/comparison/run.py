@@ -45,7 +45,9 @@ def build():
     classes = WORK / "classes"
     shutil.rmtree(classes, ignore_errors=True)
     classes.mkdir()
-    execute("javac", "-d", classes, *sorted(SOURCE.glob("*.java")), *sorted(generated.glob("*.java")))
+    sdk = [home / "lib/svm" / name for name in ("svm-shared.jar", "svm-guest-staging.jar", "svm-guest.jar")]
+    execute("javac", "-cp", os.pathsep.join(map(str, sdk)), "-d", classes, *sorted(SOURCE.glob("*.java")), *sorted(generated.glob("*.java")))
+    shutil.copytree(generated / "META-INF", classes / "META-INF", dirs_exist_ok=True)
     # Record actual builder commands including its driver flags in build metadata.
     native_args = ["-O3", "-march=compatibility", "-cp", str(classes), "-H:+UnlockExperimentalVMOptions",
                    f"-H:NativeLinkerOption={WORK / 'kernel.o'}", "-H:-UnlockExperimentalVMOptions",

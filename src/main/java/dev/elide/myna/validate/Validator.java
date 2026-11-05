@@ -1,5 +1,6 @@
 package dev.elide.myna.validate;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import java.math.BigInteger;
@@ -32,7 +33,7 @@ public final class Validator {
                + " uses provides with transitive crate as Self macro macro_rules alignas alignof"
                + " constexpr consteval constinit delete friend inline namespace operator noexcept"
                + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
-               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT Literals MynaFFM"
+               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT BINDING_ABI_VERSION MynaSymbols Literals MynaFFM"
                + " MynaNative MynaForeignFeature getClass hashCode equals toString clone finalize"
                + " wait notify notifyAll")
               .split(" "));
@@ -190,6 +191,14 @@ public final class Validator {
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
+      if (Seam.nativeLeaf(function)) {
+        require(!enabled(function.facts(), "noreturn"), "noreturn requires native_leaf=false in binding ABI 2");
+        require(!types.contains(function.name() + "_Leaf") && !signatures.contains(function.name() + "_Leaf")
+                && !types.contains(function.name() + "_Binding") && !signatures.contains(function.name() + "_Binding"),
+            "type collides with generated native leaf binding for " + function.name());
+        require(module.functions().stream().noneMatch(other -> other.name().equals(function.name() + "LeafPointer")),
+            "function collides with generated native leaf pointer accessor for " + function.name());
+      }
       require(
           !enabled(function.facts(), "native_leaf")
               || (function.direction() == Direction.IMPORT

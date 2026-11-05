@@ -20,6 +20,7 @@ public final class Generator {
             new RustFfi(),
             new JavaFfm(),
             new NativeImage(),
+            new NativeImageProperties(),
             new NativeImageForeign(),
             new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
     if (!module.resources().isEmpty() || !module.borrows().isEmpty()) {

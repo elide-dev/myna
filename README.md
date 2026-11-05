@@ -11,23 +11,38 @@
 
 # Myna
 
-A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, `@CFunction` imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
+A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, inlineable native imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
 
 **`myna apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
 
-**Substrate VM is the primary runtime.** Fixed symbols use direct generated C API bindings; explicitly contracted native leaf calls can elide VM transitions. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
+**Substrate VM is the primary runtime.** Binding ABI 2 makes inlineable no-transition native calls the default. Imports must be short, bounded, nonblocking and unable to reenter Java; other calls require `native_leaf=false@explicit_contract`. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
 
 See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
 
 ## Call overhead
 
-**Direct SVM bindings perform on par with handwritten Native Image C calls in this scalar benchmark.** Normal transitions take about **13.3 ns/call**; explicitly contracted native leaves take about **1.5 ns/call**. Equivalent generated and handwritten direct-call paths also produce matching instruction sequences in the [retained machine-code comparison](benchmarks/comparison/evidence/).
+**Fast native calls are the default in Myna 0.8.0 / binding ABI 2.** Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max**, versus **1.510 ns** and **0.999 ns** for handwritten Native Image `@CFunction(NO_TRANSITION)` calls in the same builds.
 
-![Myna versus handwritten Native Image call overhead: normal C calls 13.30 vs 13.29 ns, native leaves 1.54 vs 1.56 ns, AOT FFM 15.77 vs 16.10 ns](docs/charts/svm-boundaries.svg)
+![Default Myna native leaf calls compared with handwritten Native Image and native C pointer callers](docs/charts/default-leaf.svg)
 
-These are measured scalar-call latencies, including the small callee and loop; the roughly 0.59 ns control is **not subtracted**. Compare each pair under its own transition contract. Five fresh processes on a shared Linux ARM64 host show comparable performance, not a small percentage win or a universal latency guarantee. Native leaves require an explicit nonblocking contract.
+The native function-pointer baselines, explicitly unrolled four times, measure **0.442 ns** and **0.512 ns** respectively. The Mac process ranges overlap. These are identity-function-plus-loop timings with no control subtraction: compare within each host, not across machines. Five fresh processes per case retain ten samples each. Arithmetic workloads, custom pointers, explicit SVM unrolling and bounded batches remain in the full results.
 
-[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and additional interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun the benchmarks](docs/benchmarking.md) · [Regenerate this chart](docs/benchmarking.md#performance-charts)
+Myna generates typed inlineable pointers, symbolic linkage, and Native Image initialization metadata. Ordinary calls use the relocated symbol directly, removing the extra SVM leaf stub and runtime address-holder guard. The default contract requires **short, bounded, nonblocking calls with no Java reentry**. Other imports must specify `native_leaf=false@explicit_contract`. This backend uses internal APIs of the pinned Elide Graal compiler; see [ABI 2 migration](docs/binding-abi-2.md). Both hosts pass concurrent-GC and assembly checks.
+
+[Linux raw measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun the benchmarks](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
+
+<details>
+<summary>Portable normal-transition, native-leaf, and AOT FFM baseline</summary>
+
+Direct generated SVM bindings perform on par with handwritten Native Image C calls in the retained v0.7.2 scalar benchmark. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected generated and handwritten direct-call paths produce matching instruction sequences.
+
+![Portable Myna versus handwritten Native Image scalar call latency](docs/charts/svm-boundaries.svg)
+
+These latencies include the scalar callee and loop; the roughly 0.59 ns control is not subtracted. Transition contracts differ across pairs. These are shared-host measurements, not universal latency guarantees.
+
+[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun commands](docs/benchmarking.md) · [Regenerate charts](docs/benchmarking.md#performance-charts)
+
+</details>
 
 ## Build and use
 
@@ -75,6 +90,7 @@ Every generation produces:
 
 - `seam.h`, `seam.rs`, `MynaFFM.java`, `MynaNative.java`, `MynaForeignFeature.java`
 - `seam.json` with optimizer-fact provenance, `seam.abi` with a SHA-256 fingerprint
+- `META-INF/native-image/` initialization metadata; include it with compiled bindings
 - `seam.ll`, consumed by `myna apply` or assembled by LLVM 23's `llvm-as`
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.
