@@ -3,5 +3,5 @@ callback LongLeaf return=i64 java_type=example.leaf.LongLeaf
   param value type=i64
 end
 # Resolve once at runtime, then reuse the typed pointer. This is not a timed leaf.
-import resolve symbol=myna_leaf_address return=fn<LongLeaf> error=no_failure
+import resolve symbol=myna_leaf_address return=fn<LongLeaf> error=no_failure native_leaf=false@explicit_contract
 end

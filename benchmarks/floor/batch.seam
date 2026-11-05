@@ -1,13 +1,13 @@
 module batches abi=1 target=aarch64-apple-darwin java_package=bench java_class=Batch
-import batch4 symbol=myna_bench_batch4 return=i64 error=no_failure native_leaf=true@explicit_contract
+import batch4 symbol=myna_bench_batch4 return=i64 error=no_failure
   param value type=i64
 end
-import batch16 symbol=myna_bench_batch16 return=i64 error=no_failure native_leaf=true@explicit_contract
+import batch16 symbol=myna_bench_batch16 return=i64 error=no_failure
   param value type=i64
 end
-import batch64 symbol=myna_bench_batch64 return=i64 error=no_failure native_leaf=true@explicit_contract
+import batch64 symbol=myna_bench_batch64 return=i64 error=no_failure
   param value type=i64
 end
-import batch256 symbol=myna_bench_batch256 return=i64 error=no_failure native_leaf=true@explicit_contract
+import batch256 symbol=myna_bench_batch256 return=i64 error=no_failure
   param value type=i64
 end

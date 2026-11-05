@@ -14,6 +14,7 @@ esac
   ${native_id:+"$native_id"} -H:-UnlockExperimentalVMOptions \
   -jar .dev/artifacts/jar/myna/myna.jar -o build/dist/myna
 scripts/symbols.sh build/dist/myna
+cp scripts/compile-native-bindings.py build/dist/compile-native-bindings.py
 cp .dev/artifacts/jar/myna/myna.jar build/dist/myna.jar
 cp .dev/artifacts/jar/myna-feature/myna-feature.jar build/dist/myna-feature.jar
 cp .dev/artifacts/jar/myna-values/myna-values.jar build/dist/myna-values.jar

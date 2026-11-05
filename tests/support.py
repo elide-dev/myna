@@ -24,6 +24,14 @@ def run(*args, cwd=ROOT, ok=True):
         raise AssertionError(f"Command failed ({result.returncode}): {args}\n{result.stdout}\n{result.stderr}")
     return result
 
+def compile_native(classes, generated, *sources, classpath=()):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("myna_compile", ROOT / "scripts/compile-native-bindings.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.compile_bindings(classes, [generated], sources, classpath)
+
+
 def native_image(*args):
     # Keep the direct driver's argument dump inside ignored build output.
     work = ROOT / "build"

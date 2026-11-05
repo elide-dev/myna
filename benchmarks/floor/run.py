@@ -46,7 +46,10 @@ def build():
     execute(cc,WORK/'caller.o',WORK/'kernel.o',WORK/'batch.o','-o',WORK/'native')
     # Generator names its direct binding according to java_class, not the filename suffix.
     java_sources=[SOURCE/'Floor.java',SOURCE/'FloorMeasure.java',ROOT/'benchmarks/comparison/Measure.java',generated/'boundary/Generated.java',generated/'batch/Batch.java',generated/'identity/Identity.java',generated/'leaf-pointer/LeafBindings.java',ROOT/'examples/leaf-pointer/LongLeaf.java']
-    execute('javac','-cp',shared,'-d',classes,*java_sources)
+    sdk = [home/'lib/svm'/name for name in ('svm-shared.jar','svm-guest-staging.jar','svm-guest.jar')]
+    execute('javac','-cp',os.pathsep.join(map(str,sdk)),'-d',classes,*java_sources)
+    for directory in generated.iterdir():
+        shutil.copytree(directory/'META-INF',classes/'META-INF',dirs_exist_ok=True)
     args=['-O3','-march=compatibility','--initialize-at-build-time=bench.Generated','-cp',str(classes),
           '-H:+UnlockExperimentalVMOptions','-H:-DeleteLocalSymbols',
           f'-H:NativeLinkerOption={WORK / "kernel.o"}',f'-H:NativeLinkerOption={WORK / "batch.o"}',
@@ -66,7 +69,7 @@ def build():
            ROOT/'mise.lock',ROOT/'tools/graalvm.json',*generator_sources]
     versions={name:execute(*command).stdout for name,command in {
         'clang':(cc,'--version'),'graalvm':(home/'bin/native-image','--version')}.items()}
-    metadata={'workload':'leaf-floor-v1','revision':execute('git','rev-parse','HEAD').stdout.strip(),
+    metadata={'workload':'leaf-floor-v2','binding_abi':2,'revision':execute('git','rev-parse','HEAD').stdout.strip(),
               'dirty':execute('git','status','--porcelain').stdout,'target':TARGET,'commands':commands,'versions':versions,
               'sources':{str(p.relative_to(ROOT)):digest(p) for p in files if p.is_file()},
               'binaries':{str((WORK/p).relative_to(ROOT)):digest(WORK/p) for p in ('native','svm','kernel.o','batch.o','caller.o')},
@@ -117,7 +120,7 @@ def report(path):
         groups.setdefault((r['mode'],r['case'],r['batch']),[]).append(statistics.median(s['ns']/s['iterations'] for s in r['samples']))
     lines=['# Native call floor and bounded batching','',f"Source: `{data['build']['revision']}`; {data['forks']} processes/case; smoke: {data['smoke']}.",'',
            'One operation is one scalar call (identity or recurrence, as labeled). Batches retain each noinline native scalar call; no control subtraction.',
-           'Native and SVM execute identical linked kernel objects. Inlineable pointers and bounded Java batches are opt-in internal Graal API experiments.', '',
+           'Native and SVM execute identical linked kernel objects. Generated leaves use binding ABI 2 defaults; custom pointers and bounded Java batches are additional internal Graal API experiments.', '',
            '| Runtime | Case | Batch | Median ns/op | Process min–max | ns/boundary including work |',
            '|---|---|---:|---:|---:|---:|']
     for (mode,name,batch),values in sorted(groups.items()):

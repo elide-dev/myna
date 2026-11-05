@@ -11,11 +11,11 @@
 
 # Myna
 
-A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, `@CFunction` imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
+A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, inlineable native imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
 
 **`myna apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
 
-**Substrate VM is the primary runtime.** Fixed symbols use direct generated C API bindings; explicitly contracted native leaf calls can elide VM transitions. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
+**Substrate VM is the primary runtime.** Binding ABI 2 makes inlineable no-transition native calls the default. Imports must be short, bounded, nonblocking and unable to reenter Java; other calls require `native_leaf=false@explicit_contract`. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
 
 See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
 
@@ -25,7 +25,7 @@ See [releases](https://github.com/elide-dev/myna/releases) for published SDKs an
 
 ![Native leaf call latency compared with native function-pointer callers on Linux ARM64 and Apple M5 Max](docs/charts/leaf-floor.svg)
 
-The [typed leaf-pointer example](examples/leaf-pointer/README.md) uses Myna's existing signature mapping and resolves the address once at runtime. It removes the extra leaf adapter stub, uses **internal Graal API**, and requires short, bounded, nonblocking, primitive-only calls with **no Java reentry**. Ordinary generated bindings retain the portable Native Image API. Both paths are exercised with the pinned compiler; the opt-in path also passes concurrent allocation/GC stress.
+Myna 0.8.0 generates the inlineable path by default, including typed pointers, symbolic linkage, lazy runtime addresses, and Native Image initialization metadata. It uses internal APIs of the pinned Elide Graal compiler. [Migrate to binding ABI 2](docs/binding-abi-2.md), audit imports, and explicitly opt out where a normal transition is required. The retained chart below measures the earlier opt-in prototype; new-default measurements are being collected.
 
 The chart measures an identity function plus its caller loop, with no control subtraction. Five fresh processes expose process variation. Compare within each host. In the Linux arithmetic workload, the inlineable pointer measures **0.76 ns/op**; a bounded 16-call Java batch reaches **0.59 ns/op**, close to the native arithmetic baseline. Explicit loop unrolling is measured separately: it helps the identity workload on the Mac but is not a universal improvement.
 
@@ -90,6 +90,7 @@ Every generation produces:
 
 - `seam.h`, `seam.rs`, `MynaFFM.java`, `MynaNative.java`, `MynaForeignFeature.java`
 - `seam.json` with optimizer-fact provenance, `seam.abi` with a SHA-256 fingerprint
+- `META-INF/native-image/` initialization metadata; include it with compiled bindings
 - `seam.ll`, consumed by `myna apply` or assembled by LLVM 23's `llvm-as`
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.

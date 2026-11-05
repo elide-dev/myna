@@ -32,14 +32,14 @@ export consume symbol=myna_value_consume return=i64 java=fixture.values.ValuesMa
   param mode type=i32
 end
 # Allocates and calls Java: this is deliberately a normal-transition call.
-import drive symbol=myna_value_drive return=i64 error=no_failure
+import drive symbol=myna_value_drive return=i64 error=no_failure native_leaf=false@explicit_contract
   param consumer type=fn<ValueConsumer>
   param isolate type=isolate_thread
   param iterations type=u32
   param mode type=i32
 end
 
-import cppDrive symbol=myna_cpp_values return=i64 error=no_failure
+import cppDrive symbol=myna_cpp_values return=i64 error=no_failure native_leaf=false@explicit_contract
   param consumer type=fn<ValueConsumer>
   param isolate type=isolate_thread
 end

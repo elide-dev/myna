@@ -1,5 +1,6 @@
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
@@ -8,11 +9,6 @@ import java.util.*;
 public final class NativeImage implements Backend {
   public String filename(Module module) {
     return module.nativeClass() + ".java";
-  }
-
-  private static boolean nativeLeaf(Function f) {
-    Fact leaf = f.facts().get("native_leaf");
-    return leaf != null && leaf.enabled() && leaf.approved();
   }
 
   private static String javaType(Module m, Type type) {
@@ -76,6 +72,15 @@ public final class NativeImage implements Backend {
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
+    if (m.functions().stream().anyMatch(Seam::nativeLeaf)) {
+      imports.add("com.oracle.svm.shared.AlwaysInline");
+      imports.add("com.oracle.svm.shared.Uninterruptible");
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalData");
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalDataFactory");
+      imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
+      imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
+      imports.add("org.graalvm.nativeimage.c.function.CFunction");
+    }
     if (m.nativeConfig() != null) {
       if (m.nativeConfig().cContext() != null) imports.add("org.graalvm.nativeimage.c.CContext");
       if (m.nativeConfig().cLibrary() != null)
@@ -120,6 +125,53 @@ public final class NativeImage implements Backend {
         + ".class";
   }
 
+  private static String leafType(Function f) { return f.name() + "_Leaf"; }
+
+  private static String leafParameters(Module m, Function f) {
+    return String.join(", ", f.abiParameters().stream().map(p ->
+        (unsignedSmall(p.type()) ? "int" : carrier(m, p)) + " " + p.name()).toList());
+  }
+
+  private static void leafBindings(Module m, StringBuilder out) {
+    var leaves = m.functions().stream().map(f -> ByValue.lower(m, f)).filter(Seam::nativeLeaf).toList();
+    if (leaves.isEmpty()) return;
+    for (Function f : leaves) {
+      out.append("    public interface ").append(leafType(f)).append(" extends CFunctionPointer {\n")
+          .append("        @AlwaysInline(\"Myna binding ABI 2 native leaf\")\n")
+          .append("        @Uninterruptible(reason = \"Bounded primitive/word native leaf; no Java reentry\", mayBeInlined = true)\n")
+          .append("        @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)\n")
+          .append("        ").append(javaType(m, f.returns())).append(" invoke(")
+          .append(leafParameters(m, f)).append(");\n    }\n");
+    }
+    out.append("    /** Linker metadata only: initialized at image build time. */\n")
+        .append("    private static final class MynaSymbols {\n");
+    for (Function f : leaves)
+      out.append("        static final CGlobalData<").append(leafType(f)).append("> ")
+          .append(f.name()).append(" = CGlobalDataFactory.forSymbol(")
+          .append(SeamJson.quote(f.symbol())).append(");\n");
+    out.append("    }\n");
+    for (Function f : leaves)
+      out.append("    /** Runtime address: never initialized in the build host. */\n")
+          .append("    private static final class ").append(f.name()).append("_Binding {\n")
+          .append("        static final ").append(leafType(f)).append(" ADDRESS = MynaSymbols.")
+          .append(f.name()).append(".get();\n    }\n");
+  }
+
+  private static void leafWrapper(Module m, Function f, StringBuilder out) {
+    out.append("    /** Resolve before entering an uninterruptible caller; retain the linked library. */\n")
+        .append("    @AlwaysInline(\"Myna native leaf address\")\n    public static ")
+        .append(leafType(f)).append(' ').append(f.name()).append("LeafPointer() {\n")
+        .append("        return ").append(f.name()).append("_Binding.ADDRESS;\n    }\n")
+        .append("    @AlwaysInline(\"Myna native leaf call\")\n    public static ")
+        .append(javaType(m, f.returns())).append(' ').append(f.name()).append('(')
+        .append(params(m, f.abiParameters())).append(") {\n        ")
+        .append(f.returns() == Scalar.VOID ? "" : "return ")
+        .append(f.name()).append("_Binding.ADDRESS.invoke(")
+        .append(String.join(", ", f.abiParameters().stream().map(p ->
+            unsignedSmall(p.type()) ? widened(p.type(), p.name()) : p.name()).toList()))
+        .append(");\n    }\n");
+  }
+
   public String generate(Module m) {
     var out =
         new StringBuilder(
@@ -148,6 +200,8 @@ public final class NativeImage implements Backend {
     out.append("    public static final String ABI_FINGERPRINT = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
+    out.append("    public static final int BINDING_ABI_VERSION = ").append(Seam.BINDING_ABI_VERSION).append(";\n");
+    leafBindings(m, out);
     for (Struct st : m.structs()) accessors(m, st, out);
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
@@ -182,6 +236,10 @@ public final class NativeImage implements Backend {
       out.append("    }\n");
     }
     for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
+      if (Seam.nativeLeaf(f)) {
+        leafWrapper(m, f, out);
+        continue;
+      }
       boolean lowered =
           f.direction() == Direction.IMPORT
               && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
@@ -210,7 +268,6 @@ public final class NativeImage implements Backend {
       if (f.direction() == Direction.IMPORT)
         out.append("    @CFunction(value = ")
             .append(SeamJson.quote(f.symbol()))
-            .append(nativeLeaf(f) ? ", transition = CFunction.Transition.NO_TRANSITION" : "")
             .append(lowered ? ")\n    private static native " : ")\n    public static native ");
       else
         out.append("    @CEntryPoint(name = ")

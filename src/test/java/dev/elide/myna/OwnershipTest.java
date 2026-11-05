@@ -64,10 +64,10 @@ class OwnershipTest {
                       .replace("param count type=u64", "param count type=" + length)
                       .replace(
                           "import ticketCreate symbol=ticket_create return=ptr<Ticket>"
-                              + " error=no_failure nounwind=true@explicit_contract\n"
+                              + " error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
                               + "end",
                           "import ticketCreate symbol=ticket_create return=ptr<Ticket>"
-                              + " error=no_failure nounwind=true@explicit_contract\n"
+                              + " error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
                               + "param size type=u64\n"
                               + "end")),
               true);

@@ -5,6 +5,10 @@ name: Native call floor
   pull_request:
     paths:
       - 'benchmarks/floor/**'
+      - 'src/main/java/**'
+      - 'benchmarks/comparison/boundary.seam'
+      - 'tools/graalvm.json'
+      - 'tests/support.py'
       - 'examples/leaf-pointer/**'
       - 'benchmarks/comparison/kernel.c'
       - 'benchmarks/comparison/Measure.java'
