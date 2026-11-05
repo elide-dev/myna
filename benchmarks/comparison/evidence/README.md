@@ -13,3 +13,9 @@ Build with `-H:-DeleteLocalSymbols` to retain method names for `llvm-objdump --d
 The inlineable `example.leaf.LongLeaf.invoke` has no standalone adapter stub in either image. The ordinary generated leaf retains its frame/address-load/call/return stub. Java batches inline these ordinary stubs into bounded uninterruptible callers; the enclosing measurement loop remains interruptible. The retained SVM loops include native indirect calls and safepoint slow paths; elimination of the adapter does not mean the native call itself is eliminated.
 
 The original normal-transition comparison above and these leaf-floor experiments use different builds and workloads. Do not equate their instruction counts or mix their wall timings. Extract fresh evidence with `benchmarks/comparison/inspect-floor.py` when updating a floor baseline.
+
+## Binding ABI 2 default calls
+
+`default-leaf-linux-arm64.asm` and `default-leaf-macos-arm64.asm` retain the new default's call sites and matched native/handwritten baselines. Matching JSON records preserve source and binary hashes. Generated `Identity.leaf`, `Generated.leaf`, and their typed pointer invoke methods have no standalone adapter stub. Handwritten `Floor.identity` / `Floor.leaf` retain their ordinary native stubs. Runtime address initialization remains separate from steady-state calls.
+
+The floor workflow checks this structural property with `inspect-floor.py` as well as collecting timings. The generated default and cached-pointer integration test also requires observed collections during concurrent allocation/GC. These checks preserve the compiler's own uninterruptible validation; they do not prove arbitrary consumer implementations satisfy the leaf contract.

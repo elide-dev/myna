@@ -3,6 +3,8 @@ public final class FastMain {
   static volatile byte[] allocation;
   public static void main(String[] args) throws Exception {
     if(FastApi.BINDING_ABI_VERSION!=2) throw new AssertionError("binding ABI");
+    // The ordinary default must work before any cached pointer is requested.
+    if(FastApi.increment(40)!=41) throw new AssertionError("default leaf first use");
     var pointer=FastApi.incrementLeafPointer();
     var failure=new java.util.concurrent.atomic.AtomicReference<Throwable>();
     long before=java.lang.management.ManagementFactory.getGarbageCollectorMXBeans().stream()

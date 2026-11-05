@@ -21,15 +21,15 @@ See [releases](https://github.com/elide-dev/myna/releases) for published SDKs an
 
 ## Call overhead
 
-**Short native leaves can get close to the native-call floor.** On the pinned Linux ARM64 run, the opt-in inlineable leaf pointer takes **0.53 ns per identity call**, versus **1.50 ns** for ordinary generated or handwritten SVM leaves and **0.44 ns** for an unrolled native function-pointer caller.
+**Fast native calls are the default in Myna 0.8.0 / binding ABI 2.** Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max**, versus **1.510 ns** and **0.999 ns** for handwritten Native Image `@CFunction(NO_TRANSITION)` calls in the same builds.
 
-![Native leaf call latency compared with native function-pointer callers on Linux ARM64 and Apple M5 Max](docs/charts/leaf-floor.svg)
+![Default Myna native leaf calls compared with handwritten Native Image and native C pointer callers](docs/charts/default-leaf.svg)
 
-Myna 0.8.0 generates the inlineable path by default, including typed pointers, symbolic linkage, lazy runtime addresses, and Native Image initialization metadata. It uses internal APIs of the pinned Elide Graal compiler. [Migrate to binding ABI 2](docs/binding-abi-2.md), audit imports, and explicitly opt out where a normal transition is required. The retained chart below measures the earlier opt-in prototype; new-default measurements are being collected.
+The native function-pointer baselines, explicitly unrolled four times, measure **0.442 ns** and **0.512 ns** respectively. The Mac process ranges overlap. These are identity-function-plus-loop timings with no control subtraction: compare within each host, not across machines. Five fresh processes per case retain ten samples each. Arithmetic workloads, custom pointers, explicit SVM unrolling and bounded batches remain in the full results.
 
-The chart measures an identity function plus its caller loop, with no control subtraction. Five fresh processes expose process variation. Compare within each host. In the Linux arithmetic workload, the inlineable pointer measures **0.76 ns/op**; a bounded 16-call Java batch reaches **0.59 ns/op**, close to the native arithmetic baseline. Explicit loop unrolling is measured separately: it helps the identity workload on the Mac but is not a universal improvement.
+Myna generates typed inlineable pointers, symbolic linkage, and Native Image initialization metadata. Ordinary calls use the relocated symbol directly, removing the extra SVM leaf stub and runtime address-holder guard. The default contract requires **short, bounded, nonblocking calls with no Java reentry**. Other imports must specify `native_leaf=false@explicit_contract`. This backend uses internal APIs of the pinned Elide Graal compiler; see [ABI 2 migration](docs/binding-abi-2.md). Both hosts pass concurrent-GC and assembly checks.
 
-[Linux raw measurements](benchmarks/comparison/baselines/leaf-floor-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/leaf-floor-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/leaf-floor-macos-arm64.md) · [Rerun the floor experiment](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
+[Linux raw measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun the benchmarks](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
 
 <details>
 <summary>Portable normal-transition, native-leaf, and AOT FFM baseline</summary>
