@@ -37,8 +37,8 @@ attestation writes. The release entrypoint contains the actual publishing action
 so permission exemptions do not depend on detecting a reusable workflow. Archive
 publication retains its signed provenance bundle and a discoverable in-toto envelope.
 
-Hadolint runs on every PR and main push, including shell checks inside Dockerfile
-commands. Its action and underlying image are pinned. OS package versions follow
+Hadolint runs in the required Repository hygiene check on every PR, main push,
+and merge group, including shell checks inside Dockerfile commands. Its action and underlying image are pinned. OS package versions follow
 Ubuntu security updates within the pinned base release; DL3008 is the sole documented
 exception. This is Dockerfile analysis, not a claim of comprehensive Java/C++ SAST.
 Rust Clippy and workflow actionlint remain separate existing checks. CodeQL stays disabled.
