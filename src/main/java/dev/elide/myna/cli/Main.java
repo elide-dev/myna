@@ -1,6 +1,7 @@
 package dev.elide.myna.cli;
 
 import dev.elide.myna.Generator;
+import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
@@ -15,15 +16,16 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.8.0 — Native Image / Rust ABI generator
+      myna 0.9.1 — Native Image / Rust ABI generator
       Usage:
-        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check]
+        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni]
         myna validate INPUT.seam [--target TRIPLE] [--relaxed]
         myna apply --contracts seam.ll --input caller.o --output caller.seam.o [--llvm-tool PATH]
         myna --help | --version
       apply rewrites LLVM 23 bitcode objects or archive members using myna-llvm.
       --relaxed omits unapproved optimizer facts; unknown/contradictory contracts still fail.
       --check verifies generated files without modifying them.
+      --jni adds static JNI adapters for Substrate VM (link lib<module>_jni.a).
       """;
 
   public static void main(String[] args) {
@@ -55,7 +57,7 @@ public final class Main {
       if (args.length < 2) throw new IllegalArgumentException("missing INPUT.seam");
       Path input = Path.of(args[1]), destination = null;
       String target = null;
-      boolean strict = true, check = false;
+      boolean strict = true, check = false, jni = false;
       Set<String> seen = new HashSet<>();
       for (int i = 2; i < args.length; i++) {
         if (!seen.add(args[i])) throw new IllegalArgumentException("duplicate option: " + args[i]);
@@ -70,6 +72,7 @@ public final class Main {
           }
           case "--relaxed" -> strict = false;
           case "--check" -> check = true;
+          case "--jni" -> jni = true;
           default -> throw new IllegalArgumentException("unknown option: " + args[i]);
         }
       }
@@ -77,14 +80,15 @@ public final class Main {
       if (target != null) module = module.withTarget(target);
       Validator.validate(module, strict);
       if (args[0].equals("validate")) {
-        if (destination != null || check)
-          throw new IllegalArgumentException("validate does not accept --out/--check");
+        if (destination != null || check || jni)
+          throw new IllegalArgumentException("validate does not accept --out/--check/--jni");
         out.println("valid " + module.name() + " " + SeamJson.fingerprint(module));
         return 0;
       }
       if (destination == null)
         throw new IllegalArgumentException("generate requires --out DIRECTORY");
-      var outputs = Generator.generate(module, strict);
+      var outputs = new TreeMap<>(Generator.generate(module, strict));
+      if (jni) outputs.putAll(StaticJni.generate(module));
       if (check) {
         for (var item : outputs.entrySet()) {
           Path file = destination.resolve(item.getKey());

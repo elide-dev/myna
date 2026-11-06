@@ -1,5 +1,6 @@
 import fixture.owned.NativeApi;
 import fixture.owned.NativeApiOwnership;
+import fixture.owned.ConfinedApiOwnership;
 import java.lang.ref.Cleaner;
 import java.util.concurrent.atomic.AtomicLong;
 import org.graalvm.nativeimage.UnmanagedMemory;
@@ -87,7 +88,7 @@ public final class OwnershipMain {
     throw new AssertionError("expected rejection");
   }
 
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] args) throws Throwable {
     check(NativeApi.liveCount() == 0);
     Owner owner = NativeApiOwnership.Ticket.create(Owner::new);
     check(owner.address() != 0 && NativeApi.liveCount() == 1);
@@ -119,6 +120,8 @@ public final class OwnershipMain {
                 })
             == null);
     check(NativeApi.liveCount() == 0);
+
+    verifyConfinedResources();
 
     byte[] bytes = {1, 2, (byte) 255};
     check(NativeApiOwnership.checksum(bytes) == 258);
@@ -165,5 +168,30 @@ public final class OwnershipMain {
     check(NativeApiOwnership.checksum(empty) == 0);
     NativeApiOwnership.increment(empty);
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
+  }
+
+  private static void verifyConfinedResources() throws Throwable {
+    var owner = ConfinedApiOwnership.Ticket.create((address, destructor, thread) ->
+        new ConfinedOwner<>(address, destructor::destroy, thread));
+    check(owner.address() != 0 && NativeApi.liveCount() == 1);
+    try {
+      owner.rejectsOtherThread();
+      check(NativeApi.liveCount() == 1);
+    } finally { owner.close(); }
+    owner.close();
+    ConfinedOwner.rejects(IllegalStateException.class, owner::address);
+    check(NativeApi.liveCount() == 0);
+    ConfinedOwner.rejects(IllegalStateException.class, () -> ConfinedApiOwnership.Ticket.create(
+        (address, destructor, thread) -> {
+          check(thread == Thread.currentThread());
+          throw new IllegalStateException("confined adoption failed");
+        }));
+    ConfinedOwner.rejects(NullPointerException.class, () -> ConfinedApiOwnership.Ticket.create(
+        (address, destructor, thread) -> null));
+    check(NativeApi.liveCount() == 0);
+    NativeApi.failNext();
+    check(ConfinedApiOwnership.Ticket.create((address, destructor, thread) -> {
+      throw new AssertionError("must not adopt null");
+    }) == null);
   }
 }

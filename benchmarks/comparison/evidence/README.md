@@ -19,3 +19,52 @@ The original normal-transition comparison above and these leaf-floor experiments
 `default-leaf-linux-arm64.asm` and `default-leaf-macos-arm64.asm` retain the new default's call sites and matched native/handwritten baselines. Matching JSON records preserve source and binary hashes. Generated `Identity.leaf`, `Generated.leaf`, and their typed pointer invoke methods have no standalone adapter stub. Handwritten `Floor.identity` / `Floor.leaf` retain their ordinary native stubs. Runtime address initialization remains separate from steady-state calls.
 
 The floor workflow checks this structural property with `inspect-floor.py` as well as collecting timings. The generated default and cached-pointer integration test also requires observed collections during concurrent allocation/GC. These checks preserve the compiler's own uninterruptible validation; they do not prove arbitrary consumer implementations satisfy the leaf contract.
+
+## Scalar adapters on macOS ARM64
+
+[`adapters-macos-arm64.asm`](adapters-macos-arm64.asm) and its
+[metadata](adapters-macos-arm64.json) come from the same executables as the
+five-process [`scalar-recurrence-v3` baseline](../baselines/adapters-macos-arm64.json).
+They retain the original build metadata, source/executable/full-disassembly
+hashes, extractor hash, selected symbols and normalized comparisons.
+
+- Generated and handwritten normal direct loops contain 72 ARM64 instructions
+  each and match after normalizing target addresses. Symbol targets and relative
+  branch offsets remain part of the comparison.
+- Generated and handwritten JNI C wrappers contain 16 matching instructions,
+  including the same pending-exception check and raw native target. Their managed
+  JNI stubs contain 222 instructions each and caller loops contain 211 each;
+  equal counts alone are not an instruction-equivalence claim.
+- The generated default leaf has no standalone wrapper or pointer-invoke stub.
+  The handwritten leaf retains its eight-instruction stub. Both loops still
+  cooperate with safepoints; total loop sizes differ with compiler loop layout.
+- Typed critical FFM uses the compiled unbound adapter and has no generic
+  `MethodHandle.invokeBasic` call or normal native-transition slow path in its
+  loop. The generated loop contains 348 instructions versus 315 for the manual
+  unbound loop, including cold error paths. Binding and optional-address checks
+  remain, so these paths are not declared instruction-identical.
+- Runtime-bound FFM loops retain `MethodHandle.invokeBasic` and allocation
+  paths. The paired sample counters establish their steady-state allocation;
+  allocation instructions in cold exception paths alone would not establish it.
+
+Counts include alignment nops and cold paths. They are static code sizes, not
+dynamic instruction counts or timings. These findings apply to the executed
+macOS ARM64 build; supported decoder formats do not establish execution on
+another platform.
+
+After the comparison build, extract evidence without rebuilding or measuring:
+
+```sh
+mise exec -- python3 benchmarks/comparison/inspect-adapters.py build/comparison build/comparison/adapter-evidence
+```
+
+To regenerate this checked-in selection from the retained matching build:
+
+```sh
+mise exec -- python3 benchmarks/comparison/inspect-adapters.py build/comparison benchmarks/comparison/evidence/adapters-macos-arm64
+```
+
+The extractor streams full disassembly, verifies executable and assembly hashes,
+requires each named selection, and checks the normal/C-JNI normalized matches.
+It accepts ARM64 Mach-O or ELF objdump output with an optional leading symbol
+underscore, and rejects unsupported decoder formats or empty instruction sets.

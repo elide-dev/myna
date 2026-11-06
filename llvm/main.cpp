@@ -1,4 +1,4 @@
-// Apply generated seam contracts to actual LLVM 23 bitcode, before ThinLTO indexing.
+// Apply generated seam contracts to actual LLVM 23 bitcode, before ThinLTO/full-LTO linking.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
@@ -17,6 +17,11 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ArchiveWriter.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/ELFObjectFile.h"
+#include "llvm/ObjCopy/CommonConfig.h"
+#include "llvm/ObjCopy/ELF/ELFConfig.h"
+#include "llvm/ObjCopy/ELF/ELFObjcopy.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
@@ -33,7 +38,7 @@
 
 using namespace llvm;
 static cl::opt<std::string> Contracts("contracts", cl::Required, cl::desc("Generated seam.ll"));
-static cl::opt<std::string> Input("input", cl::Required, cl::desc("Bitcode object or regular archive"));
+static cl::opt<std::string> Input("input", cl::Required, cl::desc("Bitcode/FatLTO object or regular archive"));
 static cl::opt<std::string> Output("output", cl::Required, cl::desc("Rewritten object/archive (distinct path)"));
 static unsigned Matched = 0, Calls = 0, Modules = 0, PreservedMembers = 0;
 
@@ -218,20 +223,58 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
 }
 static Expected<std::unique_ptr<MemoryBuffer>> rewrite(MemoryBufferRef Buffer, LLVMContext &Context,
                                                       const Module &Contract, StringRef Hash) {
+  auto LTO = getBitcodeLTOInfo(Buffer);
+  if (!LTO) return LTO.takeError();
   auto Parsed = parseBitcodeFile(Buffer, Context);
   if (!Parsed) return Parsed.takeError();
   Module &M = **Parsed;
   unsigned Before = Matched;
   if (auto E = apply(M, Contract, Hash)) return E;
   if (Before == Matched) return MemoryBuffer::getMemBufferCopy(Buffer.getBuffer(), Buffer.getBufferIdentifier());
-  // Recompute both summary and module hash. Reusing old summaries/cache keys is incorrect.
+  // Recompute summaries when present, without converting full-LTO input into ThinLTO.
+  // Reusing old summaries/cache keys is incorrect.
   // Producers without a GUID pass (llvm-as, older tools) leave definitions unassigned.
   AssignGUIDPass::runOnModule(M);
-  ProfileSummaryInfo PSI(M);
-  auto Index = buildModuleSummaryIndex(M, nullptr, &PSI);
   SmallVector<char, 0> Bytes;
   raw_svector_ostream Stream(Bytes);
-  WriteBitcodeToFile(M, Stream, false, &Index, true);
+  if (LTO->HasSummary) {
+    ProfileSummaryInfo PSI(M);
+    auto Index = buildModuleSummaryIndex(M, nullptr, &PSI);
+    WriteBitcodeToFile(M, Stream, false, &Index, true);
+  } else WriteBitcodeToFile(M, Stream, false, nullptr, true);
+  return MemoryBuffer::getMemBufferCopy(StringRef(Bytes.data(), Bytes.size()), Buffer.getBufferIdentifier());
+}
+// Rewrite the optimizer input, preserving the native fallback and all other sections.
+// A null result denotes an ordinary native object, which archives preserve unchanged.
+static Expected<std::unique_ptr<MemoryBuffer>> rewriteFatLTO(
+    MemoryBufferRef Buffer, LLVMContext &Context, const Module &Contract, StringRef Hash) {
+  if (identify_magic(Buffer.getBuffer()) != file_magic::elf_relocatable) return nullptr;
+  auto Object = object::ObjectFile::createObjectFile(Buffer);
+  if (!Object) return Object.takeError();
+  std::optional<StringRef> Bitcode;
+  for (auto Section : (*Object)->sections()) {
+    auto Name = Section.getName();
+    if (!Name) return Name.takeError();
+    if (*Name != ".llvm.lto") continue;
+    if (Bitcode) return fail("duplicate .llvm.lto sections in " + Buffer.getBufferIdentifier());
+    auto Contents = Section.getContents();
+    if (!Contents) return Contents.takeError();
+    Bitcode = *Contents;
+  }
+  if (!Bitcode) return nullptr;
+  auto Rewritten = rewrite(MemoryBufferRef(*Bitcode, Buffer.getBufferIdentifier()), Context, Contract, Hash);
+  if (!Rewritten)
+    return joinErrors(fail("invalid .llvm.lto in " + Buffer.getBufferIdentifier() + ":"), Rewritten.takeError());
+  if ((*Rewritten)->getBuffer() == *Bitcode)
+    return MemoryBuffer::getMemBufferCopy(Buffer.getBuffer(), Buffer.getBufferIdentifier());
+  objcopy::CommonConfig Config;
+  Config.InputFilename = Buffer.getBufferIdentifier();
+  Config.OutputFilename = Buffer.getBufferIdentifier();
+  Config.UpdateSection.emplace_back(".llvm.lto", std::move(*Rewritten));
+  SmallVector<char, 0> Bytes;
+  raw_svector_ostream Stream(Bytes);
+  if (auto E = objcopy::elf::executeObjcopyOnBinary(
+          Config, objcopy::ELFConfig(), cast<object::ELFObjectFileBase>(**Object), Stream)) return E;
   return MemoryBuffer::getMemBufferCopy(StringRef(Bytes.data(), Bytes.size()), Buffer.getBufferIdentifier());
 }
 static Error run() {
@@ -273,7 +316,12 @@ static Error run() {
         auto Rewritten = rewrite(Member->Buf->getMemBufferRef(), Context, *Contract, ContentHash);
         if (!Rewritten) return Rewritten.takeError();
         Member->Buf = std::move(*Rewritten);
-      } else ++PreservedMembers;
+      } else {
+        auto Rewritten = rewriteFatLTO(Member->Buf->getMemBufferRef(), Context, *Contract, ContentHash);
+        if (!Rewritten) return Rewritten.takeError();
+        if (*Rewritten) Member->Buf = std::move(*Rewritten);
+        else ++PreservedMembers;
+      }
       Members.push_back(std::move(*Member));
     }
     if (Iteration) return Iteration;
@@ -281,7 +329,13 @@ static Error run() {
                                         (*Archive)->kind(), true, false);
     if (!Rebuilt) return Rebuilt.takeError();
     Result = std::move(*Rebuilt);
-  } else return fail("input has no standalone LLVM bitcode; compile with -flto=thin or Rust -Clinker-plugin-lto (native machine-code objects cannot carry usable optimizer annotations)");
+  } else {
+    auto Rewritten = rewriteFatLTO((*Buffer)->getMemBufferRef(), Context, *Contract, ContentHash);
+    if (!Rewritten) return Rewritten.takeError();
+    if (!*Rewritten)
+      return fail("input has no LLVM bitcode; compile with -flto=thin/-flto=full or Rust -Clinker-plugin-lto (native machine-code objects cannot carry usable optimizer annotations)");
+    Result = std::move(*Rewritten);
+  }
   if (Matched == 0) return fail("no contract symbols matched input; refusing an ineffective rewrite");
   // Commit after every member, signature and contract has been validated.
   SmallString<256> Temporary;
