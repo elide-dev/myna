@@ -46,7 +46,7 @@ These latencies include the scalar callee and loop; the roughly 0.59 ns control 
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.1 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.2 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 ```sh
 mise trust
@@ -176,7 +176,7 @@ The Feature exports the validated descriptors during `beforeAnalysis`; it does n
 
 ## Optional FFM and JNI adapters
 
-Typed FFM calls and Native Image downcall-stub registration are implemented. Fuller FFM and Static JNI adapters are future compatibility work, subordinate to the direct Substrate VM path. The [JVM roadmap](docs/jvm-roadmap.md) covers typed FFM bindings, callbacks/lifetimes, explicit JNI lowering, static registration, and contract scope across VM adapters.
+Java 25 FFM supports explicit library arenas, typed buffer borrows, consumer-owned resource cleanup, scoped callbacks, by-value records, and policy-checked critical downcalls on the JVM and Native Image. `myna generate ... --jni` adds static JNI wrappers for Substrate VM, concrete C/Rust/LLVM JNI signatures, and the pinned linker's symbol manifest. See the [adapter guide](docs/jvm-roadmap.md) for lifetime contracts, static-link instructions, tested targets and supported JNI types. The direct Substrate VM path remains primary.
 
 ## Current scope
 
@@ -184,6 +184,6 @@ The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and poin
 
 Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.
 
-Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.1,
+Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.2,
 and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.

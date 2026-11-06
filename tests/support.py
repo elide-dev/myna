@@ -15,6 +15,8 @@ TARGET = {("Darwin", "arm64"): "aarch64-apple-darwin", ("Darwin", "x86_64"): "x8
 def run(*args, cwd=ROOT, ok=True):
     if str(args[0]) in ("cc", "c++"):
         args = (os.environ["CC" if str(args[0]) == "cc" else "CXX"], *args[1:])
+    if str(args[0]) == "ar":
+        args = (os.environ["AR"], *args[1:])
     if str(args[0]) == "rustc":
         args = (*args, "-C", f"linker={os.environ['CC']}")
     if platform.system() == "Darwin" and Path(args[0]).name in ("clang", "clang++"):

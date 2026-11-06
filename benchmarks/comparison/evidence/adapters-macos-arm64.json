@@ -1,0 +1,701 @@
+{
+  "schema": 1,
+  "target": "aarch64-apple-darwin",
+  "build": {
+    "schema": 1,
+    "workload": "scalar-recurrence-v3",
+    "target": "aarch64-apple-darwin",
+    "execution_profile": {
+      "native_image_cpu": "compatibility",
+      "c_cpu_flags": []
+    },
+    "cases": {
+      "native": [
+        "control",
+        "generated-normal",
+        "manual-normal",
+        "generated-leaf",
+        "manual-leaf",
+        "generated-static-jni",
+        "manual-static-jni"
+      ],
+      "jvm": [
+        "control",
+        "generated-ffm",
+        "manual-ffm",
+        "manual-bound-ffm",
+        "generated-library-ffm",
+        "manual-library-ffm",
+        "generated-critical-ffm",
+        "manual-bound-critical-ffm",
+        "manual-unbound-critical-ffm",
+        "generated-typed-critical-ffm",
+        "jni"
+      ],
+      "ffm-aot": [
+        "control",
+        "generated-ffm",
+        "manual-ffm",
+        "manual-bound-ffm",
+        "generated-library-ffm",
+        "manual-library-ffm",
+        "generated-critical-ffm",
+        "manual-bound-critical-ffm",
+        "manual-unbound-critical-ffm",
+        "generated-typed-critical-ffm"
+      ]
+    },
+    "allocation_scope": "current-thread-java-heap",
+    "revision": "6377cbdcafc89ea2ae86306f3d51e73e43ed0b7e",
+    "dirty": " M .github/workflows/benchmark.comparison.yml\n M .github/workflows/check.native.yml\n M Cargo.lock\n M Cargo.toml\n M README.md\n M benchmarks/comparison/Jvm.java\n M benchmarks/comparison/Measure.java\n M benchmarks/comparison/Native.java\n M benchmarks/comparison/run.py\n M benchmarks/pom.xml\n M crates/myna-values/tests/values.rs\n M docs/benchmarking.md\n M docs/dsl.md\n M docs/jvm-roadmap.md\n M docs/ownership.md\n M docs/performance.md\n M docs/thinlto.md\n M elide.pkl\n M llvm/main.cpp\n M pom.xml\n M src/main/java/dev/elide/myna/backend/JavaFfm.java\n M src/main/java/dev/elide/myna/backend/NativeImageForeign.java\n M src/main/java/dev/elide/myna/cli/Main.java\n M src/main/java/dev/elide/myna/frontend/Dsl.java\n M src/main/java/dev/elide/myna/model/Seam.java\n M src/main/java/dev/elide/myna/serialize/SeamJson.java\n M src/main/java/dev/elide/myna/validate/OwnershipValidator.java\n M src/main/java/dev/elide/myna/validate/Validator.java\n M src/test/java/dev/elide/myna/CliTest.java\n M tests/abi/FfmMain.java\n M tests/e2e.py\n M tests/fuzz/canary.cpp\n M tests/fuzz/values.cpp\n M tests/golden/MynaFFM.java\n M tests/golden/MynaForeignFeature.java\n M tests/golden/MynaNative.java\n M tests/golden/seam.abi\n M tests/golden/seam.h\n M tests/golden/seam.json\n M tests/golden/seam.ll\n M tests/golden/seam.rs\n M tests/llvm_integration.py\n M tests/native_image_integration.py\n M tests/sanitizers.py\n M tests/support.py\n?? benchmarks/comparison/ManualJNI.java\n?? benchmarks/comparison/manual-jni.c\n?? src/main/java/dev/elide/myna/backend/FfmCallbacks.java\n?? src/main/java/dev/elide/myna/backend/JniAbi.java\n?? src/main/java/dev/elide/myna/backend/StaticJni.java\n?? src/test/java/dev/elide/myna/FfmTest.java\n?? src/test/java/dev/elide/myna/JniTest.java\n?? tests/callback_fixture.py\n?? tests/callbacks/\n?? tests/ffm_binding.py\n?? tests/ownership/FfmBindingMain.java\n?? tests/ownership/JniMain.java\n?? tests/ownership/jni_checks.c\n",
+    "sources": {
+      "benchmarks/comparison/inspect-floor.py": "1e2649fbf7f23609095fa5479fdd5e3f9ebf017cb5c8da372a1e1defbfc90912",
+      "benchmarks/comparison/run.py": "d5f7453358faad2ccbd152bc3f545c1deca498662a6be19405d9e48d3046048d",
+      "benchmarks/comparison/kernel.c": "781043c56d8a80f6525b5343a62604966d03ab0d30d6e2d324a509cfad710ebe",
+      "benchmarks/comparison/boundary.seam": "a32fef2761b47af7efd232f80a1471a6f35339693932fe1e0fccd6ca2fdcf0fe",
+      "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
+      "benchmarks/comparison/manual-jni.c": "2c648338474f0358f5097997165495751c98503587ff0ad496e7d557c7251820",
+      "benchmarks/comparison/chart.py": "9a49db93a79a22e7b6adeb5f855bf0948fd069c943e6c764c999b02eb6b78c12",
+      "benchmarks/comparison/Native.java": "c8cb690bcbdef30b6a0732423257d9a1b0f7395caf8906d951d063e71dbf24b2",
+      "benchmarks/comparison/Measure.java": "d1f74831602cf1c41c8f9cd7392db6e3aef0b512beaa74468eae7dc2e2252ec6",
+      "benchmarks/comparison/ManualJNI.java": "fa1a9b3ad235210b3e8d88e0e350933e2cddb1fb7e46bf3e8c998ffe54bb6623",
+      "benchmarks/comparison/Jvm.java": "51304ec9c749a05c185533fbf342a6aa87eaecca44bce5c650548d2af6644617",
+      "benchmarks/comparison/abi2-chart.py": "2a8db5dbd9e70f2270a64fb9e2183f3e58fe49d0d5cd5107415059e5d1e29b6d",
+      "benchmarks/comparison/floor-chart.py": "4fd367db4358c68f767c4732cb577cd6547d4213ba8ea6b3f8118fd4fd46c471",
+      "benchmarks/comparison/compare.py": "93bdceb1dfbb4b772214eb32bae75e603db528fd5abaac3b96a8c8dc8d5e6692",
+      "benchmarks/comparison/requirements.in": "de950d3b75e4ad1a760c121533e06390c84574f7dd0b53c0eaa742ab6d5c2f38",
+      "src/main/java/dev/elide/myna/Generator.java": "10fc15f7672e5c423af6b2a3366eed0b2413bb37bbd4f09381af21a2153dd440",
+      "src/main/java/dev/elide/myna/backend/Backend.java": "ed0559e3e5e46e6ea118f1d384075b44122e0115b7609aadb3689058d0f89935",
+      "src/main/java/dev/elide/myna/backend/ByValue.java": "3fddbfc2d697f5eb5f7983760ef5864a294b62bb681aa334b928e1bd42ce3fd1",
+      "src/main/java/dev/elide/myna/backend/CHeader.java": "7da7e594baf7bd4dc0717bdd7a6eeb93e8cf2050d04ad5d972adfcd414341929",
+      "src/main/java/dev/elide/myna/backend/FfmCallbacks.java": "1c82feae36a587be1086abec0c93284c6a3ce9cb048c0604581b4a5a70ba99f4",
+      "src/main/java/dev/elide/myna/backend/JavaFfm.java": "f5b4a918a539032a6b1ff126e6ab9e0c53a289b570cb89759e9a5df278996449",
+      "src/main/java/dev/elide/myna/backend/JniAbi.java": "94f78601b09ecb990e586c46735c12a6eabde1c387cb77d844925318adeec493",
+      "src/main/java/dev/elide/myna/backend/Llvm.java": "5de8d4f010d842cf819a83c2da9eb946ca539d2d2e68641b6674b8f1c6bc1359",
+      "src/main/java/dev/elide/myna/backend/NativeImage.java": "ec3c8893712653d28aae3f03b07f7444efc08560d29fa89076e11b3766bbc7d5",
+      "src/main/java/dev/elide/myna/backend/NativeImageForeign.java": "6511088f2599f536bda7d3076b8655c8c2b275e161f8e44c5a9785d442263659",
+      "src/main/java/dev/elide/myna/backend/NativeImageProperties.java": "2cf1a6e5613e50f8acd6a3e0469b92e6206a9bf3478ac7ece84c077c90695411",
+      "src/main/java/dev/elide/myna/backend/NativeOwnership.java": "b498903c67680aa242d045c424c57d6d58428b8f536ec1be803954d087fe4f64",
+      "src/main/java/dev/elide/myna/backend/RustFfi.java": "a0222ab7dd8774c167b0a12849b4399ed30ff3b074de7ab0696505d38afe99e3",
+      "src/main/java/dev/elide/myna/backend/RustOwnership.java": "210ff5dfd278f32a8efec2c60f45f94370de43ba7ced3d7b553f68c157fd0f5a",
+      "src/main/java/dev/elide/myna/backend/StaticJni.java": "bcd89e2e98306e41d318109bbb64edaa9d752304c92c9cce1f107e63ef0ecf35",
+      "src/main/java/dev/elide/myna/backend/Types.java": "35e4c047ff79576f2cfcec244ee1a0b57b6329641c248b511398e2adc239f402",
+      "src/main/java/dev/elide/myna/cli/Main.java": "a88b30f1da00705e4bc68949dbce4a6d935674fc6d4c8b5defea78cff1b58ffb",
+      "src/main/java/dev/elide/myna/frontend/Dsl.java": "3b296b9589749121ce59605b5b701c9ae60265ea0ea66c8f22a5518f43ddc1bf",
+      "src/main/java/dev/elide/myna/model/Seam.java": "653ba7b2212d924cb42a3dbc8060eb84cc192563d9252551b52e1e0eff2d73b6",
+      "src/main/java/dev/elide/myna/serialize/SeamJson.java": "b00bfe7984585bbe147979ae6e68ba7a6242275593b3291dd91d888d8cf25860",
+      "src/main/java/dev/elide/myna/validate/OwnershipValidator.java": "75dd3aaa239856becae4a3c161e34626df4cff17c54bb0527f3577849c60e1b7",
+      "src/main/java/dev/elide/myna/validate/Validator.java": "b40a34960a87b3f3cd5fa902111052d0f04e5bb269f87d6a373979befc91aa4c",
+      "tests/support.py": "adeaf404aa89011ea22156a9ff45fd07f6425485aae1bb415fcb5035498f5ad0",
+      "mise.lock": "86a84783bbd988ca9fd8e69242175b17f669b455e3903a1e43b83be55403ee4a",
+      "tools/graalvm.json": "c2bfbb719e54b2a46158c8c294f06c39409829754b08e41dc851add034c5c84c"
+    },
+    "binaries": {
+      "build/comparison/native": "80f10c66a398e425ef673116c04610f1021db2364d0bd875ecc059446c77ac8d",
+      "build/comparison/ffm-aot": "67781247138f5f546353d3a47743753f235f6ed60f49eae4cf4999ec613e2297",
+      "build/comparison/libboundary.dylib": "755570f8fe75144bd77326874f80d7f696f57c0f9a65ac416026e65bedd3a17d",
+      "build/comparison/libboundary_jni.a": "bb95c29c3aaa07f3d34b80a867595350d9df1c022389f7f69974fb5339f50f98",
+      "build/comparison/libboundary_jni.a.symbols": "35be8bcee86fb5d3296a32c4ef292250660567e3dec521369a3f25f712390ce9",
+      "build/comparison/kernel.o": "909a71e6a128c71361baf3104cd274988a817d5cc52c6d7f303e4deefd614217",
+      "build/comparison/generated-jni.bc": "6745fc69a7cc1975a9053d5e3d3f20b8951f926e841d3ff1dcd35a8d335852d3",
+      "build/comparison/manual-jni.bc": "7e50fb39ebe41bc39046cf89ed91eec6aefdfe54b41109a66025b2784ddd642f",
+      "build/comparison/classes/bench/Measure$ReferenceLoop.class": "ec1726acbcd4ec9123145c0bc731cf9fe8962d5db72da11ffe0192e321c8d492",
+      "build/comparison/classes/bench/Jvm$ManualBoundCriticalFfm.class": "cca2b7d74679f6b785d0cafcfd6c9e00b87921a69af427ebee1b0be9c61995f2",
+      "build/comparison/classes/bench/Jvm$CriticalUnbound.class": "167c721422f86937b7c3751d6d50df7b39772a4a44aa8728b5051d0710b951a2",
+      "build/comparison/classes/bench/GeneratedForeignFeature.class": "0ca1a830db50d45abc22698c979df63f79c5e09c637e382f16977f594813cbd2",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_Downcall.class": "1aa350eee910ad4fc1dfec442cc7afd14ffc51bbe4410747214f8953c0442529",
+      "build/comparison/classes/bench/Measure$Loop.class": "ac2aa6cc9a24f3f1a0dff4bca35880bec76891dc4edef962b8023d38b531937e",
+      "build/comparison/classes/bench/GeneratedJNI.class": "af122ff5b25815a217e98d298439a4c5a8965a13ba0472529af3933cc8ccc680",
+      "build/comparison/classes/bench/Native$GeneratedStaticJni.class": "4623e5af3e5cc457fa5b2ac5fdbf9a79d8363c7e891a956435ec8cb4f27b10f3",
+      "build/comparison/classes/bench/Jvm$GeneratedFfm.class": "dd6ce060ca8da08f7cf5b2ac45d29b0f0d12584a389c5cdbefa06b570ed432a0",
+      "build/comparison/classes/bench/Jvm$GeneratedCriticalFfm.class": "175809ee74070e0754d15820e258332b1e82b6b22b2a02b237c636f459ebc8a9",
+      "build/comparison/classes/bench/Native.class": "bca071d640e6eb3c0c17906a31f8fee1f837abdba922ff487b6f33742b3fbc11",
+      "build/comparison/classes/bench/Native$ManualLeaf.class": "d977845b545ccd1818a9ff05d95d9cb6edd979cacde28ba6d115c28ad092a445",
+      "build/comparison/classes/bench/Jvm$ManualUnboundCriticalFfm.class": "5df14c54d50f9e513da5aae89608438e6387b4a5b9e1e200dc33c57d4881173c",
+      "build/comparison/classes/bench/GeneratedFFM$LibraryBinding.class": "83f6310c3b4aed2d352456661136da6241c21abf9040ced09b5d1c7df8b1307d",
+      "build/comparison/classes/bench/Jvm$Jni.class": "2c862c1144b658522ab20c02bf5a5e5c8c8a00501411dc2e561f631b8e2eeb8b",
+      "build/comparison/classes/bench/GeneratedFFM$step_Downcall.class": "1fe413920e1696ac30fbf625248c10ee522f7e5a387dd5200fdd6ca8d17b9fe0",
+      "build/comparison/classes/bench/Generated$MynaSymbols.class": "af1d3db0288ba60fbebe1fa8110cc8da37c46a2323447a3911a608dfaa81701f",
+      "build/comparison/classes/bench/Generated$leaf_Leaf.class": "7f3055a8f41e3f4c8c520cb157bf20173e9f030adde432a4ef807d88df6c096d",
+      "build/comparison/classes/bench/Generated$leaf_Binding.class": "5e2516bef9f21daf6c406a6835970a0dcf08f385db0539e2e7dd522ff55e3ac6",
+      "build/comparison/classes/bench/Jvm$ManualLibraryFfm.class": "2a949ebf10a07620945cdeefa0cdb817b42f05a09f7a86c8f992f385d14695c7",
+      "build/comparison/classes/bench/Jvm$GeneratedTypedCriticalFfm.class": "5fcb51c845a1388f2dee34bcb40a3dac7a87403ae1012f3bda8877c0d97c1646",
+      "build/comparison/classes/bench/GeneratedFFM$step_Binding.class": "b7e1f04002a6ba3cf977157a505511b96022ebadbeb81a9d81be18ffb3d512e9",
+      "build/comparison/classes/bench/Jvm$GeneratedLibraryFfm.class": "4c912012364723f5ccd1ff3ab1c1c63510df6d2288d700595265134f903910cb",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_Binding.class": "6cca4816856a15880d1ed958c0e37c538a124097ea7f828550fb41898ab4c590",
+      "build/comparison/classes/bench/Native$ManualStaticJni.class": "9ffb4d08e2ce948b7911ea40c20e72f585984867dbfd2b210e90a200fa8409e0",
+      "build/comparison/classes/bench/Measure.class": "32b95de61559ef94d04ab1c156950eb3fb5c68f14b71b46269ab34d6dd80a84e",
+      "build/comparison/classes/bench/GeneratedFFM.class": "f59b306bfbd6a032ee4b78b6180f98821828d0142890869f1bbfa9c062acd03f",
+      "build/comparison/classes/bench/Native$GeneratedLeaf.class": "7c2820566273967fada8940f45859a15d6a363719ff64f3235471b96377a2dde",
+      "build/comparison/classes/bench/GeneratedFFM$leaf_CriticalDowncall.class": "1ee07bbce0fb28e69c71c29d774c68408a6fa6bbbccc91ff8c56ce994de573f3",
+      "build/comparison/classes/bench/Jvm$Unbound.class": "1f6963a4a1198849187729b67964e17fbbe4dc96efc641a40abcbca833c64401",
+      "build/comparison/classes/bench/Jvm.class": "cf8fe37e6e6871b6364e4c15b2508f0827824913489cd72e7d3b7bfb6dee46d7",
+      "build/comparison/classes/bench/GeneratedFFM$CriticalLibraryBinding.class": "ffee92446eae5c5fedbd50be964fcaa7a018f28551ad0ef9ab123b9a52238d29",
+      "build/comparison/classes/bench/Jvm$ManualBoundFfm.class": "0026cdc8e7c57c327029cd0657a03bebce7fbd3e85028e8b3cf6c2c041718b9b",
+      "build/comparison/classes/bench/ManualJNI.class": "d26cdd074c490550a08312d1fd2d2fe4f9ca9792c972c9bc91fd09d11b85ae2e",
+      "build/comparison/classes/bench/Native$GeneratedNormal.class": "c373e449da1bc2b80446b26feea4f3cde4c1dbbe02c5ed0d9cdcb9c38a6467cf",
+      "build/comparison/classes/bench/Generated.class": "873087de5f91da7b81abc91e9a001373644eae1ee43ddfb8396ff10642dc8b78",
+      "build/comparison/classes/bench/Jvm$ManualFfm.class": "0154ea5ab9635123550fbf3f1e54f14506275111fbb5e1064af2c6d41e870abd",
+      "build/comparison/classes/bench/Native$ManualNormal.class": "0e22e031eecf6266f8c195b4587eb2d34b8d7555b3c8df0519718b3893c0d12a"
+    },
+    "assembly": {
+      "build/comparison/native.asm": "90310eef76faaf7b6ce002fc48fb685d16fa7f483b023bf4d6ba2f48e54f8af1",
+      "build/comparison/ffm-aot.asm": "cbbeb730ef2eb8cdeee85bd923af9e1b2314196bf391c8a49d52b06425103109"
+    },
+    "jni_ir": {
+      "build/comparison/manual-jni.ll": "938b7adc0d17238495d2b39953da0ca10c6520cdff1beccfbae207ffada8876f",
+      "build/comparison/generated-jni.ll": "74b57386abe238468d225a9649e61094c972b04fc5ac4a07814b406c45deedff"
+    },
+    "versions": {
+      "java": "openjdk version \"25.0.4.1.1\" 2026-08-18\nOpenJDK Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nOpenJDK 64-Bit Server VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24, mixed mode, sharing)\n",
+      "clang": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: arm64-apple-darwin\nThread model: posix\nInstalledDir: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin\nConfiguration file: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/arm64-apple-darwin.cfg\n",
+      "native-image": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n",
+      "toolchain": "2026.11.1\n",
+      "ar": "LLVM (http://llvm.org/):\n  LLVM version 23.1.4\n  Optimized build.\n"
+    },
+    "graalvm": {
+      "version": "25.5.5-elide.24",
+      "edition": "ce",
+      "platforms": {
+        "Darwin-arm64": {
+          "archive": "macos-aarch64",
+          "sha256": "8b03207cb35ab5b9bec6422b4266178315f7a056ae88e90f57cc22b2362c44a6"
+        },
+        "Linux-x86_64": {
+          "archive": "linux-amd64",
+          "sha256": "83bd7b3b78e76de00bb3879eeae79a8b439f9356fefd3bf3b84d2818af8961e7"
+        },
+        "Linux-aarch64": {
+          "archive": "linux-aarch64",
+          "sha256": "f89eb4bdc6596b8aa7acdf063997c69ab06aa9a488e8f98cff07865b0261618f"
+        }
+      }
+    },
+    "build_commands": [
+      [
+        "javac",
+        "-d",
+        "/Users/sam/workspace/myna/build/comparison/generator-classes",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/Generator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Backend.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/ByValue.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/CHeader.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/FfmCallbacks.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/JavaFfm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/JniAbi.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Llvm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImage.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImageForeign.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImageProperties.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustFfi.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/StaticJni.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Types.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/cli/Main.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/frontend/Dsl.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/model/Seam.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/serialize/SeamJson.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/OwnershipValidator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/Validator.java"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/comparison/boundary.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/comparison/generated",
+        "--target",
+        "aarch64-apple-darwin",
+        "--jni"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/comparison/kernel.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-shared",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-flto=thin",
+        "-I",
+        "/Users/sam/workspace/myna/build/comparison/generated",
+        "-c",
+        "/Users/sam/workspace/myna/build/comparison/generated/seam-jni.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/generated-jni.bc"
+      ],
+      [
+        "/Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/llvm-dis",
+        "/Users/sam/workspace/myna/build/comparison/generated-jni.bc",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/generated-jni.ll"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-flto=thin",
+        "-I",
+        "/Users/sam/workspace/myna/build/comparison/generated",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/comparison/manual-jni.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/manual-jni.bc"
+      ],
+      [
+        "/Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/llvm-dis",
+        "/Users/sam/workspace/myna/build/comparison/manual-jni.bc",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/manual-jni.ll"
+      ],
+      [
+        "/Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/llvm-ar",
+        "rcs",
+        "/Users/sam/workspace/myna/build/comparison/libboundary_jni.a",
+        "/Users/sam/workspace/myna/build/comparison/generated-jni.bc",
+        "/Users/sam/workspace/myna/build/comparison/manual-jni.bc",
+        "/Users/sam/workspace/myna/build/comparison/kernel.o"
+      ],
+      [
+        "javac",
+        "-cp",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/lib/svm/svm-shared.jar:/Users/sam/workspace/myna/.dev/toolchains/graalvm/lib/svm/svm-guest-staging.jar:/Users/sam/workspace/myna/.dev/toolchains/graalvm/lib/svm/svm-guest.jar",
+        "-d",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Jvm.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/ManualJNI.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Measure.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Native.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/Generated.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedFFM.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedForeignFeature.java",
+        "/Users/sam/workspace/myna/build/comparison/generated/GeneratedJNI.java"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-march=compatibility",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:CLibraryPath=/Users/sam/workspace/myna/build/comparison",
+        "-H:-DeleteLocalSymbols",
+        "-H:-UnlockExperimentalVMOptions",
+        "--initialize-at-run-time=bench.ManualJNI",
+        "bench.Native",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/native"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-march=compatibility",
+        "--enable-native-access=ALL-UNNAMED",
+        "-cp",
+        "/Users/sam/workspace/myna/build/comparison/classes",
+        "--initialize-at-run-time=bench.Jvm",
+        "--initialize-at-build-time=bench.Jvm$Unbound,bench.Jvm$CriticalUnbound",
+        "--features=bench.GeneratedForeignFeature",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:CLibraryPath=/Users/sam/workspace/myna/build/comparison",
+        "-H:-DeleteLocalSymbols",
+        "-H:-UnlockExperimentalVMOptions",
+        "bench.Jvm",
+        "-o",
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot"
+      ],
+      [
+        "/Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/llvm-objdump",
+        "--disassemble",
+        "/Users/sam/workspace/myna/build/comparison/native"
+      ],
+      [
+        "/Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/llvm-objdump",
+        "--disassemble",
+        "/Users/sam/workspace/myna/build/comparison/ffm-aot"
+      ],
+      [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    ],
+    "library": "/Users/sam/workspace/myna/build/comparison/libboundary.dylib"
+  },
+  "extractor_sha256": "f59ca6cacc22c036ec161f762f8ce75b214954d449fbd818886eea45b46a0269",
+  "extraction_command": [
+    "python3",
+    "/Users/sam/workspace/myna/benchmarks/comparison/inspect-adapters.py",
+    "/Users/sam/workspace/myna/build/comparison",
+    "benchmarks/comparison/evidence/adapters-macos-arm64"
+  ],
+  "selected_assembly_sha256": "6ee3982410d81fe60691ba4ae45a2acf65d835d2e3904acf856a20d74834b37a",
+  "selection": {
+    "native/generated-normal": {
+      "symbol": "_Native$GeneratedNormal_run_O33nV67aluIGjOwBRn23QE",
+      "instructions_including_nops": 72,
+      "nops": 3,
+      "direct_call_targets": [
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84"
+      ],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "15093d16207a3cb69aa3787d33ff2084436b41e96e43e99df63bf2322ae97ddf"
+    },
+    "native/manual-normal": {
+      "symbol": "_Native$ManualNormal_run_uHdgTewYDtEdK30bZv8sjD",
+      "instructions_including_nops": 72,
+      "nops": 3,
+      "direct_call_targets": [
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84"
+      ],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "15093d16207a3cb69aa3787d33ff2084436b41e96e43e99df63bf2322ae97ddf"
+    },
+    "native/generated-leaf": {
+      "symbol": "_Native$GeneratedLeaf_run_EaXamf1cn4Kuyi2hC6OtWA",
+      "instructions_including_nops": 117,
+      "nops": 7,
+      "direct_call_targets": [
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB"
+      ],
+      "indirect_call_sites_including_cold_paths": 6,
+      "normalized_sha256": "5930a29835d58c60b313f39a8f7dfaff0493c21d1e8d87b307c312bdfb9df4d2"
+    },
+    "native/manual-leaf": {
+      "symbol": "_Native$ManualLeaf_run_XqGHjJ0fwuH3x7KZ4Ti7e8",
+      "instructions_including_nops": 99,
+      "nops": 5,
+      "direct_call_targets": [
+        "_Native_leaf_4jmZJhyx6ZCIpcsFKc9g8F",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "6da182693990ffbbf9fa161e161ad855840851856642708490bbd561876909b5"
+    },
+    "native/manual-leaf-stub": {
+      "symbol": "_Native_leaf_4jmZJhyx6ZCIpcsFKc9g8F",
+      "instructions_including_nops": 8,
+      "nops": 0,
+      "direct_call_targets": [],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "8d6ef483ce6e91525a46d48dd66309c23a73eab1937768b9fca8932a0ba6b1da"
+    },
+    "native/generated-static-jni": {
+      "symbol": "_Native$GeneratedStaticJni_run_nofEeE2VlqJtgwWOWS0PhD",
+      "instructions_including_nops": 211,
+      "nops": 14,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_GeneratedJNI_step_65N4HKhdLh1yVuebbVkuy5"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "da9acd2dad2f492be252bb99c52ff60f894327e96955fc7a33a72d7d232f38d3"
+    },
+    "native/manual-static-jni": {
+      "symbol": "_Native$ManualStaticJni_run_FBtIPr4ojZ0h5doZEpWQb3",
+      "instructions_including_nops": 211,
+      "nops": 14,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ManualJNI_step_yd0RaFLlk2AZlVxajNzkV2"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "3622ad3348bb69f0b629991d2a43edf78c3e71376e43346fd536c1b400ad027a"
+    },
+    "native/generated-jni-java-stub": {
+      "symbol": "_GeneratedJNI_step_65N4HKhdLh1yVuebbVkuy5",
+      "instructions_including_nops": 222,
+      "nops": 0,
+      "direct_call_targets": [
+        "_ImplicitExceptions_throwNewIntegerOverflowException_z9qEBLHeFx7nfnCFFA4vx0",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_ImplicitExceptions_throwOptOutOfBoundsException_1u8LgzEFx5HG3Dm1iVN34B",
+        "_JNIMethodSupport_nativeCallEpilogue_qd5OT3R9Y61aJqFSQx6Ix5",
+        "_JNIMethodSupport_rethrowPendingException_88jcaUwVPTB7xJeYe11hz7",
+        "_JNIObjectHandles_createLocalSlow0_NB9V8PUqTvBLinhdXS6cPD",
+        "_JNIObjectHandles_createLocals_FkbjZiTnc6BikFhRQBvMlF",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_ThreadLocalHandles_growCapacity_L2BNYcp1FSKj2L5gNje8MH",
+        "_ThreadLocalHandles_growFrameStack_EjnMPHGrQn2QLWuk4IFLDF"
+      ],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "70163b65f7995fbc5d0022092323817221546aa5d34f944cbdbc947ee80c0316"
+    },
+    "native/manual-jni-java-stub": {
+      "symbol": "_ManualJNI_step_yd0RaFLlk2AZlVxajNzkV2",
+      "instructions_including_nops": 222,
+      "nops": 0,
+      "direct_call_targets": [
+        "_ImplicitExceptions_throwNewIntegerOverflowException_z9qEBLHeFx7nfnCFFA4vx0",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_ImplicitExceptions_throwOptOutOfBoundsException_1u8LgzEFx5HG3Dm1iVN34B",
+        "_JNIMethodSupport_nativeCallEpilogue_qd5OT3R9Y61aJqFSQx6Ix5",
+        "_JNIMethodSupport_rethrowPendingException_88jcaUwVPTB7xJeYe11hz7",
+        "_JNIObjectHandles_createLocalSlow0_NB9V8PUqTvBLinhdXS6cPD",
+        "_JNIObjectHandles_createLocals_FkbjZiTnc6BikFhRQBvMlF",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_ThreadLocalHandles_growCapacity_L2BNYcp1FSKj2L5gNje8MH",
+        "_ThreadLocalHandles_growFrameStack_EjnMPHGrQn2QLWuk4IFLDF"
+      ],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "79f7f12eab294ea0268e7e6d049b04448e1aa590941bc1232ea4d286d0a89c2d"
+    },
+    "native/generated-jni-c-wrapper": {
+      "symbol": "_Java_bench_GeneratedJNI_step__J",
+      "instructions_including_nops": 16,
+      "nops": 0,
+      "direct_call_targets": [],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "fad1ed266267579c44af1bc5dc13614539cc22ecb2282106253170a4b16c9d81"
+    },
+    "native/manual-jni-c-wrapper": {
+      "symbol": "_Java_bench_ManualJNI_step",
+      "instructions_including_nops": 16,
+      "nops": 0,
+      "direct_call_targets": [],
+      "indirect_call_sites_including_cold_paths": 1,
+      "normalized_sha256": "fad1ed266267579c44af1bc5dc13614539cc22ecb2282106253170a4b16c9d81"
+    },
+    "ffm-aot/generated-ffm": {
+      "symbol": "_Jvm$GeneratedFfm_run_cp4hy7MCrhGq08R0QTjjBJ",
+      "instructions_including_nops": 371,
+      "nops": 3,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 4,
+      "normalized_sha256": "cceb2235a4c646d6637c60f6ad820221eeb1101e7e00ccad7ad561db20549db6"
+    },
+    "ffm-aot/manual-ffm": {
+      "symbol": "_Jvm$ManualFfm_run_ZT7vbfWhYt5Fey6k2XuRT5",
+      "instructions_including_nops": 331,
+      "nops": 3,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 4,
+      "normalized_sha256": "eac3e80a5bdb10666f8dc0cc876d97f13299f4be8483154b2cd9c064d182c3ad"
+    },
+    "ffm-aot/generated-library-ffm": {
+      "symbol": "_Jvm$GeneratedLibraryFfm_run_UW4rrXC4tmAOheOTpVcoA8",
+      "instructions_including_nops": 368,
+      "nops": 0,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptClassCastException_UXv9fg3pe9HQF6muVBaSh5",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 4,
+      "normalized_sha256": "90f84a497d7d058a2c95218a6c0056e55720cdf99f9746e2eff247e182266913"
+    },
+    "ffm-aot/manual-library-ffm": {
+      "symbol": "_Jvm$ManualLibraryFfm_run_XxF4eaxr0SHfMhCWpQVtdE",
+      "instructions_including_nops": 331,
+      "nops": 3,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8",
+        "_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 4,
+      "normalized_sha256": "b4ef01b09d61247027c7f9f99e1b67d3471c24e055137a9146b71b0a012d881c"
+    },
+    "ffm-aot/generated-critical-ffm": {
+      "symbol": "_Jvm$GeneratedCriticalFfm_run_71wsi1deFa9NLiGP3XjxfA",
+      "instructions_including_nops": 449,
+      "nops": 7,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_Class_toString_EntbmjmqdNIJmJ087QDxJE",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptClassCastException_UXv9fg3pe9HQF6muVBaSh5",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_ImplicitExceptions_throwOptOutOfBoundsException_1u8LgzEFx5HG3Dm1iVN34B",
+        "_Invokers_newWrongMethodTypeException_jNF0cwCrfG6sx7E5xixKa5",
+        "_MethodHandle_invokeBasic_w1WLuXKv6oKBRkg53Rcaw3",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB",
+        "_SubstrateStringConcatHelper_simpleConcat_raaFOKQ8p40ENYVQkgHRc9",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6",
+        "_VMError_shouldNotReachHere_OJ2hHRdF16AAw9xjrSjhG4"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "fba0cbcfb1db31fc8bcc3712b232c3cb6725789a153be987bc83d87560821b73"
+    },
+    "ffm-aot/manual-bound-critical-ffm": {
+      "symbol": "_Jvm$ManualBoundCriticalFfm_run_Sf0t7EqK9sAkXBprsjRRNF",
+      "instructions_including_nops": 449,
+      "nops": 7,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_Class_toString_EntbmjmqdNIJmJ087QDxJE",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptClassCastException_UXv9fg3pe9HQF6muVBaSh5",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_ImplicitExceptions_throwOptOutOfBoundsException_1u8LgzEFx5HG3Dm1iVN34B",
+        "_Invokers_newWrongMethodTypeException_jNF0cwCrfG6sx7E5xixKa5",
+        "_MethodHandle_invokeBasic_w1WLuXKv6oKBRkg53Rcaw3",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB",
+        "_SubstrateStringConcatHelper_simpleConcat_raaFOKQ8p40ENYVQkgHRc9",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6",
+        "_VMError_shouldNotReachHere_OJ2hHRdF16AAw9xjrSjhG4"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "3bb18e317b76c524f382ee119fcfa301ff43649b4a4d1415a6c917f40b0c9a15"
+    },
+    "ffm-aot/manual-bound-ffm": {
+      "symbol": "_Jvm$ManualBoundFfm_run_ZsKYQp8raX1DUYK7NQKUv6",
+      "instructions_including_nops": 449,
+      "nops": 7,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_Class_toString_EntbmjmqdNIJmJ087QDxJE",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptClassCastException_UXv9fg3pe9HQF6muVBaSh5",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_ImplicitExceptions_throwOptOutOfBoundsException_1u8LgzEFx5HG3Dm1iVN34B",
+        "_Invokers_newWrongMethodTypeException_jNF0cwCrfG6sx7E5xixKa5",
+        "_MethodHandle_invokeBasic_w1WLuXKv6oKBRkg53Rcaw3",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB",
+        "_SubstrateStringConcatHelper_simpleConcat_raaFOKQ8p40ENYVQkgHRc9",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6",
+        "_VMError_shouldNotReachHere_OJ2hHRdF16AAw9xjrSjhG4"
+      ],
+      "indirect_call_sites_including_cold_paths": 0,
+      "normalized_sha256": "9ada5b6f7a1040776f1a774692431106bbecca132d4ecfcf4eb895ac7be62edf"
+    },
+    "ffm-aot/generated-typed-critical-ffm": {
+      "symbol": "_Jvm$GeneratedTypedCriticalFfm_run_amgVAMJjtsLwy3bU6mRupJ",
+      "instructions_including_nops": 348,
+      "nops": 4,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptClassCastException_UXv9fg3pe9HQF6muVBaSh5",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 7,
+      "normalized_sha256": "66063733da055c77dc30dde6e5ec0a2e4f79676cf56403971b4c018821b68de9"
+    },
+    "ffm-aot/manual-unbound-critical-ffm": {
+      "symbol": "_Jvm$ManualUnboundCriticalFfm_run_Y6QXTjyvVbBkiwRU5sIfg4",
+      "instructions_including_nops": 315,
+      "nops": 7,
+      "direct_call_targets": [
+        "_ClassInitializationInfo_slowPath_4IkmzbbP3iDWUlsbaqoCg7",
+        "_ExceptionUnwind_unwindExceptionWithoutCalleeSavedRegisters_D2uDbIIG0NJynRdXlWueWI",
+        "_GenScavengeAllocationSupport_slowNewInstance_cVwSGnaka62OV0G4bo2NyI",
+        "_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8",
+        "_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB",
+        "_SubstrateForeignUtil_throwSymbolIsNullException_eG3tVnjFmBKOZbMYv5OKpB",
+        "_Throwable_fillInStackTrace_r1XmDo89qjHSNaXbvF0Ch6"
+      ],
+      "indirect_call_sites_including_cold_paths": 7,
+      "normalized_sha256": "b5f2962f99d0c729bbd1d50a1512b3e00a5c35c33fdf2340d3a585281bd2db6e"
+    }
+  },
+  "normalized_pairs": {
+    "normal-direct": {
+      "left": "native/generated-normal",
+      "right": "native/manual-normal",
+      "equal_after_target_normalization": true
+    },
+    "jni-c-wrappers": {
+      "left": "native/generated-jni-c-wrapper",
+      "right": "native/manual-jni-c-wrapper",
+      "equal_after_target_normalization": true
+    }
+  },
+  "absent_generated_leaf_stubs": {
+    "_Generated_leaf_": true,
+    "_Generated$leaf_Leaf_invoke_": true
+  },
+  "limits": [
+    "Static instruction counts include cold paths and alignment nops; they are not dynamic instruction counts.",
+    "Target normalization removes disassembly addresses, preserves target symbol names, and makes self-relative labels explicit.",
+    "Direct normal loops and JNI C wrappers match after only target normalization; other call sites are retained without an equivalence claim.",
+    "Leaf and critical loops retain safepoint checks between bounded loop chunks; lack of a normal transition is not lack of GC cooperation.",
+    "Allocation calls on cold error paths do not establish steady-state allocation; use per-sample allocation counters."
+  ]
+}

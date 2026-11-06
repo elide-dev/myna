@@ -133,7 +133,9 @@ public final class Dsl {
                       header[1],
                       Seam.type(takeRequired(options, "return")),
                       parameters,
-                      take(options, "java_type", null)));
+                      take(options, "java_type", null),
+                      take(options, "ffm_java", null),
+                      take(options, "ffm_sentinel", null)));
               empty(options);
             } else if (header[0].equals("struct")) {
               structs.add(

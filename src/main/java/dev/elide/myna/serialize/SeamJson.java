@@ -58,6 +58,8 @@ public final class SeamJson {
                         "{\"name\":"
                             + quote(c.name())
                             + (c.javaType() == null ? "" : ",\"javaType\":" + quote(c.javaType()))
+                            + (c.ffmTarget() == null ? "" : ",\"ffmTarget\":" + quote(c.ffmTarget())
+                                + ",\"ffmSentinel\":" + quote(c.ffmSentinel()))
                             + ",\"returnType\":"
                             + quote(c.returns().text())
                             + ",\"parameters\":"
@@ -207,6 +209,15 @@ public final class SeamJson {
 
   public static String quote(String value) {
     if (value == null) return "null";
+    boolean escaped = false;
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if (c < 32 || c == '"' || c == '\\') {
+        escaped = true;
+        break;
+      }
+    }
+    if (!escaped) return "\"" + value + "\"";
     var out = new StringBuilder("\"");
     for (char c : value.toCharArray()) {
       switch (c) {

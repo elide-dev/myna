@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 # Build only the requested target: generator (default) or llvm23 (object rewriting).
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS native-toolchain
+FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c AS native-toolchain
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake make xz-utils python3 zlib1g-dev libzstd-dev libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN case "$TARGETARCH" in \
-      amd64) digest=4610627acc96f647776fd4256b3c1fce04c14b2757df692d8923ec299aed0e58; triple=x86_64-unknown-linux-gnu ;; \
-      arm64) digest=b6c73becf52e8491c0aad2d1bb5ac6185a7e0c931e1206c62652b1e47fb26785; triple=aarch64-unknown-linux-gnu ;; \
+      amd64) digest=f65ccbecd24c5c283216126bdacb6485381fbfce852f6359e45af69c87bf59ea; triple=x86_64-unknown-linux-gnu ;; \
+      arm64) digest=faab1f1bd9927361dec33bf0c9d521158ace9d11911212fd9caaa67a680400e5; triple=aarch64-unknown-linux-gnu ;; \
       *) exit 1 ;; esac \
-    && curl -fSL "https://github.com/elide-dev/toolchain/releases/download/v2026.11.1/elide-toolchain-2026.11.1-linux-${TARGETARCH}.tar.xz" -o /tmp/toolchain.tar.xz \
+    && curl -fSL "https://github.com/elide-dev/toolchain/releases/download/v2026.11.2/elide-toolchain-2026.11.2-linux-${TARGETARCH}.tar.xz" -o /tmp/toolchain.tar.xz \
     && echo "$digest  /tmp/toolchain.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/toolchain.tar.xz -C /opt && rm /tmp/toolchain.tar.xz \
     && printf '#!/bin/sh\nexec /opt/elide-toolchain/bin/%s-clang "$@"\n' "$triple" > /opt/myna-cc \
@@ -60,7 +60,7 @@ WORKDIR /work
 ENTRYPOINT ["/usr/local/bin/myna"]
 CMD ["--help"]
 
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS generator
+FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c AS generator
 COPY LICENSE LICENSE-APACHE LICENSE-MIT /usr/share/licenses/myna/
 RUN apt-get update && apt-get install -y --no-install-recommends zlib1g \
     && rm -rf /var/lib/apt/lists/*

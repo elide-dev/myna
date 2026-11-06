@@ -13,6 +13,25 @@ final class OwnershipValidator {
           "NativeBuffer",
           "NativeDestructor",
           "ResourceFactory",
+          "MemorySegment",
+          "Thread",
+          "Arena",
+          "MethodHandle",
+          "SegmentAllocator",
+          "SymbolLookup",
+          "Linker",
+          "ValueLayout",
+          "MemoryLayout",
+          "StructLayout",
+          "FunctionDescriptor",
+          "String",
+          "Throwable",
+          "ExceptionInInitializerError",
+          "UnsatisfiedLinkError",
+          "IllegalArgumentException",
+          "IllegalStateException",
+          "WrongThreadException",
+          "ReflectiveOperationException",
           "java",
           "org",
           "core",
@@ -44,6 +63,7 @@ final class OwnershipValidator {
       require(!r.name().equals(m.nativeClass()), "resource shadows native API class");
       require(!RESERVED.contains(r.name()), "reserved resource name");
       require(!r.name().equals(m.ownershipClass()), "resource shadows generated ownership class");
+      require(!r.name().equals(m.ffmClass()), "resource shadows generated FFM class");
       var create = functions.get(r.create());
       var destroy = functions.get(r.destroy());
       require(create != null && destroy != null, "unknown resource lifecycle function");
