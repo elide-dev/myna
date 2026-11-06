@@ -178,18 +178,26 @@ a separate process before a clean workload can pass. The ASan lane also requires
 undefined-behavior and leak canaries and enforces fail-fast UBSan and LSan without
 leak suppressions. A separate RSS canary verifies the runner's process-memory
 watchdog. Fuzzer seed is 1729; seed
-corpora are checked in under `tests/fuzz/corpus`. Extend a campaign with
+corpora are checked in under `tests/fuzz/corpus`. CI fuzzes for ten minutes with
+`--duration 600`, then exits normally so leak checks and coverage reports run.
+Local `mise run test:asan` retains its 20,000-input development workload.
+Extend a campaign with
 `MYNA_PYTHON_TIMEOUT=35m mise exec -- scripts/python.sh tests/sanitizers.py asan --runs 1000000 --campaign-timeout 1800`; replay
 failures with `build/sanitizers/asan/fuzz-values path/to/crash-file`.
 
 Fuzzing bounds input length (1KiB), individual allocations (64MiB), each input's
-execution (5 seconds), total campaign execution (300 seconds by default; use
-`--campaign-timeout 1800` for the longer campaign above), and observed
+execution (5 seconds), total campaign execution (300 seconds by default;
+duration-based campaigns get at least 30 seconds of shutdown grace; use
+`--campaign-timeout 1800` for the million-input campaign above), and observed
 process RSS (512MiB). The RSS canary retains an independent 30-second limit.
 `MYNA_PYTHON_TIMEOUT` sets Elide's outer runtime cap when supplied; the long
 command allows 35 minutes around the fuzz process's 30-minute cap. Without it,
 the wrapper preserves Elide's default. Process logs stream to disk, with periodic
 resource snapshots and final status retained even for watchdog failures.
+Longer campaigns run separately from CI; for example, an eight-hour run is
+`MYNA_PYTHON_TIMEOUT=9h mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 28800`.
+Duration and input-count limits are mutually exclusive, and the watchdog must
+exceed a requested duration so a successful campaign can finish its leak checks.
 The RSS watcher polls
 the process; it is a test termination limit, not an exact allocator budget.
 The value workload separately enforces actual live PMR allocation budgets and

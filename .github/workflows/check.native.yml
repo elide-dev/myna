@@ -58,7 +58,11 @@ jobs:
         run: mise run test:cpp
       - run: mise run test:rust-coverage
         if: runner.os == 'Linux'
-      - run: mise run test:asan
+      - name: ASan, UBSan and LSan with ten-minute fuzz campaign
+        timeout-minutes: 15
+        env:
+          MYNA_PYTHON_TIMEOUT: 14m
+        run: mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 600
       - run: mise run test:tsan
       - run: mise run test:e2e
       - run: mise run test:llvm-coverage
@@ -98,6 +102,8 @@ jobs:
             build/sanitizers/**/*.log
             build/sanitizers/**/*.json
             build/sanitizers/**/crash-*
+            build/sanitizers/**/corpus/*
+            build/sanitizers/**/fuzz-values
             build/comparison/**/*.json
             build/comparison/**/*.jsonl
             build/comparison/**/*.md

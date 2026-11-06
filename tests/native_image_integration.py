@@ -70,7 +70,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         from ffm_binding import build_binding_fixture
         work, classes, library = build_binding_fixture()
         native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
-                     "--features=fixture.owned.NativeApiForeignFeature", "FfmBindingMain",
+                     "--features=fixture.owned.NativeApiForeignFeature,fixture.owned.ConfinedApiForeignFeature", "FfmBindingMain",
                      "-o", work / "binding-app")
         self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
                       run(work / "binding-app", library).stdout)
@@ -162,7 +162,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("cannot move out of `owner` because it is borrowed", rejected.stderr)
         # Confined resources must not accidentally implement Send.
         confined = work / "confined.seam"
-        confined.write_text((ROOT / "examples/ownership.seam").read_text().replace("threading=shared", "threading=confined"))
+        confined.write_text((ROOT / "examples/ownership.seam").read_text()
+            .replace("threading=shared", "threading=confined")
+            .replace("java_class=NativeApi", "java_class=ConfinedApi"))
         run(BINARY, "generate", confined, "--out", work / "confined", "--target", TARGET)
         os.environ["SEAM_GENERATED"] = str(work / "confined")
         invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
@@ -176,7 +178,10 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        compile_native(classes, generated, generated / "NativeApi.java", generated / "NativeApiOwnership.java", ROOT / "tests/ownership/OwnershipMain.java")
+        compile_native(classes, generated, generated / "NativeApi.java", generated / "NativeApiOwnership.java",
+                       work / "confined/ConfinedApi.java", work / "confined/ConfinedApiOwnership.java",
+                       ROOT / "tests/ownership/ConfinedOwner.java", ROOT / "tests/ownership/OwnershipMain.java")
+        shutil.copytree(work / "confined/META-INF", classes / "META-INF", dirs_exist_ok=True)
         app = work / "ownership-app"
         native_image( "-O1", "-cp", classes,
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={fixture}", "-H:-UnlockExperimentalVMOptions",

@@ -8,6 +8,20 @@ import unittest
 from support import BINARY, ROOT, TARGET, main, run
 
 class NativeCliTests(unittest.TestCase):
+    def test_callback_records_are_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="myna-callback-record-") as tmp:
+            work = Path(tmp)
+            for signature in ("callback RecordCallback return=Record\nend\n",
+                              "callback RecordCallback return=i64\n  param value type=Record\nend\n"):
+                with self.subTest(signature=signature):
+                    source = work / "records.seam"
+                    source.write_text(f"module callback_records target={TARGET}\n"
+                        "struct Record size=8 align=8\n  field value type=i64 offset=0\nend\n" + signature)
+                    rejected = run(BINARY, "generate", source, "--out", work / "generated", ok=False)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertIn("by-value records are function parameters and returns only; use ptr<T>",
+                                  rejected.stdout + rejected.stderr)
+
     def test_jni_wrapper_locals_do_not_shadow_native_symbols(self):
         with tempfile.TemporaryDirectory(prefix="myna-jni-names-") as tmp:
             work = Path(tmp)

@@ -1,4 +1,5 @@
 import fixture.owned.NativeApiFFM;
+import fixture.owned.ConfinedApiFFM;
 import java.lang.foreign.*;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -81,6 +82,37 @@ public final class FfmBindingMain {
       }
       rejects(IllegalStateException.class, () -> binding.liveCount());
     }
+    verifyConfinedResources(Path.of(args[0]));
     System.out.println("Explicit FFM library lifetime and buffer borrowing passed");
+  }
+
+  private static void verifyConfinedResources(Path path) throws Throwable {
+    // The library is shared: the resource's requiredThread must supply the confinement.
+    try (var library = Arena.ofShared()) {
+      var binding = new ConfinedApiFFM.LibraryBinding(path, library);
+      var owner = ConfinedApiFFM.Ticket.create(binding, (address, destructor, thread) ->
+          new ConfinedOwner<>(address, destructor::destroy, thread));
+      if (owner.address().address() == 0 || binding.liveCount() != 1)
+        throw new AssertionError("confined allocation");
+      try {
+        owner.rejectsOtherThread();
+        if (binding.liveCount() != 1) throw new AssertionError("wrong-thread destruction");
+      } finally { owner.close(); }
+      owner.close();
+      rejects(IllegalStateException.class, owner::address);
+      if (binding.liveCount() != 0) throw new AssertionError("confined release");
+      rejects(IllegalStateException.class, () -> ConfinedApiFFM.Ticket.create(binding,
+          (address, destructor, thread) -> {
+            if (thread != Thread.currentThread()) throw new AssertionError("adoption thread");
+            throw new IllegalStateException("confined adoption failed");
+          }));
+      rejects(NullPointerException.class, () -> ConfinedApiFFM.Ticket.create(binding,
+          (address, destructor, thread) -> null));
+      if (binding.liveCount() != 0) throw new AssertionError("confined adoption leaked");
+      binding.failNext();
+      if (ConfinedApiFFM.Ticket.create(binding, (address, destructor, thread) -> {
+        throw new AssertionError("must not adopt null");
+      }) != null) throw new AssertionError("confined null allocation");
+    }
   }
 }

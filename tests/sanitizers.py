@@ -18,12 +18,22 @@ def positive(value):
     if number <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return number
-parser.add_argument("--runs", type=positive, default=20000)
+campaign = parser.add_mutually_exclusive_group()
+campaign.add_argument("--runs", type=positive, help="number of fuzz inputs (default: 20000)")
+campaign.add_argument("--duration", type=positive, help="fuzz for this many seconds, then exit normally")
 parser.add_argument("--rss-limit-mb", type=positive, default=512)
 parser.add_argument("--malloc-limit-mb", type=positive, default=64)
 parser.add_argument("--timeout", type=positive, default=5, help="maximum seconds per fuzz input")
-parser.add_argument("--campaign-timeout", type=positive, default=300, help="maximum seconds for the entire fuzz process")
+parser.add_argument("--campaign-timeout", type=positive, help="watchdog deadline (default: at least 300 seconds, or duration + 30)")
 args = parser.parse_args()
+if args.duration is not None and args.mode != "asan":
+    parser.error("--duration is only supported for the ASan fuzz campaign")
+if args.campaign_timeout is None:
+    args.campaign_timeout = max(300, (args.duration or 0) + 30)
+if args.duration is not None and args.campaign_timeout <= args.duration:
+    parser.error("--campaign-timeout must exceed --duration to allow clean sanitizer shutdown")
+if args.runs is None and args.duration is None:
+    args.runs = 20000
 triple = {("Darwin", "arm64"): "arm64-apple-darwin", ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
           ("Linux", "aarch64"): "aarch64-unknown-linux-gnu"}[(platform.system(), platform.machine())]
 home = Path(os.environ["ELIDE_TOOLCHAIN_HOME"])
@@ -127,6 +137,8 @@ def digest(path):
     "options": options, "resource_dir": str(resource),
     "rss_watchdog": "host ps RSS sampled every 100ms; expected-failure canary required",
     "rss_limit_mb": args.rss_limit_mb,
+    "fuzz_runs": args.runs,
+    "fuzz_duration_seconds": args.duration,
     "campaign_timeout_seconds": args.campaign_timeout,
     "outer_runtime_timeout": os.environ.get("MYNA_PYTHON_TIMEOUT", "Elide default"),
     "runtime_inventory_sha256": {str(path.relative_to(home)): digest(path) for path in sorted(runtime_files)},
@@ -147,7 +159,8 @@ else:
     corpus.mkdir()
     for seed in (source / "corpus").iterdir():
         (corpus / seed.name).write_bytes(seed.read_bytes())
-    command = [work / "fuzz-values", f"-runs={args.runs}", "-seed=1729", "-max_len=1024",
+    stop = f"-max_total_time={args.duration}" if args.duration is not None else f"-runs={args.runs}"
+    command = [work / "fuzz-values", stop, "-seed=1729", "-max_len=1024",
                # Pinned libFuzzer's detached RSS watcher leaks its thread state on macOS.
                # The external watchdog enforces the cap; the RSS canary proves it works.
                "-rss_limit_mb=0", f"-malloc_limit_mb={args.malloc_limit_mb}",
