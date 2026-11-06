@@ -14,6 +14,11 @@ public final class NativeImageForeign implements Backend {
 
   public String generate(Module module) {
     String pkg = module.javaPackageName(), ffm = module.ffmClass();
+    String downcall = "        RuntimeForeignAccess.registerForDowncall(" + ffm + '.';
+    String buildTime = "        RuntimeClassInitialization.initializeAtBuildTime(\""
+        + pkg + '.' + ffm + '$';
+    String runTime = "        RuntimeClassInitialization.initializeAtRunTime(\""
+        + pkg + '.' + ffm + '$';
     // Registration text is proportional to the ABI surface. Avoid copying the growing output
     // for ordinary modules, without making an unbounded speculative allocation for large inputs.
     int capacity = (int) Math.min(1_048_576L,
@@ -33,34 +38,22 @@ public final class NativeImageForeign implements Backend {
                 + " implements Feature {\n"
                 + "    @Override public void duringSetup(DuringSetupAccess access) {\n");
     for (Function function : module.functions()) {
-      out.append("        RuntimeForeignAccess.registerForDowncall(")
-          .append(ffm)
-          .append('.')
-          .append(function.name())
+      out.append(downcall).append(function.name())
           .append("_DESCRIPTOR);\n");
       if (Seam.nativeLeaf(function)) {
-        out.append("        RuntimeForeignAccess.registerForDowncall(").append(ffm).append('.')
-            .append(function.name()).append("_DESCRIPTOR, java.lang.foreign.Linker.Option.critical(false));\n");
-        out.append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
-            .append(pkg).append('.').append(ffm).append('$').append(function.name())
+        out.append(downcall).append(function.name()).append("_DESCRIPTOR, java.lang.foreign.Linker.Option.critical(false));\n");
+        out.append(buildTime).append(function.name())
             .append("_CriticalDowncall\");\n");
       }
-      out.append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
-          .append(pkg).append('.').append(ffm).append('$').append(function.name())
+      out.append(buildTime).append(function.name())
           .append("_Downcall\");\n");
-      out.append("        RuntimeClassInitialization.initializeAtRunTime(\"")
-          .append(pkg)
-          .append('.')
-          .append(ffm)
-          .append('$')
-          .append(function.name())
+      out.append(runTime).append(function.name())
           .append("_Binding\");\n");
     }
     for (var callback : module.callbacks()) {
       out.append("        RuntimeForeignAccess.registerForUpcall(").append(ffm).append('.')
           .append(callback.name()).append("_CALLBACK_DESCRIPTOR);\n")
-          .append("        RuntimeClassInitialization.initializeAtBuildTime(\"").append(pkg).append('.')
-          .append(ffm).append('$').append(callback.name()).append("Upcalls\");\n");
+          .append(buildTime).append(callback.name()).append("Upcalls\");\n");
       if (callback.ffmTarget() != null)
         out.append("        RuntimeForeignAccess.registerForDirectUpcall(").append(ffm).append('.')
             .append(callback.name()).append("Upcalls.STATIC_HANDLE, ").append(ffm).append('.')
