@@ -103,7 +103,12 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
         self.assertTrue(saved, f"LLD must save optimized {mode} LTO bitcode")
         caller_irs = [self.ir(p) for p in saved if "@c_probe" in self.ir(p) or "@rust_probe" in self.ir(p)]
         self.assertTrue(any("captures(none)" in text for text in caller_irs), f"attributes survive into {mode} LTO backend")
-        self.assertTrue(all("load i64" not in text for text in caller_irs), "both backends eliminate the post-call reload")
+        # FatLTO sysroot libraries can contribute unrelated loads to the merged module.
+        # Inspect the probe bodies, not the entire linked runtime.
+        probe_bodies = [body for text in caller_irs for body in re.findall(
+            r"(?ms)^define [^\n]*@(?:c_probe|rust_probe)[^(]*\([^\n]*\).*?^}", text)]
+        self.assertGreaterEqual(len(probe_bodies), 2)
+        self.assertTrue(all("load i64" not in body for body in probe_bodies), "both backends eliminate the post-call reload")
         if mode == "thin":
             self.assertTrue(any("ret i64 42" in text for text in caller_irs))
         else:
@@ -219,7 +224,10 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
                     irs = [self.ir(path) for path in saved if "@fat_probe" in self.ir(path)]
                     self.assertTrue(irs, "linker must consume embedded fat-object IR")
                     self.assertTrue(any("!myna.applied" in ir for ir in irs))
-                    self.assertTrue(all("load i64" not in ir for ir in irs))
+                    bodies = [body for ir in irs for body in re.findall(
+                        r"(?ms)^define [^\n]*@fat_probe[^(]*\([^\n]*\).*?^}", ir)]
+                    self.assertTrue(bodies)
+                    self.assertTrue(all("load i64" not in body for body in bodies))
                     for i, ir in enumerate(irs):
                         (evidence / f"linked-{i}.ll").write_text(ir)
                     (evidence / "linked.asm").write_text(run(llvm("llvm-objdump"), "-d", binary).stdout)
