@@ -31,6 +31,11 @@ updates:
     groups:
       rust:
         patterns: ['*']
+    ignore:
+      # bumpalo's allocator-api2 integration implements the 0.2 trait; a newer
+      # allocator-api2 splits the trait and breaks the arena allocator.
+      - dependency-name: allocator-api2
+        versions: ['>=0.3']
 
   - package-ecosystem: maven
     directory: /benchmarks
