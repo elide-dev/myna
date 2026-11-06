@@ -84,9 +84,20 @@ jobs:
             build/dist/
             build/reports/
             build/sanitizers/**/*.log
-            build/sanitizers/**/command.json
+            build/sanitizers/**/*.json
             build/sanitizers/**/crash-*
             build/comparison/**/*.json
             build/comparison/**/*.jsonl
             build/comparison/**/*.md
             build/comparison/**/*.log
+            build/comparison/**/*.asm
+            build/comparison/**/*.bc
+            build/comparison/**/*.ll
+            build/comparison/native
+            build/comparison/ffm-aot
+            build/static-jni-test/*.bc
+            build/static-jni-test/*.ll
+            build/static-jni-test/*.txt
+            build/static-jni-test/jni-app
+            build/static-jni-test/generated/seam-jni.*
+            build/aot-ffm-test/jni*.bc

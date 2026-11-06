@@ -34,7 +34,7 @@ public final class Validator {
                + " constexpr consteval constinit delete friend inline namespace operator noexcept"
                + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
                + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT BINDING_ABI_VERSION MynaSymbols Literals MynaFFM"
-               + " MynaNative MynaForeignFeature getClass hashCode equals toString clone finalize"
+               + " MynaNative MynaForeignFeature LibraryBinding CriticalLibraryBinding getClass hashCode equals toString clone finalize"
                + " wait notify notifyAll")
               .split(" "));
 
@@ -90,12 +90,30 @@ public final class Validator {
     for (Signature signature : module.callbacks()) {
       identifier(signature.name());
       if (signature.javaType() != null) qualifiedType(signature.javaType());
+      require((signature.ffmTarget() == null) == (signature.ffmSentinel() == null),
+          "FFM callback target and sentinel must be declared together");
+      if (signature.ffmTarget() != null) {
+        qualifiedType(signature.ffmTarget());
+        require(signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
+            "static FFM callbacks require an i32/i64 status return");
+        try {
+          if (signature.returns() == Scalar.I32) Integer.parseInt(signature.ffmSentinel());
+          else Long.parseLong(signature.ffmSentinel());
+        } catch (NumberFormatException invalid) {
+          throw new IllegalArgumentException("FFM callback sentinel is outside its carrier range");
+        }
+      }
       require(types.add(signature.name()), "duplicate type: " + signature.name());
       require(!isScalarName(signature.name()), "type shadows scalar: " + signature.name());
       require(
           !RESERVED_TYPE_NAMES.contains(signature.name()),
           "type shadows generated name: " + signature.name());
       signatures.add(signature.name());
+    }
+    for (Signature signature : module.callbacks()) {
+      for (String generated : List.of(signature.name() + "Callback", signature.name() + "Upcalls"))
+        require(!types.contains(generated) && !module.ffmClass().equals(generated),
+            "type collides with generated FFM callback helper: " + generated);
     }
     // The JDK FFM linker rejects by-value struct layouts that are not the natural C ABI, so
     // imports (which keep the real by-value layout, unlike _myna_ref-lowered exports) need
@@ -191,6 +209,9 @@ public final class Validator {
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
+      for (String suffix : List.of("_Downcall", "_CriticalDowncall"))
+        require(!types.contains(function.name() + suffix) && !signatures.contains(function.name() + suffix),
+            "type collides with generated FFM adapter for " + function.name());
       if (Seam.nativeLeaf(function)) {
         require(!enabled(function.facts(), "noreturn"), "noreturn requires native_leaf=false in binding ABI 2");
         require(!types.contains(function.name() + "_Leaf") && !signatures.contains(function.name() + "_Leaf")

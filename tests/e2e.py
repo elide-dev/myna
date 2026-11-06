@@ -8,12 +8,71 @@ import unittest
 from support import BINARY, ROOT, TARGET, main, run
 
 class NativeCliTests(unittest.TestCase):
+    def test_jni_wrapper_locals_do_not_shadow_native_symbols(self):
+        with tempfile.TemporaryDirectory(prefix="myna-jni-names-") as tmp:
+            work = Path(tmp)
+            definitions = [f"module jni_names target={TARGET}\n"]
+            for symbol in ("env", "clazz", "arg0", "arg1", "pointer", "length", "empty", "error"):
+                name = "call" + symbol.capitalize()
+                definitions.append(f"""borrow {name} bytes length=count lifetime=call
+import {name} symbol={symbol} return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+""")
+            definitions.append("""struct Record size=8 align=8
+  field value type=i64 offset=0
+end
+import recordResult symbol=result return=Record error=no_failure
+  param value type=Record
+end
+""")
+            source = work / "names.seam"
+            source.write_text("".join(definitions))
+            generated = work / "generated"
+            run(BINARY, "generate", source, "--jni", "--out", generated)
+            home = Path(os.environ["GRAALVM_HOME"])
+            run("cc", "-std=c11", "-Wall", "-Werror", "-fsyntax-only", "-I", home / "include",
+                "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux"),
+                generated / "seam-jni.c")
+            run("javac", "-d", work / "classes", generated / "MynaFFM.java", generated / "MynaNativeJNI.java")
+
+    def test_record_allocator_parameter_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            source = work / "collision.seam"
+            source.write_text(f"""module collision target={TARGET}
+struct Record size=8 align=8
+  field value type=i64 offset=0
+end
+import transform return=Record error=no_failure
+  param allocator type=Record
+  param allocator_ type=i32
+end
+""")
+            run(BINARY, "generate", source, "--out", work / "generated")
+            run("javac", "-d", work / "classes", work / "generated/MynaFFM.java")
+
+    def test_scoped_ffm_callbacks(self):
+        from callback_fixture import build_callback_fixture
+        _, classes, library = build_callback_fixture()
+        self.assertIn("Scoped callbacks, native threads and exception status passed",
+                      run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                          "fixture.callbacks.CallbackMain", library).stdout)
+
+    def test_explicit_ffm_library_binding(self):
+        from ffm_binding import build_binding_fixture
+        _, classes, library = build_binding_fixture()
+        self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
+                      run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                          "FfmBindingMain", library).stdout)
+
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.8.0")
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.9.0")
         with tempfile.TemporaryDirectory(prefix="myna e2e ") as tmp:
             out = Path(tmp)
-            run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET)
+            run(BINARY, "generate", ROOT / "examples/buffer.seam", "--jni", "--out", out, "--target", TARGET)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET, "--check")
             descriptor = json.loads((out / "seam.json").read_text())
             self.assertEqual(descriptor["targetTriple"], TARGET)
@@ -23,7 +82,7 @@ class NativeCliTests(unittest.TestCase):
             run(out / "check")
             run("c++", "-std=c++17", "-x", "c++", "-fsyntax-only", out / "check.c")
             run("rustc", "--edition=2024", "--crate-type=lib", out / "seam.rs", "-o", out / "libseam.rlib")
-            run("javac", "-d", out / "classes", out / "MynaFFM.java")
+            run("javac", "-d", out / "classes", out / "MynaFFM.java", out / "MynaNativeJNI.java", ROOT / "tests/abi/FfmMain.java")
             library = out / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
             os.environ["SEAM_GENERATED"] = str(out)
             run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -51,6 +110,7 @@ public class FfmCheck { public static void main(String[] args) throws Throwable 
 }''')
             run("javac", "-cp", out / "classes", "-d", out / "classes", out / "FfmCheck.java")
             run("java", "--enable-native-access=ALL-UNNAMED", "-cp", out / "classes", "FfmCheck", library)
+            run("java", "--enable-native-access=ALL-UNNAMED", "-cp", out / "classes", "FfmMain", library)
             (out / "seam.h").write_text("drift")
             result = run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", out, "--target", TARGET, "--check", ok=False)
             self.assertEqual(result.returncode, 1)

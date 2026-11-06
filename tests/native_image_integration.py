@@ -9,6 +9,72 @@ from support import BINARY, ROOT, TARGET, main, native_image, run, compile_nativ
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
 
 class NativeImageIntegrationTests(unittest.TestCase):
+    def test_scoped_ffm_callbacks_and_static_jni(self):
+        from callback_fixture import build_callback_fixture
+        work, classes, library = build_callback_fixture()
+        native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                     "--features=fixture.callbacks.CallbackApiForeignFeature",
+                     "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.callbacks.CallbackMain", "-o", work / "callback-app")
+        self.assertIn("Scoped callbacks, native threads and exception status passed",
+                      run(work / "callback-app", library, "jni").stdout)
+
+    def test_static_jni_archive(self):
+        work = ROOT / "build/static-jni-test"
+        work.mkdir(parents=True, exist_ok=True)
+        generated = work / "generated"
+        run(BINARY, "generate", ROOT / "examples/ownership.seam", "--jni", "--out", generated, "--target", TARGET)
+        run("rustc", "--edition=2024", "--crate-type=lib", generated / "seam-jni.rs", "-o", work / "libjni_bindings.rlib")
+        obj = work / "ownership.o"
+        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort",
+            "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/ownership/native.rs", "-o", obj)
+        home = Path(os.environ["GRAALVM_HOME"])
+        wrapper = work / "jni.bc"
+        run("cc", "-O2", "-flto=thin", "-fPIC", "-I", home / "include", "-I",
+            home / "include" / ("darwin" if sys.platform == "darwin" else "linux"),
+            "-c", generated / "seam-jni.c", "-o", wrapper)
+        annotated = work / "jni.annotated.bc"
+        run(BINARY, "apply", "--contracts", generated / "seam-jni.ll", "--input", wrapper,
+            "--output", annotated, "--llvm-tool", ROOT / "build/dist/myna-llvm")
+        ir = run(LLVM / "llvm-dis", annotated, "-o", "-").stdout
+        (work / "jni.annotated.ll").write_text(ir)
+        self.assertIn("captures(none)", ir)
+        self.assertIn("Java_fixture_owned_NativeApiJNI_checksum", ir)
+        probe = work / "probe.c"
+        probe.write_text('#include "seam.h"\nuint8_t contract_probe(void) { uint8_t value = 42; '
+                         '(void)buffer_checksum(&value, 1); return value; }\n')
+        run("cc", "-O1", "-flto=thin", "-I", generated, "-c", probe, "-o", work / "probe.bc")
+        run(BINARY, "apply", "--contracts", generated / "seam-jni.ll", "--input", work / "probe.bc",
+            "--output", work / "probe.annotated.bc", "--llvm-tool", ROOT / "build/dist/myna-llvm")
+        before = run(LLVM / "opt", "-passes=default<O2>", "-S", work / "probe.bc", "-o", "-").stdout
+        after = run(LLVM / "opt", "-passes=default<O2>", "-S", work / "probe.annotated.bc", "-o", "-").stdout
+        (work / "probe.before.ll").write_text(before)
+        (work / "probe.after.ll").write_text(after)
+        self.assertIn("load i8", before)
+        self.assertNotIn("load i8", after)
+        self.assertIn("ret i8 42", after)
+        run("cc", "-O2", "-flto=thin", "-I", generated, "-I", home / "include", "-I",
+            home / "include" / ("darwin" if sys.platform == "darwin" else "linux"),
+            "-c", ROOT / "tests/ownership/jni_checks.c", "-o", work / "checks.bc")
+        run("ar", "rcs", work / "libownership_demo_jni.a", annotated, obj, work / "checks.bc")
+        (work / "libownership_demo_jni.a.symbols").write_text(
+            (generated / "libownership_demo_jni.a.symbols").read_text() + "Java_JniMain_nativeErrors\n")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "NativeApiJNI.java", ROOT / "tests/ownership/JniMain.java")
+        native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}",
+                     "-H:-UnlockExperimentalVMOptions", "JniMain", "-o", work / "jni-app")
+        self.assertIn("Static JNI scalar, ownership and direct buffer calls passed", run(work / "jni-app").stdout)
+        (work / "jni-app.disassembly.txt").write_text(run(LLVM / "llvm-objdump", "--disassemble", work / "jni-app").stdout)
+
+    def test_explicit_ffm_library_binding(self):
+        from ffm_binding import build_binding_fixture
+        work, classes, library = build_binding_fixture()
+        native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                     "--features=fixture.owned.NativeApiForeignFeature", "FfmBindingMain",
+                     "-o", work / "binding-app")
+        self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
+                      run(work / "binding-app", library).stdout)
+
     def test_binding_abi2_default_leaf_static_linkage_and_gc(self):
         work = ROOT / "build/fast-test"
         fixture = ROOT / "tests/fast"
@@ -121,19 +187,31 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work = ROOT / "build/aot-ffm-test"
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
-        run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
+        run(BINARY, "generate", ROOT / "examples/buffer.seam", "--jni", "--out", generated, "--target", TARGET)
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        compile_native(classes, generated, generated / "MynaFFM.java", generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        compile_native(classes, generated, generated / "MynaFFM.java", generated / "MynaNativeJNI.java",
+                       generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
+        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2",
+            "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", work / "inspect.o")
+        home = Path(os.environ["GRAALVM_HOME"])
+        run("cc", "-O2", "-flto=thin", "-I", home / "include", "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux"),
+            "-c", generated / "seam-jni.c", "-o", work / "jni.bc")
+        run(BINARY, "apply", "--contracts", generated / "seam-jni.ll", "--input", work / "jni.bc",
+            "--output", work / "jni.annotated.bc", "--llvm-tool", ROOT / "build/dist/myna-llvm")
+        (work / "libbuffer_jni.a").unlink(missing_ok=True)
+        run("ar", "rcs", work / "libbuffer_jni.a", work / "jni.annotated.bc", work / "inspect.o")
+        shutil.copyfile(generated / "libbuffer_jni.a.symbols", work / "libbuffer_jni.a.symbols")
         native_image( "-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+            "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}", "-H:-UnlockExperimentalVMOptions",
             "--features=dev.elide.myna.generated.MynaForeignFeature", "FfmMain", "-o", work / "ffm-app")
-        self.assertIn("AOT FFM -> Rust passed", run(work / "ffm-app", library).stdout)
+        self.assertIn("AOT FFM -> Rust passed", run(work / "ffm-app", library, "jni").stdout)
 
     def test_rust_native_image_rust(self):
         work = ROOT / "build/native-image-test"

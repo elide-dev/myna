@@ -137,3 +137,11 @@ The consumer supplies the public, accessible `CContext.Directives` implementatio
 Omit `callback=` on an export if its entry-point literal should also remain handwritten. Existing callback declarations without `java_type` continue generating nested interfaces. Callback retention and lifetime management remain the consumer's responsibility.
 
 Both linkage configuration and handwritten type mappings are serialized and fingerprinted; target overrides preserve them. The executable [Bemo integration fixture](../tests/bemo/bemo.seam) links a static Rust archive using only the generated annotations and consumer directives, then calls back through a handwritten interface and literal.
+
+## FFM callback targets and static JNI
+
+Callbacks may additionally declare `ffm_java=qualified.Class.method ffm_sentinel=INTEGER`. Both fields are required together, and the signature must return `i32` or `i64`. The generated FFM upcall invokes the public static target with FFM carriers, catches Java exceptions and returns the reserved sentinel. The hosted Feature registers this static target for AOT upcalls. These fields are independent of the SVM `java_type` interface mapping and are included in the ABI fingerprint.
+
+Callbacks without a static FFM target still provide scoped factories accepting a Java callback and an explicit failure sentinel. Stub lifetime and thread access follow the supplied arena. Imports that call back must opt out of native leaves. See the [adapter guide](jvm-roadmap.md) for callback ownership and library lifetimes.
+
+The CLI's optional `--jni` flag projects imports into static SVM JNI methods. It does not change the canonical C signature or introduce JNI handles into seam types. Declared `borrow` relationships additionally generate direct `ByteBuffer` overloads; raw pointers remain explicit unsafe `long` addresses. The adapter emits its own concrete JNI signatures and library lifecycle metadata.

@@ -64,3 +64,8 @@ jobs:
             build/comparison/**/*.jsonl
             build/comparison/**/*.md
             build/comparison/**/*.log
+            build/comparison/**/*.asm
+            build/comparison/**/*.bc
+            build/comparison/**/*.ll
+            build/comparison/native
+            build/comparison/ffm-aot

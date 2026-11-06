@@ -1,6 +1,7 @@
 package dev.elide.myna.backend;
 
 import dev.elide.myna.model.Seam.Function;
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
 
 /**
@@ -33,6 +34,13 @@ public final class NativeImageForeign implements Backend {
           .append('.')
           .append(function.name())
           .append("_DESCRIPTOR);\n");
+      if (Seam.nativeLeaf(function)) {
+        out.append("        RuntimeForeignAccess.registerForDowncall(").append(ffm).append('.')
+            .append(function.name()).append("_DESCRIPTOR, java.lang.foreign.Linker.Option.critical(false));\n");
+        out.append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
+            .append(pkg).append('.').append(ffm).append('$').append(function.name())
+            .append("_CriticalDowncall\");\n");
+      }
       out.append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
           .append(pkg).append('.').append(ffm).append('$').append(function.name())
           .append("_Downcall\");\n");
@@ -43,6 +51,16 @@ public final class NativeImageForeign implements Backend {
           .append('$')
           .append(function.name())
           .append("_Binding\");\n");
+    }
+    for (var callback : module.callbacks()) {
+      out.append("        RuntimeForeignAccess.registerForUpcall(").append(ffm).append('.')
+          .append(callback.name()).append("_CALLBACK_DESCRIPTOR);\n")
+          .append("        RuntimeClassInitialization.initializeAtBuildTime(\"").append(pkg).append('.')
+          .append(ffm).append('$').append(callback.name()).append("Upcalls\");\n");
+      if (callback.ffmTarget() != null)
+        out.append("        RuntimeForeignAccess.registerForDirectUpcall(").append(ffm).append('.')
+            .append(callback.name()).append("Upcalls.STATIC_HANDLE, ").append(ffm).append('.')
+            .append(callback.name()).append("_CALLBACK_DESCRIPTOR);\n");
     }
     return out.append("    }\n}\n").toString();
   }

@@ -1,6 +1,7 @@
 package dev.elide.myna.backend;
 
 import dev.elide.myna.model.Seam.*;
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
@@ -80,9 +81,29 @@ public final class JavaFfm implements Backend {
           .append(")), ")
           .append(f.name())
           .append("_DESCRIPTOR);\n    }\n");
+      out.append("    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */\n")
+          .append("    public static MethodHandle ").append(f.name())
+          .append("(SymbolLookup lookup, boolean critical) {\n")
+          .append("        if (!critical) return ").append(f.name()).append("(lookup);\n");
+      if (Seam.nativeLeaf(f)) {
+        out.append("        return Linker.nativeLinker().downcallHandle(lookup.find(")
+            .append(SeamJson.quote(f.symbol())).append(").orElseThrow(() -> new UnsatisfiedLinkError(")
+            .append(SeamJson.quote(f.symbol())).append(")), ").append(f.name())
+            .append("_DESCRIPTOR, Linker.Option.critical(false));\n");
+      } else {
+        out.append("        throw new IllegalArgumentException(\"critical downcall requires a native leaf contract\");\n");
+      }
+      out.append("    }\n");
     }
     for (Function f : m.functions().stream().map(d -> ffmForm(m, d)).toList()) {
       String carrier = Types.ffmCarrier(f.returns());
+      String allocator = allocatorParameter(f);
+      if (Seam.nativeLeaf(f))
+        out.append("    private static final class ").append(f.name())
+            .append("_CriticalDowncall {\n")
+            .append("        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(")
+            .append(m.ffmClass()).append('.').append(f.name())
+            .append("_DESCRIPTOR, Linker.Option.critical(false));\n    }\n");
       out.append("    // ABI adapters may be compiled into an image; addresses remain runtime-bound.\n")
           .append("    private static final class ")
           .append(f.name())
@@ -103,7 +124,7 @@ public final class JavaFfm implements Backend {
           .append(' ')
           .append(f.name())
           .append('(')
-          .append(f.returns() instanceof Named ? "SegmentAllocator allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
+          .append(f.returns() instanceof Named ? "SegmentAllocator " + allocator + (f.abiParameters().isEmpty() ? "" : ", ") : "")
           .append(
               String.join(
                   ", ",
@@ -118,11 +139,173 @@ public final class JavaFfm implements Backend {
           .append("_Downcall.HANDLE.invokeExact(")
           .append(m.ffmClass()).append('.').append(f.name()).append("_Binding.ADDRESS")
           .append(f.returns() instanceof Named || !f.abiParameters().isEmpty() ? ", " : "")
-          .append(f.returns() instanceof Named ? "allocator" + (f.abiParameters().isEmpty() ? "" : ", ") : "")
+          .append(f.returns() instanceof Named ? allocator + (f.abiParameters().isEmpty() ? "" : ", ") : "")
           .append(String.join(", ", f.abiParameters().stream().map(p -> widened(p.type(), p.name())).toList()))
           .append(");\n    }\n");
     }
+    binding(m, out, false);
+    binding(m, out, true);
+    ownership(m, out);
+    FfmCallbacks.generate(m, out);
     return out.append("}\n").toString();
+  }
+
+  private static void ownership(Module m, StringBuilder out) {
+    if (m.resources().isEmpty()) return;
+    out.append("""
+        @FunctionalInterface
+        public interface NativeDestructor { void destroy(MemorySegment address) throws Throwable; }
+        /**
+         * On successful return, takes sole ownership and returns a non-null consumer owner.
+         * On failure, undo registrations without freeing; the generated factory destroys the value.
+         * The consumer must keep the library arena alive until destruction, guard all borrows,
+         * and enforce requiredThread for access and destruction (null permits shared ownership).
+         */
+        @FunctionalInterface
+        public interface ResourceFactory<T> {
+            T adopt(MemorySegment address, NativeDestructor destructor, Thread requiredThread) throws Throwable;
+        }
+""");
+    for (Resource r : m.resources()) {
+      Function create = m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
+      var params = new ArrayList<String>();
+      var args = new ArrayList<String>();
+      int index = 0;
+      for (Parameter p : create.parameters()) {
+        String name = "arg" + index++;
+        params.add(Types.ffmCarrier(p.type()) + " " + name);
+        args.add(name);
+      }
+      out.append("    public static final class ").append(r.name()).append(" {\n")
+          .append("        private ").append(r.name()).append("() {}\n")
+          .append("        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory")
+          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+          .append(") throws Throwable {\n")
+          .append("            java.util.Objects.requireNonNull(factory);\n")
+          .append("            MemorySegment address = binding.").append(create.name()).append('(')
+          .append(String.join(", ", args)).append(");\n")
+          .append("            if (address.address() == 0) return null;\n")
+          .append("            try {\n")
+          .append("                return java.util.Objects.requireNonNull(factory.adopt(address, binding::")
+          .append(r.destroy()).append(", ").append(r.shared() ? "null" : "Thread.currentThread()")
+          .append("));\n")
+          .append("            } catch (Throwable failure) {\n")
+          .append("                try { binding.").append(r.destroy()).append("(address); }\n")
+          .append("                catch (Throwable cleanup) { if (cleanup != failure) failure.addSuppressed(cleanup); }\n")
+          .append("                throw failure;\n            }\n        }\n    }\n");
+    }
+  }
+
+  /** Instance addresses retain their lookup scope; only the address-free adapters are static. */
+  private static void binding(Module m, StringBuilder out, boolean critical) {
+    String cls = critical ? "CriticalLibraryBinding" : "LibraryBinding";
+    var functions = m.functions().stream().filter(f -> !critical || Seam.nativeLeaf(f)).toList();
+    out.append("""
+        /**
+         * Explicit library binding. The caller owns the lookup/library arena and must keep it
+         * alive for every call and any native values or callbacks that outlive a call.
+         * Closing that arena invalidates its symbol segments; FFM rejects subsequent calls.
+         * Missing symbols fail only when invoked, allowing import-only libraries.
+         */
+""")
+        .append(critical ? "        // Only bounded, nonblocking, non-reentrant native leaves are exposed.\n" : "")
+        .append("        public static final class ").append(cls).append(" {\n");
+    for (Function original : functions) {
+      Function f = ffmForm(m, original);
+      out.append("        private final java.util.Optional<MemorySegment> ")
+          .append(f.name()).append("_address;\n");
+    }
+    out.append("        public ").append(cls).append("(java.nio.file.Path path, Arena arena) {\n")
+        .append("            this(SymbolLookup.libraryLookup(path, arena));\n        }\n")
+        .append("        public ").append(cls).append("(SymbolLookup lookup) {\n")
+        .append("            java.util.Objects.requireNonNull(lookup);\n");
+    for (Function original : functions) {
+      Function f = ffmForm(m, original);
+      out.append("            this.").append(f.name()).append("_address = lookup.find(")
+          .append(SeamJson.quote(f.symbol())).append(");\n");
+    }
+    out.append("        }\n");
+    for (Function original : functions) {
+      Function f = ffmForm(m, original);
+      var params = new ArrayList<String>();
+      var args = new ArrayList<String>();
+      if (f.returns() instanceof Named) {
+        String allocator = allocatorParameter(f);
+        params.add("SegmentAllocator " + allocator);
+        args.add(allocator);
+      }
+      for (Parameter p : f.abiParameters()) {
+        params.add(Types.ffmCarrier(p.type()) + " " + p.name());
+        args.add(widened(p.type(), p.name()));
+      }
+      String carrier = Types.ffmCarrier(f.returns());
+      out.append("        public ").append(carrier).append(' ').append(f.name())
+          .append('(').append(String.join(", ", params)).append(") throws Throwable {\n            ");
+      if (f.returns() != Scalar.VOID) out.append("return (").append(carrier).append(") ");
+      out.append(m.ffmClass()).append('.').append(f.name())
+          .append(critical ? "_CriticalDowncall" : "_Downcall")
+          .append(".HANDLE.invokeExact(this.").append(f.name())
+          .append("_address.orElseThrow(() -> new UnsatisfiedLinkError(")
+          .append(SeamJson.quote(f.symbol())).append("))")
+          .append(args.isEmpty() ? "" : ", " + String.join(", ", args))
+          .append(");\n        }\n");
+    }
+    for (BufferBorrow borrow : m.borrows())
+      if (functions.stream().anyMatch(f -> f.name().equals(borrow.function()))) buffer(m, borrow, out);
+    out.append("    }\n");
+  }
+
+  private static void buffer(Module m, BufferBorrow borrow, StringBuilder out) {
+    Function f = m.functions().stream().filter(x -> x.name().equals(borrow.function()))
+        .findFirst().orElseThrow();
+    Parameter buffer = f.parameters().stream().filter(p -> p.name().equals(borrow.parameter()))
+        .findFirst().orElseThrow();
+    Type length = f.parameters().stream().filter(p -> p.name().equals(borrow.length()))
+        .findFirst().orElseThrow().type();
+    var params = new ArrayList<String>();
+    var args = new ArrayList<String>();
+    String name = "";
+    int index = 0;
+    for (Parameter p : f.parameters()) {
+      String arg = "arg" + index++;
+      if (p == buffer) {
+        name = arg;
+        params.add("MemorySegment " + arg);
+        args.add("pointer");
+      } else if (p.name().equals(borrow.length())) {
+        args.add(length == Scalar.I32 || length == Scalar.U32 ? "(int) length" : "length");
+      } else {
+        params.add(Types.ffmCarrier(p.type()) + " " + arg);
+        args.add(arg);
+      }
+    }
+    out.append("        /** Borrows the entire native segment for this call; length is in bytes. */\n")
+        .append("        public ").append(Types.ffmCarrier(f.returns())).append(' ')
+        .append(f.name()).append('(').append(String.join(", ", params))
+        .append(") throws Throwable {\n")
+        .append("            if (!").append(name).append(".isNative()) throw new IllegalArgumentException(\"native segment required\");\n");
+    if (buffer.access() == Access.READ_WRITE)
+      out.append("            if (").append(name).append(".isReadOnly()) throw new IllegalArgumentException(\"writable segment required\");\n");
+    out.append("            if (!").append(name).append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
+        .append("            if (!").append(name).append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n")
+        .append("            long length = ").append(name).append(".byteSize();\n");
+    out.append("            if (length != 0 && ").append(name)
+        .append(".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
+    if (length == Scalar.I32 || length == Scalar.U32)
+      out.append("            if (length > ").append(length == Scalar.I32 ? "2147483647L" : "4294967295L")
+          .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
+    out.append("            if (length != 0) {\n")
+        .append("                MemorySegment pointer = ").append(name).append(";\n                ");
+    if (f.returns() != Scalar.VOID) out.append("return ");
+    out.append("this.").append(f.name()).append('(').append(String.join(", ", args))
+        .append(");\n");
+    if (f.returns() == Scalar.VOID) out.append("                return;\n");
+    out.append("            }\n")
+        .append("            try (Arena empty = Arena.ofConfined()) {\n")
+        .append("                MemorySegment pointer = empty.allocate(1);\n                ");
+    if (f.returns() != Scalar.VOID) out.append("return ");
+    out.append("this.").append(f.name()).append('(').append(String.join(", ", args))
+        .append(");\n            }\n        }\n");
   }
 
   /**
@@ -131,6 +314,13 @@ public final class JavaFfm implements Backend {
    */
   private static Function ffmForm(Module m, Function f) {
     return f.direction() == Direction.EXPORT ? ByValue.lower(m, f) : f;
+  }
+
+  private static String allocatorParameter(Function f) {
+    var names = f.abiParameters().stream().map(Parameter::name).toList();
+    String name = "allocator";
+    while (names.contains(name)) name += "_";
+    return name;
   }
 
   private static boolean unsignedSmall(Type t) {
