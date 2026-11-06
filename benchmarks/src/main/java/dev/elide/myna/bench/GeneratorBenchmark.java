@@ -10,9 +10,9 @@ import org.openjdk.jmh.annotations.*;
 
 /** End-to-end and per-stage benchmarks of the Seam IR pipeline: parse, validate, emit. */
 @State(Scope.Benchmark)
-@Fork(1)
-@Warmup(iterations = 2, time = 1)
-@Measurement(iterations = 3, time = 1)
+@Fork(2)
+@Warmup(iterations = 15, time = 1)
+@Measurement(iterations = 5, time = 1)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 public class GeneratorBenchmark {
   @Param({"buffer", "ownership", "elide_lzma", "bemo", "synthetic"})

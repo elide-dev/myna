@@ -9,9 +9,9 @@ import org.openjdk.jmh.annotations.*;
 
 /** Each code generation backend in isolation, on a validated module. */
 @State(Scope.Benchmark)
-@Fork(1)
-@Warmup(iterations = 2, time = 1)
-@Measurement(iterations = 3, time = 1)
+@Fork(2)
+@Warmup(iterations = 15, time = 1)
+@Measurement(iterations = 5, time = 1)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 public class BackendBenchmark {
   @Param({"buffer", "synthetic"})

@@ -60,7 +60,22 @@ jobs:
 
   benchmarks:
     needs: build-jmh
-    name: Run benchmarks
+    name: Run benchmarks (${{ matrix.shard }})
+    # Two forks with 15 s of warmup per case keep JIT convergence out of the
+    # measured rounds. Shards keep that within the old wall-clock budget;
+    # CodSpeed merges results from every job in this workflow run.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: generator-front
+            filter: 'GeneratorBenchmark\.(parse|validate)$'
+          - shard: generator-emit
+            filter: 'GeneratorBenchmark\.(generate|endToEnd)$'
+          - shard: generator-serialize
+            filter: 'GeneratorBenchmark\.(canonicalJson|fingerprint)$'
+          - shard: backends
+            filter: 'BackendBenchmark\.'
     runs-on: ${{ vars.MYNA_ARM_BENCH_RUNNER || 'ubuntu-24.04-arm' }}
     timeout-minutes: 30
     permissions:
@@ -84,7 +99,7 @@ jobs:
         uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
         with:
           mode: walltime
-          run: mise exec -- java -jar benchmarks/target/benchmarks.jar
+          run: mise exec -- java -jar benchmarks/target/benchmarks.jar '${{ matrix.filter }}'
 
   native-values:
     needs: native-wall-build
