@@ -28,6 +28,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Select Apple linker for instrumented LLVM objects
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Xcode 16.4 ld rejects fuzzer+UBSan relocations (LLVM #139684).
+          # Keep pinned Clang/compiler-rt; select the platform SDK and linker.
+          export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --show-sdk-version
+          xcrun ld -v
       - name: Setup tools
         uses: ./.github/actions/setup
       - name: Verify LLVM compatibility
