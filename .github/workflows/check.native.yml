@@ -46,13 +46,15 @@ jobs:
         shell: bash
         run: |
           eval "$(mise env -s bash)"
-          test "$(elide-toolchain version)" = 2026.11.1
+          test "$(elide-toolchain version)" = 2026.11.2
           test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
         run: mise run build:llvm
       - name: Verify symbol identity failures
         run: mise exec -- python3 tests/symbols.py
+      - run: mise run test:e2e
+      - run: mise run test:llvm-coverage
       - run: mise run test:rust
       - name: C++ value ABI and simdjson conformance
         run: mise run test:cpp
@@ -64,8 +66,6 @@ jobs:
           MYNA_PYTHON_TIMEOUT: 14m
         run: mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 600
       - run: mise run test:tsan
-      - run: mise run test:e2e
-      - run: mise run test:llvm-coverage
       - run: mise run test:native-image
       - run: mise run bench:comparison-build
         if: runner.os == 'Linux'

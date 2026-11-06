@@ -103,7 +103,12 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
         self.assertTrue(saved, f"LLD must save optimized {mode} LTO bitcode")
         caller_irs = [self.ir(p) for p in saved if "@c_probe" in self.ir(p) or "@rust_probe" in self.ir(p)]
         self.assertTrue(any("captures(none)" in text for text in caller_irs), f"attributes survive into {mode} LTO backend")
-        self.assertTrue(all("load i64" not in text for text in caller_irs), "both backends eliminate the post-call reload")
+        # FatLTO sysroot libraries can contribute unrelated loads to the merged module.
+        # Inspect the probe bodies, not the entire linked runtime.
+        probe_bodies = [body for text in caller_irs for body in re.findall(
+            r"(?ms)^define [^\n]*@(?:c_probe|rust_probe)[^(]*\([^\n]*\).*?^}", text)]
+        self.assertGreaterEqual(len(probe_bodies), 2)
+        self.assertTrue(all("load i64" not in body for body in probe_bodies), "both backends eliminate the post-call reload")
         if mode == "thin":
             self.assertTrue(any("ret i64 42" in text for text in caller_irs))
         else:
@@ -135,40 +140,176 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
             "native_flags": ["-O2"],
         }, indent=2) + "\n")
 
-    def test_rejects_fat_lto_objects_and_mixed_archives(self):
-        original = self.c_object()
+    def test_fat_lto_objects_and_mixed_archives(self):
+        # Exercise real ELF containers on every host; execute links on Linux.
+        target = TARGET if sys.platform == "linux" else "x86_64-unknown-linux-gnu"
+        generated = self.work / "elf-contracts"
+        run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", target)
+        contracts = generated / "seam.ll"
         source = self.work / "fat.c"
         source.write_text("extern long long seam_inspect(const long long *);\n"
-                          "long long fat_probe(void) { long long value = 42; seam_inspect(&value); return value; }\n")
-        # LLVM FatLTO is ELF-only. Cross-compile this format check even on macOS; no foreign
-        # executable runs, and a matching ordinary host bitcode member exposes partial rewrites.
+                          "__attribute__((noinline)) long long fat_probe(void) { "
+                          "long long value = 42; seam_inspect(&value); return value; }\n")
+        ordinary_source = self.work / "ordinary.c"
+        ordinary_source.write_text(source.read_text().replace("fat_probe", "ordinary_probe"))
+        native_source = self.work / "native.c"
+        native_source.write_text("long long seam_inspect(const long long *p) { return *p; }\n")
+        unrelated_source = self.work / "unrelated.c"
+        unrelated_source.write_text("int unrelated(void) { return 7; }\n")
+        native = self.work / "native.o"
+        run(llvm("clang"), f"--target={target}", "-O1", "-c", native_source, "-o", native)
+        native_bytes = native.read_bytes()
+        main_c = self.work / "main.c"
+        main_c.write_text("extern long long fat_probe(void); extern long long ordinary_probe(void);\n"
+                          "int main(void) { return fat_probe() == 42 && ordinary_probe() == 42 ? 0 : 1; }\n")
         for mode in ("thin", "full"):
             with self.subTest(mode=mode):
                 fat = self.work / f"fat-{mode}.o"
-                run(llvm("clang"), "--target=x86_64-unknown-linux-gnu", "-O1",
-                    f"-flto={mode}", "-ffat-lto-objects", "-c", source, "-o", fat)
-                self.assertIn(".llvm.lto", run(llvm("llvm-readobj"), "--sections", fat).stdout)
+                flags = [f"--target={target}", "-O1", "-g", f"-flto={mode}"]
+                run(llvm("clang"), *flags, "-ffat-lto-objects", "-c", source, "-o", fat)
+                unrelated = self.work / f"unrelated-{mode}.o"
+                run(llvm("clang"), *flags, "-ffat-lto-objects", "-c", unrelated_source, "-o", unrelated)
+                ordinary = self.work / f"ordinary-{mode}.o"
+                run(llvm("clang"), *flags, "-c", ordinary_source, "-o", ordinary)
                 archive = self.work / f"mixed-{mode}.a"
-                run(llvm("llvm-ar"), "rcs", archive, original, fat)
-                for path in (fat, archive):
-                    before = path.read_bytes()
-                    output = self.work / f"rejected-{path.name}"
-                    result = self.apply(path, output, ok=False)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("unsupported embedded LLVM bitcode (.llvm.lto)", result.stdout + result.stderr)
-                    self.assertEqual(path.read_bytes(), before)
-                    self.assertFalse(output.exists())
-        # A genuine machine-code ELF member still passes through byte-for-byte.
-        native = self.work / "native-elf.o"
-        run(llvm("clang"), "--target=x86_64-unknown-linux-gnu", "-O1", "-c", source, "-o", native)
-        before = native.read_bytes()
-        plain_archive = self.work / "plain-elf.a"
-        run(llvm("llvm-ar"), "rcs", plain_archive, original, native)
-        rewritten = self.work / "plain-elf.seam.a"
-        self.apply(plain_archive, rewritten)
-        run(llvm("llvm-ar"), "x", rewritten, native.name, cwd=self.work)
-        self.assertEqual(native.read_bytes(), before)
+                run(llvm("llvm-ar"), "rcs", archive, ordinary, fat, native, unrelated)
+                original_bc = self.work / f"original-{mode}.bc"
+                run(llvm("llvm-objcopy"), f"--dump-section=.llvm.lto={original_bc}", fat)
+                self.assertIn("load i64", self.optimized(original_bc))
+                annotated_fat = self.work / f"annotated-{fat.name}"
+                annotated_archive = self.work / f"annotated-{archive.name}"
+                for original, annotated in ((fat, annotated_fat), (archive, annotated_archive)):
+                    before = original.read_bytes()
+                    self.apply(original, annotated, contracts)
+                    self.assertEqual(original.read_bytes(), before)
+                    twice = self.work / f"twice-{annotated.name}"
+                    self.apply(annotated, twice, contracts)
+                    self.assertEqual(annotated.read_bytes(), twice.read_bytes())
+                extracted = self.work / f"extracted-{mode}"
+                extracted.mkdir()
+                run(llvm("llvm-ar"), "x", annotated_archive, cwd=extracted)
+                self.assertEqual((extracted / native.name).read_bytes(), native_bytes)
+                self.assertEqual((extracted / unrelated.name).read_bytes(), unrelated.read_bytes())
+                self.assertEqual((extracted / fat.name).read_bytes(), annotated_fat.read_bytes())
+                self.assertIn("!myna.applied", self.ir(extracted / ordinary.name))
+                self.assertEqual(run(llvm("llvm-ar"), "t", archive).stdout,
+                                 run(llvm("llvm-ar"), "t", annotated_archive).stdout)
+                annotated_bc = self.work / f"annotated-{mode}.bc"
+                run(llvm("llvm-objcopy"), f"--dump-section=.llvm.lto={annotated_bc}", annotated_fat)
+                optimized = self.optimized(annotated_bc)
+                self.assertIn("!myna.applied", self.ir(annotated_bc))
+                self.assertIn("ret i64 42", optimized)
+                self.assertNotIn("load i64", optimized)
+                for bc in (original_bc, annotated_bc):
+                    self.assertEqual("<GLOBALVAL_SUMMARY_BLOCK " in
+                                     run(llvm("llvm-bcanalyzer"), "-dump", bc).stdout, mode == "thin")
+                # All native sections, symbols, relocations and debug payloads survive.
+                fallbacks = []
+                for i, obj in enumerate((fat, annotated_fat)):
+                    fallback = self.work / f"fallback-{mode}-{i}.o"
+                    run(llvm("llvm-objcopy"), "--remove-section=.llvm.lto", obj, fallback)
+                    fallbacks.append(fallback.read_bytes())
+                self.assertEqual(*fallbacks)
+                evidence = ROOT / "build/reports/fatlto" / target / mode
+                evidence.mkdir(parents=True, exist_ok=True)
+                retained = [source, ordinary_source, native_source, main_c, contracts, fat, ordinary,
+                            native, archive, annotated_fat, annotated_archive, original_bc, annotated_bc]
+                if sys.platform == "linux":
+                    # The pinned driver must select archive bitcode by default for LTO links.
+                    binary = self.work / f"linked-{mode}"
+                    run(llvm("clang"), f"-flto={mode}", "-fuse-ld=lld", "-O2", "-Wl,--save-temps",
+                        main_c, annotated_archive, "-o", binary)
+                    run(binary)
+                    saved = list(self.work.glob("*.opt.bc"))
+                    irs = [self.ir(path) for path in saved if "@fat_probe" in self.ir(path)]
+                    self.assertTrue(irs, "linker must consume embedded fat-object IR")
+                    self.assertTrue(any("!myna.applied" in ir for ir in irs))
+                    bodies = [body for ir in irs for body in re.findall(
+                        r"(?ms)^define [^\n]*@fat_probe[^(]*\([^\n]*\).*?^}", ir)]
+                    self.assertTrue(bodies)
+                    self.assertTrue(all("load i64" not in body for body in bodies))
+                    for i, ir in enumerate(irs):
+                        (evidence / f"linked-{i}.ll").write_text(ir)
+                    (evidence / "linked.asm").write_text(run(llvm("llvm-objdump"), "-d", binary).stdout)
+                    retained.extend([binary, *saved])
+                    # The unchanged native fallback also remains linkable without FatLTO selection.
+                    fallback_binary = self.work / f"native-linked-{mode}"
+                    run(llvm("clang"), "-fuse-ld=lld", "-Wl,--no-fat-lto-objects",
+                        main_c, annotated_archive, "-o", fallback_binary)
+                    run(fallback_binary)
+                for path in retained:
+                    shutil.copyfile(path, evidence / path.name)
+                (evidence / "optimized.ll").write_text(optimized)
+                (evidence / "metadata.json").write_text(json.dumps({
+                    "target": target, "mode": mode, "clang": run(llvm("clang"), "--version").stdout,
+                    "compile_flags": [*flags, "-ffat-lto-objects"],
+                    "sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in retained},
+                }, indent=2) + "\n")
+                for path in self.work.glob("*.opt.bc"):
+                    path.unlink()
 
+    @unittest.skipUnless(sys.platform == "linux", "the shipped ELF sysroot runs on Linux")
+    def test_shipped_fat_lto_sysroot_archive(self):
+        original = Path(os.environ["ELIDE_TOOLCHAIN_HOME"]) / "sysroot" / TARGET / "usr/lib/libzstd.a"
+        self.assertTrue(original.is_file(), f"the pinned toolchain must ship {original}")
+        contracts = self.work / "zstd.ll"
+        contracts.write_text(self.contracts.read_text() + "\ndeclare i32 @ZSTD_versionNumber() nounwind willreturn nofree\n")
+        annotated = self.work / "libzstd.a"
+        self.apply(original, annotated, contracts)
+        # Ordinary archive lookup (not whole-archive) must find the rewritten member.
+        source = self.work / "zstd.c"
+        source.write_text("extern unsigned ZSTD_versionNumber(void);\n"
+                          "int main(void) { return ZSTD_versionNumber() < 10000; }\n")
+        binary = self.work / "zstd"
+        run(llvm("clang"), "-flto=thin", "-fuse-ld=lld", "-O2", "-Wl,--save-temps",
+            source, annotated, "-o", binary)
+        run(binary)
+        saved = list(self.work.glob("*.opt.bc"))
+        self.assertTrue(any("!myna.applied" in self.ir(path) for path in saved),
+                        "the linker must consume annotated sysroot bitcode")
+        evidence = ROOT / "build/reports/fatlto" / TARGET / "sysroot"
+        evidence.mkdir(parents=True, exist_ok=True)
+        for path in [source, contracts, annotated, binary, *saved]:
+            shutil.copyfile(path, evidence / path.name)
+        (evidence / "metadata.json").write_text(json.dumps({
+            "input": str(original), "input_sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
+            "output_sha256": hashlib.sha256(annotated.read_bytes()).hexdigest(),
+            "clang": run(llvm("clang"), "--version").stdout,
+        }, indent=2) + "\n")
+
+    def test_fat_lto_invalid_payloads_fail_atomically(self):
+        target = "x86_64-unknown-linux-gnu"
+        generated = self.work / "elf-contracts"
+        run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", target)
+        contracts = generated / "seam.ll"
+        source = self.work / "fat.c"
+        source.write_text("extern long long seam_inspect(const long long *);\n"
+                          "long long probe(const long long *p) { return seam_inspect(p); }\n")
+        fat = self.work / "fat.o"
+        run(llvm("clang"), f"--target={target}", "-flto=thin", "-ffat-lto-objects", "-c", source, "-o", fat)
+        annotated = self.work / "annotated.o"
+        self.apply(fat, annotated, contracts)
+        stale = self.work / "stale.ll"
+        stale.write_text(contracts.read_text().replace("readonly", "writeonly"))
+        malformed = self.work / "malformed.bc"
+        malformed.write_bytes(b"not bitcode")
+        corrupt = self.work / "corrupt.o"
+        run(llvm("llvm-objcopy"), f"--update-section=.llvm.lto={malformed}", fat, corrupt)
+        duplicate = self.work / "duplicate.o"
+        run(llvm("llvm-objcopy"), "--rename-section=.comment=.llvm.lto", fat, duplicate)
+        cases = [(annotated, stale, "different seam contracts"),
+                 (corrupt, contracts, "invalid .llvm.lto"),
+                 (duplicate, contracts, "duplicate .llvm.lto")]
+        for i, (obj, contract, error) in enumerate(cases):
+            archive = self.work / f"invalid-{i}.a"
+            run(llvm("llvm-ar"), "rcs", archive, fat, obj)
+            for original in (obj, archive):
+                output = self.work / "existing-output.o"
+                output.write_bytes(b"preserve previous output")
+                result = self.apply(original, output, contract, ok=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stdout + result.stderr)
+                self.assertEqual(output.read_bytes(), b"preserve previous output")
 
     def test_rlib_members_and_native_archive_members(self):
         source = self.work / "lib.rs"
@@ -381,7 +522,7 @@ pub fn scale_probe(thread: *mut core::ffi::c_void) -> i64 {
         self.assertNotEqual(self.apply(original, original, ok=False).returncode, 0)
         native = self.work / "native.o"
         run(llvm("clang"), "-c", self.work / "caller.c", "-o", native)
-        self.assertIn("no standalone LLVM bitcode", self.apply(native, output, ok=False).stdout)
+        self.assertIn("no LLVM bitcode", self.apply(native, output, ok=False).stdout)
         empty = self.work / "empty.ll"
         empty.write_text(self.contracts.read_text().replace("@seam_inspect", "@not_present"))
         self.assertIn("no contract symbols", self.apply(original, output, empty, ok=False).stdout)

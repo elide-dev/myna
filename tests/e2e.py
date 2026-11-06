@@ -83,7 +83,7 @@ end
 
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.9.0")
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.9.1")
         with tempfile.TemporaryDirectory(prefix="myna e2e ") as tmp:
             out = Path(tmp)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--jni", "--out", out, "--target", TARGET)

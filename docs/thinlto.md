@@ -36,7 +36,7 @@ This revises the briefing's expectation that a separate declaration module in th
 The helper:
 
 1. Reads generator-produced `seam.ll`, checks its fingerprint metadata, and restricts the accepted attribute vocabulary.
-2. Reads LLVM bitcode regardless of `.bc`/`.o` suffix. For regular `.a`/`.rlib` archives, rewrites bitcode members and preserves other member payloads, names, and order. Rebuilds the archive symbol table deterministically.
+2. Reads LLVM bitcode regardless of `.bc`/`.o` suffix. For regular `.a`/`.rlib` archives, rewrites bitcode members and preserves other member payloads, names, and order. Rewrites embedded `.llvm.lto` bitcode in ELF FatLTO objects, including archive members, while preserving their native fallback. Rebuilds the archive symbol table deterministically.
 3. Matches exact symbols and checks target architecture/OS/environment/object format, function type, calling convention, and existing attribute compatibility.
 4. Adds approved parameter/function contracts to matching definitions/declarations and their direct call/invoke sites. Indirect calls are not guessed from signature similarity.
 5. Verifies modified IR, embeds `!myna.applied` with a SHA-256 of the actual contract bytes, rebuilds existing module summaries, and recomputes the module hash. ThinLTO/full-LTO mode is preserved; full-LTO inputs do not acquire a ThinLTO summary.
@@ -44,13 +44,17 @@ The helper:
 
 Same-contract application is idempotent. Reapplying a different contract set to already annotated input is rejected: rebuild from the original compiler output to avoid retaining attributes that were removed or weakened. Version 1 expects one consolidated contract module per object/archive.
 
-Thin archives, native-only object rewriting, embedded-bitcode containers, aliases used as contracted symbols, and incompatible ABI forms are rejected. Ordinary native archive members and Rust metadata are preserved. A native-only symbol can still be described; its attributes are attached to declarations/calls in the LLVM callers rather than to machine instructions.
+Thin archives, native-only object rewriting, aliases used as contracted symbols, and incompatible ABI forms are rejected. Ordinary native archive members and Rust metadata are preserved. A native-only symbol can still be described; its attributes are attached to declarations/calls in the LLVM callers rather than to machine instructions.
 
 Full LTO (`clang -flto=full`, Rust full/fat LTO bitcode) is supported separately
 from LLVM **FatLTO objects**. The latter contain native code plus an embedded
-`.llvm.lto` section and currently require ELF. Myna rejects them both standalone
-and inside mixed archives, preventing partial success that leaves embedded
-optimizer input unannotated. Use standalone bitcode with the applicator. See
+`.llvm.lto` section and currently require ELF. Myna 0.9.1 rewrites that section
+both standalone and inside regular archives, preserving ThinLTO/full-LTO mode
+and the native fallback. Link with `-flto=thin` or `-flto=full`; the pinned
+2026.11.2 toolchain selects FatLTO archive bitcode by default on Linux. With
+other LLVM drivers, also pass `-Wl,--fat-lto-objects`. A non-LTO link uses the
+unchanged machine code, where the added optimizer contracts have no effect.
+Malformed or duplicate `.llvm.lto` sections fail before any output is replaced. See
 [LLVM FatLTO](https://llvm.org/docs/FatLTO.html) for the packaging distinction.
 
 ## Build pipeline
@@ -91,7 +95,7 @@ External files loaded only by a late LTO plugin may not enter an existing ThinLT
 
 ## Evidence
 
-`tests/llvm_integration.py` compiles actual Clang and Rust bitcode objects with an opaque foreign call between a local store and load. Before application the load survives optimization. After application, LLVM returns constant `42` while retaining the native call. Separate ThinLTO and full-LTO tests link both annotated objects with an unchanged native implementation through LLD, execute the binary, and inspect saved optimized bitcode for the attached attributes and folded result. Source, bitcode, executable, disassembly and hashes are retained under `build/reports/thinlto/<target>/` and `build/reports/fulllto/<target>/`. Tests also exercise `.rlib` members, native archive-member preservation, actual ELF FatLTO rejection, idempotence, signature rejection, and stale-contract rejection.
+`tests/llvm_integration.py` compiles actual Clang and Rust bitcode objects with an opaque foreign call between a local store and load. Before application the load survives optimization. After application, LLVM returns constant `42` while retaining the native call. Separate ThinLTO and full-LTO tests link both annotated objects with an unchanged native implementation through LLD, execute the binary, and inspect saved optimized bitcode for the attached attributes and folded result. Source, bitcode, executable, disassembly and hashes are retained under `build/reports/thinlto/<target>/` and `build/reports/fulllto/<target>/`. FatLTO IR, binaries and hashes are retained under `build/reports/fatlto/<target>/`. Tests also exercise `.rlib` members, native archive-member preservation, ELF FatLTO rewriting in both LTO modes, native-fallback preservation and execution, and linkage against the shipped FatLTO sysroot `libzstd.a`, idempotence, signature rejection, and stale-contract rejection.
 
 `tests/native_image_integration.py` separately executes the generated C API against a real Native Image shared library and Rust implementation. This proves ABI agreement and exception translation; it does not claim that Native Image machine code becomes LLVM IR.
 
