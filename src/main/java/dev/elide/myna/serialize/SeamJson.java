@@ -12,7 +12,7 @@ public final class SeamJson {
   private SeamJson() {}
 
   public static String canonical(Module m) {
-    return "{\n  \"schemaVersion\": 1,\n  \"generatorVersion\": "
+    return "{\n  \"schemaVersion\": 2,\n  \"bindingAbiVersion\": 2,\n  \"generatorVersion\": "
         + quote(Seam.VERSION)
         + ",\n  \"name\": "
         + quote(m.name())
@@ -136,6 +136,7 @@ public final class SeamJson {
         + quote(f.symbol())
         + ",\"direction\":"
         + quote(f.direction().name())
+        + (f.direction() == Direction.IMPORT ? ",\"nativeCallPolicy\":" + quote(Seam.nativeLeaf(f) ? "INLINE_LEAF" : "TRANSITION") : "")
         + ",\"callingConvention\":\"C\",\"returnType\":"
         + quote(f.returns().text())
         + ",\"errorConvention\":"

@@ -42,6 +42,7 @@ for name in filter(None, files):
             errors.append(f'{name}: missing local target {target}')
 if errors:
     raise SystemExit('\n'.join(errors))
-for name, digest in json.loads((ROOT / 'docs/charts/svm-boundaries.manifest.json').read_text()).items():
-    assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, f'Stale chart input/output: {name}'
+for manifest in (ROOT / 'docs/charts').glob('*.manifest.json'):
+    for name, digest in json.loads(manifest.read_text()).items():
+        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, f'Stale chart input/output: {name}'
 print('Licensing, policy files, and local documentation links verified')

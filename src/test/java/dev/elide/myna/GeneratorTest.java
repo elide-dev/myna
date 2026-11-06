@@ -24,7 +24,7 @@ class GeneratorTest {
   }
 
   @Test
-  void nativeLeafElidesOnlyApprovedImportTransitions() {
+  void nativeLeafIsTheDefaultWithAnExplicitNormalTransitionOptOut() {
     String leaf =
         VALID.replace("error=no_failure", "error=no_failure native_leaf=true@explicit_contract");
     var output = generate(leaf);
@@ -32,7 +32,9 @@ class GeneratorTest {
         output.get("MynaNative.java").contains("transition = CFunction.Transition.NO_TRANSITION"));
     assertFalse(output.get("seam.ll").contains("native_leaf"));
     assertTrue(output.get("seam.json").contains("native_leaf"));
-    assertFalse(generate(VALID).get("MynaNative.java").contains("NO_TRANSITION"));
+    assertTrue(generate(VALID).get("MynaNative.java").contains("NO_TRANSITION"));
+    assertTrue(generate(VALID).get("seam.json").contains("\"bindingAbiVersion\": 2"));
+    assertTrue(generate(VALID).get("seam.json").contains("\"nativeCallPolicy\":\"INLINE_LEAF\""));
     assertFalse(
         generate(leaf.replace("native_leaf=true", "native_leaf=false"))
             .get("MynaNative.java")
@@ -65,6 +67,7 @@ class GeneratorTest {
     var output = generate(named);
     assertEquals(
         Set.of(
+            "META-INF/native-image/dev.elide.myna/dev.example.io.IoNatives/native-image.properties",
             "IoNatives.java",
             "IoNativesFFM.java",
             "IoNativesForeignFeature.java",
@@ -165,8 +168,8 @@ class GeneratorTest {
     assertTrue(output.get("seam.ll").contains("declare i8 @put(i8 %a, i8 %b, i16 %c, i1 %d)"));
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("public static byte put(byte a, byte b, short c, boolean d) {"), ni);
-    assertTrue(ni.contains("return putNative(a, b & 0xff, c & 0xffff, d);"), ni);
-    assertTrue(ni.contains("private static native byte putNative(byte a, int b, int c, boolean d);"), ni);
+    assertTrue(ni.contains("return MynaSymbols.put.get().invoke(a, b & 0xff, c & 0xffff, d);"), ni);
+    assertTrue(ni.contains("byte invoke(byte a, int b, int c, boolean d);"), ni);
     assertTrue(ni.contains("public static int get(IsolateThread isolate_thread, short a) {"), ni);
     assertTrue(ni.contains("return fixture.Ops.get(a) & 0xffff;"), ni);
     String rust = output.get("seam.rs");
@@ -238,7 +241,7 @@ class GeneratorTest {
         output.get("seam.h"));
     String ni = output.get("MynaNative.java");
     assertTrue(
-        ni.contains("long lookup(CCharPointer name, WordPointer out, long delta, byte tag);"), ni);
+        ni.contains("long lookup(CCharPointer name, WordPointer out, long delta, byte tag) {"), ni);
     assertTrue(ni.contains("import org.graalvm.nativeimage.c.type.WordPointer;"));
     assertTrue(output.get("seam.ll").contains("declare i64 @lookup(ptr %name, ptr %out, i64 %delta, i8 signext %tag)"));
     assertTrue(output.get("seam.rs").contains("pub type LookupFn = unsafe extern \"C\" fn("));
@@ -320,8 +323,8 @@ class GeneratorTest {
             + "  param p type=Pt\nend\n";
     var output = generate(base);
     String ni = output.get("MynaNative.java");
-    assertTrue(ni.contains("@CFunction(value = \"pt_flip_myna_ref\")"), ni);
-    assertTrue(ni.contains("public static native void flip(PointerBase p, int k, PointerBase result);"), ni);
+    assertTrue(ni.contains("CGlobalDataFactory.forSymbol(\"pt_flip_myna_ref\")"), ni);
+    assertTrue(ni.contains("public static void flip(PointerBase p, int k, PointerBase result) {"), ni);
     assertTrue(ni.contains("@CEntryPoint(name = \"pt_norm_myna_ref\")"), ni);
     assertTrue(ni.contains("return fixture.Ops.norm(p);"), ni);
     assertTrue(ni.contains("public static final int SIZE = 8;"), ni);
@@ -726,7 +729,7 @@ class GeneratorTest {
   void scalarFunctionCarriers() {
     for (String type : List.of("i32", "u32", "i64", "u64", "f32", "f64")) {
       assertEquals(
-          8,
+          9,
           generate(
                   MODULE
                       + "import identity return="
@@ -739,7 +742,7 @@ class GeneratorTest {
     assertTrue(
         generate(
                 MODULE
-                    + "import halt return=void error=no_failure noreturn=true@explicit_contract"
+                    + "import halt return=void error=no_failure native_leaf=false@explicit_contract noreturn=true@explicit_contract"
                     + " nofree=true@explicit_contract\n"
                     + "end\n")
             .get("seam.ll")

@@ -73,7 +73,7 @@ end
 
 `import` means Java calls an external native implementation. For imports, `seam.rs` also defines `assert_implementations!()`: invoked where the Rust implementations are in scope under their symbol names, it fails compilation if any implementation's signature differs from the descriptor's lowered ABI (including `*const`/`*mut` from `access`). `export` means Native Image exposes a Java method. Rust declarations may call either symbol; downstream implementations define imports separately. Logical names and linker symbols are independent; `symbol` defaults to the logical name. Symbols and logical names are unique within a module.
 
-Imports default to the normal `@CFunction` transition and require `error=no_failure`, describing an ABI where language exceptions do not cross the boundary. This does **not** infer `nounwind` or mean an operation cannot return an application error code.
+Binding ABI 2 imports default to inlineable no-transition leaf calls and require `error=no_failure`, describing an ABI where language exceptions do not cross the boundary. This does **not** infer `nounwind` or mean an operation cannot return an application error code.
 
 Exports require `isolate=thread` and a public static `java=qualified.Class.method`. An `isolate_thread` pointer is prepended to the normalized ABI and all backend signatures. The implementation method receives only the declared parameters. The caller creates/attaches an isolate before invoking an export. Pointer carriers are typed where Native Image has one (`ptr<u8>`/`ptr<i8>` → `CCharPointer`, `ptr<ptr<u8>>` → `CCharPointerPointer`, `ptr<void>` → `VoidPointer`, `ptr<i32>` → `CIntPointer`, …) and `org.graalvm.word.PointerBase` otherwise. `include=qualified.Predicate` sets `@CEntryPoint(include = …)`, a `BooleanSupplier` that decides per image whether the export is built. Read-only pointer parameters of exports carry `@CConst`, which reaches the C headers Native Image writes. `seam.rs` also defines `<Name>Fn` function-pointer types for every function, for callers that resolve symbols dynamically.
 
@@ -109,7 +109,7 @@ Declarations and fact keys are sorted, parameter/field order is preserved, and o
 
 ## Native Image leaf-call policy
 
-`native_leaf=true@explicit_contract` on an import selects `CFunction.Transition.NO_TRANSITION`. It promises short, bounded execution with no blocking or Java callbacks and compliance with the Native Image no-transition restrictions. Exports and `noreturn` functions cannot opt in. Default imports retain normal transitions. This runtime contract is recorded in JSON/fingerprints, never emitted as an LLVM attribute, and never inferred from `nounwind` or `willreturn`. See [the performance design](performance.md) for obligations and optimization boundaries.
+Imports default to the binding ABI 2 leaf contract: short, bounded, nonblocking execution with no Java reentry. Use `native_leaf=false@explicit_contract` to opt out and retain a normal `@CFunction` transition. Explicit `native_leaf=true@explicit_contract` is accepted but redundant. Exports retain normal isolate entry; `noreturn` imports must opt out. The effective policy is recorded in schema 2 JSON as `nativeCallPolicy`, with a separate `bindingAbiVersion: 2`; the module's `abi` remains the consumer's own protocol version. Leaf policy changes fingerprints but emits no LLVM attributes. See [migration](binding-abi-2.md) and [performance](performance.md).
 
 ## Resource lifecycles and call borrows
 

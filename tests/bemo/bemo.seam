@@ -3,7 +3,7 @@ callback Sink return=i64 java_type=fixture.bemo.HandwrittenSink
   param thread type=isolate_thread
   param value type=i64
 end
-import invokeSink symbol=bemo_invoke return=i64 error=no_failure
+import invokeSink symbol=bemo_invoke return=i64 error=no_failure native_leaf=false@explicit_contract
   param callback type=fn<Sink>
   param thread type=isolate_thread
   param value type=i64

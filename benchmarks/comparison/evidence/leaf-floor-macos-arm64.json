@@ -1,0 +1,420 @@
+{
+  "native": {
+    "full_disassembly_sha256": "c4983064343775b2fc9d56e8d2842093fe581da43c910f613dd91724160088b5",
+    "functions": [
+      {
+        "symbol": "_direct",
+        "instructions": 15
+      },
+      {
+        "symbol": "_indirect",
+        "instructions": 17
+      },
+      {
+        "symbol": "_identity_direct",
+        "instructions": 15
+      },
+      {
+        "symbol": "_identity_indirect",
+        "instructions": 17
+      },
+      {
+        "symbol": "_identity_direct_unrolled4",
+        "instructions": 20
+      },
+      {
+        "symbol": "_identity_indirect_unrolled4",
+        "instructions": 24
+      },
+      {
+        "symbol": "_myna_bench_identity",
+        "instructions": 1
+      },
+      {
+        "symbol": "_myna_bench_identity_address",
+        "instructions": 3
+      }
+    ]
+  },
+  "svm": {
+    "full_disassembly_sha256": "994ac750dbac8a3e247524dba67e64c91f0b6fa386a4311760593fdccaccdf7c",
+    "functions": [
+      {
+        "symbol": "_Floor$$L6da3e9eb_run_QuppMDsqob0AtmYZ0mPW0F",
+        "instructions": 76
+      },
+      {
+        "symbol": "_Floor$$L74e6baa5_run_YFUWe4LKllCznoyGXGLueH",
+        "instructions": 72
+      },
+      {
+        "symbol": "_Floor$$L95d43726_run_zGM0sRlKO6DI8sWvyMfZ4I",
+        "instructions": 100
+      },
+      {
+        "symbol": "_Floor$$Lef419cf5_run_J7LgcnGz92C03MxtZTK86D",
+        "instructions": 72
+      },
+      {
+        "symbol": "_Floor$$L510bcefe_run_sY7rwcdEFY32dSqH5FoPQL",
+        "instructions": 328
+      },
+      {
+        "symbol": "_Floor$$L9dd63404_run_zeq0KfgBu5IumxxDL7K2JC",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$L30d5b9c5_run_xQDISKYGLb5pCu0Yk3FGYC",
+        "instructions": 76
+      },
+      {
+        "symbol": "_Floor$$L449e57c0_run_Kd5L8bVzwGGhMIomqLBV4K",
+        "instructions": 100
+      },
+      {
+        "symbol": "_Floor$$L61909a59_run_wfD2VY4UVQLvKHA63JxVLL",
+        "instructions": 100
+      },
+      {
+        "symbol": "_Floor$$L000fc164_run_xtYbtwj8Sw9RCHmUYDsp60",
+        "instructions": 52
+      },
+      {
+        "symbol": "_Floor$$La0fdad9e_run_SkCJLqgJj0FmJa5mFWu737",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$La67625fa_run_8WOcKLMPn3CJJrJIdGpg1I",
+        "instructions": 128
+      },
+      {
+        "symbol": "_Floor$$L3d90f1ff_run_8ODbOjRoKQEmTlHclWlJv4",
+        "instructions": 100
+      },
+      {
+        "symbol": "_Floor$$L96d13f15_run_heZ2UOVKfQIpyPY9MSXq0K",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$Lcfad789b_run_3DONXrQrVp8R2X5T2KCkt9",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$L68668255_run_9kZK4HqEYPKMAgU2FCFFgK",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$L94443504_run_6yvMnpYPA0DjfERyVQDVNB",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$Lb172ff21_run_7YPUX1Q7TU4vgVsYZ4vAR3",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$L53758d58_run_YwKBjRYGCg1OknlOimQnBH",
+        "instructions": 72
+      },
+      {
+        "symbol": "_Floor$$L42bf9579_run_nEQtvOCj5JKmKJEFOrpGfB",
+        "instructions": 48
+      },
+      {
+        "symbol": "_Floor$$L539ba646_run_3qHj8aDoIyKOlv2gjhQv9L",
+        "instructions": 128
+      },
+      {
+        "symbol": "_Floor_javaBatch16_y3MnyKV1Au2DVE8WunT2mC",
+        "instructions": 40
+      },
+      {
+        "symbol": "_Floor_javaBatch256_mMJuhMu6RmCgK0YWiRzdP0",
+        "instructions": 80
+      },
+      {
+        "symbol": "_Floor_javaBatch4_f1KINYClC5BmmtfwLbXF1F",
+        "instructions": 16
+      },
+      {
+        "symbol": "_Floor_javaBatch64_pgMJB9JHBI7okdXsdyhwU1",
+        "instructions": 136
+      },
+      {
+        "symbol": "_Generated_leaf_A7zZco9JWUE1TvDDMvfDp7",
+        "instructions": 8
+      },
+      {
+        "symbol": "_Identity_leaf_gOd6suzlEz5e8qvz4k8wcB",
+        "instructions": 8
+      }
+    ]
+  },
+  "build": {
+    "workload": "leaf-floor-v1",
+    "revision": "125ef636e5bc42482ac83f0b5a0e0996f98bf403",
+    "dirty": "",
+    "target": "aarch64-apple-darwin",
+    "commands": [
+      [
+        "javac",
+        "-d",
+        "/Users/sam/workspace/myna/build/floor/generator-classes",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/Generator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Backend.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/ByValue.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/CHeader.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/JavaFfm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Llvm.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImage.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeImageForeign.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/NativeOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustFfi.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/RustOwnership.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/backend/Types.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/cli/Main.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/frontend/Dsl.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/model/Seam.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/serialize/SeamJson.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/OwnershipValidator.java",
+        "/Users/sam/workspace/myna/src/main/java/dev/elide/myna/validate/Validator.java"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/comparison/boundary.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/floor/generated/boundary",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/floor/batch.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/floor/generated/batch",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/benchmarks/floor/identity.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/floor/generated/identity",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "java",
+        "-cp",
+        "/Users/sam/workspace/myna/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/Users/sam/workspace/myna/examples/leaf-pointer/leaf-pointer.seam",
+        "--out",
+        "/Users/sam/workspace/myna/build/floor/generated/leaf-pointer",
+        "--target",
+        "aarch64-apple-darwin"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/comparison/kernel.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/floor/kernel.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/floor/batch.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/floor/batch.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include",
+        "-I",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/include/darwin",
+        "-c",
+        "/Users/sam/workspace/myna/benchmarks/floor/native.c",
+        "-o",
+        "/Users/sam/workspace/myna/build/floor/caller.o"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "/Users/sam/workspace/myna/build/floor/caller.o",
+        "/Users/sam/workspace/myna/build/floor/kernel.o",
+        "/Users/sam/workspace/myna/build/floor/batch.o",
+        "-o",
+        "/Users/sam/workspace/myna/build/floor/native"
+      ],
+      [
+        "javac",
+        "-cp",
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/lib/svm/svm-shared.jar",
+        "-d",
+        "/Users/sam/workspace/myna/build/floor/classes",
+        "/Users/sam/workspace/myna/benchmarks/floor/Floor.java",
+        "/Users/sam/workspace/myna/benchmarks/floor/FloorMeasure.java",
+        "/Users/sam/workspace/myna/benchmarks/comparison/Measure.java",
+        "/Users/sam/workspace/myna/build/floor/generated/boundary/Generated.java",
+        "/Users/sam/workspace/myna/build/floor/generated/batch/Batch.java",
+        "/Users/sam/workspace/myna/build/floor/generated/identity/Identity.java",
+        "/Users/sam/workspace/myna/build/floor/generated/leaf-pointer/LeafBindings.java",
+        "/Users/sam/workspace/myna/examples/leaf-pointer/LongLeaf.java"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/Users/sam/workspace/myna/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-march=compatibility",
+        "--initialize-at-build-time=bench.Generated",
+        "-cp",
+        "/Users/sam/workspace/myna/build/floor/classes",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-DeleteLocalSymbols",
+        "-H:NativeLinkerOption=/Users/sam/workspace/myna/build/floor/kernel.o",
+        "-H:NativeLinkerOption=/Users/sam/workspace/myna/build/floor/batch.o",
+        "-H:-UnlockExperimentalVMOptions",
+        "bench.Floor",
+        "-o",
+        "/Users/sam/workspace/myna/build/floor/svm"
+      ],
+      [
+        "llvm-objdump",
+        "--disassemble",
+        "/Users/sam/workspace/myna/build/floor/native"
+      ],
+      [
+        "llvm-objdump",
+        "--disassemble",
+        "/Users/sam/workspace/myna/build/floor/svm"
+      ],
+      [
+        "/Users/sam/workspace/myna/build/floor/svm",
+        "stress"
+      ],
+      [
+        "/Users/sam/workspace/myna/scripts/native-cc",
+        "--version"
+      ],
+      [
+        "/Users/sam/workspace/myna/.dev/toolchains/graalvm/bin/native-image",
+        "--version"
+      ],
+      [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    ],
+    "versions": {
+      "clang": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: arm64-apple-darwin\nThread model: posix\nInstalledDir: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin\nConfiguration file: /Users/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.1/elide-toolchain/bin/arm64-apple-darwin.cfg\n",
+      "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n"
+    },
+    "sources": {
+      "benchmarks/floor/run.py": "c8765adf05e64471e645043409355ceb36460e6390a275be480ecc32c9ef5434",
+      "benchmarks/floor/batch.seam": "75c3a394ef4a2c4b4391a53a35010ce116c24c13eb60da91ba9033099078cfed",
+      "benchmarks/floor/identity.seam": "4e5db367a563a733380f0dfa2040318e86a19e6dcbac62c9542266ca6f5a5e01",
+      "benchmarks/floor/README.md": "abd46556bcf65ae32702894ab929e7bb952d2ebab7a2a530ec08296bb68e8fae",
+      "benchmarks/floor/FloorMeasure.java": "469f3cb864699aa3fc87389bb482f6a3aa85e0a8ec87f533e09253e192599590",
+      "benchmarks/floor/native.c": "70149806dcaa2c17a23088ce511f77742109d0e46bfc705bf66932b8ef680b48",
+      "benchmarks/floor/batch.c": "ceebabbe7ffc15063247b37c20d5da18fd7fff84deefd19295f4a7f56fce5cd0",
+      "benchmarks/floor/Floor.java": "ad141f8efb9f5694811a76a3ad06d17a5c714790db6be9f81644319ecc477b05",
+      "examples/leaf-pointer/LongLeaf.java": "bd4b36b9c7491c47d5a64885c75abbe520b73437a8252102dda4ca2f52ae1402",
+      "examples/leaf-pointer/README.md": "4bb5520c0f2d5551c38bb1b7d09798b96149998d9444b8078b8976e317a185f5",
+      "examples/leaf-pointer/leaf-pointer.seam": "f04b7acb617327229c40e6212700b707e5eb85f3c754375035e288f4063bb34b",
+      "benchmarks/comparison/kernel.c": "781043c56d8a80f6525b5343a62604966d03ab0d30d6e2d324a509cfad710ebe",
+      "benchmarks/comparison/Measure.java": "a11f5589a6e81be16b192c33553fb17268d0889e0dc5b0d06e7a7d8cef4b5b2a",
+      "benchmarks/comparison/boundary.seam": "377220a3de2bd2f78149e8c63aa486eccd7933756ff7c9d1b0b2f32fff8591a4",
+      "benchmarks/comparison/run.py": "12f9f7730f04f43db42c6df1940c092c1c55f0e3d15a39293a84965c0d7b8c87",
+      "tests/support.py": "ddabfdb0ffabff20e3f50efcb08b134eedf8012efcb775d1ba541e333bf90efc",
+      "mise.lock": "86a84783bbd988ca9fd8e69242175b17f669b455e3903a1e43b83be55403ee4a",
+      "tools/graalvm.json": "c2bfbb719e54b2a46158c8c294f06c39409829754b08e41dc851add034c5c84c",
+      "src/main/java/dev/elide/myna/Generator.java": "f7d79d8d86acde968e95e447675dcb731aa6c20e5d70bf712c7832a6a2ea6a7d",
+      "src/main/java/dev/elide/myna/backend/Backend.java": "ed0559e3e5e46e6ea118f1d384075b44122e0115b7609aadb3689058d0f89935",
+      "src/main/java/dev/elide/myna/backend/ByValue.java": "3fddbfc2d697f5eb5f7983760ef5864a294b62bb681aa334b928e1bd42ce3fd1",
+      "src/main/java/dev/elide/myna/backend/CHeader.java": "3c7abb618a3749fd93d6e7a1e0e903899b659d9ed37cfa85b4b6ed21c08235b2",
+      "src/main/java/dev/elide/myna/backend/JavaFfm.java": "928e61685de4e0ff245c40818202d1d127691f0610894350a306f9e5955b6073",
+      "src/main/java/dev/elide/myna/backend/Llvm.java": "5de8d4f010d842cf819a83c2da9eb946ca539d2d2e68641b6674b8f1c6bc1359",
+      "src/main/java/dev/elide/myna/backend/NativeImage.java": "cc07d1e6b5f0c91a17234b2475add58e3ddadd4ed3aaa08be1c6c0e946190976",
+      "src/main/java/dev/elide/myna/backend/NativeImageForeign.java": "b86765d7f79fe37044a61b6527e7f8bc301d21f85f710cb9477413dc854e300b",
+      "src/main/java/dev/elide/myna/backend/NativeOwnership.java": "b498903c67680aa242d045c424c57d6d58428b8f536ec1be803954d087fe4f64",
+      "src/main/java/dev/elide/myna/backend/RustFfi.java": "c28fc3a05a2b9ce9acf345909d7280d60b07f21f38e9415fac7e6146bba80ddf",
+      "src/main/java/dev/elide/myna/backend/RustOwnership.java": "210ff5dfd278f32a8efec2c60f45f94370de43ba7ced3d7b553f68c157fd0f5a",
+      "src/main/java/dev/elide/myna/backend/Types.java": "35e4c047ff79576f2cfcec244ee1a0b57b6329641c248b511398e2adc239f402",
+      "src/main/java/dev/elide/myna/cli/Main.java": "bfa73a319835a8652fe6bbb20ed619e3011f7f6985482ccab12e1461f17ddff8",
+      "src/main/java/dev/elide/myna/frontend/Dsl.java": "0d1a423fa5946deb8d0fa3c9db7fdb691e0345e20fda2566acdfaa58c4afa024",
+      "src/main/java/dev/elide/myna/model/Seam.java": "eff367c41c61ff6b25a41a66d9a15543719afac84dc077a212b37ef7b73f0f98",
+      "src/main/java/dev/elide/myna/serialize/SeamJson.java": "b0bbb9a95cf4d1a8f129acb3708407bbc8b73f7690f0b2a69ba51575e66cf687",
+      "src/main/java/dev/elide/myna/validate/OwnershipValidator.java": "0bee50f4e6f62da4d99896eb8692cdd2262162e16e610ce53558f53c53a0070f",
+      "src/main/java/dev/elide/myna/validate/Validator.java": "faea91e88b58e6eb1032dbbb53288146d98d35813798328047cbe3e2d72290b2"
+    },
+    "binaries": {
+      "build/floor/native": "42eebdf77544c7a05e308b6932e58c22fd4b374c71e834b0ecf8d9406c50da25",
+      "build/floor/svm": "122c0410b7f03298b2ecd1ffe01fc745bc6540ac2c2bba3dc3d3b9fc9582daf0",
+      "build/floor/kernel.o": "909a71e6a128c71361baf3104cd274988a817d5cc52c6d7f303e4deefd614217",
+      "build/floor/batch.o": "262d2d9d263dc95db35f13b9dbdd1dfaa3b9faa6211c0bff722d09c84a82d8db",
+      "build/floor/caller.o": "c06f6ad6fd20d67877a0a6257e1d5619d5cc28483e1439ea24a79cd6b79c9b54"
+    },
+    "annotation_jar_sha256": "3bdf88ecaa4e4869deee24bae416d2daeff53f9776def8c9e5338f138010ba32",
+    "graalvm": {
+      "version": "25.5.5-elide.24",
+      "edition": "ce",
+      "platforms": {
+        "Darwin-arm64": {
+          "archive": "macos-aarch64",
+          "sha256": "8b03207cb35ab5b9bec6422b4266178315f7a056ae88e90f57cc22b2362c44a6"
+        },
+        "Linux-x86_64": {
+          "archive": "linux-amd64",
+          "sha256": "83bd7b3b78e76de00bb3879eeae79a8b439f9356fefd3bf3b84d2818af8961e7"
+        },
+        "Linux-aarch64": {
+          "archive": "linux-aarch64",
+          "sha256": "f89eb4bdc6596b8aa7acdf063997c69ab06aa9a488e8f98cff07865b0261618f"
+        }
+      }
+    },
+    "execution_profile": {
+      "native_image_cpu": "compatibility",
+      "c_cpu_flags": [],
+      "lto": false
+    }
+  },
+  "retained_disassembly_sha256": "0bb87f360293a64ea4d0cf3ef4b389cb41d76bd0b9f8cea8812cbda8c016bd65"
+}

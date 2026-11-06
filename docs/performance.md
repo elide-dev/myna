@@ -6,8 +6,8 @@ Substrate VM is the primary execution target. The generator should resolve ABI l
 
 | Edge | Preferred lowering | Optimization boundary |
 | --- | --- | --- |
-| Native Image → known Rust symbol | Generated `@CFunction` with primitive/word carriers and direct linker symbol | Graal optimizes the Java caller; LLVM optimizes the Rust implementation. |
-| Native Image → proven short native leaf | The same binding with `Transition.NO_TRANSITION` | Removes the VM transition when the explicit leaf contract permits it. |
+| Native Image → known Rust symbol | Generated inlineable leaf pointer with primitive/word carriers and linker symbol | Graal optimizes the Java caller; LLVM optimizes the Rust implementation. |
+| Native Image → proven short native leaf | Default binding ABI 2 leaf | Removes the adapter stub and VM transition under the default leaf contract. |
 | Rust → known Native Image target | Generated `@CEntryPoint` invoking a fixed Java method | Graal sees the adapter and Java target together; LLVM sees contracts on the real Rust callsite. |
 | Native Image → runtime-selected function through FFM | Typed `invokeExact`, build-time unbound adapters, runtime symbol addresses, hosted downcall registration | Image builder generates ABI stubs ahead of time; addresses bind at runtime. |
 | Future known FFM callback | Register the specific static Java target for a specialized direct upcall | Prefer target-specific generated code over descriptor-only generic dispatch. |
@@ -15,23 +15,36 @@ Substrate VM is the primary execution target. The generator should resolve ABI l
 
 No libffi-based dispatcher is needed for the fixed C API path. Build-time knowledge removes runtime ABI discovery, reflection, argument arrays, boxing, and symbol lookup from that path. Generated entry methods use direct static Java calls, allowing Graal to optimize and inline eligible Java adapter code. Necessary isolate entry, exception conversion, and GC transitions remain explicit.
 
-## Explicit leaf calls
+## Default leaf calls (binding ABI 2)
 
-The implemented DSL opt-in is:
+Myna 0.8.0 makes short native leaves the default for every import:
 
 ```text
-import inspect symbol=seam_inspect return=i64 error=no_failure native_leaf=true@explicit_contract
+import inspect symbol=seam_inspect return=i64 error=no_failure
   param value type=ptr<i64> nullable=false ownership=borrowed access=read
 end
 ```
 
-`native_leaf` promises that **every execution is short and bounded, cannot block, cannot call back into Java, and obeys the Native Image no-transition restrictions**. It applies to native imports only. The generator emits `@CFunction(value = "seam_inspect", transition = CFunction.Transition.NO_TRANSITION)`. The owned example performs a single off-heap integer read and exercises this path in the real Native Image/Rust round-trip test.
+Every execution must be **short and bounded, nonblocking, and unable to reenter Java**. Consumers must explicitly opt out for allocating, blocking, callback-capable, or potentially long-running operations:
 
-Ordinary imports retain the default transition. Neither `nounwind`, `willreturn`, nor read-only pointer access implies a leaf call. Unapproved leaf facts fail strict validation; relaxed generation preserves provenance but does not elide the transition. Leaf policy participates in the ABI fingerprint and JSON, but is not emitted as an LLVM attribute. It does not imply LLVM `nounwind` or `nofree`.
+```text
+import compress symbol=compress return=i32 error=no_failure native_leaf=false@explicit_contract
+end
+```
 
-The same model can later drive FFM `critical` options, but that mapping is not enabled in this version. Heap access, pointer escape, safepoint behavior, and callbacks need separate policy checks. Exports retain normal isolate entry; removing the entry prologue merely because a caller is known would not establish valid thread state.
+The default generated method calls a typed `@InvokeCFunctionPointer(NO_TRANSITION)` interface with the pinned Graal compiler's `@AlwaysInline` and `@Uninterruptible(mayBeInlined=true)` annotations. Graal can inline the adapter into an interruptible caller while retaining the caller's safepoints. Explicit opt-outs use ordinary transitioning `@CFunction` methods. Exports retain normal isolate entry. No compiler safety checks are disabled.
 
-See the [Native Image transition contract](https://www.graalvm.org/sdk/javadoc/org/graalvm/nativeimage/c/function/CFunction.Transition.html). Long-running no-transition calls can delay safepoints and GC, so leaf eligibility is an implementation obligation, not a name-based heuristic.
+Each leaf has a symbolic linker reference. Ordinary calls use Graal's relocated-symbol intrinsic directly, avoiding runtime holder-initialization guards in the hot path. A separate lazy runtime holder serves the cached pointer accessor. Generated `META-INF/native-image` configuration initializes symbolic metadata at image build time and resolves addresses at runtime. It must accompany the compiled classes. Only reached imports require their symbols; static libraries work through the existing `c_context` / `c_library` configuration. Linked libraries must remain available throughout calls. The generated `nameLeafPointer()` accessor exposes the cached typed pointer for specialized callers: resolve it before entering an uninterruptible region, because first-use initialization itself is interruptible.
+
+This backend deliberately uses internal APIs of the pinned **elide-dev/graal 25.5.5-elide.24** compiler. Compile against its `svm-shared.jar`, `svm-guest-staging.jar`, and `svm-guest.jar` without bundling them or putting them on the Native Image application classpath. [The compiler helper](../scripts/compile-native-bindings.py) handles the compile-only classpath and copies generated metadata. Retest compiler upgrades. See [ABI 2 migration](binding-abi-2.md) for complete commands.
+
+Leaf policy participates in canonical JSON and the ABI fingerprint. It never implies LLVM `nounwind`, `nofree`, or other effects. Unapproved explicit leaf facts fail strict validation; relaxed generation retains their provenance and conservatively uses a normal transition. FFM does not yet map this contract to `critical` downcalls.
+
+## Call-floor experiments
+
+The [floor harness](../benchmarks/floor/README.md) compares identical linked kernel objects through default generated leaves, handwritten `@CFunction` leaves, custom inlineable pointers, native direct/indirect calls, explicit caller unrolling, and fixed C/Java batches. It separates identity-call cost from arithmetic dependency-chain latency. Java batches receive an already-resolved typed pointer, contain at most 256 calls, and must satisfy the bounded-latency contract as a whole; larger batches are not uniformly faster. Concurrent allocation/GC checks exercise both generated leaves and specialized callers.
+
+The [custom pointer example](../examples/leaf-pointer/README.md) remains useful for runtime-selected targets. Fixed symbols need no handwritten pointer interface or resolver with binding ABI 2.
 
 ## Real cross-language optimization
 
@@ -60,7 +73,7 @@ The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer 
 
 ## Performance acceptance
 
-The current evidence is executable ABI correctness and inspected LLVM optimization results, not measured minimum latency. Future performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
+The retained evidence includes executable ABI correctness, inspected LLVM/native code, and measured scalar call floors on Linux ARM64 and macOS ARM64. It does not establish a universal minimum for every ABI or workload. Performance gates should compare direct C/Rust baselines, normal and leaf `@CFunction`, `@CEntryPoint`, and AOT FFM on each supported architecture. Measure steady-state cycles per crossing, allocation, generated assembly, batch scaling, and safepoint latency under concurrent GC. Keep startup/library binding separate from repeated invocation, consume results to prevent elimination, and retain disassembly with benchmark reports. JVM benchmarks are secondary compatibility checks.
 
 See [repeatable benchmarks and comparisons](benchmarking.md) for the measurement strategy.
 

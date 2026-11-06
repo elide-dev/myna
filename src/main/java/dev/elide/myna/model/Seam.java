@@ -6,7 +6,15 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.7.2";
+  public static final String VERSION = "0.8.0";
+  public static final int BINDING_ABI_VERSION = 2;
+
+  /** Binding ABI 2 makes bounded, nonblocking, non-reentrant native imports the default. */
+  public static boolean nativeLeaf(Function function) {
+    if (function.direction() != Direction.IMPORT) return false;
+    Fact fact = function.facts().get("native_leaf");
+    return fact == null || (fact.enabled() && fact.approved());
+  }
 
   public enum Direction {
     IMPORT,

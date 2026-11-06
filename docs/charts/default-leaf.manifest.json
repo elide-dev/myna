@@ -1,0 +1,8 @@
+{
+  "benchmarks/comparison/baselines/default-leaf-linux-arm64.json": "9fd3c04ec14d852a699250558531e9c488f938dd309ee9e46eb1b03b789e6210",
+  "benchmarks/comparison/baselines/default-leaf-macos-arm64.json": "93ec97cf06826a51bbec85309e85be3487406b124767aef8f347058cc4e7717e",
+  "benchmarks/comparison/abi2-chart.py": "2a8db5dbd9e70f2270a64fb9e2183f3e58fe49d0d5cd5107415059e5d1e29b6d",
+  "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
+  "docs/charts/default-leaf.svg": "416ec370d30fa084997d7b741297b74ccdcf56fca9a9ce5f0383bcf0a15663ff",
+  "docs/charts/default-leaf.png": "c0cdf8808960bdc5b36263a11569380aa944351da2b57ff7c991bea7c41742a2"
+}

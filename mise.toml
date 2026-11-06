@@ -106,3 +106,9 @@ run = "scripts/python.sh benchmarks/native/build.py"
 
 [tasks."test:llvm-coverage"]
 run = "scripts/python.sh scripts/native-coverage.py"
+
+[tasks."bench:floor-build"]
+run = "scripts/python.sh benchmarks/floor/run.py build"
+
+[tasks."bench:floor"]
+run = "scripts/python.sh benchmarks/floor/run.py run"

@@ -1,0 +1,48 @@
+name: Native call floor
+
+"on":
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/floor/**'
+      - 'src/main/java/**'
+      - 'benchmarks/comparison/boundary.seam'
+      - 'tools/graalvm.json'
+      - 'tests/support.py'
+      - 'examples/leaf-pointer/**'
+      - 'benchmarks/comparison/kernel.c'
+      - 'benchmarks/comparison/Measure.java'
+      - '.github/workflows/benchmark.floor.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: floor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  floor:
+    runs-on: ${{ vars.MYNA_ARM_BENCH_RUNNER || 'ubuntu-24.04-arm' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          version: '2026.10.25'
+      - uses: ./.github/actions/setup-graalvm
+      - run: mise exec -- python3 benchmarks/floor/run.py build
+      - run: python3 benchmarks/comparison/inspect-floor.py build/floor build/floor/callsite-evidence
+      - run: mise exec -- python3 benchmarks/floor/run.py run
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: native-call-floor
+          path: |
+            build/floor/*.json
+            build/floor/*.md
+            build/floor/*.asm
+            build/floor/*.log
+            build/floor/results-logs/

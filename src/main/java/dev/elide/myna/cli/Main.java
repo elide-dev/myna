@@ -15,7 +15,7 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.7.2 — Native Image / Rust ABI generator
+      myna 0.8.0 — Native Image / Rust ABI generator
       Usage:
         myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check]
         myna validate INPUT.seam [--target TRIPLE] [--relaxed]
@@ -115,18 +115,22 @@ public final class Main {
     // Complete parsing and validation happens before entering this method. Replace files
     // atomically.
     for (var item : outputs.entrySet()) {
-      Path temporary = Files.createTempFile(destination, ".myna-", ".tmp");
+      Path target = destination.toAbsolutePath().resolve(item.getKey()).normalize();
+      if (!target.startsWith(destination.toAbsolutePath().normalize()))
+        throw new IllegalArgumentException("generated path escapes destination: " + item.getKey());
+      Files.createDirectories(target.getParent());
+      Path temporary = Files.createTempFile(target.getParent(), ".myna-", ".tmp");
       try {
         Files.writeString(temporary, item.getValue());
         try {
           Files.move(
               temporary,
-              destination.resolve(item.getKey()),
+              target,
               StandardCopyOption.ATOMIC_MOVE,
               StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
           Files.move(
-              temporary, destination.resolve(item.getKey()), StandardCopyOption.REPLACE_EXISTING);
+              temporary, target, StandardCopyOption.REPLACE_EXISTING);
         }
       } finally {
         Files.deleteIfExists(temporary);

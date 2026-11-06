@@ -8,7 +8,7 @@
     Then: benchmarks/mvnw -f benchmarks/pom.xml package && java -jar benchmarks/target/benchmarks.jar
   -->
   <modelVersion>4.0.0</modelVersion>
-  <groupId>dev.elide</groupId><artifactId>myna-benchmarks</artifactId><version>0.7.2</version>
+  <groupId>dev.elide</groupId><artifactId>myna-benchmarks</artifactId><version>0.8.0</version>
   <!-- Consumers may choose either license; these are alternatives. -->
   <licenses>
     <license><name>Apache-2.0 OR MIT</name><url>https://github.com/elide-dev/myna/blob/main/LICENSE</url><distribution>repo</distribution></license>
