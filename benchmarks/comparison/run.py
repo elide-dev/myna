@@ -32,15 +32,32 @@ CASES = {
     "ffm-aot": ["control", *FFM_METHODS],
 }
 
-def execute(*args):
+def execute(*args, output=None):
     recorded = [str(arg) for arg in args]
     if sys.platform == "darwin" and Path(args[0]).name in ("clang", "clang++"):
         recorded.extend(["-isysroot", os.environ["SDKROOT"]])
     COMMANDS.append(recorded)
+    if output is not None:
+        # Disassembly can exceed the Python runtime's heap. Keep it on disk
+        # while still checking the command and retaining failure diagnostics.
+        with output.open("wb") as stream:
+            try:
+                result = subprocess.run(recorded, cwd=ROOT, env=dict(os.environ),
+                                        stdout=stream, stderr=subprocess.PIPE,
+                                        text=True, timeout=300)
+            except subprocess.TimeoutExpired as failure:
+                raise AssertionError(f"Command timed out: {recorded}\n{failure.stderr}") from failure
+        if result.returncode:
+            raise AssertionError(f"Command failed ({result.returncode}): {recorded}\n{result.stderr}")
+        return None
     return run(*args).stdout
 
 def digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    checksum = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 def build():
     WORK.mkdir(parents=True, exist_ok=True)
@@ -102,7 +119,7 @@ def build():
     assembly = []
     for name in ("native", "ffm-aot"):
         path = WORK / f"{name}.asm"
-        path.write_text(execute(llvm / "llvm-objdump", "--disassemble", WORK / name))
+        execute(llvm / "llvm-objdump", "--disassemble", WORK / name, output=path)
         assembly.append(path)
     sources = [*SOURCE.glob("*"), *generator_sources, ROOT / "tests/support.py", ROOT / "mise.lock", ROOT / "tools/graalvm.json"]
     binaries = [WORK / "native", WORK / "ffm-aot", library, archive, symbols, WORK / "kernel.o", *wrappers,
