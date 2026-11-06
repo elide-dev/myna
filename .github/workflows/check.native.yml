@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           eval "$(mise env -s bash)"
-          test "$(elide-toolchain version)" = 2026.11.1
+          test "$(elide-toolchain version)" = 2026.11.2
           test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator

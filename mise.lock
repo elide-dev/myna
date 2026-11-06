@@ -91,45 +91,45 @@ url = "https://github.com/elide-dev/elide/releases/download/v1.6.2/elide.macos-a
 url_api = "https://api.github.com/repos/elide-dev/elide/releases/assets/698678364"
 
 [[tools."github:elide-dev/toolchain"]]
-version = "2026.11.1"
+version = "2026.11.2"
 backend = "github:elide-dev/toolchain"
-specifiers = ["2026.11.1"]
+specifiers = ["2026.11.2"]
 
 [tools."github:elide-dev/toolchain".options]
-asset_pattern = "elide-toolchain-2026.11.1-linux-arm64.tar.xz"
+asset_pattern = "elide-toolchain-2026.11.2-linux-arm64.tar.xz"
 
 [tools."github:elide-dev/toolchain"."platforms.linux-arm64"]
-checksum = "sha256:b6c73becf52e8491c0aad2d1bb5ac6185a7e0c931e1206c62652b1e47fb26785"
-url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.1/elide-toolchain-2026.11.1-linux-arm64.tar.xz"
-url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/707389188"
+checksum = "sha256:faab1f1bd9927361dec33bf0c9d521158ace9d11911212fd9caaa67a680400e5"
+url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.2/elide-toolchain-2026.11.2-linux-arm64.tar.xz"
+url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/718502439"
 provenance = "github-attestations"
 
 [[tools."github:elide-dev/toolchain"]]
-version = "2026.11.1"
+version = "2026.11.2"
 backend = "github:elide-dev/toolchain"
-specifiers = ["2026.11.1"]
+specifiers = ["2026.11.2"]
 
 [tools."github:elide-dev/toolchain".options]
-asset_pattern = "elide-toolchain-2026.11.1-linux-amd64.tar.xz"
+asset_pattern = "elide-toolchain-2026.11.2-linux-amd64.tar.xz"
 
 [tools."github:elide-dev/toolchain"."platforms.linux-x64"]
-checksum = "sha256:4610627acc96f647776fd4256b3c1fce04c14b2757df692d8923ec299aed0e58"
-url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.1/elide-toolchain-2026.11.1-linux-amd64.tar.xz"
-url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/707389094"
+checksum = "sha256:f65ccbecd24c5c283216126bdacb6485381fbfce852f6359e45af69c87bf59ea"
+url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.2/elide-toolchain-2026.11.2-linux-amd64.tar.xz"
+url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/718502403"
 provenance = "github-attestations"
 
 [[tools."github:elide-dev/toolchain"]]
-version = "2026.11.1"
+version = "2026.11.2"
 backend = "github:elide-dev/toolchain"
-specifiers = ["2026.11.1"]
+specifiers = ["2026.11.2"]
 
 [tools."github:elide-dev/toolchain".options]
-asset_pattern = "elide-toolchain-2026.11.1-darwin-arm64.tar.xz"
+asset_pattern = "elide-toolchain-2026.11.2-darwin-arm64.tar.xz"
 
 [tools."github:elide-dev/toolchain"."platforms.macos-arm64"]
-checksum = "sha256:37e56bad391f8397c99951a529ef84bdc99c9d19bdf91edbc153b5bdecb69e88"
-url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.1/elide-toolchain-2026.11.1-darwin-arm64.tar.xz"
-url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/707388977"
+checksum = "sha256:3fc98e38c3b08eeda9fbbc2c2509d6a0971c1383526fa1ab7413c495329976a7"
+url = "https://github.com/elide-dev/toolchain/releases/download/v2026.11.2/elide-toolchain-2026.11.2-darwin-arm64.tar.xz"
+url_api = "https://api.github.com/repos/elide-dev/toolchain/releases/assets/718502255"
 provenance = "github-attestations"
 
 [[tools."github:taiki-e/cargo-llvm-cov"]]
