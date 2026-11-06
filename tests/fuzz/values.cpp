@@ -1,8 +1,29 @@
 #include <myna/values.hpp>
+#include <algorithm>
 #include <cstdlib>
 #include <cassert>
 #include <cstdint>
 #include <string>
+
+// Bound actual retained PMR storage, not only logical node/text counts. Inject
+// failures after successful allocations so cleanup exercises partial documents.
+struct bounded_resource final : std::pmr::memory_resource {
+  size_t live = 0, peak = 0, allocated = 0, freed = 0;
+  size_t budget, fail_after;
+  bounded_resource(size_t limit, size_t fail) : budget(limit), fail_after(fail) {}
+  void *do_allocate(size_t size, size_t alignment) override {
+    if (allocated >= fail_after || size > budget - live) throw std::bad_alloc();
+    void *pointer = std::pmr::new_delete_resource()->allocate(size, alignment);
+    live += size; peak = std::max(peak, live); ++allocated;
+    return pointer;
+  }
+  void do_deallocate(void *pointer, size_t size, size_t alignment) override {
+    assert(size <= live);
+    live -= size; ++freed;
+    std::pmr::new_delete_resource()->deallocate(pointer, size, alignment);
+  }
+  bool do_is_equal(const std::pmr::memory_resource &other) const noexcept override { return this == &other; }
+};
 
 // Check published shape independently of the producer's mutation algorithm.
 static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned depth = 0) {
@@ -37,10 +58,14 @@ static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned dept
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::string backing(64, 'a');
-  myna::value_builder builder(std::pmr::get_default_resource(), {64, 256, 8});
+  bounded_resource resource(256 + (size ? data[0] : 255) * 64,
+      size > 1 && (data[1] & 1) ? data[1] / 2 : SIZE_MAX);
+  {
+  myna::value_builder builder(&resource, {64, 256, 8});
   for (size_t i = 0; i < size && i < 1024; ++i) {
+    unsigned operation = data[i] % 17;
     try {
-      switch (data[i] % 17) {
+      switch (operation) {
         case 0: builder.begin_array(); break;
         case 1: builder.begin_object(); break;
         case 2: builder.end(); break;
@@ -61,8 +86,26 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       }
     } catch (const std::exception &) {
       // Failed mutations poison until clear; view() may reject incompleteness.
-      // Keep mutating to cover both recovery and poisoned-state rejection.
+      // A failed view or independent invalid constructor does not mutate builder.
+      if (operation != 9 && operation != 15) {
+        bool rejected = false;
+        try { (void)builder.view(); } catch (const std::logic_error &) { rejected = true; }
+        assert(rejected);
+        rejected = false;
+        try { builder.null(); } catch (const std::logic_error &) { rejected = true; }
+        assert(rejected);
+      }
     }
+    assert(resource.live <= resource.budget);
   }
+  // Removing failure injection and clearing must restore a usable document.
+  // Retained capacity stays bounded; allow one final node allocation if needed.
+  resource.budget += sizeof(myna_value_node);
+  resource.fail_after = SIZE_MAX;
+  builder.clear(); builder.null();
+  assert(builder.view().node_count == 1);
+  assert(resource.peak <= resource.budget);
+  }
+  assert(resource.live == 0 && resource.allocated == resource.freed);
   return 0;
 }

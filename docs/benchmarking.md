@@ -22,7 +22,7 @@ the baseline requires a real optimization available under the same contract.
 
 ## Toolchain and execution modes
 
-Pin Elide 1.6.2, the native toolchain 2026.11.1, and GraalVM
+Pin Elide 1.6.2, the native toolchain 2026.11.2, and GraalVM
 25.5.5-elide.24. The latter is an explicit external distribution: Elide 1.6.2's
 embedded Native Image compiler reports 25.5.5-elide.21. Retain archive checksums,
 compiler versions, edition, target, JVM flags and native link flags with results.
@@ -124,15 +124,27 @@ mise run bench:comparison     # five fresh processes/case, 10 warmup + 10 measur
 mise exec -- scripts/python.sh benchmarks/comparison/run.py report --output build/comparison/results.json
 ```
 
-The checked-in comparison currently measures dependent scalar call latency:
-generated/manual Native Image normal and leaf calls, generated/manual FFM on JVM
-and Native Image, JNI on JVM, and a control loop. Each matched pair calls the same
-native function. Normal and leaf declarations have separate symbols containing
-the same arithmetic. JNI delegates to the normal function. No allocation or
-string conversion is part of this workload. Buffer/callback correctness and
-ThinLTO optimization are checked by integration tests; their timings are future
-extensions of this comparison matrix. BoltFFI is not required for this primitive
-baseline and is not represented by invented estimates.
+The checked-in comparison measures dependent scalar call latency: generated/manual
+Native Image normal and leaf calls, ordinary and critical FFM on JVM and SVM,
+explicit FFM library bindings, generated/manual static JNI on SVM, JNI on JVM,
+and a control loop. Each matched pair calls the same native function. Normal and
+leaf declarations have separate symbols containing the same arithmetic. Static
+JNI wrappers both check pending exceptions and delegate to the normal function.
+Typed critical bindings use build-time unbound adapters; separately reported
+runtime-bound critical factories compare against equivalent manual bound handles.
+Buffer/callback correctness and LTO optimization are checked by integration tests;
+buffer, record, callback and resource timings remain gaps. BoltFFI is not required
+for this primitive baseline and is not represented by invented estimates.
+
+Every sample records current-thread Java heap allocation bytes using an active
+allocation canary. The four direct SVM generated/manual normal/leaf cases enforce
+exactly zero measured bytes after warmup. Other adapters report allocation rather
+than assuming it is absent. Counters run outside the timed interval. This measures
+the invoking thread's Java heap, not native malloc traffic or other threads.
+The report includes the maximum sample B/op as well as the median, so rare
+allocations are visible. Named loop classes make the retained SVM assembly easy
+to map back to cases. The expanded workload is `scalar-recurrence-v3`; historical
+v2 results cannot be used as a same-workload regression baseline.
 
 JVM runs request synchronous Graal compilation with tiering disabled. They fail
 unless compilation logs establish that the measured loop compiled before warmup
@@ -161,11 +173,43 @@ result schema. Hooks alone provide profiles, not wall-time result statistics. Cr
 ## Sanitizer and coverage boundaries
 
 The sanitizer wrappers and Linux amd64 instrumented-library add-ons come from
-`elide-dev/toolchain` 2026.11.1. ASan and TSan each must detect a deliberate bug in
-a separate process before a clean workload can pass. Fuzzer seed is 1729; seed
-corpora are checked in under `tests/fuzz/corpus`. Extend a campaign with
-`mise exec -- scripts/python.sh tests/sanitizers.py asan --runs 1000000`; replay
+`elide-dev/toolchain` 2026.11.2. ASan and TSan each must detect a deliberate bug in
+a separate process before a clean workload can pass. The ASan lane also requires
+undefined-behavior and leak canaries and enforces fail-fast UBSan and LSan without
+leak suppressions. A separate RSS canary verifies the runner's process-memory
+watchdog. Fuzzer seed is 1729; seed
+corpora are checked in under `tests/fuzz/corpus`. CI fuzzes for ten minutes with
+`--duration 600`, then exits normally so leak checks and coverage reports run.
+Local `mise run test:asan` retains its 20,000-input development workload.
+Extend a campaign with
+`MYNA_PYTHON_TIMEOUT=35m mise exec -- scripts/python.sh tests/sanitizers.py asan --runs 1000000 --campaign-timeout 1800`; replay
 failures with `build/sanitizers/asan/fuzz-values path/to/crash-file`.
+
+Fuzzing bounds input length (1KiB), individual allocations (64MiB), each input's
+execution (5 seconds), total campaign execution (300 seconds by default;
+duration-based campaigns get at least 30 seconds of shutdown grace; use
+`--campaign-timeout 1800` for the million-input campaign above), and observed
+process RSS (512MiB). The RSS canary retains an independent 30-second limit.
+`MYNA_PYTHON_TIMEOUT` sets Elide's outer runtime cap when supplied; the long
+command allows 35 minutes around the fuzz process's 30-minute cap. Without it,
+the wrapper preserves Elide's default. Process logs stream to disk, with periodic
+resource snapshots and final status retained even for watchdog failures.
+Longer campaigns run separately from CI; for example, an eight-hour run is
+`MYNA_PYTHON_TIMEOUT=9h mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 28800`.
+Duration and input-count limits are mutually exclusive, and the watchdog must
+exceed a requested duration so a successful campaign can finish its leak checks.
+The RSS watcher polls
+the process; it is a test termination limit, not an exact allocator budget.
+The value workload separately enforces actual live PMR allocation budgets and
+injects failure after successful allocations, checks poisoned-builder recovery,
+and requires balanced release. Rust tests fail each allocation in document and
+builder construction in turn, then verify recovery and exactly balanced release.
+Runtime flags, compiler-rt hashes, source hashes,
+exact commands and RSS observations are retained under `build/sanitizers/`.
+Pinned libFuzzer's own RSS watcher leaks its detached thread state on macOS;
+the harness disables that watcher and supplies an external one, preserving exit
+leak detection. Merely accepting an RSS option does not establish enforcement:
+the pinned macOS runtime's `hard_rss_limit_mb` failed the allocation canary.
 
 On macOS, LLVM 23.1.4's `ld64.lld` plus ASan fails a minimal C++ exception-catching
 probe. Sanitizer builds therefore retain pinned Clang/compiler-rt and use
@@ -189,8 +233,9 @@ It rejects smoke runs and mismatched workload sources, hardware, runtime, compil
 iteration counts or case sets. Changes are advisory percentages; timing thresholds
 belong on controlled runners, not shared CI hosts.
 
-ThinLTO tests retain before/after optimized C and Rust IR, final linker IR,
-disassembly and artifact/tool hashes under `build/reports/thinlto/<target>/`.
+ThinLTO and full LTO tests retain before/after optimized C and Rust IR, final
+linker IR, disassembly and artifact/tool hashes under
+`build/reports/thinlto/<target>/` and `build/reports/fulllto/<target>/`.
 These tests prove load elimination across the opaque call without pretending that
 LLVM can inline Java Native Image machine code.
 
@@ -201,6 +246,13 @@ current Java sources with pinned `javac`. Build/run/report commands remain usabl
 locally. Historical local before/after data is checked in under
 `benchmarks/comparison/baselines`; it is advisory because this shared workstation
 experienced substantial concurrent load.
+
+The [adapter scalar baseline](../benchmarks/comparison/baselines/adapters-macos-arm64.md)
+records five fresh processes for direct, normal/critical FFM, explicit library
+bindings and static JNI, including Java heap allocation counts. Matching
+[assembly evidence](../benchmarks/comparison/evidence/README.md) records which
+generated and handwritten paths are instruction-equivalent. These scalar results
+do not establish buffer, record, callback or resource-lifecycle performance.
 
 ARM binaries are built on hosted ARM builders and measured on `ubuntu-24.04-arm`
 by default. Set the repository variable `MYNA_ARM_BENCH_RUNNER` to a compatible,

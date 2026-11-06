@@ -90,14 +90,14 @@ An additional `byte[]` overload pins the array for the call and unpins it afterw
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, scalar constructor arguments, Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows. Ownership metadata is serialized and fingerprinted. Existing descriptors without these declarations retain their output shape. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, scalar constructor arguments, Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 
 1. Native operations consuming owned resources, with explicit transfer-on-success/failure rules; multiple buffers and typed element views.
 2. Returned buffer views tied to an owner, including mutation/invalidation rules and pooled-buffer retention.
 3. SVM-managed Java objects represented by isolate-bound rooted handles; release of a handle is distinct from destruction of its referent.
-4. Retained asynchronous borrows/callbacks, retain/release protocols, and additional FFM/JNI projections.
+4. Retained asynchronous buffer borrows and retain/release protocols. FFM upcall stubs already have explicit caller-owned arena lifetimes.
 
 These future forms currently fail parsing/validation rather than receiving invented safe lifetimes. GC-rooted Java objects must not be declared as `representation=native`. Cross-isolate ownership and automatic lifetime inference are not implemented.
 

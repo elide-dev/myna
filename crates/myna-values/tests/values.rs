@@ -220,6 +220,172 @@ unsafe impl Allocator for Failing {
         unreachable!()
     }
 }
+
+#[derive(Default)]
+struct AllocationState {
+    attempts: AtomicUsize,
+    allocated: AtomicUsize,
+    released: AtomicUsize,
+    live_bytes: AtomicUsize,
+    fail_after: AtomicUsize,
+}
+#[derive(Clone)]
+struct FailAfter(Arc<AllocationState>);
+impl FailAfter {
+    fn new(limit: usize) -> Self {
+        let state = Arc::new(AllocationState::default());
+        state.fail_after.store(limit, Ordering::Relaxed);
+        Self(state)
+    }
+    fn allow_allocations(&self) {
+        self.0.fail_after.store(usize::MAX, Ordering::Relaxed);
+    }
+    fn attempts(&self) -> usize {
+        self.0.attempts.load(Ordering::Relaxed)
+    }
+    fn assert_released(&self) {
+        assert_eq!(self.0.live_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            self.0.allocated.load(Ordering::Relaxed),
+            self.0.released.load(Ordering::Relaxed)
+        );
+    }
+}
+// SAFETY: successful allocations and their matching deallocations delegate to
+// Global with unchanged layouts; failures never expose partially allocated memory.
+unsafe impl Allocator for FailAfter {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        let attempt = self.0.attempts.fetch_add(1, Ordering::Relaxed);
+        if attempt >= self.0.fail_after.load(Ordering::Relaxed) {
+            return Err(AllocError);
+        }
+        let allocation = Global.allocate(layout)?;
+        self.0.allocated.fetch_add(1, Ordering::Relaxed);
+        self.0
+            .live_bytes
+            .fetch_add(layout.size(), Ordering::Relaxed);
+        Ok(allocation)
+    }
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let previous = self
+            .0
+            .live_bytes
+            .fetch_sub(layout.size(), Ordering::Relaxed);
+        assert!(previous >= layout.size());
+        self.0.released.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: this pointer and layout came unchanged from Global above.
+        unsafe { Global.deallocate(ptr, layout) }
+    }
+}
+
+#[test]
+fn allocation_fail_after_each_partial_construction_recovers_and_releases() {
+    let value = json!({
+        "message": "owned text longer than the inline representation",
+        "nested": (0..32).map(|i| json!({"index": i, "text": "another owned text allocation"})).collect::<Vec<_>>()
+    });
+    let baseline = FailAfter::new(usize::MAX);
+    {
+        let mut doc = Document::new_in(baseline.clone());
+        assert_eq!(decode(doc.encode(&value).unwrap(), 0), value);
+    }
+    baseline.assert_released();
+    let count = baseline.attempts();
+    assert!(count > 2, "exercise growth after both buffers exist");
+    for fail_after in 0..=count {
+        let allocator = FailAfter::new(fail_after);
+        {
+            let mut doc = Document::new_in(allocator.clone());
+            let result = doc.encode(&value);
+            if fail_after < count {
+                assert!(
+                    matches!(result, Err(Error::Allocation)),
+                    "failure point {fail_after}"
+                );
+                assert!(doc.view().is_none(), "partial document escaped");
+            } else {
+                assert_eq!(decode(result.unwrap(), 0), value);
+            }
+            allocator.allow_allocations();
+            assert_eq!(decode(doc.encode(&value).unwrap(), 0), value);
+            let attempts = allocator.attempts();
+            assert_eq!(decode(doc.encode(&value).unwrap(), 0), value);
+            assert_eq!(
+                allocator.attempts(),
+                attempts,
+                "capacity reuse after recovery"
+            );
+        }
+        allocator.assert_released();
+    }
+
+    fn populate<'a>(
+        builder: &mut Builder<'a, FailAfter>,
+        value: &Value,
+        backing: &'a [u8],
+    ) -> Result<(), Error> {
+        // Grow node, owned-text, frame and borrowed-region storage independently.
+        for _ in 0..8 {
+            builder.begin_array()?;
+            let region = builder.region(backing)?;
+            builder.string_ref(region, 0, backing.len() as u32)?;
+        }
+        builder.value(value)?;
+        for _ in 0..8 {
+            builder.end()?;
+        }
+        Ok(())
+    }
+    let backing = "borrowed region that must remain alive through recovery";
+    let mut expected = value.clone();
+    for _ in 0..8 {
+        expected = json!([backing, expected]);
+    }
+    let baseline = FailAfter::new(usize::MAX);
+    {
+        let mut builder = Builder::new_in(baseline.clone());
+        populate(&mut builder, &value, backing.as_bytes()).unwrap();
+        assert_eq!(decode(builder.finish().unwrap(), 0), expected);
+    }
+    baseline.assert_released();
+    let count = baseline.attempts();
+    assert!(count > 4, "exercise all four buffers and their growth");
+    for fail_after in 0..=count {
+        let allocator = FailAfter::new(fail_after);
+        {
+            let mut builder = Builder::new_in(allocator.clone());
+            let result = populate(&mut builder, &value, backing.as_bytes());
+            if fail_after < count {
+                assert!(
+                    matches!(result, Err(Error::Allocation)),
+                    "failure point {fail_after}"
+                );
+                assert!(matches!(builder.finish(), Err(Error::Protocol(_))));
+                let attempts = allocator.attempts();
+                assert!(matches!(builder.value(&42), Err(Error::Protocol(_))));
+                assert_eq!(allocator.attempts(), attempts, "poisoned builder allocated");
+            } else {
+                result.unwrap();
+                assert_eq!(decode(builder.finish().unwrap(), 0), expected);
+            }
+            allocator.allow_allocations();
+            builder.clear();
+            populate(&mut builder, &value, backing.as_bytes()).unwrap();
+            assert_eq!(decode(builder.finish().unwrap(), 0), expected);
+            let attempts = allocator.attempts();
+            builder.clear();
+            populate(&mut builder, &value, backing.as_bytes()).unwrap();
+            assert_eq!(decode(builder.finish().unwrap(), 0), expected);
+            assert_eq!(
+                allocator.attempts(),
+                attempts,
+                "capacity reuse after recovery"
+            );
+        }
+        allocator.assert_released();
+    }
+}
+
 #[test]
 fn allocation_failure_limits_and_recovery() {
     let mut fail = Document::new_in(Failing);
