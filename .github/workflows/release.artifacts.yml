@@ -14,10 +14,12 @@ concurrency:
 
 jobs:
   artifacts:
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
       artifact-metadata: write
@@ -48,9 +50,16 @@ jobs:
       - name: Resolve inherited workspace license declarations
         run: mise exec -- python3 scripts/sbom-metadata.py build/dist/myna-source.spdx.json
       - name: Attest artifacts built in this workflow
+        id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: build/dist/*.tar.gz
+      - name: Retain the signed provenance bundle with the downloads
+        env:
+          BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE_PATH" build/dist/myna-provenance.sigstore.json
+          jq -ce '.dsseEnvelope | select(.payloadType == "application/vnd.in-toto+json" and (.signatures | length > 0))' "$BUNDLE_PATH" > build/dist/myna-provenance.intoto.jsonl
       - name: Attest the source dependency inventory
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -60,12 +69,24 @@ jobs:
         with:
           name: release-artifacts
           path: build/dist/
+  publish:
+    needs: artifacts
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-artifacts
+          path: build/dist
       - name: Attach to an unpublished release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+          PACKAGE_VERSION: ${{ needs.artifacts.outputs.version }}
         run: |
           test "$RELEASE_TAG" = "v$PACKAGE_VERSION"
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then

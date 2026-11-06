@@ -28,3 +28,27 @@ CodSpeed maintains Myna simulation and wall-time workloads. The separate boundar
 Repository rulesets require pull requests, an approving review, resolved review threads, linear history, and passing `Gate`, `Repository hygiene`, and `Dependency review` checks on up-to-date branches. Version tags cannot be updated or deleted. Rulesets are applied after these checks are available; see `.github/rulesets/` for the exact configurations. Performance timing is not a required check on shared runners. Administrators can manage repository rules through GitHub; no workflow gets an admin credential.
 
 Use [release verification](releases.md) for artifact attestations and SBOMs. Do not claim that a historical locally built artifact has CI build provenance simply by uploading it to CI.
+
+## Scorecard evidence and remaining limits
+
+OpenSSF Scorecard runs on main and retains its JSON report. Container validation
+has explicit read-only permissions; only tag publication grants package and
+attestation writes. The release entrypoint contains the actual publishing actions,
+so permission exemptions do not depend on detecting a reusable workflow. Archive
+publication retains its signed provenance bundle and a discoverable in-toto envelope.
+
+Hadolint runs in the required Repository hygiene check on every PR, main push,
+and merge group, including shell checks inside Dockerfile commands. Its action and underlying image are pinned. OS package versions follow
+Ubuntu security updates within the pinned base release; DL3008 is the sole documented
+exception. This is Dockerfile analysis, not a claim of comprehensive Java/C++ SAST.
+Rust Clippy and workflow actionlint remain separate existing checks. CodeQL stays disabled.
+
+The November 6, 2026 baseline was 6.1/10. Do not interpret improvements as a full
+security audit: the score includes repository age, recent independent review history,
+and best-practices badge certification. The repository must age past 90 days for
+Maintained credit. Code-Review requires real independent reviews of final revisions;
+admin merges do not earn that credit. Branch-Protection currently requires one
+code-owner approval; its highest tier requires two independent approvals. The
+Best Practices badge must be completed with truthful maintainer evidence, not just
+added to the README. Historical unsigned releases continue to affect Signed-Releases;
+never regenerate their bytes or manufacture CI provenance to improve the score.

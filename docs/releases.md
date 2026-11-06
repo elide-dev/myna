@@ -11,6 +11,12 @@ Myna's own code is available under **Apache-2.0 OR MIT**, at the recipient's opt
 
 The Docker release job smoke-tests each image before publication, records BuildKit provenance, scans the immutable pushed digest, and attaches signed provenance and SBOM attestations to that digest. Source and image inventories are distinct: the source SBOM covers first-party declared dependencies, including development/build dependencies; vendored benchmark submodules and generated build trees are excluded. Inherited workspace license declarations are resolved from Cargo metadata; this does not alter dependency licenses or claim license conclusions. An image SBOM inventories detected packages in that image and cannot prove that every statically linked component was identified.
 
+The release downloads also retain the original Sigstore provenance bundle
+(`myna-provenance.sigstore.json`) and its signed in-toto DSSE envelope as a single
+JSON line (`myna-provenance.intoto.jsonl`). The latter makes provenance discoverable
+to clients such as Scorecard; use the full bundle for offline signature verification.
+These describe only the archives built by that release workflow.
+
 ## Consumer verification
 
 Check checksums before using downloaded files. For artifacts produced by the provenance workflow:
@@ -18,6 +24,7 @@ Check checksums before using downloaded files. For artifacts produced by the pro
 ```sh
 gh attestation verify myna-values-VERSION.tar.gz --repo elide-dev/myna
 gh attestation verify myna-source-VERSION.tar.gz --repo elide-dev/myna
+gh attestation verify myna-values-VERSION.tar.gz --repo elide-dev/myna --bundle myna-provenance.sigstore.json
 gh attestation verify oci://ghcr.io/elide-dev/myna@sha256:DIGEST --repo elide-dev/myna
 ```
 

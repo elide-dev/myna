@@ -14,6 +14,7 @@ required = ("LICENSE", "LICENSE-APACHE", "LICENSE-MIT", "SECURITY.md", "CONTRIBU
 for name in required:
     assert (ROOT / name).is_file(), f"Missing {name}"
 assert 'Apache-2.0 OR MIT' in (ROOT / 'LICENSE').read_text()
+assert (ROOT / 'LICENSE').read_text().startswith((ROOT / 'LICENSE-APACHE').read_text())
 workspace = tomllib.loads((ROOT / 'Cargo.toml').read_text())
 assert workspace['workspace']['package']['license'] == 'Apache-2.0 OR MIT'
 for name in ('LICENSE-APACHE', 'LICENSE-MIT'):

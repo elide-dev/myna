@@ -1,0 +1,4 @@
+# OS packages intentionally follow the security updates for the digest-pinned
+# Ubuntu release. Toolchain archives and base images are separately pinned.
+ignored:
+  - DL3008

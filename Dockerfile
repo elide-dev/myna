@@ -2,6 +2,7 @@
 # Build only the requested target: generator (default) or llvm23 (object rewriting).
 FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c AS native-toolchain
 ARG TARGETARCH
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake make xz-utils python3 zlib1g-dev libzstd-dev libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN case "$TARGETARCH" in \
@@ -28,10 +29,10 @@ RUN cmake -S llvm -B output -DLLVM_DIR=/opt/elide-toolchain/lib/cmake/llvm -DCMA
 FROM native-toolchain AS java-build
 ARG TARGETARCH
 ARG ELIDE_VERSION=1.6.2
+WORKDIR /tmp
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /opt/elide \
-    && cd /tmp \
     && curl -fsSLO "https://github.com/elide-dev/elide/releases/download/v${ELIDE_VERSION}/elide.linux-${TARGETARCH}.txz" \
     && curl -fsSLO "https://github.com/elide-dev/elide/releases/download/v${ELIDE_VERSION}/elide.linux-${TARGETARCH}.txz.sha256" \
     && sha256sum -c "elide.linux-${TARGETARCH}.txz.sha256" \
