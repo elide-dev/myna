@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class MynaFFM {
     private MynaFFM() {}
-    public static final String ABI_FINGERPRINT = "84aeca3df1975cb714257e05567849cf84de6995534d740b37399423b8e6da60";
+    public static final String ABI_FINGERPRINT = "09ffa225180ad8b62222e60cda636f0f77ad83864ba79474753bb02e3419e565";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
@@ -35,69 +35,154 @@ public final class MynaFFM {
     public static MethodHandle classify(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_classify").orElseThrow(() -> new UnsatisfiedLinkError("seam_classify")), classify_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle classify(SymbolLookup lookup, boolean critical) {
+        if (!critical) return classify(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
+    }
     public static final FunctionDescriptor echo_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
     public static MethodHandle echo(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_echo").orElseThrow(() -> new UnsatisfiedLinkError("seam_echo")), echo_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle echo(SymbolLookup lookup, boolean critical) {
+        if (!critical) return echo(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
     public static final FunctionDescriptor exercise_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
     public static MethodHandle exercise(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_exercise").orElseThrow(() -> new UnsatisfiedLinkError("seam_exercise")), exercise_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle exercise(SymbolLookup lookup, boolean critical) {
+        if (!critical) return exercise(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
+    }
     public static final FunctionDescriptor forEach_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle forEach(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_for_each").orElseThrow(() -> new UnsatisfiedLinkError("seam_for_each")), forEach_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle forEach(SymbolLookup lookup, boolean critical) {
+        if (!critical) return forEach(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
     public static final FunctionDescriptor inspect_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
     public static MethodHandle inspect(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_inspect").orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), inspect_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle inspect(SymbolLookup lookup, boolean critical) {
+        if (!critical) return inspect(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_inspect").orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), inspect_DESCRIPTOR, Linker.Option.critical(false));
+    }
     public static final FunctionDescriptor isHigh_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BOOLEAN, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
     public static MethodHandle isHigh(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_is_high").orElseThrow(() -> new UnsatisfiedLinkError("seam_is_high")), isHigh_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle isHigh(SymbolLookup lookup, boolean critical) {
+        if (!critical) return isHigh(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
     public static final FunctionDescriptor lowSigned_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT);
     public static MethodHandle lowSigned(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_signed").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed")), lowSigned_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle lowSigned(SymbolLookup lookup, boolean critical) {
+        if (!critical) return lowSigned(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_signed").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed")), lowSigned_DESCRIPTOR, Linker.Option.critical(false));
+    }
     public static final FunctionDescriptor lowUnsigned_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT);
     public static MethodHandle lowUnsigned(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_unsigned").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned")), lowUnsigned_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle lowUnsigned(SymbolLookup lookup, boolean critical) {
+        if (!critical) return lowUnsigned(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_low_unsigned").orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned")), lowUnsigned_DESCRIPTOR, Linker.Option.critical(false));
     }
     public static final FunctionDescriptor reducer_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.ADDRESS);
     public static MethodHandle reducer(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_reducer").orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer")), reducer_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle reducer(SymbolLookup lookup, boolean critical) {
+        if (!critical) return reducer(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_reducer").orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer")), reducer_DESCRIPTOR, Linker.Option.critical(false));
+    }
     public static final FunctionDescriptor rotate_DESCRIPTOR = FunctionDescriptor.of(Triple_LAYOUT, Triple_LAYOUT, ValueLayout.JAVA_INT);
     public static MethodHandle rotate(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_rotate").orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), rotate_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle rotate(SymbolLookup lookup, boolean critical) {
+        if (!critical) return rotate(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_rotate").orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), rotate_DESCRIPTOR, Linker.Option.critical(false));
     }
     public static final FunctionDescriptor scale_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle scale(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_scale_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_scale_myna_ref")), scale_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle scale(SymbolLookup lookup, boolean critical) {
+        if (!critical) return scale(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
+    }
     public static final FunctionDescriptor spread_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
     public static MethodHandle spread(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_spread_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_spread_myna_ref")), spread_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle spread(SymbolLookup lookup, boolean critical) {
+        if (!critical) return spread(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
     public static final FunctionDescriptor structProbe_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle structProbe(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_struct_probe").orElseThrow(() -> new UnsatisfiedLinkError("seam_struct_probe")), structProbe_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle structProbe(SymbolLookup lookup, boolean critical) {
+        if (!critical) return structProbe(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
+    }
     public static final FunctionDescriptor sum_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle sum(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_sum").orElseThrow(() -> new UnsatisfiedLinkError("seam_sum")), sum_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle sum(SymbolLookup lookup, boolean critical) {
+        if (!critical) return sum(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
     public static final FunctionDescriptor swapPair_DESCRIPTOR = FunctionDescriptor.of(Pair_LAYOUT, Pair_LAYOUT);
     public static MethodHandle swapPair(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_swap_pair").orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair")), swapPair_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle swapPair(SymbolLookup lookup, boolean critical) {
+        if (!critical) return swapPair(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_swap_pair").orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair")), swapPair_DESCRIPTOR, Linker.Option.critical(false));
+    }
     public static final FunctionDescriptor visit_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     public static MethodHandle visit(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_visit").orElseThrow(() -> new UnsatisfiedLinkError("seam_visit")), visit_DESCRIPTOR);
     }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle visit(SymbolLookup lookup, boolean critical) {
+        if (!critical) return visit(lookup);
+        throw new IllegalArgumentException("critical downcall requires a native leaf contract");
+    }
     public static final FunctionDescriptor widen_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_INT, ValueLayout.JAVA_BOOLEAN);
     public static MethodHandle widen(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), widen_DESCRIPTOR);
+    }
+    /** Critical calls require the declared bounded, nonblocking, non-reentrant leaf contract. */
+    public static MethodHandle widen(SymbolLookup lookup, boolean critical) {
+        if (!critical) return widen(lookup);
+        return Linker.nativeLinker().downcallHandle(lookup.find("seam_widen").orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), widen_DESCRIPTOR, Linker.Option.critical(false));
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class classify_Downcall {
@@ -139,6 +224,9 @@ public final class MynaFFM {
     public static int forEach(MemorySegment visitor, MemorySegment isolate, long count) throws Throwable {
         return (int) MynaFFM.forEach_Downcall.HANDLE.invokeExact(MynaFFM.forEach_Binding.ADDRESS, visitor, isolate, count);
     }
+    private static final class inspect_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.inspect_DESCRIPTOR, Linker.Option.critical(false));
+    }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class inspect_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.inspect_DESCRIPTOR);
@@ -159,6 +247,9 @@ public final class MynaFFM {
     public static boolean isHigh(MemorySegment isolate_thread, byte value) throws Throwable {
         return (boolean) MynaFFM.isHigh_Downcall.HANDLE.invokeExact(MynaFFM.isHigh_Binding.ADDRESS, isolate_thread, value & 0xff);
     }
+    private static final class lowSigned_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.lowSigned_DESCRIPTOR, Linker.Option.critical(false));
+    }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class lowSigned_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.lowSigned_DESCRIPTOR);
@@ -168,6 +259,9 @@ public final class MynaFFM {
     }
     public static byte lowSigned(int value) throws Throwable {
         return (byte) MynaFFM.lowSigned_Downcall.HANDLE.invokeExact(MynaFFM.lowSigned_Binding.ADDRESS, value);
+    }
+    private static final class lowUnsigned_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.lowUnsigned_DESCRIPTOR, Linker.Option.critical(false));
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class lowUnsigned_Downcall {
@@ -179,6 +273,9 @@ public final class MynaFFM {
     public static byte lowUnsigned(int value) throws Throwable {
         return (byte) MynaFFM.lowUnsigned_Downcall.HANDLE.invokeExact(MynaFFM.lowUnsigned_Binding.ADDRESS, value);
     }
+    private static final class reducer_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.reducer_DESCRIPTOR, Linker.Option.critical(false));
+    }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class reducer_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.reducer_DESCRIPTOR);
@@ -188,6 +285,9 @@ public final class MynaFFM {
     }
     public static MemorySegment reducer() throws Throwable {
         return (MemorySegment) MynaFFM.reducer_Downcall.HANDLE.invokeExact(MynaFFM.reducer_Binding.ADDRESS);
+    }
+    private static final class rotate_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.rotate_DESCRIPTOR, Linker.Option.critical(false));
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class rotate_Downcall {
@@ -239,6 +339,9 @@ public final class MynaFFM {
     public static long sum(MemorySegment isolate_thread, MemorySegment data, long length) throws Throwable {
         return (long) MynaFFM.sum_Downcall.HANDLE.invokeExact(MynaFFM.sum_Binding.ADDRESS, isolate_thread, data, length);
     }
+    private static final class swapPair_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.swapPair_DESCRIPTOR, Linker.Option.critical(false));
+    }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class swapPair_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.swapPair_DESCRIPTOR);
@@ -259,6 +362,9 @@ public final class MynaFFM {
     public static int visit(MemorySegment isolate_thread, long value) throws Throwable {
         return (int) MynaFFM.visit_Downcall.HANDLE.invokeExact(MynaFFM.visit_Binding.ADDRESS, isolate_thread, value);
     }
+    private static final class widen_CriticalDowncall {
+        static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.widen_DESCRIPTOR, Linker.Option.critical(false));
+    }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class widen_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(MynaFFM.widen_DESCRIPTOR);
@@ -268,5 +374,202 @@ public final class MynaFFM {
     }
     public static int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
         return (int) MynaFFM.widen_Downcall.HANDLE.invokeExact(MynaFFM.widen_Binding.ADDRESS, signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+    }
+        /**
+         * Explicit library binding. The caller owns the lookup/library arena and must keep it
+         * alive for every call and any native values or callbacks that outlive a call.
+         * Closing that arena invalidates its symbol segments; FFM rejects subsequent calls.
+         * Missing symbols fail only when invoked, allowing import-only libraries.
+         */
+        public static final class LibraryBinding {
+        private final java.util.Optional<MemorySegment> classify_address;
+        private final java.util.Optional<MemorySegment> echo_address;
+        private final java.util.Optional<MemorySegment> exercise_address;
+        private final java.util.Optional<MemorySegment> forEach_address;
+        private final java.util.Optional<MemorySegment> inspect_address;
+        private final java.util.Optional<MemorySegment> isHigh_address;
+        private final java.util.Optional<MemorySegment> lowSigned_address;
+        private final java.util.Optional<MemorySegment> lowUnsigned_address;
+        private final java.util.Optional<MemorySegment> reducer_address;
+        private final java.util.Optional<MemorySegment> rotate_address;
+        private final java.util.Optional<MemorySegment> scale_address;
+        private final java.util.Optional<MemorySegment> spread_address;
+        private final java.util.Optional<MemorySegment> structProbe_address;
+        private final java.util.Optional<MemorySegment> sum_address;
+        private final java.util.Optional<MemorySegment> swapPair_address;
+        private final java.util.Optional<MemorySegment> visit_address;
+        private final java.util.Optional<MemorySegment> widen_address;
+        public LibraryBinding(java.nio.file.Path path, Arena arena) {
+            this(SymbolLookup.libraryLookup(path, arena));
+        }
+        public LibraryBinding(SymbolLookup lookup) {
+            java.util.Objects.requireNonNull(lookup);
+            this.classify_address = lookup.find("seam_classify");
+            this.echo_address = lookup.find("seam_echo");
+            this.exercise_address = lookup.find("seam_exercise");
+            this.forEach_address = lookup.find("seam_for_each");
+            this.inspect_address = lookup.find("seam_inspect");
+            this.isHigh_address = lookup.find("seam_is_high");
+            this.lowSigned_address = lookup.find("seam_low_signed");
+            this.lowUnsigned_address = lookup.find("seam_low_unsigned");
+            this.reducer_address = lookup.find("seam_reducer");
+            this.rotate_address = lookup.find("seam_rotate");
+            this.scale_address = lookup.find("seam_scale_myna_ref");
+            this.spread_address = lookup.find("seam_spread_myna_ref");
+            this.structProbe_address = lookup.find("seam_struct_probe");
+            this.sum_address = lookup.find("seam_sum");
+            this.swapPair_address = lookup.find("seam_swap_pair");
+            this.visit_address = lookup.find("seam_visit");
+            this.widen_address = lookup.find("seam_widen");
+        }
+        public byte classify(MemorySegment isolate_thread, short value, boolean strict) throws Throwable {
+            return (byte) MynaFFM.classify_Downcall.HANDLE.invokeExact(this.classify_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_classify")), isolate_thread, value, strict);
+        }
+        public byte echo(MemorySegment isolate_thread, byte value) throws Throwable {
+            return (byte) MynaFFM.echo_Downcall.HANDLE.invokeExact(this.echo_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_echo")), isolate_thread, value & 0xff);
+        }
+        public long exercise(MemorySegment isolate_thread) throws Throwable {
+            return (long) MynaFFM.exercise_Downcall.HANDLE.invokeExact(this.exercise_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_exercise")), isolate_thread);
+        }
+        public int forEach(MemorySegment visitor, MemorySegment isolate, long count) throws Throwable {
+            return (int) MynaFFM.forEach_Downcall.HANDLE.invokeExact(this.forEach_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_for_each")), visitor, isolate, count);
+        }
+        public long inspect(MemorySegment value) throws Throwable {
+            return (long) MynaFFM.inspect_Downcall.HANDLE.invokeExact(this.inspect_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), value);
+        }
+        public boolean isHigh(MemorySegment isolate_thread, byte value) throws Throwable {
+            return (boolean) MynaFFM.isHigh_Downcall.HANDLE.invokeExact(this.isHigh_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_is_high")), isolate_thread, value & 0xff);
+        }
+        public byte lowSigned(int value) throws Throwable {
+            return (byte) MynaFFM.lowSigned_Downcall.HANDLE.invokeExact(this.lowSigned_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed")), value);
+        }
+        public byte lowUnsigned(int value) throws Throwable {
+            return (byte) MynaFFM.lowUnsigned_Downcall.HANDLE.invokeExact(this.lowUnsigned_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned")), value);
+        }
+        public MemorySegment reducer() throws Throwable {
+            return (MemorySegment) MynaFFM.reducer_Downcall.HANDLE.invokeExact(this.reducer_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer")));
+        }
+        public MemorySegment rotate(SegmentAllocator allocator, MemorySegment value, int times) throws Throwable {
+            return (MemorySegment) MynaFFM.rotate_Downcall.HANDLE.invokeExact(this.rotate_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), allocator, value, times);
+        }
+        public void scale(MemorySegment isolate_thread, MemorySegment value, int factor, MemorySegment result) throws Throwable {
+            MynaFFM.scale_Downcall.HANDLE.invokeExact(this.scale_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_scale_myna_ref")), isolate_thread, value, factor, result);
+        }
+        public void spread(MemorySegment isolate_thread, MemorySegment value, MemorySegment result) throws Throwable {
+            MynaFFM.spread_Downcall.HANDLE.invokeExact(this.spread_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_spread_myna_ref")), isolate_thread, value, result);
+        }
+        public int structProbe(MemorySegment isolate_thread) throws Throwable {
+            return (int) MynaFFM.structProbe_Downcall.HANDLE.invokeExact(this.structProbe_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_struct_probe")), isolate_thread);
+        }
+        public long sum(MemorySegment isolate_thread, MemorySegment data, long length) throws Throwable {
+            return (long) MynaFFM.sum_Downcall.HANDLE.invokeExact(this.sum_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_sum")), isolate_thread, data, length);
+        }
+        public MemorySegment swapPair(SegmentAllocator allocator, MemorySegment value) throws Throwable {
+            return (MemorySegment) MynaFFM.swapPair_Downcall.HANDLE.invokeExact(this.swapPair_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair")), allocator, value);
+        }
+        public int visit(MemorySegment isolate_thread, long value) throws Throwable {
+            return (int) MynaFFM.visit_Downcall.HANDLE.invokeExact(this.visit_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_visit")), isolate_thread, value);
+        }
+        public int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
+            return (int) MynaFFM.widen_Downcall.HANDLE.invokeExact(this.widen_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+        }
+    }
+        /**
+         * Explicit library binding. The caller owns the lookup/library arena and must keep it
+         * alive for every call and any native values or callbacks that outlive a call.
+         * Closing that arena invalidates its symbol segments; FFM rejects subsequent calls.
+         * Missing symbols fail only when invoked, allowing import-only libraries.
+         */
+        // Only bounded, nonblocking, non-reentrant native leaves are exposed.
+        public static final class CriticalLibraryBinding {
+        private final java.util.Optional<MemorySegment> inspect_address;
+        private final java.util.Optional<MemorySegment> lowSigned_address;
+        private final java.util.Optional<MemorySegment> lowUnsigned_address;
+        private final java.util.Optional<MemorySegment> reducer_address;
+        private final java.util.Optional<MemorySegment> rotate_address;
+        private final java.util.Optional<MemorySegment> swapPair_address;
+        private final java.util.Optional<MemorySegment> widen_address;
+        public CriticalLibraryBinding(java.nio.file.Path path, Arena arena) {
+            this(SymbolLookup.libraryLookup(path, arena));
+        }
+        public CriticalLibraryBinding(SymbolLookup lookup) {
+            java.util.Objects.requireNonNull(lookup);
+            this.inspect_address = lookup.find("seam_inspect");
+            this.lowSigned_address = lookup.find("seam_low_signed");
+            this.lowUnsigned_address = lookup.find("seam_low_unsigned");
+            this.reducer_address = lookup.find("seam_reducer");
+            this.rotate_address = lookup.find("seam_rotate");
+            this.swapPair_address = lookup.find("seam_swap_pair");
+            this.widen_address = lookup.find("seam_widen");
+        }
+        public long inspect(MemorySegment value) throws Throwable {
+            return (long) MynaFFM.inspect_CriticalDowncall.HANDLE.invokeExact(this.inspect_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_inspect")), value);
+        }
+        public byte lowSigned(int value) throws Throwable {
+            return (byte) MynaFFM.lowSigned_CriticalDowncall.HANDLE.invokeExact(this.lowSigned_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_low_signed")), value);
+        }
+        public byte lowUnsigned(int value) throws Throwable {
+            return (byte) MynaFFM.lowUnsigned_CriticalDowncall.HANDLE.invokeExact(this.lowUnsigned_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_low_unsigned")), value);
+        }
+        public MemorySegment reducer() throws Throwable {
+            return (MemorySegment) MynaFFM.reducer_CriticalDowncall.HANDLE.invokeExact(this.reducer_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_reducer")));
+        }
+        public MemorySegment rotate(SegmentAllocator allocator, MemorySegment value, int times) throws Throwable {
+            return (MemorySegment) MynaFFM.rotate_CriticalDowncall.HANDLE.invokeExact(this.rotate_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), allocator, value, times);
+        }
+        public MemorySegment swapPair(SegmentAllocator allocator, MemorySegment value) throws Throwable {
+            return (MemorySegment) MynaFFM.swapPair_CriticalDowncall.HANDLE.invokeExact(this.swapPair_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_swap_pair")), allocator, value);
+        }
+        public int widen(byte signedByte, byte unsignedByte, short signedShort, short unsignedShort, boolean flag) throws Throwable {
+            return (int) MynaFFM.widen_CriticalDowncall.HANDLE.invokeExact(this.widen_address.orElseThrow(() -> new UnsatisfiedLinkError("seam_widen")), signedByte, unsignedByte & 0xff, signedShort, unsignedShort & 0xffff, flag);
+        }
+    }
+    public static final FunctionDescriptor Reducer_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
+    @FunctionalInterface public interface ReducerCallback {
+        long invoke(long arg0, long arg1) throws Throwable;
+    }
+    public static final class ReducerUpcalls {
+        private ReducerUpcalls() {}
+        private static final MethodHandle HANDLE;
+        static {
+            try {
+                HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(ReducerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(long.class, ReducerCallback.class, long.class, long.class, long.class));
+            } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+        }
+        private static long invoke(ReducerCallback target, long sentinel, long arg0, long arg1) {
+            try { return target.invoke(arg0, arg1); }
+            catch (Throwable failure) { return sentinel; }
+        }
+        /** Caller owns arena; keep it alive until native code has stopped using the stub.
+         * Use a shared arena for native threads. Exceptions return the supplied sentinel.
+         * A void callback discards exceptions; catch inside the callback to report them. */
+        public static MemorySegment create(ReducerCallback target, long sentinel, Arena arena) {
+            java.util.Objects.requireNonNull(target);
+            return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Reducer_CALLBACK_DESCRIPTOR, arena);
+        }
+    }
+    public static final FunctionDescriptor Visitor_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
+    @FunctionalInterface public interface VisitorCallback {
+        int invoke(MemorySegment arg0, long arg1) throws Throwable;
+    }
+    public static final class VisitorUpcalls {
+        private VisitorUpcalls() {}
+        private static final MethodHandle HANDLE;
+        static {
+            try {
+                HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(VisitorUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, VisitorCallback.class, int.class, MemorySegment.class, long.class));
+            } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+        }
+        private static int invoke(VisitorCallback target, int sentinel, MemorySegment arg0, long arg1) {
+            try { return target.invoke(arg0, arg1); }
+            catch (Throwable failure) { return sentinel; }
+        }
+        /** Caller owns arena; keep it alive until native code has stopped using the stub.
+         * Use a shared arena for native threads. Exceptions return the supplied sentinel.
+         * A void callback discards exceptions; catch inside the callback to report them. */
+        public static MemorySegment create(VisitorCallback target, int sentinel, Arena arena) {
+            java.util.Objects.requireNonNull(target);
+            return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Visitor_CALLBACK_DESCRIPTOR, arena);
+        }
     }
 }

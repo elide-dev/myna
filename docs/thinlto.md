@@ -39,12 +39,19 @@ The helper:
 2. Reads LLVM bitcode regardless of `.bc`/`.o` suffix. For regular `.a`/`.rlib` archives, rewrites bitcode members and preserves other member payloads, names, and order. Rebuilds the archive symbol table deterministically.
 3. Matches exact symbols and checks target architecture/OS/environment/object format, function type, calling convention, and existing attribute compatibility.
 4. Adds approved parameter/function contracts to matching definitions/declarations and their direct call/invoke sites. Indirect calls are not guessed from signature similarity.
-5. Verifies modified IR, embeds `!myna.applied` with a SHA-256 of the actual contract bytes, rebuilds the module summary, and recomputes the module hash.
+5. Verifies modified IR, embeds `!myna.applied` with a SHA-256 of the actual contract bytes, rebuilds existing module summaries, and recomputes the module hash. ThinLTO/full-LTO mode is preserved; full-LTO inputs do not acquire a ThinLTO summary.
 6. Commits a separate output file only after validation succeeds. No-match inputs fail, so an ineffective pipeline integration cannot pass silently.
 
 Same-contract application is idempotent. Reapplying a different contract set to already annotated input is rejected: rebuild from the original compiler output to avoid retaining attributes that were removed or weakened. Version 1 expects one consolidated contract module per object/archive.
 
 Thin archives, native-only object rewriting, embedded-bitcode containers, aliases used as contracted symbols, and incompatible ABI forms are rejected. Ordinary native archive members and Rust metadata are preserved. A native-only symbol can still be described; its attributes are attached to declarations/calls in the LLVM callers rather than to machine instructions.
+
+Full LTO (`clang -flto=full`, Rust full/fat LTO bitcode) is supported separately
+from LLVM **FatLTO objects**. The latter contain native code plus an embedded
+`.llvm.lto` section and currently require ELF. Myna rejects them both standalone
+and inside mixed archives, preventing partial success that leaves embedded
+optimizer input unannotated. Use standalone bitcode with the applicator. See
+[LLVM FatLTO](https://llvm.org/docs/FatLTO.html) for the packaging distinction.
 
 ## Build pipeline
 
@@ -84,7 +91,7 @@ External files loaded only by a late LTO plugin may not enter an existing ThinLT
 
 ## Evidence
 
-`tests/llvm_integration.py` compiles actual Clang and Rust bitcode objects with an opaque foreign call between a local store and load. Before application the load survives optimization. After application, LLVM returns constant `42` while retaining the native call. The test links both annotated objects with an unchanged native implementation through LLD ThinLTO, runs the executable, and inspects saved optimized bitcode for the attached attributes and folded result. It also exercises `.rlib` members, native archive-member preservation, idempotence, signature rejection, and stale-contract rejection.
+`tests/llvm_integration.py` compiles actual Clang and Rust bitcode objects with an opaque foreign call between a local store and load. Before application the load survives optimization. After application, LLVM returns constant `42` while retaining the native call. Separate ThinLTO and full-LTO tests link both annotated objects with an unchanged native implementation through LLD, execute the binary, and inspect saved optimized bitcode for the attached attributes and folded result. Source, bitcode, executable, disassembly and hashes are retained under `build/reports/thinlto/<target>/` and `build/reports/fulllto/<target>/`. Tests also exercise `.rlib` members, native archive-member preservation, actual ELF FatLTO rejection, idempotence, signature rejection, and stale-contract rejection.
 
 `tests/native_image_integration.py` separately executes the generated C API against a real Native Image shared library and Rust implementation. This proves ABI agreement and exception translation; it does not claim that Native Image machine code becomes LLVM IR.
 

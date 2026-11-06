@@ -10,8 +10,8 @@ Substrate VM is the primary execution target. The generator should resolve ABI l
 | Native Image → proven short native leaf | Default binding ABI 2 leaf | Removes the adapter stub and VM transition under the default leaf contract. |
 | Rust → known Native Image target | Generated `@CEntryPoint` invoking a fixed Java method | Graal sees the adapter and Java target together; LLVM sees contracts on the real Rust callsite. |
 | Native Image → runtime-selected function through FFM | Typed `invokeExact`, build-time unbound adapters, runtime symbol addresses, hosted downcall registration | Image builder generates ABI stubs ahead of time; addresses bind at runtime. |
-| Future known FFM callback | Register the specific static Java target for a specialized direct upcall | Prefer target-specific generated code over descriptor-only generic dispatch. |
-| Future JNI compatibility | Explicit JNI adapter delegating to the raw seam | Adapter effects and JNI lifecycle remain separate from implementation contracts. |
+| Known FFM callback | Register the specific static Java target for a specialized direct upcall | Prefer target-specific generated code over descriptor-only generic dispatch. |
+| Static JNI compatibility on SVM | Explicit JNI adapter delegating to the raw seam | Adapter effects and JNI lifecycle remain separate from implementation contracts. |
 
 No libffi-based dispatcher is needed for the fixed C API path. Build-time knowledge removes runtime ABI discovery, reflection, argument arrays, boxing, and symbol lookup from that path. Generated entry methods use direct static Java calls, allowing Graal to optimize and inline eligible Java adapter code. Necessary isolate entry, exception conversion, and GC transitions remain explicit.
 
@@ -38,7 +38,7 @@ Each leaf has a symbolic linker reference. Ordinary calls use Graal's relocated-
 
 This backend deliberately uses internal APIs of the pinned **elide-dev/graal 25.5.5-elide.24** compiler. Compile against its `svm-shared.jar`, `svm-guest-staging.jar`, and `svm-guest.jar` without bundling them or putting them on the Native Image application classpath. [The compiler helper](../scripts/compile-native-bindings.py) handles the compile-only classpath and copies generated metadata. Retest compiler upgrades. See [ABI 2 migration](binding-abi-2.md) for complete commands.
 
-Leaf policy participates in canonical JSON and the ABI fingerprint. It never implies LLVM `nounwind`, `nofree`, or other effects. Unapproved explicit leaf facts fail strict validation; relaxed generation retains their provenance and conservatively uses a normal transition. FFM does not yet map this contract to `critical` downcalls.
+Leaf policy participates in canonical JSON and the ABI fingerprint. It never implies LLVM `nounwind`, `nofree`, or other effects. Unapproved explicit leaf facts fail strict validation; relaxed generation retains their provenance and conservatively uses a normal transition. FFM exposes opt-in critical factories and typed `CriticalLibraryBinding` calls only for this contract. Critical FFM does not permit heap access. JNI wrappers retain ordinary JNI transitions even when their raw target is a leaf.
 
 ## Call-floor experiments
 
@@ -63,9 +63,9 @@ The optional generated `MynaForeignFeature.java` registers all downcall descript
 --enable-native-access=ALL-UNNAMED
 ```
 
-Generated typed methods use per-symbol lazy, static-final handles and `invokeExact`. Load the native library with `System.load` in the binding's class loader before the first typed invocation. Handle holders are explicitly initialized at runtime: a build-host address must never be frozen into an executable. The existing factories accepting `SymbolLookup` remain available for explicit library lifetime management.
+Generated typed methods use per-symbol static-final handles and `invokeExact`. Load the native library with `System.load` in the binding's class loader before the first loader-scoped invocation, or use an explicit library binding. Unbound handle holders initialize at image build time; symbol addresses initialize at runtime. A build-host address must never be frozen into an executable. The factories accepting `SymbolLookup` remain available for independently bound handles.
 
-The integration suite compiles and runs this path as a Native Image executable calling Rust. Full callback/lifetime modeling is still future work. Graal's [FFM documentation](https://www.graalvm.org/latest/reference-manual/native-image/native-code-interoperability/ffm-api/) explains AOT registration and specialization for known upcall targets.
+The integration suite compiles and runs this path as a Native Image executable calling Rust. Explicit scoped library bindings, consumer-owned resource factories and scoped dynamic/static callbacks are described in the [adapter guide](jvm-roadmap.md). Graal's [FFM documentation](https://www.graalvm.org/latest/reference-manual/native-image/native-code-interoperability/ffm-api/) explains AOT registration and specialization for known upcall targets.
 
 ## Ownership and off-heap access
 
@@ -83,3 +83,37 @@ at build time and the address holder at runtime. This allows AOT specialization 
 the adapter while keeping native library loading and address ownership at runtime.
 The explicit `SymbolLookup` factory retains its original independently bound-handle
 semantics; benchmarks distinguish that path from the optimized convenience call.
+
+## Next verification and specialization work
+
+The highest-value follow-up is compiler verification of native producer leaves.
+Pinned Clang 23 supports `nonblocking` / `nonallocating` constraints with
+`-Werror=function-effects`: local probes reject allocation, mutex locking and
+unannotated indirect calls. Verification must inspect the implementation body;
+annotating an external declaration merely asserts a contract. A spin loop still
+passes, so these checks cannot establish bounded duration or absence of Java
+reentry. [Clang function-effect analysis](https://clang.llvm.org/docs/FunctionEffectAnalysis.html)
+and [RealtimeSanitizer](https://clang.llvm.org/docs/RealtimeSanitizer.html) are
+complementary. The pinned macOS bundle has RTSan headers but lacks its runtime
+library; no RTSan enforcement is currently claimed.
+
+Differential ABI fuzzing should generate valid signatures and boundary values,
+then compare the generated C, JNI and FFM paths with independently compiled
+C/Rust oracles on each target. Prioritize register/stack splits, mixed records,
+unsigned callback returns, NaNs and negative zero, and retain minimized failures.
+The value-builder fuzzer and its allocator-failure tests do not cover that ABI
+space. Likewise, sanitizer libraries being available does not instrument Native
+Image's managed heap or automatically verify generated JNI wrappers.
+
+Future FFM policies worth testing include caller-owned `captureCallState("errno")`
+storage and explicitly heap-enabled critical borrowing for tiny, noncapturing
+calls. Both need declared policies, matching AOT registration and lifetime tests;
+heap addresses must never escape the call. The current adapter deliberately uses
+`critical(false)`. See the [JDK linker options](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/foreign/Linker.Option.html).
+
+Beating a matched native function-pointer loop requires a concrete optimization
+opportunity: a known direct target, useful constant specialization, vectorization,
+or amortized crossings through bounded batching. Give the native baseline the
+same information and optimization settings. Existing call-floor measurements
+establish low scalar overhead; they do not establish a universal win over native
+pointers or performance for buffers, records, callbacks and ownership lifecycles.

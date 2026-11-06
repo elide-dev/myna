@@ -1,4 +1,4 @@
-"""Prove actual object/rlib changes, optimization effects, and final ThinLTO linkage."""
+"""Prove actual object/rlib changes, optimization effects, and ThinLTO/full-LTO linkage."""
 import hashlib
 import json
 import os
@@ -27,19 +27,25 @@ class LlvmIntegrationTests(unittest.TestCase):
         return run(BINARY, "apply", "--contracts", contracts or self.contracts, "--input", input, "--output", output, "--llvm-tool", HELPER, ok=ok)
     def ir(self, path):
         return run(llvm("llvm-dis"), path, "-o", "-").stdout
-    def c_object(self):
+    def c_object(self, mode="thin"):
         source = self.work / "caller.c"
         source.write_text('''#include <stdint.h>
 extern int64_t seam_inspect(const int64_t *);
-int64_t c_probe(void) { int64_t value = 42; (void)seam_inspect(&value); return value; }
+__attribute__((noinline)) int64_t c_probe(void) { int64_t value = 42; (void)seam_inspect(&value); return value; }
 ''')
         output = self.work / "caller.o"
-        run(llvm("clang"), "-O1", "-flto=thin", "-c", source, "-o", output)
+        run(llvm("clang"), "-O1", f"-flto={mode}", "-c", source, "-o", output)
         return output
     def optimized(self, path):
         return run(llvm("opt"), "-passes=default<O2>", "-S", path, "-o", "-").stdout
-    def test_real_c_and_rust_objects_optimize_and_link(self):
-        original = self.c_object()
+    def test_real_c_and_rust_objects_optimize_and_link_thin_lto(self):
+        self.prove_lto("thin")
+
+    def test_real_c_and_rust_objects_optimize_and_link_full_lto(self):
+        self.prove_lto("full")
+
+    def prove_lto(self, mode):
+        original = self.c_object(mode)
         original_hash = hashlib.sha256(original.read_bytes()).hexdigest()
         annotated = self.work / "caller.seam.o"
         self.apply(original, annotated)
@@ -52,6 +58,7 @@ int64_t c_probe(void) { int64_t value = 42; (void)seam_inspect(&value); return v
         rust.write_text('''#![no_std]
 unsafe extern "C" { fn seam_inspect(value: *const i64) -> i64; }
 #[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn rust_probe() -> i64 {
  let mut value: i64 = 42;
  unsafe { seam_inspect(&raw mut value); }
@@ -60,12 +67,20 @@ pub extern "C" fn rust_probe() -> i64 {
 ''')
         self.assertRegex(run("rustc", "-vV").stdout, r"LLVM version: 23\.")
         rust_obj = self.work / "rust.o"
-        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Copt-level=1", "-Cpanic=abort", "-Clinker-plugin-lto", rust, "-o", rust_obj)
+        rust_flags = ["--edition=2024", "--crate-type=lib", "-Copt-level=1", "-Cpanic=abort",
+                      *(["--emit=obj", "-Clinker-plugin-lto"] if mode == "thin"
+                        else ["--emit=llvm-bc", "-Clto=fat"])]
+        run("rustc", *rust_flags, rust, "-o", rust_obj)
         rust_annotated = self.work / "rust.seam.o"
         self.apply(rust_obj, rust_annotated)
         self.assertIn("load i64", self.optimized(rust_obj))
         self.assertNotIn("load i64", self.optimized(rust_annotated))
         self.assertIn("ret i64 42", self.optimized(rust_annotated))
+        for obj in [original, annotated, rust_obj, rust_annotated]:
+            # Rust fat LTO can carry a FULL_LTO_GLOBALVAL_SUMMARY_BLOCK; it is not a
+            # ThinLTO input merely because it contains a summary.
+            has_thin_summary = "<GLOBALVAL_SUMMARY_BLOCK " in run(llvm("llvm-bcanalyzer"), "-dump", obj).stdout
+            self.assertEqual(has_thin_summary, mode == "thin", f"{obj.name}: preserve {mode} LTO mode")
         native = self.work / "native.c"
         native.write_text('#include <stdint.h>\nint64_t seam_inspect(const int64_t *value) { return *value; }\n')
         native_obj = self.work / "native.o"
@@ -80,29 +95,79 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
         self.assertIsNotNone(linker, "LLD 23 is required")
         binary = self.work / "linked"
         save = "-Wl,-save-temps" if sys.platform == "darwin" else "-Wl,--save-temps"
-        run(llvm("clang"), f"-fuse-ld={linker}", "-flto=thin", "-O2", save, main_c, annotated, rust_annotated, native_obj, "-o", binary)
+        link_flags = [f"-fuse-ld={linker}", f"-flto={mode}", "-O2", save]
+        run(llvm("clang"), *link_flags, main_c, annotated, rust_annotated, native_obj, "-o", binary)
         run(binary)
         self.assertEqual(native_hash, hashlib.sha256(native_obj.read_bytes()).hexdigest())
         saved = list(self.work.glob("*.opt.bc"))
-        self.assertTrue(saved, "LLD must save optimized ThinLTO bitcode")
+        self.assertTrue(saved, f"LLD must save optimized {mode} LTO bitcode")
         caller_irs = [self.ir(p) for p in saved if "@c_probe" in self.ir(p) or "@rust_probe" in self.ir(p)]
-        self.assertTrue(any("captures(none)" in text for text in caller_irs), "attributes survive into ThinLTO backend")
-        self.assertTrue(any("ret i64 42" in text for text in caller_irs))
-        evidence = ROOT / "build/reports/thinlto" / TARGET
+        self.assertTrue(any("captures(none)" in text for text in caller_irs), f"attributes survive into {mode} LTO backend")
+        self.assertTrue(all("load i64" not in text for text in caller_irs), "both backends eliminate the post-call reload")
+        if mode == "thin":
+            self.assertTrue(any("ret i64 42" in text for text in caller_irs))
+        else:
+            self.assertEqual(len(saved), 1, "full LTO optimizes one merged module")
+            # Full LTO propagates both constant return values into main, then erases the
+            # now-unused probe results. Its final proof is main's unconditional success.
+            self.assertRegex(caller_irs[0], r"(?s)define [^\n]*@main\(.*?\n  ret i32 0\n}")
+        evidence = ROOT / f"build/reports/{mode}lto" / TARGET
         evidence.mkdir(parents=True, exist_ok=True)
+        retained = [original, annotated, rust_obj, rust_annotated, native_obj, binary,
+                    self.work / "caller.c", rust, native, main_c, self.contracts]
+        for path in retained:
+            shutil.copyfile(path, evidence / path.name)
         for label, obj in [("c-before", original), ("c-after", annotated),
                            ("rust-before", rust_obj), ("rust-after", rust_annotated)]:
             (evidence / f"{label}.ll").write_text(self.optimized(obj))
         for i, text in enumerate(caller_irs):
             (evidence / f"linked-{i}.ll").write_text(text)
+        for i, path in enumerate(saved):
+            shutil.copyfile(path, evidence / f"linked-{i}.bc")
         (evidence / "linked.asm").write_text(run(llvm("llvm-objdump"), "-d", binary).stdout)
         (evidence / "metadata.json").write_text(json.dumps({
-            "target": TARGET, "clang": run(llvm("clang"), "--version").stdout,
+            "target": TARGET, "mode": mode, "clang": run(llvm("clang"), "--version").stdout,
             "rust": run("rustc", "-vV").stdout,
             "sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                       for p in [original, annotated, rust_obj, rust_annotated, native_obj, binary]},
-            "linker": linker, "flags": ["-flto=thin", "-O2", save],
+                       for p in retained},
+            "linker": linker, "flags": link_flags,
+            "c_flags": ["-O1", f"-flto={mode}"], "rust_flags": rust_flags,
+            "native_flags": ["-O2"],
         }, indent=2) + "\n")
+
+    def test_rejects_fat_lto_objects_and_mixed_archives(self):
+        original = self.c_object()
+        source = self.work / "fat.c"
+        source.write_text("extern long long seam_inspect(const long long *);\n"
+                          "long long fat_probe(void) { long long value = 42; seam_inspect(&value); return value; }\n")
+        # LLVM FatLTO is ELF-only. Cross-compile this format check even on macOS; no foreign
+        # executable runs, and a matching ordinary host bitcode member exposes partial rewrites.
+        for mode in ("thin", "full"):
+            with self.subTest(mode=mode):
+                fat = self.work / f"fat-{mode}.o"
+                run(llvm("clang"), "--target=x86_64-unknown-linux-gnu", "-O1",
+                    f"-flto={mode}", "-ffat-lto-objects", "-c", source, "-o", fat)
+                self.assertIn(".llvm.lto", run(llvm("llvm-readobj"), "--sections", fat).stdout)
+                archive = self.work / f"mixed-{mode}.a"
+                run(llvm("llvm-ar"), "rcs", archive, original, fat)
+                for path in (fat, archive):
+                    before = path.read_bytes()
+                    output = self.work / f"rejected-{path.name}"
+                    result = self.apply(path, output, ok=False)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("unsupported embedded LLVM bitcode (.llvm.lto)", result.stdout + result.stderr)
+                    self.assertEqual(path.read_bytes(), before)
+                    self.assertFalse(output.exists())
+        # A genuine machine-code ELF member still passes through byte-for-byte.
+        native = self.work / "native-elf.o"
+        run(llvm("clang"), "--target=x86_64-unknown-linux-gnu", "-O1", "-c", source, "-o", native)
+        before = native.read_bytes()
+        plain_archive = self.work / "plain-elf.a"
+        run(llvm("llvm-ar"), "rcs", plain_archive, original, native)
+        rewritten = self.work / "plain-elf.seam.a"
+        self.apply(plain_archive, rewritten)
+        run(llvm("llvm-ar"), "x", rewritten, native.name, cwd=self.work)
+        self.assertEqual(native.read_bytes(), before)
 
 
     def test_rlib_members_and_native_archive_members(self):

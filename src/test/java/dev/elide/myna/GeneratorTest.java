@@ -777,6 +777,10 @@ class GeneratorTest {
 
   @Test
   void jsonEscapingAndImmutability() {
+    assertEquals("\"\"", SeamJson.quote(""));
+    assertEquals("\"caf\u00e9 \ud83d\ude80\"", SeamJson.quote("caf\u00e9 \ud83d\ude80"));
+    assertEquals("\"\\n\"", SeamJson.quote("\n"));
+    assertEquals("\"\\\\\"", SeamJson.quote("\\"));
     assertEquals("\"a\\\"\\\\\\n\\r\\t\\u0001\"", SeamJson.quote("a\"\\\n\r\t\u0001"));
     assertEquals("null", SeamJson.quote(null));
     var module = Dsl.parse(VALID);

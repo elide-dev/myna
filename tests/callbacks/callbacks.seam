@@ -1,0 +1,53 @@
+module callbacks target=aarch64-apple-darwin java_package=fixture.callbacks java_class=CallbackApi
+callback Reducer return=i64 ffm_java=fixture.callbacks.CallbackOps.reduce ffm_sentinel=-1
+  param left type=i64
+  param right type=i64
+end
+callback ByteResult return=u8
+  param fail type=bool
+end
+callback ShortResult return=u16
+  param fail type=bool
+end
+callback Notify return=void
+  param value type=i32
+end
+callback PointerResult return=ptr<u8>
+  param value type=ptr<u8>
+end
+callback FloatResult return=f32
+  param value type=f32
+end
+callback DoubleResult return=f64
+  param value type=f64
+end
+import invoke symbol=myna_invoke_callback return=i64 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<Reducer>
+  param threaded type=bool
+  param left type=i64
+  param right type=i64
+end
+import invokeByte symbol=myna_invoke_byte return=i32 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<ByteResult>
+  param fail type=bool
+end
+import invokeShort symbol=myna_invoke_short return=i32 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<ShortResult>
+  param fail type=bool
+end
+import callNotify symbol=myna_notify return=void error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<Notify>
+  param value type=i32
+end
+import invokePointer symbol=myna_invoke_pointer return=ptr<u8> error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<PointerResult>
+  param value type=ptr<u8>
+end
+import invokeFloat symbol=myna_invoke_float return=f32 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<FloatResult>
+  param value type=f32
+end
+import invokeDouble symbol=myna_invoke_double return=f64 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<DoubleResult>
+  param value type=f64
+end

@@ -28,6 +28,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Select Apple linker for instrumented LLVM objects
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Xcode 16.4 ld rejects fuzzer+UBSan relocations (LLVM #139684).
+          # Keep pinned Clang/compiler-rt; select the platform SDK and linker.
+          export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --show-sdk-version
+          xcrun ld -v
       - name: Setup tools
         uses: ./.github/actions/setup
       - name: Verify LLVM compatibility
@@ -46,7 +58,11 @@ jobs:
         run: mise run test:cpp
       - run: mise run test:rust-coverage
         if: runner.os == 'Linux'
-      - run: mise run test:asan
+      - name: ASan, UBSan and LSan with ten-minute fuzz campaign
+        timeout-minutes: 15
+        env:
+          MYNA_PYTHON_TIMEOUT: 14m
+        run: mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 600
       - run: mise run test:tsan
       - run: mise run test:e2e
       - run: mise run test:llvm-coverage
@@ -84,9 +100,22 @@ jobs:
             build/dist/
             build/reports/
             build/sanitizers/**/*.log
-            build/sanitizers/**/command.json
+            build/sanitizers/**/*.json
             build/sanitizers/**/crash-*
+            build/sanitizers/**/corpus/*
+            build/sanitizers/**/fuzz-values
             build/comparison/**/*.json
             build/comparison/**/*.jsonl
             build/comparison/**/*.md
             build/comparison/**/*.log
+            build/comparison/**/*.asm
+            build/comparison/**/*.bc
+            build/comparison/**/*.ll
+            build/comparison/native
+            build/comparison/ffm-aot
+            build/static-jni-test/*.bc
+            build/static-jni-test/*.ll
+            build/static-jni-test/*.txt
+            build/static-jni-test/jni-app
+            build/static-jni-test/generated/seam-jni.*
+            build/aot-ffm-test/jni*.bc

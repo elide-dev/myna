@@ -19,7 +19,7 @@ import org.graalvm.word.PointerBase;
 
 public final class MynaNative {
     private MynaNative() {}
-    public static final String ABI_FINGERPRINT = "84aeca3df1975cb714257e05567849cf84de6995534d740b37399423b8e6da60";
+    public static final String ABI_FINGERPRINT = "09ffa225180ad8b62222e60cda636f0f77ad83864ba79474753bb02e3419e565";
     public static final int BINDING_ABI_VERSION = 2;
     public interface inspect_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")

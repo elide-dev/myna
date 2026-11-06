@@ -1,4 +1,4 @@
-// Apply generated seam contracts to actual LLVM 23 bitcode, before ThinLTO indexing.
+// Apply generated seam contracts to actual LLVM 23 bitcode, before ThinLTO/full-LTO linking.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
@@ -17,6 +17,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ArchiveWriter.h"
+#include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
@@ -218,21 +219,41 @@ static Error apply(Module &M, const Module &C, StringRef Hash) {
 }
 static Expected<std::unique_ptr<MemoryBuffer>> rewrite(MemoryBufferRef Buffer, LLVMContext &Context,
                                                       const Module &Contract, StringRef Hash) {
+  auto LTO = getBitcodeLTOInfo(Buffer);
+  if (!LTO) return LTO.takeError();
   auto Parsed = parseBitcodeFile(Buffer, Context);
   if (!Parsed) return Parsed.takeError();
   Module &M = **Parsed;
   unsigned Before = Matched;
   if (auto E = apply(M, Contract, Hash)) return E;
   if (Before == Matched) return MemoryBuffer::getMemBufferCopy(Buffer.getBuffer(), Buffer.getBufferIdentifier());
-  // Recompute both summary and module hash. Reusing old summaries/cache keys is incorrect.
+  // Recompute summaries when present, without converting full-LTO input into ThinLTO.
+  // Reusing old summaries/cache keys is incorrect.
   // Producers without a GUID pass (llvm-as, older tools) leave definitions unassigned.
   AssignGUIDPass::runOnModule(M);
-  ProfileSummaryInfo PSI(M);
-  auto Index = buildModuleSummaryIndex(M, nullptr, &PSI);
   SmallVector<char, 0> Bytes;
   raw_svector_ostream Stream(Bytes);
-  WriteBitcodeToFile(M, Stream, false, &Index, true);
+  if (LTO->HasSummary) {
+    ProfileSummaryInfo PSI(M);
+    auto Index = buildModuleSummaryIndex(M, nullptr, &PSI);
+    WriteBitcodeToFile(M, Stream, false, &Index, true);
+  } else WriteBitcodeToFile(M, Stream, false, nullptr, true);
   return MemoryBuffer::getMemBufferCopy(StringRef(Bytes.data(), Bytes.size()), Buffer.getBufferIdentifier());
+}
+// LLVM FatLTO embeds optimizer input beside machine code. Preserving such a member unchanged
+// would silently omit its contracts while reporting success for another bitcode archive member.
+static Error rejectEmbeddedBitcode(MemoryBufferRef Buffer) {
+  if (identify_magic(Buffer.getBuffer()) != file_magic::elf_relocatable) return Error::success();
+  auto Object = object::ObjectFile::createObjectFile(Buffer);
+  if (!Object) return Object.takeError();
+  for (auto Section : (*Object)->sections()) {
+    auto Name = Section.getName();
+    if (!Name) return Name.takeError();
+    if (*Name == ".llvm.lto")
+      return fail("unsupported embedded LLVM bitcode (.llvm.lto) in " + Buffer.getBufferIdentifier() +
+                  "; provide standalone -flto=thin/-flto=full bitcode instead of a FatLTO object");
+  }
+  return Error::success();
 }
 static Error run() {
   if (Input == Output) return fail("input and output must differ; preserve the original object for contract changes");
@@ -273,7 +294,10 @@ static Error run() {
         auto Rewritten = rewrite(Member->Buf->getMemBufferRef(), Context, *Contract, ContentHash);
         if (!Rewritten) return Rewritten.takeError();
         Member->Buf = std::move(*Rewritten);
-      } else ++PreservedMembers;
+      } else {
+        if (auto E = rejectEmbeddedBitcode(Member->Buf->getMemBufferRef())) return E;
+        ++PreservedMembers;
+      }
       Members.push_back(std::move(*Member));
     }
     if (Iteration) return Iteration;
@@ -281,7 +305,10 @@ static Error run() {
                                         (*Archive)->kind(), true, false);
     if (!Rebuilt) return Rebuilt.takeError();
     Result = std::move(*Rebuilt);
-  } else return fail("input has no standalone LLVM bitcode; compile with -flto=thin or Rust -Clinker-plugin-lto (native machine-code objects cannot carry usable optimizer annotations)");
+  } else {
+    if (auto E = rejectEmbeddedBitcode((*Buffer)->getMemBufferRef())) return E;
+    return fail("input has no standalone LLVM bitcode; compile with -flto=thin/-flto=full or Rust -Clinker-plugin-lto (native machine-code objects cannot carry usable optimizer annotations)");
+  }
   if (Matched == 0) return fail("no contract symbols matched input; refusing an ineffective rewrite");
   // Commit after every member, signature and contract has been validated.
   SmallString<256> Temporary;
