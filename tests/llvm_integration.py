@@ -250,9 +250,8 @@ int main(void) { return c_probe() == 42 && rust_probe() == 42 ? 0 : 1; }
 
     @unittest.skipUnless(sys.platform == "linux", "the shipped ELF sysroot runs on Linux")
     def test_shipped_fat_lto_sysroot_archive(self):
-        libraries = list((Path(os.environ["ELIDE_TOOLCHAIN_HOME"]) / "sysroot").glob("*/usr/lib/libzstd.a"))
-        self.assertEqual(len(libraries), 1, "the pinned toolchain must ship its host zstd archive")
-        original = libraries[0]
+        original = Path(os.environ["ELIDE_TOOLCHAIN_HOME"]) / "sysroot" / TARGET / "usr/lib/libzstd.a"
+        self.assertTrue(original.is_file(), f"the pinned toolchain must ship {original}")
         contracts = self.work / "zstd.ll"
         contracts.write_text(self.contracts.read_text() + "\ndeclare i32 @ZSTD_versionNumber() nounwind willreturn nofree\n")
         annotated = self.work / "libzstd.a"
