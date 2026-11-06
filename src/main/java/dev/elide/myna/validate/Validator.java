@@ -5,6 +5,7 @@ import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import java.math.BigInteger;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /** Rejects unsupported ABI shapes before any output is written. */
 public final class Validator {
@@ -21,6 +22,7 @@ public final class Validator {
           "nonnull", "nocapture", "readonly", "writeonly", "noalias", "align", "dereferenceable");
   private static final Set<String> FUNCTION_FACTS =
       Set.of("nounwind", "noreturn", "willreturn", "nofree", "native_leaf");
+  private static final Pattern IDENTIFIER = Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*");
   private static final Set<String> KEYWORDS =
       Set.of(
           ("abstract assert auto boolean break byte case catch char class const continue default do"
@@ -209,9 +211,12 @@ public final class Validator {
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
-      for (String suffix : List.of("_Downcall", "_CriticalDowncall"))
-        require(!types.contains(function.name() + suffix) && !signatures.contains(function.name() + suffix),
+      for (String suffix : List.of("_Downcall", "_CriticalDowncall")) {
+        String generated = function.name() + suffix;
+        // All callback signatures are already present in types.
+        require(!types.contains(generated),
             "type collides with generated FFM adapter for " + function.name());
+      }
       if (Seam.nativeLeaf(function)) {
         require(!enabled(function.facts(), "noreturn"), "noreturn requires native_leaf=false in binding ABI 2");
         require(!types.contains(function.name() + "_Leaf") && !signatures.contains(function.name() + "_Leaf")
@@ -449,7 +454,7 @@ public final class Validator {
   private static void identifier(String name) {
     require(
         name != null
-            && name.matches("[a-zA-Z][a-zA-Z0-9_]*")
+            && IDENTIFIER.matcher(name).matches()
             && !KEYWORDS.contains(name)
             && !name.startsWith("seamPadding"),
         "invalid or reserved identifier: " + name);
