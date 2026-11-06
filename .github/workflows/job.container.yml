@@ -2,13 +2,10 @@ name: "Build - Containers"
 
 "on":
   workflow_call:
-    inputs:
-      publish:
-        description: Publish smoke-tested images for a version tag
-        type: boolean
-        default: false
 
-# Inherit the caller's permissions: only the release entrypoint grants packages: write.
+permissions:
+  contents: read
+
 jobs:
   image:
     runs-on: ubuntu-24.04
@@ -19,103 +16,12 @@ jobs:
         target: [generator, llvm23]
     steps:
       - name: "Setup: Harden Runner"
-        if: runner.os == 'Linux'
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
-      - name: "Setup: Checkout"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: ./.github/actions/container-build
         with:
-          version: v0.38.2
-      - name: Image name
-        id: image
-        shell: bash
-        run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          suffix=""
-          if [ '${{ matrix.target }}' = llvm23 ]; then suffix=-llvm23; fi
-          echo "name=$image" >> "$GITHUB_OUTPUT"
-          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        id: meta
-        with:
-          images: ${{ steps.image.outputs.name }}
-          flavor: suffix=${{ steps.image.outputs.suffix }},onlatest=true
-          tags: |
-            type=ref,event=tag
-            type=sha
-          labels: |
-            org.opencontainers.image.licenses=Apache-2.0 OR MIT
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
           target: ${{ matrix.target }}
-          load: true
-          pull: true
-          push: false
-          tags: myna:test
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
-      - name: Smoke-test container
-        run: |
-          docker run --rm myna:test --version
-          mkdir -p build/container
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test generate examples/buffer.seam --out build/container --target x86_64-unknown-linux-gnu --check
-      - name: Smoke-test object application
-        if: matrix.target == 'llvm23'
-        run: |
-          printf '%s\n' 'extern long seam_inspect(const long*); long f(void) { long x=42; seam_inspect(&x); return x; }' > build/container/caller.c
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint clang myna:test -O1 -flto=thin -c build/container/caller.c -o build/container/caller.o
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:test apply --contracts build/container/seam.ll --input build/container/caller.o --output build/container/caller.seam.o
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        id: publish
-        with:
-          context: .
-          target: ${{ matrix.target }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.target }}
-          provenance: mode=max
-      - name: Inventory the published image by digest
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          image: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
-          config: .github/syft-image.yaml
-          syft-version: v1.56.0
-          format: spdx-json
-          output-file: container-${{ matrix.target }}.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
-      - name: Attest container build provenance
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.publish.outputs.digest }}
-          push-to-registry: true
-      - name: Attest the container inventory
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: container-${{ matrix.target }}.spdx.json
-          push-to-registry: true
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: container-sbom-${{ matrix.target }}
-          path: container-${{ matrix.target }}.spdx.json
