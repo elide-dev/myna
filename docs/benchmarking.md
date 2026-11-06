@@ -151,7 +151,7 @@ claims. Medians, process ranges and bootstrap intervals describe the observed
 runs, not universal hardware limits. Compare results only for matching workload,
 compiler/runtime, transition policy and hardware profiles.
 
-CodSpeed's generator JMH wall series uses the PR #29 harness. Separate native
+CodSpeed's generator JMH wall series uses the PR #29 harness. Each case runs two forks with 15 one-second warmup and five measured iterations: shorter warmup left Graal JIT convergence inside the measured rounds and produced 10-17% swings between identical commits. The workflow shards the JMH cases across four jobs, which CodSpeed merges into one report. Separate native
 wall and simulation jobs exercise inline, owned and borrowed value construction.
 These use its pinned instrument-hooks submodule and fail if instrumentation was
 requested but is absent. Native wall-time runs retain 30 raw measured rounds after
