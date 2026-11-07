@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "myna-values-fixture"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "myna-values",
  "serde",
