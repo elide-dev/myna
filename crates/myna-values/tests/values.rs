@@ -1082,3 +1082,165 @@ fn batch_text_mixed_storage_sizing_and_transactional_errors() {
         );
     }
 }
+
+#[test]
+fn abi4_allocation_failures_poison_and_recover() {
+    fn populate(b: &mut Builder<'_, FailAfter>) -> Result<(), Error> {
+        b.enable_v4(1, true)?;
+        b.begin_object()?;
+        for i in 0..16 {
+            b.value(&format!("key-{i}"))?;
+            b.begin_object()?;
+            b.value("nested")?;
+            b.value(&i)?;
+            b.end()?;
+        }
+        b.metadata(0, 42)?;
+        b.end()
+    }
+    let baseline = FailAfter::new(usize::MAX);
+    {
+        let mut b = Builder::new_in(baseline.clone());
+        populate(&mut b).unwrap();
+        assert_eq!(b.finish().unwrap().directory().len(), 32);
+    }
+    baseline.assert_released();
+    for fail_after in 0..baseline.attempts() {
+        let allocator = FailAfter::new(fail_after);
+        {
+            let mut b = Builder::new_in(allocator.clone());
+            assert!(matches!(populate(&mut b), Err(Error::Allocation)));
+            assert!(b.finish().is_err());
+            let attempts = allocator.attempts();
+            assert!(b.value(&1).is_err());
+            assert_eq!(allocator.attempts(), attempts);
+            allocator.allow_allocations();
+            b.clear();
+            populate(&mut b).unwrap();
+            let view = b.finish().unwrap();
+            assert_eq!(view.directory().len(), 32);
+            assert_eq!(view.metadata().len(), view.nodes().len());
+            assert_eq!(view.metadata()[0], 42);
+            let attempts = allocator.attempts();
+            b.clear();
+            populate(&mut b).unwrap();
+            assert_eq!(allocator.attempts(), attempts);
+        }
+        allocator.assert_released();
+    }
+}
+
+#[test]
+fn batch_text_rejects_bad_descriptors_and_handles_empty_regions() {
+    use myna_values::text::{TextEntry, myna_tape_text_v1};
+    let arena = Bump::new();
+    let mut doc = Document::new(&arena);
+    let raw = doc.encode("hello").unwrap().raw();
+    // SAFETY: descriptor borrows a live document; invalid pointer cases below
+    // are rejected by alignment/null checks before any dereference.
+    unsafe {
+        let base = *raw.as_ptr();
+        let query = |view: &RawView| {
+            myna_tape_text_v1(view, std::ptr::null_mut(), 0, std::ptr::null_mut(), 0)
+        };
+        for case in 0..12 {
+            let mut view = base;
+            match case {
+                0 => view.flags = 2,
+                1 => view.node_count = 0,
+                2 => view.node_count = u64::MAX,
+                3 => view.nodes = std::ptr::null(),
+                4 => view.nodes = std::ptr::without_provenance(1),
+                5 => {
+                    view.bytes = std::ptr::null();
+                    view.byte_count = 1;
+                }
+                6 => view.byte_count = u64::MAX,
+                7 => view.region_count = u64::MAX,
+                8 => {
+                    view.regions = std::ptr::null();
+                    view.region_count = 1;
+                }
+                9 => {
+                    view.regions = std::ptr::without_provenance(1);
+                    view.region_count = 1;
+                }
+                10 => view.version = 99,
+                _ => view.version = 2,
+            }
+            assert_eq!(query(&view), -2, "case {case}");
+        }
+        let mut output = [0xcc; 16];
+        let mut table = [TextEntry::default()];
+        assert_eq!(
+            myna_tape_text_v1(&base, output.as_mut_ptr(), u64::MAX, table.as_mut_ptr(), 1),
+            -2
+        );
+        assert_eq!(
+            myna_tape_text_v1(&base, output.as_mut_ptr(), 16, table.as_mut_ptr(), u64::MAX),
+            -2
+        );
+        assert_eq!(
+            myna_tape_text_v1(&base, std::ptr::null_mut(), 16, table.as_mut_ptr(), 1),
+            -2
+        );
+        assert_eq!(
+            myna_tape_text_v1(&base, output.as_mut_ptr(), 16, std::ptr::null_mut(), 1),
+            -2
+        );
+        assert_eq!(
+            myna_tape_text_v1(
+                &base,
+                output.as_mut_ptr(),
+                16,
+                std::ptr::without_provenance_mut(1),
+                1
+            ),
+            -2
+        );
+        assert_eq!(
+            myna_tape_text_v1(&base, output.as_mut_ptr(), 16, table.as_mut_ptr(), 0),
+            -3
+        );
+        assert!(output.iter().all(|b| *b == 0xcc));
+        let mut node = Node {
+            tag: STRING | REGION_TEXT,
+            len: 0,
+            payload: 0,
+            next: 1,
+        };
+        let mut view = base;
+        view.nodes = &node;
+        view.bytes = std::ptr::null();
+        view.byte_count = 0;
+        assert_eq!(query(&view), 0);
+        assert_eq!(
+            myna_tape_text_v1(&view, std::ptr::null_mut(), 0, table.as_mut_ptr(), 1),
+            0
+        );
+        assert_eq!(table[0].encoding, 1);
+        node.len = 1;
+        view.nodes = &node;
+        assert_eq!(query(&view), -2);
+        node.payload = 1_u64 << 32;
+        view.nodes = &node;
+        assert_eq!(query(&view), -2);
+        let region = Region {
+            data: std::ptr::null(),
+            len: 1,
+        };
+        view.regions = &region;
+        view.region_count = 1;
+        assert_eq!(query(&view), -2);
+        let region = Region {
+            data: std::ptr::null(),
+            len: u64::MAX,
+        };
+        view.regions = &region;
+        assert_eq!(query(&view), -2);
+        node.tag = STRING;
+        node.len = 17;
+        view.nodes = &node;
+        assert_eq!(query(&view), -2);
+    }
+}

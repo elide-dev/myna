@@ -119,6 +119,9 @@ MYNA_STATIC_ASSERT(offsetof(myna_value_node, payload) == 8, "Myna node payload")
 MYNA_STATIC_ASSERT(offsetof(myna_value_node, next) == 16, "Myna node next");
 MYNA_STATIC_ASSERT(sizeof(myna_value_region) == 16, "Myna region layout");
 MYNA_STATIC_ASSERT(sizeof(myna_value_view_v4) == 88, "Myna v4 descriptor layout");
+MYNA_STATIC_ASSERT(offsetof(myna_value_view_v4, directory) == 56, "Myna directory pointer");
+MYNA_STATIC_ASSERT(offsetof(myna_value_view_v4, metadata) == 72, "Myna metadata pointer");
+MYNA_STATIC_ASSERT(sizeof(myna_text_entry) == 24, "Myna text entry layout");
 MYNA_STATIC_ASSERT(sizeof(myna_value_directory_entry) == 8, "Myna directory layout");
 MYNA_STATIC_ASSERT(sizeof(myna_value_view) == 56, "Myna descriptor layout");
 MYNA_STATIC_ASSERT(offsetof(myna_value_view, nodes) == 8, "Myna nodes");

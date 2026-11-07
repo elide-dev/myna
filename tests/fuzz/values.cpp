@@ -93,6 +93,28 @@ extern "C" int LLVMFuzzerInitialize(int *, char ***) {
   assert(myna_value_region_id(view.nodes) == region);
   assert(view.nodes[0].length == token.size());
   assert(std::memcmp(view.regions[region - 1].data, token.data(), token.size()) == 0);
+  // Deterministic extension cases complement mutation of malformed protocols.
+  myna::value_builder indexed;
+  indexed.enable_v4(1, true);
+  indexed.reserve(32, 128, 2, 4);
+  auto borrowed = indexed.region("borrowed long object key");
+  indexed.begin_array(); indexed.begin_object();
+  indexed.string("costarring"); indexed.integer(1);
+  indexed.string("liquid"); indexed.null();
+  indexed.string("owned long object key"); indexed.boolean(true);
+  indexed.string_ref(borrowed, 0, 24); indexed.null();
+  indexed.end(); indexed.metadata(1, 42); indexed.ref(1); indexed.end();
+  auto extended = indexed.view_v4();
+  assert(extended.directory_count == 4 && extended.metadata_count == 11);
+  assert(extended.metadata[1] == 42 && extended.base.nodes[10].payload == 1);
+  assert(myna_value_hash(reinterpret_cast<const uint8_t *>("hello"), 5) == UINT32_C(0x4f9f2cab));
+  rejected = false; try { indexed.view(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
+  rejected = false; try { decimal.view_v4(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
+  rejected = false; try { indexed.enable_v4(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
+  indexed.clear(); indexed.begin_array();
+  rejected = false; try { indexed.ref(0); } catch (const std::invalid_argument &) { rejected = true; } assert(rejected);
+  indexed.clear(); indexed.enable_v4(0, false); indexed.null();
+  assert(indexed.view_v4().metadata_count == 0);
   return 0;
 }
 

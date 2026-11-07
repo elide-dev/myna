@@ -166,6 +166,11 @@ else:
                "-rss_limit_mb=0", f"-malloc_limit_mb={args.malloc_limit_mb}",
                f"-timeout={args.timeout}", "-detect_leaks=1",
                f"-artifact_prefix={work}/", corpus]
+    # macOS libc++abi leaks a demangler output buffer when libFuzzer prints newly
+    # covered template functions. Disable that progress listing, not symbolized
+    # sanitizer reports or leak detection. Expected-failure canaries still run.
+    if sys.platform == "darwin":
+        command.append("-print_new_funcs=0")
     os.environ["LLVM_PROFILE_FILE"] = str(work / "values.profraw")
     (work / "values.profraw").unlink(missing_ok=True)
     (work / "command.json").write_text(json.dumps(list(map(str, command)), indent=2))

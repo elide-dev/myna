@@ -10,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,21 @@ spec.loader.exec_module(native_image)
 
 
 class BuildPolicyTest(unittest.TestCase):
+    def test_container_toolchain_checksums_match_locked_release(self):
+        config = tomllib.loads((ROOT / "mise.toml").read_text())
+        version = config["tools"]["github:elide-dev/toolchain"]["version"]
+        lock = tomllib.loads((ROOT / "mise.lock").read_text())
+        docker = (ROOT / "Dockerfile").read_text()
+        self.assertIn(f"/releases/download/v{version}/elide-toolchain-{version}-linux-", docker)
+        seen = set()
+        for entry in lock["tools"]["github:elide-dev/toolchain"]:
+            self.assertEqual(entry["version"], version)
+            for platform, artifact in entry.items():
+                if platform in ("platforms.linux-x64", "platforms.linux-arm64"):
+                    self.assertIn(artifact["checksum"].removeprefix("sha256:"), docker)
+                    seen.add(platform)
+        self.assertEqual(seen, {"platforms.linux-x64", "platforms.linux-arm64"})
+
     def test_elide_wrapper_forwards_build_flags_and_source_epoch(self):
         with tempfile.TemporaryDirectory() as temporary:
             tool = Path(temporary) / "elide"

@@ -3,9 +3,9 @@ package dev.elide.myna.values;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Read-only access to Myna value ABI v3 (with v2 reader compatibility). Node indexes replace
- * per-value wrappers. The caller must keep the backing storage alive and immutable for every read.
- * Implementations must bounds-check their backing allocation at construction.
+ * Read-only access to Myna value ABI v2, v3, and v4. Node indexes replace per-value wrappers. The
+ * caller must keep the backing storage alive and immutable for every read. Implementations must
+ * bounds-check their backing allocation at construction.
  */
 public abstract class ValueTape {
   public static final int ABI_VERSION = 3;

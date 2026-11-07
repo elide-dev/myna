@@ -62,12 +62,29 @@ public final class ValuesMain {
       // A failed descriptor bind must preserve all old fields.
       Pointer invalid = org.graalvm.nativeimage.StackValue.get(88);
       for (int offset = 0; offset < 88; offset += 8) invalid.writeLong(offset, ((Pointer) descriptor).readLong(offset));
-      invalid.writeLong(16, -1);
-      rejected = false;
-      try { tape.rebind(invalid); } catch (IllegalArgumentException expected) { rejected = true; }
-      check(rejected && tape.nodeCount() == 9 && tape.metadata(1) == 42);
+      for (long[] mutation : new long[][]{{0, 99}, {4, 2}, {8, 0}, {16, -1}, {24, 0},
+          {48, -1}, {56, 0}, {64, -1}, {72, 0}, {80, 1}}) {
+        for (int offset = 0; offset < 88; offset += 8) invalid.writeLong(offset, ((Pointer) descriptor).readLong(offset));
+        int offset = (int) mutation[0];
+        if (offset == 0 || offset == 4) invalid.writeInt(offset, (int) mutation[1]);
+        else invalid.writeLong(offset, mutation[1]);
+        // This fixture has no external bytes; make a null byte pointer invalid explicitly.
+        if (offset == 24) invalid.writeLong(32, 1);
+        rejected = false;
+        try { tape.rebind(invalid); } catch (IllegalArgumentException expected) { rejected = true; }
+        check(rejected && tape.nodeCount() == 9 && tape.metadata(1) == 42);
+      }
+      Pointer scalar = org.graalvm.nativeimage.StackValue.get(24);
+      scalar.writeLong(0, 0); scalar.writeLong(8, 0); scalar.writeLong(16, 1);
+      for (int offset = 0; offset < 88; offset += 8) invalid.writeLong(offset, 0);
+      invalid.writeInt(0, 3); invalid.writeWord(8, scalar); invalid.writeLong(16, 1);
+      tape.rebind(invalid);
+      check(tape.nodeCount() == 1 && tape.kindAt(0) == ValueTape.NULL && tape.metadata(0) == 0);
       tape.rebind((Pointer) descriptor); tape.validate();
       check(tape.stringValue(tape.find(1, key("liquid"))).equals("🦀"));
+      rejected = false;
+      try { new SimdNativeValueTape((Pointer) descriptor, -1); } catch (IllegalArgumentException expected) { rejected = true; }
+      check(rejected);
       if (compiledCheck != null) {
         try { compiledCheck.accept(tape); } catch (Throwable failure) { failure.printStackTrace(); throw failure; }
       }
