@@ -145,11 +145,11 @@
 100010268: b9002fe1    	str	w1, [sp, #0x2c]
 10001026c: 7100043f    	cmp	w1, #0x1
 100010270: 5400022b    	b.lt	0x1000102b4 <_Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x64>
-100010274: 52873f23    	mov	w3, #0x39f9             ; =14841
+100010274: 52871fc3    	mov	w3, #0x38fe             ; =14590
 100010278: 72a000a3    	movk	w3, #0x5, lsl #16
 10001027c: 8b030f63    	add	x3, x27, x3, lsl #3
 100010280: f90013e3    	str	x3, [sp, #0x20]
-100010284: f9401060    	ldr	x0, [x3, #0x20]
+100010284: f9402460    	ldr	x0, [x3, #0x48]
 100010288: aa0203e1    	mov	x1, x2
 10001028c: 94000795    	bl	0x1000120e0 <_Floor_javaBatch256_sBLMR8Ztqr8TxvWCU9C5E1>
 100010290: b9402fe1    	ldr	w1, [sp, #0x2c]
@@ -172,7 +172,7 @@
 1000102d4: b9002be9    	str	w9, [sp, #0x28]
 1000102d8: f94013e3    	ldr	x3, [sp, #0x20]
 1000102dc: aa0003e1    	mov	x1, x0
-1000102e0: f9401060    	ldr	x0, [x3, #0x20]
+1000102e0: f9402460    	ldr	x0, [x3, #0x48]
 1000102e4: 9400077f    	bl	0x1000120e0 <_Floor_javaBatch256_sBLMR8Ztqr8TxvWCU9C5E1>
 1000102e8: b9402be1    	ldr	w1, [sp, #0x28]
 1000102ec: 11040022    	add	w2, w1, #0x100
@@ -186,13 +186,13 @@
 10001030c: f94013e3    	ldr	x3, [sp, #0x20]
 100010310: 17fffff4    	b	0x1000102e0 <_Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x90>
 100010314: f94013e4    	ldr	x4, [sp, #0x20]
-100010318: 9405edea    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010318: 9405ee1e    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 10001031c: aa0003e1    	mov	x1, x0
 100010320: b9002be2    	str	w2, [sp, #0x28]
 100010324: aa0403e3    	mov	x3, x4
 100010328: 17ffffee    	b	0x1000102e0 <_Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x90>
-10001032c: 14029ad9    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010330: 1405ede4    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001032c: 14029b0d    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010330: 1405ee18    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010334: cccccccc    	<unknown>
 100010338: cccccccc    	<unknown>
 10001033c: cccccccc    	<unknown>
@@ -208,8 +208,8 @@
 100010358: b9002fe1    	str	w1, [sp, #0x2c]
 10001035c: 7100043f    	cmp	w1, #0x1
 100010360: 5400020b    	b.lt	0x1000103a0 <_Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x60>
-100010364: 90002103    	adrp	x3, 0x100430000 <___data>
-100010368: f9408c63    	ldr	x3, [x3, #0x118]
+100010364: 90002083    	adrp	x3, 0x100420000 <___data>
+100010368: f9408863    	ldr	x3, [x3, #0x110]
 10001036c: f90013e3    	str	x3, [sp, #0x20]
 100010370: aa0203e0    	mov	x0, x2
 100010374: aa0303fe    	mov	x30, x3
@@ -248,12 +248,12 @@
 1000103f8: f94013e3    	ldr	x3, [sp, #0x20]
 1000103fc: 17fffff5    	b	0x1000103d0 <_Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x90>
 100010400: f94013e4    	ldr	x4, [sp, #0x20]
-100010404: 9405edaf    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010404: 9405ede3    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010408: b9002be2    	str	w2, [sp, #0x28]
 10001040c: aa0403e3    	mov	x3, x4
 100010410: 17fffff0    	b	0x1000103d0 <_Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x90>
-100010414: 14029a9f    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010418: 1405edaa    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010414: 14029ad3    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010418: 1405edde    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 10001041c: cccccccc    	<unknown>
 
 # svm: _Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF
@@ -267,11 +267,11 @@
 100010438: b9002fe1    	str	w1, [sp, #0x2c]
 10001043c: 7100043f    	cmp	w1, #0x1
 100010440: 5400022b    	b.lt	0x100010484 <_Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x64>
-100010444: 52873f23    	mov	w3, #0x39f9             ; =14841
+100010444: 52871fc3    	mov	w3, #0x38fe             ; =14590
 100010448: 72a000a3    	movk	w3, #0x5, lsl #16
 10001044c: 8b030f63    	add	x3, x27, x3, lsl #3
 100010450: f90013e3    	str	x3, [sp, #0x20]
-100010454: f9401060    	ldr	x0, [x3, #0x20]
+100010454: f9402460    	ldr	x0, [x3, #0x48]
 100010458: aa0203e1    	mov	x1, x2
 10001045c: 94000779    	bl	0x100012240 <_Floor_javaBatch4_wasvmklIr2I1bT69W7y2vI>
 100010460: b9402fe1    	ldr	w1, [sp, #0x2c]
@@ -294,7 +294,7 @@
 1000104a4: b9002be9    	str	w9, [sp, #0x28]
 1000104a8: f94013e3    	ldr	x3, [sp, #0x20]
 1000104ac: aa0003e1    	mov	x1, x0
-1000104b0: f9401060    	ldr	x0, [x3, #0x20]
+1000104b0: f9402460    	ldr	x0, [x3, #0x48]
 1000104b4: 94000763    	bl	0x100012240 <_Floor_javaBatch4_wasvmklIr2I1bT69W7y2vI>
 1000104b8: b9402be1    	ldr	w1, [sp, #0x28]
 1000104bc: 11001022    	add	w2, w1, #0x4
@@ -308,13 +308,13 @@
 1000104dc: f94013e3    	ldr	x3, [sp, #0x20]
 1000104e0: 17fffff4    	b	0x1000104b0 <_Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x90>
 1000104e4: f94013e4    	ldr	x4, [sp, #0x20]
-1000104e8: 9405ed76    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000104e8: 9405edaa    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000104ec: aa0003e1    	mov	x1, x0
 1000104f0: b9002be2    	str	w2, [sp, #0x28]
 1000104f4: aa0403e3    	mov	x3, x4
 1000104f8: 17ffffee    	b	0x1000104b0 <_Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x90>
-1000104fc: 14029a65    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010500: 1405ed70    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000104fc: 14029a99    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010500: 1405eda4    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010504: cccccccc    	<unknown>
 100010508: cccccccc    	<unknown>
 10001050c: cccccccc    	<unknown>
@@ -392,12 +392,12 @@
 100010620: 34000069    	cbz	w9, 0x10001062c <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x11c>
 100010624: 29448fe4    	ldp	w4, w3, [sp, #0x24]
 100010628: 17ffffd6    	b	0x100010580 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x70>
-10001062c: 9405ed25    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001062c: 9405ed59    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010630: 29448fe4    	ldp	w4, w3, [sp, #0x24]
 100010634: 17ffffd3    	b	0x100010580 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x70>
 100010638: b9401389    	ldr	w9, [x28, #0x10]
 10001063c: 35fffa29    	cbnz	w9, 0x100010580 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x70>
-100010640: 9405ed20    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010640: 9405ed54    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010644: 17ffffcf    	b	0x100010580 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x70>
 100010648: 2a0103e2    	mov	w2, w1
 10001064c: 14000006    	b	0x100010664 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x154>
@@ -418,8 +418,8 @@
 100010688: aa0203e0    	mov	x0, x2
 10001068c: 2a1f03e2    	mov	w2, wzr
 100010690: 17ffffb0    	b	0x100010550 <_Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x40>
-100010694: 140299ff    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010698: 1405ed0a    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010694: 14029a33    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010698: 1405ed3e    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 10001069c: cccccccc    	<unknown>
 
 # svm: _Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669
@@ -433,10 +433,10 @@
 1000106b8: b9002fe1    	str	w1, [sp, #0x2c]
 1000106bc: 7100043f    	cmp	w1, #0x1
 1000106c0: 5400030b    	b.lt	0x100010720 <_Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0x80>
-1000106c4: 52873f20    	mov	w0, #0x39f9             ; =14841
+1000106c4: 52871fc0    	mov	w0, #0x38fe             ; =14590
 1000106c8: 72a000a0    	movk	w0, #0x5, lsl #16
 1000106cc: 8b000f60    	add	x0, x27, x0, lsl #3
-1000106d0: f9401403    	ldr	x3, [x0, #0x28]
+1000106d0: f9402803    	ldr	x3, [x0, #0x50]
 1000106d4: f90013e3    	str	x3, [sp, #0x20]
 1000106d8: aa0203e0    	mov	x0, x2
 1000106dc: aa0303fe    	mov	x30, x3
@@ -487,12 +487,12 @@
 100010790: f94013e3    	ldr	x3, [sp, #0x20]
 100010794: 17ffffef    	b	0x100010750 <_Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0xb0>
 100010798: f94013e4    	ldr	x4, [sp, #0x20]
-10001079c: 9405ecc9    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001079c: 9405ecfd    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000107a0: b9002be2    	str	w2, [sp, #0x28]
 1000107a4: aa0403e3    	mov	x3, x4
 1000107a8: 17ffffea    	b	0x100010750 <_Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0xb0>
-1000107ac: 140299b9    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-1000107b0: 1405ecc4    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000107ac: 140299ed    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+1000107b0: 1405ecf8    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000107b4: cccccccc    	<unknown>
 1000107b8: cccccccc    	<unknown>
 1000107bc: cccccccc    	<unknown>
@@ -506,10 +506,10 @@
 1000107d0: a93f7bfd    	stp	x29, x30, [sp, #-0x10]
 1000107d4: 9100013f    	mov	sp, x9
 1000107d8: b90033e1    	str	w1, [sp, #0x30]
-1000107dc: 52873f20    	mov	w0, #0x39f9             ; =14841
+1000107dc: 52871fc0    	mov	w0, #0x38fe             ; =14590
 1000107e0: 72a000a0    	movk	w0, #0x5, lsl #16
 1000107e4: 8b000f60    	add	x0, x27, x0, lsl #3
-1000107e8: f9401403    	ldr	x3, [x0, #0x28]
+1000107e8: f9402803    	ldr	x3, [x0, #0x50]
 1000107ec: f9000fe3    	str	x3, [sp, #0x18]
 1000107f0: 7100043f    	cmp	w1, #0x1
 1000107f4: 320003e0    	orr	w0, wzr, #0x1
@@ -588,13 +588,13 @@
 100010918: 29448be3    	ldp	w3, w2, [sp, #0x24]
 10001091c: f9400fe4    	ldr	x4, [sp, #0x18]
 100010920: 17ffffcc    	b	0x100010850 <_Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x90>
-100010924: 9405ec67    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010924: 9405ec9b    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010928: 29448be3    	ldp	w3, w2, [sp, #0x24]
 10001092c: f9400fe4    	ldr	x4, [sp, #0x18]
 100010930: 17ffffc8    	b	0x100010850 <_Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x90>
 100010934: b9401389    	ldr	w9, [x28, #0x10]
 100010938: 35fff8c9    	cbnz	w9, 0x100010850 <_Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x90>
-10001093c: 9405ec61    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001093c: 9405ec95    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010940: 17ffffc4    	b	0x100010850 <_Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x90>
 100010944: 2a0103e2    	mov	w2, w1
 100010948: aa0403e3    	mov	x3, x4
@@ -622,8 +622,8 @@
 1000109a0: 2a1f03fe    	mov	w30, wzr
 1000109a4: aa0203e0    	mov	x0, x2
 1000109a8: 17ffff9c    	b	0x100010818 <_Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x58>
-1000109ac: 14029939    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-1000109b0: 1405ec44    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000109ac: 1402996d    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+1000109b0: 1405ec78    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000109b4: cccccccc    	<unknown>
 1000109b8: cccccccc    	<unknown>
 1000109bc: cccccccc    	<unknown>
@@ -639,10 +639,10 @@
 1000109d8: b9002fe1    	str	w1, [sp, #0x2c]
 1000109dc: 7100043f    	cmp	w1, #0x1
 1000109e0: 5400030b    	b.lt	0x100010a40 <_Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0x80>
-1000109e4: 52873f20    	mov	w0, #0x39f9             ; =14841
+1000109e4: 52871fc0    	mov	w0, #0x38fe             ; =14590
 1000109e8: 72a000a0    	movk	w0, #0x5, lsl #16
 1000109ec: 8b000f60    	add	x0, x27, x0, lsl #3
-1000109f0: f9401403    	ldr	x3, [x0, #0x28]
+1000109f0: f9402803    	ldr	x3, [x0, #0x50]
 1000109f4: f90013e3    	str	x3, [sp, #0x20]
 1000109f8: aa0203e0    	mov	x0, x2
 1000109fc: aa0303fe    	mov	x30, x3
@@ -693,12 +693,12 @@
 100010ab0: f94013e3    	ldr	x3, [sp, #0x20]
 100010ab4: 17ffffef    	b	0x100010a70 <_Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0xb0>
 100010ab8: f94013e4    	ldr	x4, [sp, #0x20]
-100010abc: 9405ec01    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010abc: 9405ec35    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010ac0: b9002be2    	str	w2, [sp, #0x28]
 100010ac4: aa0403e3    	mov	x3, x4
 100010ac8: 17ffffea    	b	0x100010a70 <_Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0xb0>
-100010acc: 140298f1    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010ad0: 1405ebfc    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010acc: 14029925    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010ad0: 1405ec30    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010ad4: cccccccc    	<unknown>
 100010ad8: cccccccc    	<unknown>
 100010adc: cccccccc    	<unknown>
@@ -714,8 +714,8 @@
 100010af8: b9002fe1    	str	w1, [sp, #0x2c]
 100010afc: 7100043f    	cmp	w1, #0x1
 100010b00: 5400020b    	b.lt	0x100010b40 <_Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x60>
-100010b04: 90002103    	adrp	x3, 0x100430000 <___data>
-100010b08: f9418863    	ldr	x3, [x3, #0x310]
+100010b04: 90002083    	adrp	x3, 0x100420000 <___data>
+100010b08: f943e863    	ldr	x3, [x3, #0x7d0]
 100010b0c: f90013e3    	str	x3, [sp, #0x20]
 100010b10: aa0203e0    	mov	x0, x2
 100010b14: aa0303fe    	mov	x30, x3
@@ -754,12 +754,12 @@
 100010b98: f94013e3    	ldr	x3, [sp, #0x20]
 100010b9c: 17fffff5    	b	0x100010b70 <_Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x90>
 100010ba0: f94013e4    	ldr	x4, [sp, #0x20]
-100010ba4: 9405ebc7    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010ba4: 9405ebfb    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010ba8: b9002be2    	str	w2, [sp, #0x28]
 100010bac: aa0403e3    	mov	x3, x4
 100010bb0: 17fffff0    	b	0x100010b70 <_Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x90>
-100010bb4: 140298b7    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010bb8: 1405ebc2    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010bb4: 140298eb    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010bb8: 1405ebf6    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010bbc: cccccccc    	<unknown>
 
 # svm: _Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G
@@ -835,12 +835,12 @@
 100010cd0: 34000069    	cbz	w9, 0x100010cdc <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x11c>
 100010cd4: 29448fe4    	ldp	w4, w3, [sp, #0x24]
 100010cd8: 17ffffd6    	b	0x100010c30 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x70>
-100010cdc: 9405eb79    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010cdc: 9405ebad    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010ce0: 29448fe4    	ldp	w4, w3, [sp, #0x24]
 100010ce4: 17ffffd3    	b	0x100010c30 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x70>
 100010ce8: b9401389    	ldr	w9, [x28, #0x10]
 100010cec: 35fffa29    	cbnz	w9, 0x100010c30 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x70>
-100010cf0: 9405eb74    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010cf0: 9405eba8    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010cf4: 17ffffcf    	b	0x100010c30 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x70>
 100010cf8: 2a0103e2    	mov	w2, w1
 100010cfc: 14000006    	b	0x100010d14 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x154>
@@ -861,8 +861,8 @@
 100010d38: aa0203e0    	mov	x0, x2
 100010d3c: 2a1f03e2    	mov	w2, wzr
 100010d40: 17ffffb0    	b	0x100010c00 <_Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x40>
-100010d44: 14029853    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010d48: 1405eb5e    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010d44: 14029887    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010d48: 1405eb92    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010d4c: cccccccc    	<unknown>
 
 # svm: _Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7
@@ -876,11 +876,11 @@
 100010d68: b9002fe1    	str	w1, [sp, #0x2c]
 100010d6c: 7100043f    	cmp	w1, #0x1
 100010d70: 5400022b    	b.lt	0x100010db4 <_Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x64>
-100010d74: 52873f23    	mov	w3, #0x39f9             ; =14841
+100010d74: 52871fc3    	mov	w3, #0x38fe             ; =14590
 100010d78: 72a000a3    	movk	w3, #0x5, lsl #16
 100010d7c: 8b030f63    	add	x3, x27, x3, lsl #3
 100010d80: f90013e3    	str	x3, [sp, #0x20]
-100010d84: f9401060    	ldr	x0, [x3, #0x20]
+100010d84: f9402460    	ldr	x0, [x3, #0x48]
 100010d88: aa0203e1    	mov	x1, x2
 100010d8c: 9400053d    	bl	0x100012280 <_Floor_javaBatch64_K1Yw1tcLJ64AWpNsVkdWbK>
 100010d90: b9402fe1    	ldr	w1, [sp, #0x2c]
@@ -903,7 +903,7 @@
 100010dd4: b9002be9    	str	w9, [sp, #0x28]
 100010dd8: f94013e3    	ldr	x3, [sp, #0x20]
 100010ddc: aa0003e1    	mov	x1, x0
-100010de0: f9401060    	ldr	x0, [x3, #0x20]
+100010de0: f9402460    	ldr	x0, [x3, #0x48]
 100010de4: 94000527    	bl	0x100012280 <_Floor_javaBatch64_K1Yw1tcLJ64AWpNsVkdWbK>
 100010de8: b9402be1    	ldr	w1, [sp, #0x28]
 100010dec: 11010022    	add	w2, w1, #0x40
@@ -917,13 +917,13 @@
 100010e0c: f94013e3    	ldr	x3, [sp, #0x20]
 100010e10: 17fffff4    	b	0x100010de0 <_Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x90>
 100010e14: f94013e4    	ldr	x4, [sp, #0x20]
-100010e18: 9405eb2a    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010e18: 9405eb5e    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010e1c: aa0003e1    	mov	x1, x0
 100010e20: b9002be2    	str	w2, [sp, #0x28]
 100010e24: aa0403e3    	mov	x3, x4
 100010e28: 17ffffee    	b	0x100010de0 <_Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x90>
-100010e2c: 14029819    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100010e30: 1405eb24    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010e2c: 1402984d    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100010e30: 1405eb58    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010e34: cccccccc    	<unknown>
 100010e38: cccccccc    	<unknown>
 100010e3c: cccccccc    	<unknown>
@@ -965,34 +965,34 @@
 100010ec0: 35001b9e    	cbnz	w30, 0x100011230 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3f0>
 100010ec4: b9401389    	ldr	w9, [x28, #0x10]
 100010ec8: 35fffe49    	cbnz	w9, 0x100010e90 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x50>
-100010ecc: 9405eafd    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100010ecc: 9405eb31    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100010ed0: 17fffff0    	b	0x100010e90 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x50>
-100010ed4: 52874343    	mov	w3, #0x3a1a             ; =14874
+100010ed4: 528723e3    	mov	w3, #0x391f             ; =14623
 100010ed8: 72a000a3    	movk	w3, #0x5, lsl #16
 100010edc: 8b030f63    	add	x3, x27, x3, lsl #3
 100010ee0: f9000fe3    	str	x3, [sp, #0x18]
-100010ee4: 52874444    	mov	w4, #0x3a22             ; =14882
-100010ee8: 72a000a4    	movk	w4, #0x5, lsl #16
+100010ee4: 529fffa4    	mov	w4, #0xfffd             ; =65533
+100010ee8: 72a00084    	movk	w4, #0x4, lsl #16
 100010eec: 8b040f64    	add	x4, x27, x4, lsl #3
 100010ef0: f90013e4    	str	x4, [sp, #0x20]
 100010ef4: 528022e5    	mov	w5, #0x117              ; =279
 100010ef8: 72a00025    	movk	w5, #0x1, lsl #16
 100010efc: b90057e5    	str	w5, [sp, #0x54]
-100010f00: 52989b46    	mov	w6, #0xc4da             ; =50394
+100010f00: 52989a86    	mov	w6, #0xc4d4             ; =50388
 100010f04: 72a00026    	movk	w6, #0x1, lsl #16
 100010f08: 8b060f66    	add	x6, x27, x6, lsl #3
 100010f0c: f9001fe6    	str	x6, [sp, #0x38]
 100010f10: 52802667    	mov	w7, #0x133              ; =307
 100010f14: 72a00027    	movk	w7, #0x1, lsl #16
 100010f18: b90053e7    	str	w7, [sp, #0x50]
-100010f1c: 528744a8    	mov	w8, #0x3a25             ; =14885
+100010f1c: 528724e8    	mov	w8, #0x3927             ; =14631
 100010f20: 72a000a8    	movk	w8, #0x5, lsl #16
 100010f24: b9004fe8    	str	w8, [sp, #0x4c]
-100010f28: 528744eb    	mov	w11, #0x3a27            ; =14887
+100010f28: 5287252b    	mov	w11, #0x3929            ; =14633
 100010f2c: 72a000ab    	movk	w11, #0x5, lsl #16
 100010f30: 8b0b0f6b    	add	x11, x27, x11, lsl #3
 100010f34: f9001beb    	str	x11, [sp, #0x30]
-100010f38: 52873c2c    	mov	w12, #0x39e1            ; =14817
+100010f38: 52871ccc    	mov	w12, #0x38e6            ; =14566
 100010f3c: 72a000ac    	movk	w12, #0x5, lsl #16
 100010f40: 8b0c0f6c    	add	x12, x27, x12, lsl #3
 100010f44: f90017ec    	str	x12, [sp, #0x28]
@@ -1031,7 +1031,7 @@
 100010fc8: d5033abf    	dmb	ishst
 100010fcc: cb1b0000    	sub	x0, x0, x27
 100010fd0: d343fc00    	lsr	x0, x0, #3
-100010fd4: 91026189    	add	x9, x12, #0x98
+100010fd4: 91029189    	add	x9, x12, #0xa4
 100010fd8: 889ffd20    	stlr	w0, [x9]
 100010fdc: b9400180    	ldr	w0, [x12]
 100010fe0: 37080980    	tbnz	w0, #0x1, 0x100011110 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2d0>
@@ -1070,7 +1070,7 @@
 100011064: aa0303e0    	mov	x0, x3
 100011068: aa0403e1    	mov	x1, x4
 10001106c: 320003e2    	orr	w2, wzr, #0x1
-100011070: 9401e298    	bl	0x100089ad0 <_GCImpl_collectWithoutAllocating_3JkbhdqsFF0bYizLQcyXX9>
+100011070: 9401e258    	bl	0x1000899d0 <_GCImpl_collectWithoutAllocating_3JkbhdqsFF0bYizLQcyXX9>
 100011074: 340006a0    	cbz	w0, 0x100011148 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x308>
 100011078: f9400fe3    	ldr	x3, [sp, #0x18]
 10001107c: b9402460    	ldr	w0, [x3, #0x24]
@@ -1090,8 +1090,8 @@
 1000110b4: 2a1e03fe    	mov	w30, w30
 1000110b8: 8b1e0f7e    	add	x30, x27, x30, lsl #3
 1000110bc: f9404fde    	ldr	x30, [x30, #0x98]
-1000110c0: b0000361    	adrp	x1, 0x10007e000 <_CollectionPolicies_getPolicyIndex_bP8jZLnaZoEk4AVvxkBVYD+0x400>
-1000110c4: 911bc021    	add	x1, x1, #0x6f0
+1000110c0: b0000361    	adrp	x1, 0x10007e000 <_CollectionPolicies_isValidPolicyName_lfSdRJ6Ob52LI5jYi7Usm8+0x40>
+1000110c4: 9117c021    	add	x1, x1, #0x5f0
 1000110c8: cb1a0021    	sub	x1, x1, x26
 1000110cc: eb0103df    	cmp	x30, x1
 1000110d0: 54000bc0    	b.eq	0x100011248 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x408>
@@ -1140,7 +1140,7 @@
 10001117c: f85f8020    	ldur	x0, [x1, #-0x8]
 100011180: aa0c03e2    	mov	x2, x12
 100011184: cb000020    	sub	x0, x1, x0
-100011188: 91026181    	add	x1, x12, #0x98
+100011188: 91029181    	add	x1, x12, #0xa4
 10001118c: cb020021    	sub	x1, x1, x2
 100011190: b27c07e2    	orr	x2, xzr, #0x30
 100011194: 8b412441    	add	x1, x2, x1, lsr #9
@@ -1151,7 +1151,7 @@
 1000111a8: b90067f1    	str	w17, [sp, #0x64]
 1000111ac: 92407de0    	and	x0, x15, #0xffffffff
 1000111b0: b9406be1    	ldr	w1, [sp, #0x68]
-1000111b4: 94026277    	bl	0x1000a9b90 <_GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F>
+1000111b4: 940262ab    	bl	0x1000a9c60 <_GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F>
 1000111b8: b94067f1    	ldr	w17, [sp, #0x64]
 1000111bc: d2800110    	mov	x16, #0x8               ; =8
 1000111c0: f2a00030    	movk	x16, #0x1, lsl #16
@@ -1166,7 +1166,7 @@
 1000111e4: a94193e3    	ldp	x3, x4, [sp, #0x18]
 1000111e8: 17ffff79    	b	0x100010fcc <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x18c>
 1000111ec: b90067f1    	str	w17, [sp, #0x64]
-1000111f0: 94058398    	bl	0x100172050 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+1000111f0: 940583cc    	bl	0x100172120 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
 1000111f4: b9404be1    	ldr	w1, [sp, #0x48]
 1000111f8: 34000a01    	cbz	w1, 0x100011338 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x4f8>
 1000111fc: f94023e2    	ldr	x2, [sp, #0x40]
@@ -1188,7 +1188,7 @@
 10001123c: 88dffd3e    	ldar	w30, [x9]
 100011240: 34ffe4be    	cbz	w30, 0x100010ed4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x94>
 100011244: 1400000d    	b	0x100011278 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x438>
-100011248: 9402e9c2    	bl	0x1000cb950 <_OutOfMemoryUtil_heapSizeExceeded_tgNQlvtYRwAN6ucK4Y7ahE>
+100011248: 9402e9f6    	bl	0x1000cba20 <_OutOfMemoryUtil_heapSizeExceeded_tgNQlvtYRwAN6ucK4Y7ahE>
 10001124c: b26db3fd    	mov	x29, #-0x80000          ; =-524288
 100011250: f94023e2    	ldr	x2, [sp, #0x40]
 100011254: 8a1d005d    	and	x29, x2, x29
@@ -1224,13 +1224,13 @@
 1000112cc: 350000be    	cbnz	w30, 0x1000112e0 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x4a0>
 1000112d0: b9401389    	ldr	w9, [x28, #0x10]
 1000112d4: 35fffe69    	cbnz	w9, 0x1000112a0 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x460>
-1000112d8: 9405e9fa    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000112d8: 9405ea2e    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000112dc: 17fffff1    	b	0x1000112a0 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x460>
 1000112e0: b9400c00    	ldr	w0, [x0, #0xc]
 1000112e4: 34ffdf80    	cbz	w0, 0x100010ed4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x94>
 1000112e8: 2a0003e0    	mov	w0, w0
 1000112ec: 8b000f60    	add	x0, x27, x0, lsl #3
-1000112f0: 9405e2a4    	bl	0x100189d80 <_PlatformThreads_unpark_FJj4Yhv2Ja3jndtYAdmYl0>
+1000112f0: 9405e2d8    	bl	0x100189e50 <_PlatformThreads_unpark_FJj4Yhv2Ja3jndtYAdmYl0>
 1000112f4: 17fffef8    	b	0x100010ed4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x94>
 1000112f8: a9477bfd    	ldp	x29, x30, [sp, #0x70]
 1000112fc: 910203ff    	add	sp, sp, #0x80
@@ -1242,21 +1242,21 @@
 100011314: 17ffffb8    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
 100011318: 17ffffb7    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
 10001131c: b90067f1    	str	w17, [sp, #0x64]
-100011320: 94058184    	bl	0x100171930 <_ImplicitExceptions_createOptClassCastException_Ewnh8dGuUvIm5VBYxiDX2K>
+100011320: 940581b8    	bl	0x100171a00 <_ImplicitExceptions_createOptClassCastException_Ewnh8dGuUvIm5VBYxiDX2K>
 100011324: 17ffffb4    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
-100011328: 9405834a    	bl	0x100172050 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+100011328: 9405837e    	bl	0x100172120 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
 10001132c: 17ffffb2    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
-100011330: 94058348    	bl	0x100172050 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+100011330: 9405837c    	bl	0x100172120 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
 100011334: 17ffffb0    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
-100011338: 94059e86    	bl	0x100178d50 <_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8>
-10001133c: 94058345    	bl	0x100172050 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+100011338: 94059eba    	bl	0x100178e20 <_ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8>
+10001133c: 94058379    	bl	0x100172120 <_ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
 100011340: 17ffffad    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
 100011344: b94067f1    	ldr	w17, [sp, #0x64]
-100011348: 9405825e    	bl	0x100171cc0 <_ImplicitExceptions_createOptIncompatibleClassChangeError_ExDFiMUY3I5T00lGxxhlnL>
+100011348: 94058292    	bl	0x100171d90 <_ImplicitExceptions_createOptIncompatibleClassChangeError_ExDFiMUY3I5T00lGxxhlnL>
 10001134c: 17ffffaa    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
 100011350: 17ffffa9    	b	0x1000111f4 <_Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3b4>
-100011354: 140296cf    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011358: 1405e9da    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011354: 14029703    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011358: 1405ea0e    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 10001135c: cccccccc    	<unknown>
 
 # svm: _Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI
@@ -1268,10 +1268,10 @@
 100011370: a93f7bfd    	stp	x29, x30, [sp, #-0x10]
 100011374: 9100013f    	mov	sp, x9
 100011378: b90033e1    	str	w1, [sp, #0x30]
-10001137c: 52873f20    	mov	w0, #0x39f9             ; =14841
+10001137c: 52871fc0    	mov	w0, #0x38fe             ; =14590
 100011380: 72a000a0    	movk	w0, #0x5, lsl #16
 100011384: 8b000f60    	add	x0, x27, x0, lsl #3
-100011388: f9401403    	ldr	x3, [x0, #0x28]
+100011388: f9402803    	ldr	x3, [x0, #0x50]
 10001138c: f9000fe3    	str	x3, [sp, #0x18]
 100011390: 7100043f    	cmp	w1, #0x1
 100011394: 320003e0    	orr	w0, wzr, #0x1
@@ -1350,13 +1350,13 @@
 1000114b8: 29448be3    	ldp	w3, w2, [sp, #0x24]
 1000114bc: f9400fe4    	ldr	x4, [sp, #0x18]
 1000114c0: 17ffffcc    	b	0x1000113f0 <_Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x90>
-1000114c4: 9405e97f    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000114c4: 9405e9b3    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000114c8: 29448be3    	ldp	w3, w2, [sp, #0x24]
 1000114cc: f9400fe4    	ldr	x4, [sp, #0x18]
 1000114d0: 17ffffc8    	b	0x1000113f0 <_Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x90>
 1000114d4: b9401389    	ldr	w9, [x28, #0x10]
 1000114d8: 35fff8c9    	cbnz	w9, 0x1000113f0 <_Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x90>
-1000114dc: 9405e979    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000114dc: 9405e9ad    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000114e0: 17ffffc4    	b	0x1000113f0 <_Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x90>
 1000114e4: 2a0103e2    	mov	w2, w1
 1000114e8: aa0403e3    	mov	x3, x4
@@ -1384,8 +1384,8 @@
 100011540: 2a1f03fe    	mov	w30, wzr
 100011544: aa0203e0    	mov	x0, x2
 100011548: 17ffff9c    	b	0x1000113b8 <_Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x58>
-10001154c: 14029651    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011550: 1405e95c    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001154c: 14029685    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011550: 1405e990    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011554: cccccccc    	<unknown>
 100011558: cccccccc    	<unknown>
 10001155c: cccccccc    	<unknown>
@@ -1399,8 +1399,8 @@
 100011570: a93f7bfd    	stp	x29, x30, [sp, #-0x10]
 100011574: 9100013f    	mov	sp, x9
 100011578: b90037e1    	str	w1, [sp, #0x34]
-10001157c: f00020e3    	adrp	x3, 0x100430000 <___data>
-100011580: f940ec63    	ldr	x3, [x3, #0x1d8]
+10001157c: f0002063    	adrp	x3, 0x100420000 <___data>
+100011580: f9431063    	ldr	x3, [x3, #0x620]
 100011584: f90017e3    	str	x3, [sp, #0x28]
 100011588: aa0203e0    	mov	x0, x2
 10001158c: 2a1f03e2    	mov	w2, wzr
@@ -1449,11 +1449,11 @@
 100011638: f90013e0    	str	x0, [sp, #0x20]
 10001163c: 320003e0    	orr	w0, wzr, #0x1
 100011640: 320003e1    	orr	w1, wzr, #0x1
-100011644: 9405eb5b    	bl	0x10018c3b0 <_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84>
+100011644: 9405eb8f    	bl	0x10018c480 <_SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84>
 100011648: f94013e0    	ldr	x0, [sp, #0x20]
 10001164c: 17fffff4    	b	0x10001161c <_Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15+0xbc>
 100011650: f90013e0    	str	x0, [sp, #0x20]
-100011654: 9405eaeb    	bl	0x10018c200 <_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8>
+100011654: 9405eb1f    	bl	0x10018c2d0 <_SafepointSlowpath_enterSlowPathSafepointCheckRegularCCONV_G8eRCkU089De7ckv2Usgi8>
 100011658: f94013e0    	ldr	x0, [sp, #0x20]
 10001165c: 17fffff0    	b	0x10001161c <_Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15+0xbc>
 100011660: a9467bfd    	ldp	x29, x30, [sp, #0x60]
@@ -1462,8 +1462,8 @@
 10001166c: 7100013f    	cmp	w9, #0x0
 100011670: 5400006d    	b.le	0x10001167c <_Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15+0x11c>
 100011674: d65f03c0    	ret
-100011678: 14029606    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-10001167c: 1405e911    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011678: 1402963a    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+10001167c: 1405e945    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 
 # svm: _Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH
 0000000100011680 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH>:
@@ -1474,8 +1474,8 @@
 100011690: a93f7bfd    	stp	x29, x30, [sp, #-0x10]
 100011694: 9100013f    	mov	sp, x9
 100011698: b90033e1    	str	w1, [sp, #0x30]
-10001169c: f00020e3    	adrp	x3, 0x100430000 <___data>
-1000116a0: f943dc63    	ldr	x3, [x3, #0x7b8]
+10001169c: f0002063    	adrp	x3, 0x100420000 <___data>
+1000116a0: f942f463    	ldr	x3, [x3, #0x5e8]
 1000116a4: f9000fe3    	str	x3, [sp, #0x18]
 1000116a8: 7100043f    	cmp	w1, #0x1
 1000116ac: 320003e0    	orr	w0, wzr, #0x1
@@ -1548,13 +1548,13 @@
 1000117b8: 29448be3    	ldp	w3, w2, [sp, #0x24]
 1000117bc: f9400fe4    	ldr	x4, [sp, #0x18]
 1000117c0: 17ffffd0    	b	0x100011700 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x80>
-1000117c4: 9405e8bf    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000117c4: 9405e8f3    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000117c8: 29448be3    	ldp	w3, w2, [sp, #0x24]
 1000117cc: f9400fe4    	ldr	x4, [sp, #0x18]
 1000117d0: 17ffffcc    	b	0x100011700 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x80>
 1000117d4: b9401389    	ldr	w9, [x28, #0x10]
 1000117d8: 35fff949    	cbnz	w9, 0x100011700 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x80>
-1000117dc: 9405e8b9    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+1000117dc: 9405e8ed    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 1000117e0: 17ffffc8    	b	0x100011700 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x80>
 1000117e4: 2a0103e2    	mov	w2, w1
 1000117e8: aa0403e3    	mov	x3, x4
@@ -1582,8 +1582,8 @@
 100011840: 2a1f03fe    	mov	w30, wzr
 100011844: aa0203e0    	mov	x0, x2
 100011848: 17ffffa2    	b	0x1000116d0 <_Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x50>
-10001184c: 14029591    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011850: 1405e89c    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001184c: 140295c5    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011850: 1405e8d0    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011854: cccccccc    	<unknown>
 100011858: cccccccc    	<unknown>
 10001185c: cccccccc    	<unknown>
@@ -1599,10 +1599,10 @@
 100011878: 7100043f    	cmp	w1, #0x1
 10001187c: 5400080b    	b.lt	0x10001197c <_Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x11c>
 100011880: b9002fe1    	str	w1, [sp, #0x2c]
-100011884: 52873f20    	mov	w0, #0x39f9             ; =14841
+100011884: 52871fc0    	mov	w0, #0x38fe             ; =14590
 100011888: 72a000a0    	movk	w0, #0x5, lsl #16
 10001188c: 8b000f60    	add	x0, x27, x0, lsl #3
-100011890: f9401403    	ldr	x3, [x0, #0x28]
+100011890: f9402803    	ldr	x3, [x0, #0x50]
 100011894: f90013e3    	str	x3, [sp, #0x20]
 100011898: 2a1f03e9    	mov	w9, wzr
 10001189c: b9002be9    	str	w9, [sp, #0x28]
@@ -1650,7 +1650,7 @@
 100011944: f94013e3    	ldr	x3, [sp, #0x20]
 100011948: aa0003e2    	mov	x2, x0
 10001194c: 17ffffd5    	b	0x1000118a0 <_Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x40>
-100011950: 9405e85c    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011950: 9405e890    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011954: b9002be1    	str	w1, [sp, #0x28]
 100011958: f94013e3    	ldr	x3, [sp, #0x20]
 10001195c: aa0003e2    	mov	x2, x0
@@ -1663,8 +1663,8 @@
 100011978: d65f03c0    	ret
 10001197c: aa0203e0    	mov	x0, x2
 100011980: 17fffff9    	b	0x100011964 <_Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x104>
-100011984: 14029543    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011988: 1405e84e    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011984: 14029577    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011988: 1405e882    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 10001198c: cccccccc    	<unknown>
 
 # svm: _Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK
@@ -1678,10 +1678,10 @@
 1000119a8: 7100043f    	cmp	w1, #0x1
 1000119ac: 5400080b    	b.lt	0x100011aac <_Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x11c>
 1000119b0: b9002fe1    	str	w1, [sp, #0x2c]
-1000119b4: 52873f20    	mov	w0, #0x39f9             ; =14841
+1000119b4: 52871fc0    	mov	w0, #0x38fe             ; =14590
 1000119b8: 72a000a0    	movk	w0, #0x5, lsl #16
 1000119bc: 8b000f60    	add	x0, x27, x0, lsl #3
-1000119c0: f9401403    	ldr	x3, [x0, #0x28]
+1000119c0: f9402803    	ldr	x3, [x0, #0x50]
 1000119c4: f90013e3    	str	x3, [sp, #0x20]
 1000119c8: 2a1f03e9    	mov	w9, wzr
 1000119cc: b9002be9    	str	w9, [sp, #0x28]
@@ -1729,7 +1729,7 @@
 100011a74: f94013e3    	ldr	x3, [sp, #0x20]
 100011a78: aa0003e2    	mov	x2, x0
 100011a7c: 17ffffd5    	b	0x1000119d0 <_Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x40>
-100011a80: 9405e810    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011a80: 9405e844    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011a84: b9002be1    	str	w1, [sp, #0x28]
 100011a88: f94013e3    	ldr	x3, [sp, #0x20]
 100011a8c: aa0003e2    	mov	x2, x0
@@ -1742,8 +1742,8 @@
 100011aa8: d65f03c0    	ret
 100011aac: aa0203e0    	mov	x0, x2
 100011ab0: 17fffff9    	b	0x100011a94 <_Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x104>
-100011ab4: 140294f7    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011ab8: 1405e802    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011ab4: 1402952b    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011ab8: 1405e836    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011abc: cccccccc    	<unknown>
 
 # svm: _Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6
@@ -1755,8 +1755,8 @@
 100011ad0: a93f7bfd    	stp	x29, x30, [sp, #-0x10]
 100011ad4: 9100013f    	mov	sp, x9
 100011ad8: b90033e1    	str	w1, [sp, #0x30]
-100011adc: f00020e3    	adrp	x3, 0x100430000 <___data>
-100011ae0: f9401c63    	ldr	x3, [x3, #0x38]
+100011adc: f0002063    	adrp	x3, 0x100420000 <___data>
+100011ae0: f9444463    	ldr	x3, [x3, #0x888]
 100011ae4: f9000fe3    	str	x3, [sp, #0x18]
 100011ae8: 7100043f    	cmp	w1, #0x1
 100011aec: 320003e0    	orr	w0, wzr, #0x1
@@ -1829,13 +1829,13 @@
 100011bf8: 29448be3    	ldp	w3, w2, [sp, #0x24]
 100011bfc: f9400fe4    	ldr	x4, [sp, #0x18]
 100011c00: 17ffffd0    	b	0x100011b40 <_Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x80>
-100011c04: 9405e7af    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011c04: 9405e7e3    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011c08: 29448be3    	ldp	w3, w2, [sp, #0x24]
 100011c0c: f9400fe4    	ldr	x4, [sp, #0x18]
 100011c10: 17ffffcc    	b	0x100011b40 <_Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x80>
 100011c14: b9401389    	ldr	w9, [x28, #0x10]
 100011c18: 35fff949    	cbnz	w9, 0x100011b40 <_Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x80>
-100011c1c: 9405e7a9    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011c1c: 9405e7dd    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011c20: 17ffffc8    	b	0x100011b40 <_Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x80>
 100011c24: 2a0103e2    	mov	w2, w1
 100011c28: aa0403e3    	mov	x3, x4
@@ -1863,8 +1863,8 @@
 100011c80: 2a1f03fe    	mov	w30, wzr
 100011c84: aa0203e0    	mov	x0, x2
 100011c88: 17ffffa2    	b	0x100011b10 <_Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x50>
-100011c8c: 14029481    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011c90: 1405e78c    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011c8c: 140294b5    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011c90: 1405e7c0    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011c94: cccccccc    	<unknown>
 100011c98: cccccccc    	<unknown>
 100011c9c: cccccccc    	<unknown>
@@ -1880,11 +1880,11 @@
 100011cb8: b9002fe1    	str	w1, [sp, #0x2c]
 100011cbc: 7100043f    	cmp	w1, #0x1
 100011cc0: 5400022b    	b.lt	0x100011d04 <_Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x64>
-100011cc4: 52873f23    	mov	w3, #0x39f9             ; =14841
+100011cc4: 52871fc3    	mov	w3, #0x38fe             ; =14590
 100011cc8: 72a000a3    	movk	w3, #0x5, lsl #16
 100011ccc: 8b030f63    	add	x3, x27, x3, lsl #3
 100011cd0: f90013e3    	str	x3, [sp, #0x20]
-100011cd4: f9401060    	ldr	x0, [x3, #0x20]
+100011cd4: f9402460    	ldr	x0, [x3, #0x48]
 100011cd8: aa0203e1    	mov	x1, x2
 100011cdc: 940000d9    	bl	0x100012040 <_Floor_javaBatch16_8LIcqghlXl80Dft9xk6yUA>
 100011ce0: b9402fe1    	ldr	w1, [sp, #0x2c]
@@ -1907,7 +1907,7 @@
 100011d24: b9002be9    	str	w9, [sp, #0x28]
 100011d28: f94013e3    	ldr	x3, [sp, #0x20]
 100011d2c: aa0003e1    	mov	x1, x0
-100011d30: f9401060    	ldr	x0, [x3, #0x20]
+100011d30: f9402460    	ldr	x0, [x3, #0x48]
 100011d34: 940000c3    	bl	0x100012040 <_Floor_javaBatch16_8LIcqghlXl80Dft9xk6yUA>
 100011d38: b9402be1    	ldr	w1, [sp, #0x28]
 100011d3c: 11004022    	add	w2, w1, #0x10
@@ -1921,13 +1921,13 @@
 100011d5c: f94013e3    	ldr	x3, [sp, #0x20]
 100011d60: 17fffff4    	b	0x100011d30 <_Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x90>
 100011d64: f94013e4    	ldr	x4, [sp, #0x20]
-100011d68: 9405e756    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011d68: 9405e78a    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011d6c: aa0003e1    	mov	x1, x0
 100011d70: b9002be2    	str	w2, [sp, #0x28]
 100011d74: aa0403e3    	mov	x3, x4
 100011d78: 17ffffee    	b	0x100011d30 <_Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x90>
-100011d7c: 14029445    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011d80: 1405e750    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011d7c: 14029479    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011d80: 1405e784    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011d84: cccccccc    	<unknown>
 100011d88: cccccccc    	<unknown>
 100011d8c: cccccccc    	<unknown>
@@ -1943,8 +1943,8 @@
 100011da8: b9002fe1    	str	w1, [sp, #0x2c]
 100011dac: 7100043f    	cmp	w1, #0x1
 100011db0: 5400020b    	b.lt	0x100011df0 <_Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x60>
-100011db4: f00020e3    	adrp	x3, 0x100430000 <___data>
-100011db8: f944d863    	ldr	x3, [x3, #0x9b0]
+100011db4: f0002063    	adrp	x3, 0x100420000 <___data>
+100011db8: f941cc63    	ldr	x3, [x3, #0x398]
 100011dbc: f90013e3    	str	x3, [sp, #0x20]
 100011dc0: aa0203e0    	mov	x0, x2
 100011dc4: aa0303fe    	mov	x30, x3
@@ -1983,12 +1983,12 @@
 100011e48: f94013e3    	ldr	x3, [sp, #0x20]
 100011e4c: 17fffff5    	b	0x100011e20 <_Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x90>
 100011e50: f94013e4    	ldr	x4, [sp, #0x20]
-100011e54: 9405e71b    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011e54: 9405e74f    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011e58: b9002be2    	str	w2, [sp, #0x28]
 100011e5c: aa0403e3    	mov	x3, x4
 100011e60: 17fffff0    	b	0x100011e20 <_Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x90>
-100011e64: 1402940b    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011e68: 1405e716    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011e64: 1402943f    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011e68: 1405e74a    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011e6c: cccccccc    	<unknown>
 
 # svm: _Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL
@@ -2002,8 +2002,8 @@
 100011e88: b9002fe1    	str	w1, [sp, #0x2c]
 100011e8c: 7100043f    	cmp	w1, #0x1
 100011e90: 5400020b    	b.lt	0x100011ed0 <_Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x60>
-100011e94: f00020e3    	adrp	x3, 0x100430000 <___data>
-100011e98: f943fc63    	ldr	x3, [x3, #0x7f8]
+100011e94: f0002063    	adrp	x3, 0x100420000 <___data>
+100011e98: f941dc63    	ldr	x3, [x3, #0x3b8]
 100011e9c: f90013e3    	str	x3, [sp, #0x20]
 100011ea0: aa0203e0    	mov	x0, x2
 100011ea4: aa0303fe    	mov	x30, x3
@@ -2042,12 +2042,12 @@
 100011f28: f94013e3    	ldr	x3, [sp, #0x20]
 100011f2c: 17fffff5    	b	0x100011f00 <_Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x90>
 100011f30: f94013e4    	ldr	x4, [sp, #0x20]
-100011f34: 9405e6e3    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011f34: 9405e717    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011f38: b9002be2    	str	w2, [sp, #0x28]
 100011f3c: aa0403e3    	mov	x3, x4
 100011f40: 17fffff0    	b	0x100011f00 <_Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x90>
-100011f44: 140293d3    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100011f48: 1405e6de    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011f44: 14029407    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100011f48: 1405e712    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011f4c: cccccccc    	<unknown>
 
 # svm: _Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D
@@ -2089,7 +2089,7 @@
 100011fd8: 34000069    	cbz	w9, 0x100011fe4 <_Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0x94>
 100011fdc: 2a0303fe    	mov	w30, w3
 100011fe0: 17ffffe8    	b	0x100011f80 <_Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0x30>
-100011fe4: 9405e6b7    	bl	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+100011fe4: 9405e6eb    	bl	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100011fe8: 2a0303fe    	mov	w30, w3
 100011fec: 17ffffe5    	b	0x100011f80 <_Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0x30>
 100011ff0: aa0203e0    	mov	x0, x2
@@ -2099,8 +2099,8 @@
 100012000: 7100013f    	cmp	w9, #0x0
 100012004: 5400006d    	b.le	0x100012010 <_Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0xc0>
 100012008: d65f03c0    	ret
-10001200c: 140293a1    	b	0x1000b6e90 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
-100012010: 1405e6ac    	b	0x10018bac0 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+10001200c: 140293d5    	b	0x1000b6f60 <_StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+100012010: 1405e6e0    	b	0x10018bb90 <_SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
 100012014: cccccccc    	<unknown>
 100012018: cccccccc    	<unknown>
 10001201c: cccccccc    	<unknown>
@@ -2109,8 +2109,8 @@
 0000000100012020 <_Floor_identity_RGfigO1fJmId7IgDqMOKbC>:
 100012020: d10083ff    	sub	sp, sp, #0x20
 100012024: a9017bfd    	stp	x29, x30, [sp, #0x10]
-100012028: d00020fe    	adrp	x30, 0x100430000 <___data>
-10001202c: f940bfde    	ldr	x30, [x30, #0x178]
+100012028: d000207e    	adrp	x30, 0x100420000 <___data>
+10001202c: f94193de    	ldr	x30, [x30, #0x320]
 100012030: d63f03c0    	blr	x30
 100012034: a9417bfd    	ldp	x29, x30, [sp, #0x10]
 100012038: 910083ff    	add	sp, sp, #0x20
@@ -2412,8 +2412,8 @@
 00000001000129b0 <_Floor_leaf_xl8tBddbMc9N8Nhe5l1Y8G>:
 1000129b0: d10083ff    	sub	sp, sp, #0x20
 1000129b4: a9017bfd    	stp	x29, x30, [sp, #0x10]
-1000129b8: d00020fe    	adrp	x30, 0x100430000 <___data>
-1000129bc: f9431fde    	ldr	x30, [x30, #0x638]
+1000129b8: d000207e    	adrp	x30, 0x100420000 <___data>
+1000129bc: f9411fde    	ldr	x30, [x30, #0x238]
 1000129c0: d63f03c0    	blr	x30
 1000129c4: a9417bfd    	ldp	x29, x30, [sp, #0x10]
 1000129c8: 910083ff    	add	sp, sp, #0x20

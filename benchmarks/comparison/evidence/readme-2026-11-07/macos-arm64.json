@@ -37,7 +37,7 @@
     ]
   },
   "svm": {
-    "full_disassembly_sha256": "f3db205d8d145affc25a3fab063e7f64a8204324474660c4d430bab6ec0e59b9",
+    "full_disassembly_sha256": "e4d02bc4d3ddd429af5b57cce6f0c7a0e8c51f240948d141cb037d78c041401a",
     "functions": [
       {
         "symbol": "_Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG",
@@ -152,8 +152,8 @@
   "build": {
     "workload": "leaf-floor-v2",
     "binding_abi": 2,
-    "revision": "83229a24c813e1e3f7ea197539402754ad4511f9",
-    "dirty": " M .github/workflows/benchmark.comparison.yml\n M .github/workflows/benchmark.floor.yml\n M .github/workflows/codspeed.yml\n M .github/workflows/on.pr.yml\n M .github/workflows/on.push.yml\n M .github/workflows/on.queue.yml\n M README.md\n?? .github/workflows/check.changes.yml\n?? scripts/ci-changes.py\n",
+    "revision": "89bcf2a607c338d3a53efa2bded90f0bb8fcdebf",
+    "dirty": "",
     "target": "aarch64-apple-darwin",
     "commands": [
       [
@@ -395,7 +395,7 @@
     },
     "binaries": {
       "build/floor/native": "42eebdf77544c7a05e308b6932e58c22fd4b374c71e834b0ecf8d9406c50da25",
-      "build/floor/svm": "52ad4d40a77428a704631a4a73aab8184b1ac612b40d2e2dbab5ae67cde78340",
+      "build/floor/svm": "ec6910f9629c1c53b70fb74bcc207ca32ec11de3eaa1ddb91410f09afae1ac3b",
       "build/floor/kernel.o": "909a71e6a128c71361baf3104cd274988a817d5cc52c6d7f303e4deefd614217",
       "build/floor/batch.o": "262d2d9d263dc95db35f13b9dbdd1dfaa3b9faa6211c0bff722d09c84a82d8db",
       "build/floor/caller.o": "c06f6ad6fd20d67877a0a6257e1d5619d5cc28483e1439ea24a79cd6b79c9b54"
@@ -425,5 +425,5 @@
       "lto": false
     }
   },
-  "retained_disassembly_sha256": "1cefc1ca1e78de66d14748d0b965ea735451a02073c02e6b116da422da6526a6"
+  "retained_disassembly_sha256": "5f0fca8a93667ccb2632d0b10416846dffe3e8eeae96aa0440635d525d3099f1"
 }

@@ -34,11 +34,12 @@ build/dist/myna generate tests/fast/fast.seam --out build/fast-example
 # For Linux x86-64, add: --target x86_64-unknown-linux-gnu
 ```
 
-**2. Myna generates the Java declarations.** The direct SVM API exposes a typed native pointer and an inlineable call. This excerpt omits annotations and initialization helpers:
+**2. Myna generates the Java declarations.** The direct SVM API exposes a typed native pointer and an inlineable call. This excerpt is abridged; Myna supplies the initialization helpers and compiler annotations:
 
 ```java
 // FastApi.java — generated for Native Image
 public interface increment_Leaf extends CFunctionPointer {
+    @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
     long invoke(long value);
 }
 public static long increment(long value) {
@@ -93,15 +94,15 @@ Calls that can block or reenter Java must declare `native_leaf=false@explicit_co
 
 ## Call overhead
 
-Generated identity calls measure **0.527 ns on Linux ARM64** and **0.506 ns on Apple M5 Max** in the November 7, 2026 binding ABI 2 reruns. The same builds measure handwritten Native Image `@CFunction(NO_TRANSITION)` calls at **1.509 ns** and **0.973 ns**, respectively.
+Generated identity calls measure **0.787 ns on Linux x86-64 (unclemax)** and **0.516 ns on Apple M5 Max** in the November 7, 2026 binding ABI 2 reruns. The same builds measure handwritten Native Image `@CFunction(NO_TRANSITION)` calls at **1.482 ns** and **0.997 ns**, respectively.
 
 ![Identity-call latency within each host: Myna default leaves, handwritten SVM leaves, and native C pointers; points show process medians and ranges](docs/charts/default-leaf.svg)
 
-These timings include the identity function and caller loop, with no control subtraction. Each case has five fresh processes with ten samples each. Compare implementations **within each host**: the Mac Myna and native-pointer ranges overlap, so these measurements do not establish a win over native C. Native pointer callers are explicitly unrolled four times.
+These timings include the identity function and caller loop, with no control subtraction. Each case has five fresh processes with ten samples each. Compare implementations **within each host**: Myna and native-pointer ranges overlap on both hosts, so these measurements do not establish a win over native C. Native pointer callers are explicitly unrolled four times.
 
 Myna's generated direct calls use relocated symbols and remove the extra SVM leaf stub. Both hosts pass concurrent-GC and assembly checks. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
 
-[Linux measurements](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-arm64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-arm64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-07/README.md)
+[Linux measurements](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-07/README.md)
 
 <details>
 <summary>Normal transitions and AOT FFM comparisons</summary>
