@@ -263,3 +263,5 @@ and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
 
 Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`.
+
+<!-- Temporary Markdown-only CI classification check. -->
