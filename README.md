@@ -87,6 +87,8 @@ int64_t myna_fast_increment(int64_t value) {
 
 For SVM, link this implementation into `libfastfixture.a`, supply the [library-path directives](tests/fast/Directives.java), and include the generated `META-INF/native-image/` resources with the compiled bindings. The [Native Image integration test](tests/native_image_integration.py) builds and runs this path, including calls under concurrent GC. See [the adapter guide](docs/jvm-roadmap.md) for shared-library and FFM setup.
 
+Truffle languages can use these bindings from runtime-compiled code; see [the Truffle guest guide](docs/truffle-guests.md).
+
 Calls that can block or reenter Java must declare `native_leaf=false@explicit_contract`. Myna checks declared contracts for consistency; the native implementation must obey them.
 
 ## Call overhead
