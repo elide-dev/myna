@@ -24,6 +24,7 @@ public final class SeamJson {
         + quote(m.targetTriple())
         + java(m)
         + nativeConfig(m)
+        + truffle(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -84,6 +85,19 @@ public final class SeamJson {
         + quote(c.cLibrary())
         + ",\"requireStatic\":"
         + c.requireStatic()
+        + "}";
+  }
+
+  /** Omitted unless cells are requested, so existing descriptors keep their fingerprints. */
+  private static String truffle(Module m) {
+    TruffleConfig c = m.truffleConfig();
+    if (c == null) return "";
+    return ",\n  \"truffle\": {\"cells\":true,\"backend\":"
+        + quote(c.backend().name())
+        + ",\"coercion\":"
+        + quote(c.coercion().name())
+        + ",\"transitions\":"
+        + quote(c.transitions().name())
         + "}";
   }
 

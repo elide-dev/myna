@@ -23,7 +23,7 @@ the baseline requires a real optimization available under the same contract.
 ## Toolchain and execution modes
 
 Pin Elide 1.6.2, the native toolchain 2026.11.5, and GraalVM
-25.5.5-elide.24. The latter is an explicit external distribution: Elide 1.6.2's
+25.5.5-elide.26. The latter is an explicit external distribution: Elide 1.6.2's
 embedded Native Image compiler reports 25.5.5-elide.21. Retain archive checksums,
 compiler versions, edition, target, JVM flags and native link flags with results.
 Rust and LLVM must pass bitcode compatibility tests, beyond a version-major check.
@@ -287,6 +287,20 @@ python3 scripts/check-hygiene.py
 The plot separates normal transitions, native leaves, and AOT FFM. Bars show medians of process medians on a shared linear axis starting at zero; whiskers show process min–max. The runtime-bound FFM diagnostic and JVM comparisons remain in the full results table rather than the README chart. Shared-host measurements remain advisory. SVG and PNG exports plus a manifest of input/output hashes live under `docs/charts/`; changing a baseline, chart script, or dependency lock requires regenerating them. CI verifies the manifest and renders fresh artifacts without inventing a performance threshold.
 
 To update the baseline, run the complete comparison workflow, verify workload correctness and hardware/toolchain provenance, retain its JSON, and regenerate its table and charts in the same PR. `compare.py` rejects mismatched profiles and incomplete CPU identities. Refresh `requirements.txt` from `requirements.in` with `uv pip compile --generate-hashes --output-file benchmarks/comparison/requirements.txt benchmarks/comparison/requirements.in` when upgrading plotting dependencies.
+
+## Truffle cell costs
+
+`mise run bench:cells-build` and `mise run bench:cells` measure generated Truffle cells from
+runtime-compiled code on a Native Image: direct Java calls to the Native Image and AOT FFM bindings
+against the same cells through consumer glue and through the generic interop wrapper, Truffle NFI
+as the dynamic-FFI baseline, string borrows, and native, pinned and copied byte borrows by size.
+Each case is a fresh process whose single compiled root must observe compiled code and print its
+compilation trace; samples carry the current-thread allocation count. The
+[harness contract](../benchmarks/cells/README.md) and the checked-in advisory
+[Linux amd64 baseline](../benchmarks/cells/baselines/wsl2-linux-amd64-2026-11-07.md) describe the
+cases; [Truffle native cells](truffle-cells.md#measurement) summarizes the results. Runtime-compiled
+code is not in the image disassembly, so the inlining evidence is parity with the direct call plus
+zero allocation, not assembly.
 
 ## Native call floor
 

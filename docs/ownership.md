@@ -88,6 +88,10 @@ Negative lengths, lengths outside the ABI integer range, and null addresses with
 
 An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime.
 
+## Truffle cells
+
+With `truffle_cells=true`, the same declarations project into guest-callable cells: a `borrow` drops the length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
+
 ## Adoption priorities and remaining work
 
 Implemented now: native resource construction/destruction contracts, scalar constructor arguments, Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.

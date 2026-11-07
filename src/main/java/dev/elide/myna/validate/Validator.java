@@ -23,7 +23,14 @@ public final class Validator {
       Set.of(
           "nonnull", "nocapture", "readonly", "writeonly", "noalias", "align", "dereferenceable");
   private static final Set<String> FUNCTION_FACTS =
-      Set.of("nounwind", "noreturn", "willreturn", "nofree", "native_leaf");
+      Set.of(
+          "nounwind",
+          "noreturn",
+          "willreturn",
+          "nofree",
+          "native_leaf",
+          "truffle_cell",
+          "truffle_raw_pointers");
   private static final Pattern IDENTIFIER = Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*");
   private static final Set<String> KEYWORDS =
       Set.of(
@@ -39,8 +46,8 @@ public final class Validator {
                + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
                + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT"
                + " BINDING_ABI_VERSION MynaSymbols Literals MynaFFM MynaNative MynaForeignFeature"
-               + " LibraryBinding CriticalLibraryBinding getClass hashCode equals toString clone"
-               + " finalize wait notify notifyAll")
+               + " MynaTruffle LibraryBinding CriticalLibraryBinding getClass hashCode equals"
+               + " toString clone finalize wait notify notifyAll")
               .split(" "));
 
   /**
@@ -126,6 +133,11 @@ public final class Validator {
     // imports (which keep the real by-value layout, unlike _myna_ref-lowered exports) need
     // canonical structs or the generated <clinit> downcallHandle throws
     // ExceptionInInitializerError.
+    // The Truffle class is generated whenever cells are configured, even with no cell in it.
+    if (module.truffleConfig() != null)
+      require(
+          !types.contains(module.truffleClass()),
+          "type collides with generated Truffle class " + module.truffleClass());
     Set<String> byValueImportStructs = new HashSet<>();
     for (Function function : module.functions()) {
       if (function.direction() != Direction.IMPORT) continue;
@@ -247,6 +259,7 @@ public final class Validator {
               || (function.direction() == Direction.IMPORT
                   && !enabled(function.facts(), "noreturn")),
           "native_leaf requires a returning native import");
+      truffle(module, function, types, signatures);
       require(
           !(enabled(function.facts(), "noreturn") && enabled(function.facts(), "willreturn")),
           "noreturn contradicts willreturn");
@@ -376,6 +389,39 @@ public final class Validator {
       }
     }
     OwnershipValidator.validate(module);
+  }
+
+  /**
+   * Cells call existing bindings with primitive, pointer and byte-buffer arguments. Records by
+   * value and callbacks need language glue, so a module that opts into cells must opt those imports
+   * out.
+   */
+  private static void truffle(
+      Module module, Function function, Set<String> types, Set<String> signatures) {
+    boolean configured = module.truffleConfig() != null;
+    for (String fact : List.of("truffle_cell", "truffle_raw_pointers"))
+      require(
+          !function.facts().containsKey(fact) || configured,
+          fact + " requires module truffle_cells=true");
+    require(
+        !function.facts().containsKey("truffle_cell") || function.direction() == Direction.IMPORT,
+        "truffle_cell applies to imports only");
+    if (!Seam.truffleCell(module, function)) return;
+    String advice = "; opt out with truffle_cell=false@explicit_contract on " + function.name();
+    require(
+        !(function.returns() instanceof Named)
+            && function.parameters().stream().noneMatch(p -> p.type() instanceof Named),
+        "Truffle cells do not support by-value records" + advice);
+    require(
+        function.parameters().stream().noneMatch(p -> p.type() instanceof FunctionPointer),
+        "Truffle cells do not support callback parameters" + advice);
+    require(
+        !enabled(function.facts(), "noreturn"),
+        "Truffle cells require a returning import" + advice);
+    String cell = function.name() + "_Cell";
+    require(
+        !types.contains(cell) && !signatures.contains(cell),
+        "type collides with generated Truffle cell for " + function.name());
   }
 
   private static void qualifiedType(String name) {

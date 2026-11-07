@@ -17,3 +17,4 @@ scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py
 mise run test:llvm-coverage
 scripts/python.sh tests/native_image_integration.py
+scripts/python.sh tests/truffle_integration.py

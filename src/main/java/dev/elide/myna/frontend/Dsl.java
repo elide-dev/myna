@@ -15,6 +15,7 @@ public final class Dsl {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
     NativeConfig nativeConfig = null;
+    TruffleConfig truffleConfig = null;
     var opaque = new ArrayList<String>();
     var structs = new ArrayList<Struct>();
     var functions = new ArrayList<Function>();
@@ -55,6 +56,24 @@ public final class Dsl {
             if (context != null || library != null)
               nativeConfig =
                   new NativeConfig(context, library, requireStatic != null && bool(requireStatic));
+            String cells = take(opts, "truffle_cells", null);
+            String backend = take(opts, "truffle_backend", "native");
+            String coercion = take(opts, "truffle_coercion", "strict");
+            String transitions = take(opts, "truffle_transitions", "direct");
+            boolean enabled = cells != null && bool(cells);
+            require(
+                enabled
+                    || (backend.equals("native")
+                        && coercion.equals("strict")
+                        && transitions.equals("direct")),
+                "truffle_backend, truffle_coercion and truffle_transitions require"
+                    + " truffle_cells=true");
+            if (enabled)
+              truffleConfig =
+                  new TruffleConfig(
+                      option(TruffleBackend.class, "truffle_backend", backend),
+                      option(TruffleCoercion.class, "truffle_coercion", coercion),
+                      option(TruffleTransitions.class, "truffle_transitions", transitions));
             empty(opts);
           }
           case "resource" -> {
@@ -202,7 +221,8 @@ public final class Dsl {
         functions,
         resources,
         borrows,
-        nativeConfig);
+        nativeConfig,
+        truffleConfig);
   }
 
   private static Map<String, String> options(String[] words, int start) {
@@ -226,6 +246,14 @@ public final class Dsl {
               pieces[0], Provenance.valueOf(pieces[1].toUpperCase(Locale.ROOT)), "DSL contract"));
     });
     return result;
+  }
+
+  private static <E extends Enum<E>> E option(Class<E> type, String key, String value) {
+    try {
+      return Enum.valueOf(type, value.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("invalid " + key + ": " + value, e);
+    }
   }
 
   private static String take(Map<String, String> opts, String key, String fallback) {
