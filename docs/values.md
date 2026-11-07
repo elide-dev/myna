@@ -288,7 +288,10 @@ chains in partially evaluated callers. `Utf8Key` provides `byteLength`, `lowWord
 `highWord`, `hash`, and `byteAt` without exposing mutable backing bytes. Packed
 words use little-endian byte order, independently of the host. The integration
 fixture compiles these read operations with Truffle inside Native Image and
-checks bounds-error deoptimization recovery.
+checks bounds-error deoptimization recovery. That image initializes its root
+class and `dev.elide.myna.values` at image-build time; descriptors, native
+storage, and reader instances are created at runtime. No process addresses are
+placed in the image heap.
 
 ### Reservation and batch text
 
@@ -324,4 +327,4 @@ around unbounded work.
 crossover in UTF-8 bytes; zero forces SIMD for nonempty external strings and
 `Integer.MAX_VALUE` selects Java for practical sizes. The compatibility default
 remains 256 until deployment measurements support a change. See
-[the text benchmark](../benchmarks/text/README.md).
+[the text benchmark](https://github.com/elide-dev/myna/blob/v0.11.0/benchmarks/text/README.md).

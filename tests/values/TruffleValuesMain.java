@@ -18,6 +18,8 @@ public final class TruffleValuesMain {
     }
   }
   public static void main(String[] args) {
+    System.setProperty("polyglot.engine.BackgroundCompilation", "false");
+    System.setProperty("polyglot.engine.CompilationFailureAction", "Throw");
     ValuesMain.compiledCheck = tape -> {
       var target = (OptimizedCallTarget) new Read().getCallTarget();
       boolean stable = false;

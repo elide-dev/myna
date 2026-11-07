@@ -133,11 +133,12 @@ class NativeImageIntegrationTests(unittest.TestCase):
         compile_native(classes, generated, fixture / "TruffleValuesMain.java", classpath=[classes, *deps])
         truffle_app = work / "truffle-values-app"
         native_image("-O2", "--add-exports=org.graalvm.truffle.runtime/com.oracle.truffle.runtime=ALL-UNNAMED",
+            "--initialize-at-build-time=fixture.values.TruffleValuesMain$Read,dev.elide.myna.values",
             "-cp", os.pathsep.join(map(str, [classes, *deps])),
             "--initialize-at-build-time=fixture.values.ValueApi$Literals",
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.TruffleValuesMain", "-o", truffle_app)
-        self.assertIn("Truffle reader runtime compilation passed", run(truffle_app).stdout)
+        self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
 
 
     def test_bemo_static_linkage_and_handwritten_callbacks(self):
