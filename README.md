@@ -93,7 +93,7 @@ Calls that can block or reenter Java must declare `native_leaf=false@explicit_co
 
 ## Call overhead
 
-Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max** in the retained binding ABI 2 runs. The same builds measure handwritten Native Image `@CFunction(NO_TRANSITION)` calls at **1.510 ns** and **0.999 ns**, respectively.
+Generated identity calls measure **0.527 ns on Linux ARM64** and **0.506 ns on Apple M5 Max** in the November 7, 2026 binding ABI 2 reruns. The same builds measure handwritten Native Image `@CFunction(NO_TRANSITION)` calls at **1.509 ns** and **0.973 ns**, respectively.
 
 ![Identity-call latency within each host: Myna default leaves, handwritten SVM leaves, and native C pointers; points show process medians and ranges](docs/charts/default-leaf.svg)
 
@@ -101,7 +101,7 @@ These timings include the identity function and caller loop, with no control sub
 
 Myna's generated direct calls use relocated symbols and remove the extra SVM leaf stub. Both hosts pass concurrent-GC and assembly checks. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
 
-[Linux measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code](benchmarks/comparison/evidence/README.md)
+[Linux measurements](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-arm64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-arm64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-07/README.md)
 
 <details>
 <summary>Normal transitions and AOT FFM comparisons</summary>

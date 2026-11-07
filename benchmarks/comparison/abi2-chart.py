@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 ROOT=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--linux',type=Path,default=ROOT/'benchmarks/comparison/baselines/default-leaf-linux-arm64.json')
-parser.add_argument('--macos',type=Path,default=ROOT/'benchmarks/comparison/baselines/default-leaf-macos-arm64.json')
+parser.add_argument('--linux',type=Path,default=ROOT/'benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-arm64.json')
+parser.add_argument('--macos',type=Path,default=ROOT/'benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.json')
 parser.add_argument('--output',type=Path,default=ROOT/'docs/charts/default-leaf')
 args=parser.parse_args()
 inputs=[args.linux,args.macos]
