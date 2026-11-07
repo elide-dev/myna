@@ -62,9 +62,9 @@ artifacts {
 
 dependencies {
   maven {
-    repositories { ["gvm-elide"] = "https://maven.elide.dev/gvm-elide/25.5.5-elide.24" }
-    compileOnly { "org.graalvm.sdk:nativeimage:25.5.5-elide.24" }
-    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.5.5-elide.24" }
+    repositories { ["gvm-elide"] = "https://maven.elide.dev/gvm-elide/25.5.5-elide.26" }
+    compileOnly { "org.graalvm.sdk:nativeimage:25.5.5-elide.26" }
+    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.5.5-elide.26" }
   }
 }
 
