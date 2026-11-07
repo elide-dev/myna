@@ -53,7 +53,10 @@ __attribute__((noinline)) int64_t c_probe(void) { int64_t value = 42; (void)seam
         run(llvm("llvm-ar"), "rcsT", thin, original)
         truncated_elf = self.work / "truncated.o"
         truncated_elf.write_bytes(b"\x7fELF\x02\x01\x01" + b"\0" * 9 + b"\x01\0\x3e\0")
+        unknown_object = self.work / "unknown.o"
+        unknown_object.write_bytes(b"not an object or bitcode")
         cases = [(self.work / "absent.ll", original, output),
+                 (self.contracts, unknown_object, output),
                  (bad_contract, original, output),
                  (self.contracts, self.work / "absent.o", output),
                  (self.contracts, malformed, output),
