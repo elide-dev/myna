@@ -53,15 +53,38 @@ def java_warnings():
         "-d", ROOT / "build/quality/classes", *sources)
 
 
+def compiler_includes():
+    # clang-tidy does not execute compiler wrappers from compile_commands.json.
+    # Ask the actual pinned driver for its implicit C++/sysroot search paths.
+    probe = subprocess.run([os.environ["CXX"], "-E", "-x", "c++", "-", "-v"],
+                           input="", text=True, capture_output=True, check=True)
+    flags, collecting = [], False
+    for line in probe.stderr.splitlines():
+        if line.strip() == "#include <...> search starts here:":
+            collecting = True
+        elif collecting and line.strip() == "End of search list.":
+            break
+        elif collecting:
+            path = line.strip()
+            framework = path.endswith(" (framework directory)")
+            path = path.removesuffix(" (framework directory)")
+            flags += ["-iframework" if framework else "-isystem", path]
+    if not flags:
+        raise RuntimeError("Pinned C++ driver returned no include search paths")
+    return flags
+
+
 def native_analysis():
     config = subprocess.check_output([os.environ["LLVM_CONFIG"], "--cmakedir"], text=True).strip()
     build = ROOT / "build/quality/llvm"
     run("cmake", "--fresh", "-S", ROOT / "llvm", "-B", build,
         f"-DLLVM_DIR={config}", f"-DCMAKE_TOOLCHAIN_FILE={ROOT / 'tools/native.cmake'}",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DCMAKE_BUILD_TYPE=Release")
-    run("clang-tidy", ROOT / "llvm/main.cpp", "-p", build)
+    includes = compiler_includes()
+    run("clang-tidy", ROOT / "llvm/main.cpp", "-p", build,
+        *(f"--extra-arg={flag}" for flag in includes))
     # Exercise inline value producers with their real fuzz workload as a TU.
-    flags = ["-std=c++17", f"-I{ROOT / 'include'}"]
+    flags = ["-std=c++17", f"-I{ROOT / 'include'}", *includes]
     if os.environ.get("SDKROOT"):
         flags += ["-isysroot", os.environ["SDKROOT"]]
     run("clang-tidy", ROOT / "tests/fuzz/values.cpp", "--", *flags)
