@@ -7,12 +7,13 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 # Raw word loads and CFunction calls cannot execute in a stock JVM. Real SVM
 # integration tests exercise these classes; do not count them as JVM coverage.
-NATIVE_ONLY = {"dev/elide/myna/values/NativeValueTape.java", "dev/elide/myna/values/SimdNativeValueTape.java"}
+NATIVE_ONLY = {"dev/elide/myna/values/NativeValueTape.java", "dev/elide/myna/values/SimdNativeValueTape.java",
+               "dev/elide/myna/truffle/ImageMemory.java"}
 
 def select(report, output):
     root = ET.parse(report).getroot()
     expected = {str(p.relative_to(ROOT / "src" / source / "java"))
-                for source in ("main", "feature", "values")
+                for source in ("main", "feature", "values", "truffle")
                 for p in (ROOT / "src" / source / "java").rglob("*.java")} - NATIVE_ONLY
     seen = set()
     result = ET.Element("report", name="Myna production JVM")

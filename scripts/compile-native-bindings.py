@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 
-def compile_bindings(output, generated, sources, classpath=()):
+def compile_bindings(output, generated, sources, classpath=(), options=()):
     home = Path(os.environ['GRAALVM_HOME'])
     sdk = [home / 'lib/svm' / name for name in ('svm-shared.jar', 'svm-guest-staging.jar', 'svm-guest.jar')]
     for jar in sdk:
@@ -19,7 +19,7 @@ def compile_bindings(output, generated, sources, classpath=()):
             raise RuntimeError('Myna binding ABI 2 requires the pinned Elide Graal SDK: missing ' + str(jar))
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    subprocess.run(['javac', '-cp', os.pathsep.join(map(str, [*sdk, *classpath])), '-d', str(output),
+    subprocess.run(['javac', *options, '-cp', os.pathsep.join(map(str, [*sdk, *classpath])), '-d', str(output),
                     *map(str, sources)], check=True)
     for directory in generated:
         metadata = Path(directory) / 'META-INF'

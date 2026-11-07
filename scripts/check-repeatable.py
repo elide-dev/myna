@@ -22,7 +22,7 @@ version = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package
 env = dict(os.environ)
 env.setdefault("SOURCE_DATE_EPOCH", subprocess.check_output(
     ["git", "show", "-s", "--format=%ct", "HEAD"], cwd=ROOT, text=True).strip())
-files = ["myna", "myna-llvm", "myna.jar", "myna-feature.jar", "myna-values.jar",
+files = ["myna", "myna-llvm", "myna.jar", "myna-feature.jar", "myna-values.jar", "myna-truffle.jar",
          f"myna-values-{version}.tar.gz"]
 # Identify local inputs as well as HEAD, including new files and dirty edits.
 inputs = subprocess.check_output(
@@ -34,7 +34,7 @@ for number in (1, 2):
     destination = work / str(number)
     destination.mkdir(exist_ok=True)
     with (destination / "build.log").open("w") as log:
-        for command in (["elide", "build", "--no-cache", ":jar", ":feature-jar", ":values-jar"],
+        for command in (["elide", "build", "--no-cache", ":jar", ":feature-jar", ":values-jar", ":truffle-jar"],
                         ["scripts/build.sh", "--llvm"], ["scripts/package-values.sh"]):
             subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
     hashes = {}

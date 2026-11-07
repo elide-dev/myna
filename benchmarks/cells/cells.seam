@@ -1,0 +1,18 @@
+# Truffle cell workloads over the shared comparison kernel plus borrow and string targets.
+module cells_bench abi=1 target=aarch64-apple-darwin java_package=bench java_class=Cells truffle_cells=true
+import leaf symbol=myna_bench_leaf return=i64 error=no_failure
+  param value type=i64
+end
+import step symbol=myna_bench_step return=i64 error=no_failure native_leaf=false@explicit_contract
+  param value type=i64
+end
+borrow sum bytes length=count lifetime=call
+import sum symbol=myna_bench_sum return=i64 error=no_failure nounwind=true@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param salt type=i64
+end
+import text symbol=myna_bench_text return=i64 error=no_failure
+  param text type=ptr<char> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param salt type=i64
+end

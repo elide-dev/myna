@@ -6,8 +6,11 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import tomllib
 import unittest
 from support import BINARY, ROOT, TARGET, main, run
+
+VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
 
 class NativeCliTests(unittest.TestCase):
     def test_callback_records_are_rejected(self):
@@ -85,7 +88,7 @@ end
 
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
-        self.assertEqual(run(BINARY, "--version").stdout.strip(), "0.11.0")
+        self.assertEqual(run(BINARY, "--version").stdout.strip(), VERSION)
         with tempfile.TemporaryDirectory(prefix="myna e2e ") as tmp:
             out = Path(tmp)
             run(BINARY, "generate", ROOT / "examples/buffer.seam", "--jni", "--out", out, "--target", TARGET)

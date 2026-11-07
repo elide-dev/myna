@@ -34,8 +34,8 @@ description = "Install Rust check tools, Elide Python, and project dependencies"
 run = ["rustup component add rustfmt clippy llvm-tools-preview", "elide setup python --channel release", "scripts/python.sh scripts/setup-graalvm.py", "elide install"]
 
 [tasks."build:jvm"]
-description = "Build the CLI and hosted Feature JARs with Elide"
-run = "elide build :jar :feature-jar :values-jar"
+description = "Build the CLI, hosted Feature, value reader and Truffle cell JARs with Elide"
+run = "elide build :jar :feature-jar :values-jar :truffle-jar"
 
 [tasks.build]
 description = "Build the native CLI and JARs"
@@ -57,6 +57,10 @@ run = "scripts/python.sh tests/llvm_integration.py"
 
 [tasks."test:native-image"]
 run = "scripts/python.sh tests/native_image_integration.py"
+
+[tasks."test:truffle"]
+description = "Run generated Truffle cells on HotSpot (FFM) and from runtime-compiled Native Image code"
+run = "scripts/python.sh tests/truffle_integration.py"
 
 [tasks."test:rust"]
 description = "Test allocator-aware Serde value mapping"
@@ -126,6 +130,17 @@ run = "scripts/python.sh benchmarks/native/build.py"
 
 [tasks."test:llvm-coverage"]
 run = "scripts/python.sh scripts/native-coverage.py"
+
+[tasks."bench:cells-build"]
+description = "Build the Truffle cell benchmark image (needs build:jvm for myna-truffle.jar)"
+run = "scripts/python.sh benchmarks/cells/run.py build"
+
+[tasks."bench:cells"]
+description = "Measure Truffle cell call costs from runtime-compiled Native Image code"
+run = "scripts/python.sh benchmarks/cells/run.py run"
+
+[tasks."bench:cells-smoke"]
+run = "scripts/python.sh benchmarks/cells/run.py run --forks 1 --iterations 65536"
 
 [tasks."bench:floor-build"]
 run = "scripts/python.sh benchmarks/floor/run.py build"
