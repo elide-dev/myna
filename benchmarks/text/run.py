@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import platform
 from pathlib import Path
 import subprocess
@@ -30,11 +31,15 @@ def main():
     if len(samples) != args.forks * 48:
         raise RuntimeError('Missing benchmark cases')
     paths = [binary, ROOT / 'tests/values/ValuesMain.java', ROOT / 'tests/values/src/lib.rs',
+             ROOT / 'target/release/libmyna_values_fixture.a',
+             *sorted((ROOT / 'crates/myna-values/src').glob('*.rs')),
              *sorted((ROOT / 'src/values/java').rglob('*.java'))]
     result = dict(timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   platform=platform.platform(), machine=platform.machine(),
                   cpu=capture('sysctl', '-n', 'machdep.cpu.brand_string') if platform.system() == 'Darwin' else Path('/proc/cpuinfo').read_text(),
                   toolchain=capture('elide-toolchain', 'version'), java=capture('java', '--version'),
+                  clang=capture(os.environ['CC'], '--version'), rust=capture('rustc', '-vV'),
+                  build_environment={name: os.environ.get(name, '') for name in ('CC', 'CXX', 'CFLAGS', 'CXXFLAGS', 'RUSTFLAGS', 'SDKROOT')},
                   commit=capture('git', 'rev-parse', 'HEAD'), dirty=bool(capture('git', 'status', '--porcelain')),
                   native_image_flags=['-O2'], iterations=args.iterations,
                   sha256={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},
