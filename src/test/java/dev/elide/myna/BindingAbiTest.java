@@ -26,7 +26,7 @@ class BindingAbiTest {
     assertTrue(source.contains("return MynaSymbols.read.get().invoke(value);"));
     assertTrue(source.contains("public static read_Leaf readLeafPointer()"));
     assertFalse(source.contains("@CFunction(value"));
-    assertTrue(fast.get("seam.json").contains("\"schemaVersion\": 2"));
+    assertTrue(fast.get("seam.json").contains("\"schemaVersion\": 3"));
     assertTrue(fast.get("seam.json").contains("\"bindingAbiVersion\": 2"));
     assertTrue(fast.get("seam.h").contains("BINDINGS_BINDING_ABI_VERSION 2"));
     assertTrue(fast.get("seam.rs").contains("BINDING_ABI_VERSION: u32 = 2"));

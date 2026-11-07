@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.12.0",
+  "generatorVersion": "0.13.0",
   "name": "buffer",
   "abiVersion": 1,
-  "targetTriple": "aarch64-apple-darwin",
+  "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
   "opaqueTypes": ["Buffer"],
   "structs": [{"name":"BufferView","size":24,"alignment":8,"fields":[{"name":"data","type":"ptr<u8>","offset":0},{"name":"length","type":"u64","offset":8},{"name":"flags","type":"u32","offset":16}]},{"name":"Pair","size":16,"alignment":8,"fields":[{"name":"left","type":"i64","offset":0},{"name":"right","type":"i32","offset":8}]},{"name":"Triple","size":24,"alignment":8,"fields":[{"name":"a","type":"i64","offset":0},{"name":"b","type":"i64","offset":8},{"name":"c","type":"i64","offset":16}]}],
   "callbacks": [{"name":"Reducer","returnType":"i64","parameters":[{"name":"left","type":"i64","nullable":true,"ownership":"UNSPECIFIED","access":"UNSPECIFIED","facts":{}},{"name":"right","type":"i64","nullable":true,"ownership":"UNSPECIFIED","access":"UNSPECIFIED","facts":{}}]},{"name":"Visitor","returnType":"i32","parameters":[{"name":"isolate","type":"isolate_thread","nullable":true,"ownership":"UNSPECIFIED","access":"UNSPECIFIED","facts":{}},{"name":"value","type":"i64","nullable":true,"ownership":"UNSPECIFIED","access":"UNSPECIFIED","facts":{}}]}],

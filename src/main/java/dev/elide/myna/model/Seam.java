@@ -8,8 +8,37 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.12.0";
+  public static final String VERSION = "0.13.0";
   public static final int BINDING_ABI_VERSION = 2;
+
+  /**
+   * The target properties a seam's layouts and platform-neutral outputs depend on. Struct sizes,
+   * alignments and offsets, scalar widths and Java carriers follow from these alone; the triple
+   * itself only selects target-specific LLVM contracts (sub-word argument extension, by-value
+   * lowering), which are not part of the fingerprint.
+   */
+  public record TargetAbi(String dataModel, String byteOrder) {
+    @Override
+    public String toString() {
+      return dataModel + ", " + byteOrder + "-endian";
+    }
+  }
+
+  private static final TargetAbi LP64_LITTLE = new TargetAbi("LP64", "little");
+
+  /** Supported triples and their resolved ABI class. Equal classes share fingerprints. */
+  public static final Map<String, TargetAbi> TARGETS =
+      Map.of(
+          "aarch64-apple-darwin", LP64_LITTLE,
+          "x86_64-apple-darwin", LP64_LITTLE,
+          "aarch64-unknown-linux-gnu", LP64_LITTLE,
+          "x86_64-unknown-linux-gnu", LP64_LITTLE);
+
+  public static TargetAbi targetAbi(String triple) {
+    TargetAbi abi = triple == null ? null : TARGETS.get(triple);
+    if (abi == null) throw new IllegalArgumentException("unsupported target: " + triple);
+    return abi;
+  }
 
   /** Binding ABI 2 makes bounded, nonblocking, non-reentrant native imports the default. */
   public static boolean nativeLeaf(Function function) {

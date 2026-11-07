@@ -13,15 +13,23 @@ import java.util.*;
 public final class SeamJson {
   private SeamJson() {}
 
+  /**
+   * The target is recorded as its resolved ABI class, not its triple, so targets with identical
+   * layouts produce identical descriptors, fingerprints and platform-neutral outputs.
+   */
   public static String canonical(Module m) {
-    return "{\n  \"schemaVersion\": 2,\n  \"bindingAbiVersion\": 2,\n  \"generatorVersion\": "
+    TargetAbi abi = Seam.targetAbi(m.targetTriple());
+    return "{\n  \"schemaVersion\": 3,\n  \"bindingAbiVersion\": 2,\n  \"generatorVersion\": "
         + quote(Seam.VERSION)
         + ",\n  \"name\": "
         + quote(m.name())
         + ",\n  \"abiVersion\": "
         + m.abiVersion()
-        + ",\n  \"targetTriple\": "
-        + quote(m.targetTriple())
+        + ",\n  \"targetAbi\": {\"dataModel\":"
+        + quote(abi.dataModel())
+        + ",\"byteOrder\":"
+        + quote(abi.byteOrder())
+        + "}"
         + java(m)
         + nativeConfig(m)
         + truffle(m)

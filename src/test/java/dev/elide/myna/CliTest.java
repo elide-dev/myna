@@ -27,7 +27,7 @@ class CliTest {
   void helpVersionAndBadUsage() {
     assertEquals(0, run().code());
     assertTrue(run("--help").out().contains("myna apply"));
-    assertEquals("0.12.0\n", run("--version").out());
+    assertEquals("0.13.0\n", run("--version").out());
     for (String[] args :
         List.of(
             new String[] {"bad"},
@@ -38,6 +38,29 @@ class CliTest {
             new String[] {"generate", "examples/buffer.seam", "--unknown"},
             new String[] {"generate", "examples/buffer.seam", "--check", "--check"},
             new String[] {"validate", "examples/buffer.seam", "--check"},
+            new String[] {"validate", "examples/buffer.seam", "--targets"},
+            new String[] {"generate", "examples/buffer.seam", "--targets", "x86_64-apple-darwin"},
+            new String[] {
+              "validate",
+              "examples/buffer.seam",
+              "--target",
+              "x86_64-apple-darwin",
+              "--targets",
+              "x86_64-apple-darwin"
+            },
+            new String[] {
+              "validate", "examples/buffer.seam", "--targets", "x86_64-apple-darwin", "--check"
+            },
+            new String[] {
+              "validate",
+              "examples/buffer.seam",
+              "--targets",
+              "x86_64-apple-darwin,x86_64-apple-darwin"
+            },
+            new String[] {
+              "validate", "examples/buffer.seam", "--targets", "x86_64-apple-darwin,riscv64-linux"
+            },
+            new String[] {"validate", "examples/buffer.seam", "--targets", "x86_64-apple-darwin,"},
             new String[] {"generate", "examples/buffer.seam"},
             new String[] {"apply"},
             new String[] {"apply", "--wrong", "x"},
@@ -74,6 +97,37 @@ class CliTest {
     Files.delete(out.resolve("seam.abi"));
     assertEquals(
         1, run("generate", "examples/buffer.seam", "--out", out.toString(), "--check").code());
+  }
+
+  @Test
+  void validateTargetsRequiresOneFingerprint() {
+    var all =
+        run(
+            "validate",
+            "examples/buffer.seam",
+            "--targets",
+            "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,aarch64-apple-darwin,"
+                + "x86_64-apple-darwin");
+    assertEquals(0, all.code(), all.err());
+    for (String target :
+        List.of("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "aarch64-apple-darwin"))
+      assertEquals(
+          all.out(), run("validate", "examples/buffer.seam", "--target", target).out(), target);
+    assertTrue(all.out().matches("valid buffer [0-9a-f]{64}\n"), all.out());
+    var diverged =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Main.sharedFingerprint(
+                    new TreeMap<>(
+                        Map.of(
+                            "aa", List.of("x86_64-unknown-linux-gnu (LP64, little-endian)"),
+                            "bb",
+                                List.of("a (ILP32, little-endian)", "b (ILP32, little-endian)")))));
+    assertEquals(
+        "targets have different ABI fingerprints: aa for x86_64-unknown-linux-gnu (LP64,"
+            + " little-endian); bb for a (ILP32, little-endian), b (ILP32, little-endian)",
+        diverged.getMessage());
   }
 
   @Test

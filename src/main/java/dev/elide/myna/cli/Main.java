@@ -18,15 +18,16 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.12.0 — Native Image / Rust ABI generator
+      myna 0.13.0 — Native Image / Rust ABI generator
       Usage:
         myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni]
-        myna validate INPUT.seam [--target TRIPLE] [--relaxed]
+        myna validate INPUT.seam [--target TRIPLE | --targets TRIPLE,...] [--relaxed]
         myna apply --contracts seam.ll --input caller.o --output caller.seam.o [--llvm-tool PATH]
         myna --help | --version
       apply rewrites LLVM 23 bitcode objects or archive members using myna-llvm.
       --relaxed omits unapproved optimizer facts; unknown/contradictory contracts still fail.
       --check verifies generated files without modifying them.
+      --targets fails unless every listed target shares one ABI fingerprint.
       --jni adds static JNI adapters for Substrate VM (link lib<module>_jni.a).
       """;
 
@@ -41,6 +42,39 @@ public final class Main {
 
   public static int run(String[] args, PrintStream out, PrintStream err) {
     return run(args, out, err, Main::execute);
+  }
+
+  /**
+   * Validates the seam for every target and requires one fingerprint, so a published
+   * platform-neutral binding accepts each target's native library.
+   */
+  private static int validateTargets(
+      Module module, List<String> targets, boolean strict, PrintStream out) {
+    var byFingerprint = new TreeMap<String, List<String>>();
+    for (String target : targets) {
+      if (targets.indexOf(target) != targets.lastIndexOf(target))
+        throw new IllegalArgumentException("duplicate target: " + target);
+      Module retargeted = module.withTarget(target);
+      Validator.validate(retargeted, strict);
+      byFingerprint
+          .computeIfAbsent(SeamJson.fingerprint(retargeted), k -> new ArrayList<>())
+          .add(target + " (" + Seam.targetAbi(target) + ")");
+    }
+    out.println("valid " + module.name() + " " + sharedFingerprint(byFingerprint));
+    return 0;
+  }
+
+  /** The one fingerprint of {@code byFingerprint}, or a diagnostic naming each group. */
+  public static String sharedFingerprint(SortedMap<String, List<String>> byFingerprint) {
+    if (byFingerprint.size() != 1)
+      throw new IllegalArgumentException(
+          "targets have different ABI fingerprints: "
+              + String.join(
+                  "; ",
+                  byFingerprint.entrySet().stream()
+                      .map(e -> e.getKey() + " for " + String.join(", ", e.getValue()))
+                      .toList()));
+    return byFingerprint.firstKey();
   }
 
   public static int run(String[] args, PrintStream out, PrintStream err, CommandRunner runner) {
@@ -59,6 +93,7 @@ public final class Main {
       if (args.length < 2) throw new IllegalArgumentException("missing INPUT.seam");
       Path input = Path.of(args[1]), destination = null;
       String target = null;
+      List<String> targets = null;
       boolean strict = true, check = false, jni = false;
       Set<String> seen = new HashSet<>();
       for (int i = 2; i < args.length; i++) {
@@ -72,6 +107,10 @@ public final class Main {
             requireValue(args, i);
             target = args[++i];
           }
+          case "--targets" -> {
+            requireValue(args, i);
+            targets = List.of(args[++i].split(",", -1));
+          }
           case "--relaxed" -> strict = false;
           case "--check" -> check = true;
           case "--jni" -> jni = true;
@@ -79,11 +118,16 @@ public final class Main {
         }
       }
       Module module = Dsl.parse(Files.readString(input));
+      if (args[0].equals("validate") && (destination != null || check || jni))
+        throw new IllegalArgumentException("validate does not accept --out/--check/--jni");
+      if (targets != null) {
+        if (!args[0].equals("validate") || target != null)
+          throw new IllegalArgumentException("--targets is a validate option without --target");
+        return validateTargets(module, targets, strict, out);
+      }
       if (target != null) module = module.withTarget(target);
       Validator.validate(module, strict);
       if (args[0].equals("validate")) {
-        if (destination != null || check || jni)
-          throw new IllegalArgumentException("validate does not accept --out/--check/--jni");
         out.println("valid " + module.name() + " " + SeamJson.fingerprint(module));
         return 0;
       }

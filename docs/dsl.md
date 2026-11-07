@@ -12,6 +12,8 @@ Optional `java_package=dev.example.io` and `java_class=IoNatives` name the gener
 
 Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-gnu`. Their layouts are modeled explicitly as 64-bit little-endian targets; no global assumption about other ABIs is made. The CLI's `--target` overrides the descriptor target before validation/fingerprinting.
 
+The canonical descriptor records the target's resolved ABI class (`"targetAbi": {"dataModel":"LP64","byteOrder":"little"}`), not its triple. Struct sizes, alignments and offsets, scalar widths and Java carriers follow from the class alone, so targets in one class produce the same fingerprint and byte-identical `seam.json`, `seam.abi`, `seam.h`, `seam.rs`, Java and Native Image metadata. Only the LLVM contracts (`seam.ll`, `seam-jni.ll`) name the triple: sub-word argument extension and by-value lowering are target conventions that the native compiler and the Java linker each apply for the platform they run on, and `myna apply` still rejects contracts for a different target. All four supported targets currently share the LP64 little-endian class. `myna validate INPUT.seam --targets TRIPLE,...` validates every listed target and fails unless they share one fingerprint.
+
 ## Types and layouts
 
 Scalars are `void`, `bool`, `char`, `i8/u8`, `i16/u16`, `i32/u32`, `i64/u64`, `usize/isize`, `f32/f64`. `char` is C `char` (Rust `core::ffi::c_char`, signed or unsigned by target). `usize/isize` are pointer-sized (`size_t`/`ptrdiff_t`, Java `long`, `ptr<usize>` → `WordPointer`). `ptr<T>` supports scalar, opaque, record, and nested-pointer pointees.
@@ -105,7 +107,7 @@ Facts describe the entire exported/native operation, including runtime transitio
 
 ## Determinism
 
-Declarations and fact keys are sorted, parameter/field order is preserved, and output includes no timestamps or input paths. `seam.abi` is the SHA-256 of canonical `seam.json` including target, generator/schema version, ABI shape, Java adaptation, and fact provenance. It intentionally changes when contracts change, even if the C signature remains identical. Fingerprints detect drift; they do not prove semantic correctness or authenticate a provider binary.
+Declarations and fact keys are sorted, parameter/field order is preserved, and output includes no timestamps or input paths. `seam.abi` is the SHA-256 of canonical `seam.json` including target ABI class, generator/schema version, ABI shape, Java adaptation, and fact provenance. It intentionally changes when contracts change, even if the C signature remains identical. Fingerprints detect drift; they do not prove semantic correctness or authenticate a provider binary.
 
 ## Native Image leaf-call policy
 

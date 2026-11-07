@@ -13,12 +13,7 @@ import java.util.regex.Pattern;
 public final class Validator {
   private Validator() {}
 
-  public static final Set<String> TARGETS =
-      Set.of(
-          "aarch64-apple-darwin",
-          "x86_64-apple-darwin",
-          "aarch64-unknown-linux-gnu",
-          "x86_64-unknown-linux-gnu");
+  public static final Set<String> TARGETS = Seam.TARGETS.keySet();
   private static final Set<String> PARAM_FACTS =
       Set.of(
           "nonnull", "nocapture", "readonly", "writeonly", "noalias", "align", "dereferenceable");
