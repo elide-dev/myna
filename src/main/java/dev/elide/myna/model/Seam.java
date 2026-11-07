@@ -186,8 +186,13 @@ public final class Seam {
   }
 
   /** A callback signature, referenced as {@code fn<name>}. */
-  public record Signature(String name, Type returns, List<Parameter> parameters, String javaType,
-                          String ffmTarget, String ffmSentinel) {
+  public record Signature(
+      String name,
+      Type returns,
+      List<Parameter> parameters,
+      String javaType,
+      String ffmTarget,
+      String ffmSentinel) {
     public Signature(String name, Type returns, List<Parameter> parameters) {
       this(name, returns, parameters, null, null, null);
     }

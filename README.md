@@ -4,6 +4,7 @@
 [![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/elide-dev/myna?utm_source=badge)
 [![codecov](https://codecov.io/gh/elide-dev/myna/graph/badge.svg?token=LynXFKjtbf)](https://codecov.io/gh/elide-dev/myna)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/elide-dev/myna/badge)](https://scorecard.dev/viewer/?uri=github.com/elide-dev/myna)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16413/badge)](https://www.bestpractices.dev/en/projects/16413)
 [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue)](LICENSE)
 [![Discord](https://img.shields.io/discord/1119121740161884252?b2&logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
 ![Java 25+](https://img.shields.io/badge/-Java%2025%2B-blue.svg?logo=openjdk&logoColor=white)
@@ -47,6 +48,8 @@ These latencies include the scalar callee and loop; the roughly 0.59 ns control 
 ## Build and use
 
 Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.2 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+
+Native builds preserve `CC`, `CXX`, `CPPFLAGS`, `CFLAGS`, `CXXFLAGS`, and `LDFLAGS`; compiler overrides must remain compatible with the pinned LLVM 23 toolchain and sysroot. Native Image receives C/preprocessor flags for its C compilation and linker flags for its native link; the C++ applicator uses CMake's standard flag handling. Debug information is retained in matching symbol sidecars before release executables are stripped. CMake installation supports `cmake --install build/llvm --prefix PREFIX` and the standard `DESTDIR` staging variable. Containers can be installed and removed with the normal `docker pull`/`docker image rm` commands.
 
 ```sh
 mise trust
@@ -187,3 +190,5 @@ Arrays and nested by-value fields, enums, general allocator optimizer attributes
 Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.2,
 and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
+
+Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`. The current macOS check reproduces the JARs, LLVM executable and value SDK archive, but the Native Image CLI still differs. This remains a blocker for the OpenSSF silver badge; the live badge above reflects the awarded level.

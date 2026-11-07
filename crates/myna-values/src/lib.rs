@@ -40,6 +40,8 @@ use std::{fmt, marker::PhantomData};
 compile_error!("Myna value ABI v3 requires a 64-bit target");
 
 pub const ABI_VERSION: u32 = 3;
+/// Descriptor capability for IEEE-754 NaN and infinities; absent by default.
+pub const ALLOW_NON_FINITE: u32 = 1;
 pub const NULL: u32 = 0;
 pub const BOOL: u32 = 1;
 pub const I64: u32 = 2;
@@ -142,7 +144,7 @@ pub enum Error {
     Allocation,
     #[error("value exceeds the configured size or depth limit")]
     Limit,
-    #[error("JSON-shaped values require finite floating-point numbers")]
+    #[error("non-finite floats require Options::allow_non_finite")]
     NonFinite,
     #[error("integer is outside the supported i64/u64 range")]
     IntegerRange,
@@ -166,6 +168,12 @@ pub struct Limits {
     pub max_nodes: usize,
     pub max_bytes: usize,
 }
+
+/// Optional value semantics. Defaults preserve strict, JSON-shaped values.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options {
+    pub allow_non_finite: bool,
+}
 impl Default for Limits {
     fn default() -> Self {
         Self {
@@ -183,6 +191,7 @@ pub struct Document<A: Allocator + Clone> {
     nodes: Vec<Node, A>,
     bytes: Vec<u8, A>,
     limits: Limits,
+    options: Options,
     complete: bool,
     failed: bool,
     utf8_len: usize,
@@ -197,10 +206,15 @@ impl<A: Allocator + Clone> Document<A> {
         Self::with_limits_in(allocator, Limits::default())
     }
     pub fn with_limits_in(allocator: A, limits: Limits) -> Self {
+        Self::with_options_in(allocator, limits, Options::default())
+    }
+    /// Enable explicit descriptor capabilities without changing the ABI layout.
+    pub fn with_options_in(allocator: A, limits: Limits, options: Options) -> Self {
         Self {
             nodes: Vec::new_in(allocator.clone()),
             bytes: Vec::new_in(allocator),
             limits,
+            options,
             complete: false,
             failed: false,
             utf8_len: 0,
@@ -241,6 +255,11 @@ impl<A: Allocator + Clone> Document<A> {
             nodes: &self.nodes,
             bytes: &self.bytes,
             regions: &[],
+            flags: if self.options.allow_non_finite {
+                ALLOW_NON_FINITE
+            } else {
+                0
+            },
         })
     }
     pub fn capacities(&self) -> (usize, usize) {
@@ -319,8 +338,12 @@ pub struct View<'a> {
     nodes: &'a [Node],
     bytes: &'a [u8],
     regions: &'a [Region],
+    flags: u32,
 }
 impl<'a> View<'a> {
+    pub fn flags(self) -> u32 {
+        self.flags
+    }
     pub fn nodes(self) -> &'a [Node] {
         self.nodes
     }
@@ -364,7 +387,7 @@ impl<'a> View<'a> {
         BorrowedRawView {
             raw: RawView {
                 version: ABI_VERSION,
-                flags: 0,
+                flags: self.flags,
                 nodes: self.nodes.as_ptr(),
                 node_count: self.nodes.len() as u64,
                 bytes: self.bytes.as_ptr(),

@@ -118,8 +118,8 @@ class GeneratorTest {
     String source =
         MODULE
             + "opaque Handle\n"
-            + "export open symbol=x_open return=i64 java=fixture.Ops.open isolate=thread error=abort"
-            + " include=fixture.ImageOnly\n"
+            + "export open symbol=x_open return=i64 java=fixture.Ops.open isolate=thread"
+            + " error=abort include=fixture.ImageOnly\n"
             + "  param path type=ptr<u8> nullable=false access=read\n"
             + "  param argv type=ptr<ptr<u8>>\n"
             + "  param any type=ptr<void>\n"
@@ -132,21 +132,24 @@ class GeneratorTest {
         ni.contains("@CEntryPoint(name = \"x_open\", include = fixture.ImageOnly.class)"), ni);
     assertTrue(
         ni.contains(
-            "open(IsolateThread isolate_thread, @CConst CCharPointer path, CCharPointerPointer argv,"
-                + " VoidPointer any, CIntPointer ints, PointerBase handle)"),
+            "open(IsolateThread isolate_thread, @CConst CCharPointer path, CCharPointerPointer"
+                + " argv, VoidPointer any, CIntPointer ints, PointerBase handle)"),
         ni);
     assertTrue(ni.contains("return fixture.Ops.open(path, argv, any, ints, handle);"));
     assertFalse(ni.contains("WordFactory"));
     assertFalse(ni.contains("CFunction"));
     assertTrue(output.get("seam.json").contains("\"include\":\"fixture.ImageOnly\""));
     assertNotEquals(
-        output.get("seam.abi"), generate(source.replace(" include=fixture.ImageOnly", "")).get("seam.abi"));
+        output.get("seam.abi"),
+        generate(source.replace(" include=fixture.ImageOnly", "")).get("seam.abi"));
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(source.replace("include=fixture.ImageOnly", "include=ImageOnly")));
     assertThrows(
         IllegalArgumentException.class,
-        () -> generate(VALID.replace("error=no_failure", "error=no_failure include=fixture.ImageOnly")));
+        () ->
+            generate(
+                VALID.replace("error=no_failure", "error=no_failure include=fixture.ImageOnly")));
   }
 
   @Test
@@ -161,7 +164,8 @@ class GeneratorTest {
         List.of("x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin")) {
       String ll = generate(source.replace("TARGET", target)).get("seam.ll");
       assertTrue(
-          ll.contains("declare i8 @put(i8 signext %a, i8 zeroext %b, i16 zeroext %c, i1 zeroext %d)"),
+          ll.contains(
+              "declare i8 @put(i8 signext %a, i8 zeroext %b, i16 zeroext %c, i1 zeroext %d)"),
           ll);
     }
     var output = generate(source.replace("TARGET", "aarch64-unknown-linux-gnu"));
@@ -174,7 +178,8 @@ class GeneratorTest {
     assertTrue(ni.contains("return fixture.Ops.get(a) & 0xffff;"), ni);
     String rust = output.get("seam.rs");
     assertTrue(rust.contains("pub fn put(a: i8, b: u8, c: u16, d: bool) -> u8;"), rust);
-    assertTrue(output.get("seam.h").contains("uint8_t put(int8_t a, uint8_t b, uint16_t c, bool d);"));
+    assertTrue(
+        output.get("seam.h").contains("uint8_t put(int8_t a, uint8_t b, uint16_t c, bool d);"));
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -206,7 +211,9 @@ class GeneratorTest {
             "public static byte put(byte a, byte b, short c, boolean d, int e, int f)"
                 + " throws Throwable {"),
         ffm);
-    assertTrue(ffm.contains("invokeExact(MynaFFM.put_Binding.ADDRESS, a, b & 0xff, c & 0xffff, d, e, f)"), ffm);
+    assertTrue(
+        ffm.contains("invokeExact(MynaFFM.put_Binding.ADDRESS, a, b & 0xff, c & 0xffff, d, e, f)"),
+        ffm);
     // Signed (i8/i16), bool, 32-bit parameters, isolate, and returns are NOT widened or masked.
     assertTrue(
         ffm.contains(
@@ -214,7 +221,8 @@ class GeneratorTest {
                 + " ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT)"),
         ffm);
     assertTrue(
-        ffm.contains("public static short get(MemorySegment isolate_thread, short a) throws Throwable {"),
+        ffm.contains(
+            "public static short get(MemorySegment isolate_thread, short a) throws Throwable {"),
         ffm);
     assertTrue(ffm.contains("invokeExact(MynaFFM.get_Binding.ADDRESS, isolate_thread, a)"), ffm);
     assertFalse(ffm.contains("a & 0xff"), ffm);
@@ -231,19 +239,25 @@ class GeneratorTest {
                 + "  param name type=ptr<char> access=read\n  param out type=ptr<usize>\n"
                 + "  param delta type=isize\n  param tag type=char\nend\n");
     assertTrue(
-        output.get("seam.rs").contains(
-            "pub fn lookup(name: *const core::ffi::c_char, out: *mut usize, delta: isize, tag:"
-                + " core::ffi::c_char) -> usize;"),
+        output
+            .get("seam.rs")
+            .contains(
+                "pub fn lookup(name: *const core::ffi::c_char, out: *mut usize, delta: isize, tag:"
+                    + " core::ffi::c_char) -> usize;"),
         output.get("seam.rs"));
     assertTrue(
-        output.get("seam.h").contains(
-            "size_t lookup(char const * name, size_t * out, ptrdiff_t delta, char tag);"),
+        output
+            .get("seam.h")
+            .contains("size_t lookup(char const * name, size_t * out, ptrdiff_t delta, char tag);"),
         output.get("seam.h"));
     String ni = output.get("MynaNative.java");
     assertTrue(
         ni.contains("long lookup(CCharPointer name, WordPointer out, long delta, byte tag) {"), ni);
     assertTrue(ni.contains("import org.graalvm.nativeimage.c.type.WordPointer;"));
-    assertTrue(output.get("seam.ll").contains("declare i64 @lookup(ptr %name, ptr %out, i64 %delta, i8 signext %tag)"));
+    assertTrue(
+        output
+            .get("seam.ll")
+            .contains("declare i64 @lookup(ptr %name, ptr %out, i64 %delta, i8 signext %tag)"));
     assertTrue(output.get("seam.rs").contains("pub type LookupFn = unsafe extern \"C\" fn("));
   }
 
@@ -251,19 +265,29 @@ class GeneratorTest {
   void callbacksAndIsolateThreadsAreValidated() {
     String base =
         MODULE
-            + "callback Sink return=i32\n  param isolate type=isolate_thread\n  param n type=i64\nend\n"
-            + "export sink return=i32 java=fixture.Ops.sink isolate=thread error=abort callback=Sink\n"
-            + "  param n type=i64\nend\n"
-            + "import run return=void error=no_failure\n  param cb type=fn<Sink>\n"
-            + "  param isolate type=isolate_thread\nend\n";
+            + "callback Sink return=i32\n"
+            + "  param isolate type=isolate_thread\n"
+            + "  param n type=i64\n"
+            + "end\n"
+            + "export sink return=i32 java=fixture.Ops.sink isolate=thread error=abort"
+            + " callback=Sink\n"
+            + "  param n type=i64\n"
+            + "end\n"
+            + "import run return=void error=no_failure\n"
+            + "  param cb type=fn<Sink>\n"
+            + "  param isolate type=isolate_thread\n"
+            + "end\n";
     var output = generate(base);
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("public interface Sink extends CFunctionPointer {"), ni);
     assertTrue(ni.contains("int invoke(IsolateThread isolate, long n);"), ni);
     assertTrue(
-        ni.contains("CEntryPointLiteral.create(MynaNative.class, \"sink\", IsolateThread.class, long.class)"),
+        ni.contains(
+            "CEntryPointLiteral.create(MynaNative.class, \"sink\", IsolateThread.class,"
+                + " long.class)"),
         ni);
-    assertTrue(output.get("seam.h").contains("typedef int32_t (*Sink)(void * isolate, int64_t n);"));
+    assertTrue(
+        output.get("seam.h").contains("typedef int32_t (*Sink)(void * isolate, int64_t n);"));
     assertTrue(output.get("seam.json").contains("\"callback\":\"Sink\""));
     for (String bad :
         List.of(
@@ -272,7 +296,9 @@ class GeneratorTest {
             base.replace("param cb type=fn<Sink>", "param cb type=fn<Missing>"),
             base.replace("param n type=i64\nend\nexport", "param n type=u8\nend\nexport"),
             base.replace("import run return=void", "import run return=isolate_thread"),
-            base.replace("import run return=void error=no_failure", "import run return=void error=no_failure callback=Sink"),
+            base.replace(
+                "import run return=void error=no_failure",
+                "import run return=void error=no_failure callback=Sink"),
             base + "struct Holder size=8 align=8\n  field t type=isolate_thread offset=0\nend\n",
             base + "opaque SinkFn\n",
             base.replace("param cb type=fn<Sink>", "param cb type=ptr<fn<Sink>>"),
@@ -280,7 +306,9 @@ class GeneratorTest {
             base + "struct Holder size=8 align=8\n  field cb type=ptr<Sink> offset=0\nend\n",
             base.replace("callback Sink", "callback i64"),
             base
-                + "import collide symbol=Sink return=i32 error=no_failure\n  param n type=i64\nend\n",
+                + "import collide symbol=Sink return=i32 error=no_failure\n"
+                + "  param n type=i64\n"
+                + "end\n",
             base
                 + "export Sink return=i32 java=fixture.Ops.sink isolate=thread error=abort\n"
                 + "  param n type=i64\nend\n"))
@@ -299,14 +327,11 @@ class GeneratorTest {
         generate(base + "struct Box size=8 align=8\n  field value type=i64 offset=0\nend\n")
             .get("MynaNative.java");
     assertEquals(
-        1,
-        java.util.regex.Pattern.compile("class Literals \\{").matcher(ni).results().count(),
-        ni);
+        1, java.util.regex.Pattern.compile("class Literals \\{").matcher(ni).results().count(), ni);
     for (String bad :
         List.of(
             base + "struct Literals size=8 align=8\n  field value type=i64 offset=0\nend\n",
-            base
-                .replace("callback Visitor", "callback Literals")
+            base.replace("callback Visitor", "callback Literals")
                 .replace("callback=Visitor", "callback=Literals"),
             base + "opaque Literals\n"))
       assertThrows(IllegalArgumentException.class, () -> generate(bad), bad);
@@ -317,36 +342,60 @@ class GeneratorTest {
     String base =
         MODULE
             + "opaque Handle\n"
-            + "struct Pt size=8 align=4\n  field x type=i32 offset=0\n  field y type=i32 offset=4\nend\n"
-            + "import flip symbol=pt_flip return=Pt error=no_failure\n  param p type=Pt\n  param k type=i32\nend\n"
-            + "export norm symbol=pt_norm return=i32 java=fixture.Ops.norm isolate=thread error=abort\n"
-            + "  param p type=Pt\nend\n";
+            + "struct Pt size=8 align=4\n"
+            + "  field x type=i32 offset=0\n"
+            + "  field y type=i32 offset=4\n"
+            + "end\n"
+            + "import flip symbol=pt_flip return=Pt error=no_failure\n"
+            + "  param p type=Pt\n"
+            + "  param k type=i32\n"
+            + "end\n"
+            + "export norm symbol=pt_norm return=i32 java=fixture.Ops.norm isolate=thread"
+            + " error=abort\n"
+            + "  param p type=Pt\n"
+            + "end\n";
     var output = generate(base);
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("CGlobalDataFactory.forSymbol(\"pt_flip_myna_ref\")"), ni);
-    assertTrue(ni.contains("public static void flip(PointerBase p, int k, PointerBase result) {"), ni);
+    assertTrue(
+        ni.contains("public static void flip(PointerBase p, int k, PointerBase result) {"), ni);
     assertTrue(ni.contains("@CEntryPoint(name = \"pt_norm_myna_ref\")"), ni);
     assertTrue(ni.contains("return fixture.Ops.norm(p);"), ni);
     assertTrue(ni.contains("public static final int SIZE = 8;"), ni);
     assertTrue(ni.contains("((Pointer) record).readInt(4)"), ni);
     String rust = output.get("seam.rs");
     assertTrue(rust.contains("pub fn flip(p: Pt, k: i32) -> Pt;"), rust);
-    assertTrue(rust.contains("pub fn normRef(isolate_thread: *mut core::ffi::c_void, p: *const Pt) -> i32;"), rust);
-    assertTrue(rust.contains("pub unsafe fn norm(isolate_thread: *mut core::ffi::c_void, p: Pt) -> i32 {"), rust);
+    assertTrue(
+        rust.contains(
+            "pub fn normRef(isolate_thread: *mut core::ffi::c_void, p: *const Pt) -> i32;"),
+        rust);
+    assertTrue(
+        rust.contains("pub unsafe fn norm(isolate_thread: *mut core::ffi::c_void, p: Pt) -> i32 {"),
+        rust);
     assertTrue(rust.contains("#[derive(Clone, Copy)]"));
-    assertTrue(rust.contains("pub unsafe extern \"C\" fn pt_flip_myna_ref(p: *const $($seam)::+::Pt, k: i32, result: *mut $($seam)::+::Pt)"), rust);
+    assertTrue(
+        rust.contains(
+            "pub unsafe extern \"C\" fn pt_flip_myna_ref(p: *const $($seam)::+::Pt, k: i32, result:"
+                + " *mut $($seam)::+::Pt)"),
+        rust);
     assertTrue(rust.contains("unsafe { result.write(pt_flip(p.read(), k)) }"), rust);
     String ll = output.get("seam.ll");
     assertFalse(ll.contains("@pt_flip("), ll);
     assertTrue(
         ll.contains(
-            "declare void @pt_flip_myna_ref(ptr align 4 dereferenceable(8) captures(none) nonnull readonly %p, i32 %k, ptr align 4 dereferenceable(8) captures(none) nonnull writeonly %result)"),
+            "declare void @pt_flip_myna_ref(ptr align 4 dereferenceable(8) captures(none) nonnull"
+                + " readonly %p, i32 %k, ptr align 4 dereferenceable(8) captures(none) nonnull"
+                + " writeonly %result)"),
         ll);
     String h = output.get("seam.h");
     assertTrue(h.contains("struct Pt pt_flip(struct Pt p, int32_t k);"), h);
-    assertTrue(h.contains("static inline int32_t pt_norm(void * isolate_thread, struct Pt p) {"), h);
+    assertTrue(
+        h.contains("static inline int32_t pt_norm(void * isolate_thread, struct Pt p) {"), h);
     assertFalse(output.get("MynaFFM.java").contains("public static Pt flip"));
-    assertTrue(output.get("MynaFFM.java").contains("flip(SegmentAllocator allocator, MemorySegment p, int k)"));
+    assertTrue(
+        output
+            .get("MynaFFM.java")
+            .contains("flip(SegmentAllocator allocator, MemorySegment p, int k)"));
     for (String bad :
         List.of(
             base.replace("return=Pt error=no_failure", "return=Handle error=no_failure"),
@@ -363,24 +412,43 @@ class GeneratorTest {
     // natural C ABI; imports keep the real by-value layout, so non-canonical structs would throw
     // ExceptionInInitializerError at first use. Exports are lowered to the _myna_ref pointer form
     // and never feed a struct layout to the linker, so gaps there remain valid (as in C/Rust).
-    String dense = "struct Pt size=8 align=4\n  field x type=i32 offset=0\n  field y type=i32 offset=4\nend\n";
-    String denseImport = "import flip symbol=pt_flip return=Pt error=no_failure\n  param p type=Pt\nend\n";
+    String dense =
+        "struct Pt size=8 align=4\n  field x type=i32 offset=0\n  field y type=i32 offset=4\nend\n";
+    String denseImport =
+        "import flip symbol=pt_flip return=Pt error=no_failure\n  param p type=Pt\nend\n";
     var ok = generate(MODULE + dense + denseImport);
     assertTrue(
         ok.get("MynaFFM.java").contains("FunctionDescriptor.of(Pt_LAYOUT, Pt_LAYOUT)"),
         ok.get("MynaFFM.java"));
     // Natural trailing alignment padding is canonical and accepted by the linker.
-    String mix = "struct Mix size=16 align=8\n  field a type=i64 offset=0\n  field b type=i32 offset=8\nend\n";
+    String mix =
+        "struct Mix size=16 align=8\n"
+            + "  field a type=i64 offset=0\n"
+            + "  field b type=i32 offset=8\n"
+            + "end\n";
     var okMix =
-        generate(MODULE + mix + "import takeMix return=i64 error=no_failure\n  param m type=Mix\nend\n");
-    assertTrue(okMix.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(4)"), okMix.get("MynaFFM.java"));
+        generate(
+            MODULE + mix + "import takeMix return=i64 error=no_failure\n  param m type=Mix\nend\n");
+    assertTrue(
+        okMix.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(4)"),
+        okMix.get("MynaFFM.java"));
     // Reserved interior gap (u32 at 0 and 8, leaving a 4-byte hole) in a by-value import
     // parameter -> rejected.
-    String gap = "struct Gap size=12 align=4\n  field kind type=u32 offset=0\n  field flags type=u32 offset=8\nend\n";
+    String gap =
+        "struct Gap size=12 align=4\n"
+            + "  field kind type=u32 offset=0\n"
+            + "  field flags type=u32 offset=8\n"
+            + "end\n";
     var gapParam =
         assertThrows(
             IllegalArgumentException.class,
-            () -> generate(MODULE + gap + "import takeGap return=void error=no_failure\n  param m type=Gap\nend\n"));
+            () ->
+                generate(
+                    MODULE
+                        + gap
+                        + "import takeGap return=void error=no_failure\n"
+                        + "  param m type=Gap\n"
+                        + "end\n"));
     assertTrue(gapParam.getMessage().contains("Gap"), gapParam.getMessage());
     assertTrue(gapParam.getMessage().contains("natural C layout"), gapParam.getMessage());
     // Reserved interior gap reached via a by-value import RETURN is rejected too.
@@ -388,17 +456,27 @@ class GeneratorTest {
         IllegalArgumentException.class,
         () -> generate(MODULE + gap + "import makeGap return=Gap error=no_failure\nend\n"));
     // Over-declared trailing size in a by-value import -> rejected.
-    String over = "struct Over size=16 align=4\n  field a type=i32 offset=0\n  field b type=i32 offset=4\nend\n";
+    String over =
+        "struct Over size=16 align=4\n"
+            + "  field a type=i32 offset=0\n"
+            + "  field b type=i32 offset=4\n"
+            + "end\n";
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            generate(MODULE + over + "import takeOver return=void error=no_failure\n  param o type=Over\nend\n"));
+            generate(
+                MODULE
+                    + over
+                    + "import takeOver return=void error=no_failure\n  param o type=Over\nend\n"));
     // Leading gap (first field not at offset 0) in a by-value import -> rejected.
     String lead = "struct Lead size=16 align=8\n  field a type=i64 offset=8\nend\n";
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            generate(MODULE + lead + "import takeLead return=void error=no_failure\n  param l type=Lead\nend\n"));
+            generate(
+                MODULE
+                    + lead
+                    + "import takeLead return=void error=no_failure\n  param l type=Lead\nend\n"));
     // The same non-canonical struct used by value only in an EXPORT is accepted: FFM lowers it to
     // the _myna_ref pointer form (no by-value layout reaches the linker), and C/Rust still honor
     // the declared gap with explicit padding fields.
@@ -442,7 +520,10 @@ class GeneratorTest {
   @Test
   void byValueExportRefIdentifierMustNotCollide() {
     String struct =
-        "struct Pair size=16 align=8\n  field left type=i64 offset=0\n  field right type=i32 offset=8\nend\n";
+        "struct Pair size=16 align=8\n"
+            + "  field left type=i64 offset=0\n"
+            + "  field right type=i32 offset=8\n"
+            + "end\n";
     String byValueScale =
         "export scale symbol=seam_scale return=Pair java=fixture.Ops.scale isolate=thread"
             + " error=abort\n  param value type=Pair\nend\n";
@@ -452,31 +533,37 @@ class GeneratorTest {
     String scalarImportScaleRef =
         "import scaleRef return=i64 error=no_failure\n  param v type=ptr<i64> nullable=false"
             + " ownership=borrowed access=read\nend\n";
-    // Extern-block duplicate: by-value export's synthesised `pub fn scaleRef` vs an import of that name.
+    // Extern-block duplicate: by-value export's synthesised `pub fn scaleRef` vs an import of that
+    // name.
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(MODULE + struct + byValueScale + scalarImportScaleRef),
         "import named <name>Ref must clash with a by-value export's synthesised extern");
-    // Module-level duplicate: by-value export of `<name>Ref` wrapper vs another export's synthesised extern.
+    // Module-level duplicate: by-value export of `<name>Ref` wrapper vs another export's
+    // synthesised extern.
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(MODULE + struct + byValueScale + byValueScaleRef),
-        "by-value export of <name>Ref must clash with another by-value export's synthesised extern");
+        "by-value export of <name>Ref must clash with another by-value export's synthesised"
+            + " extern");
     // A by-value import named scaleRef synthesises no Ref extern, so it must remain valid.
     String byValueImportScaleRef =
-        "import scaleRef symbol=seam_scaleref return=Pair error=no_failure\n  param value type=Pair\nend\n";
+        "import scaleRef symbol=seam_scaleref return=Pair error=no_failure\n"
+            + "  param value type=Pair\n"
+            + "end\n";
     assertTrue(
-        generate(MODULE + struct + byValueImportScaleRef).get("seam.rs").contains("pub fn scaleRef("),
+        generate(MODULE + struct + byValueImportScaleRef)
+            .get("seam.rs")
+            .contains("pub fn scaleRef("),
         "a by-value import keeps its own extern name and is not rejected");
     // An unrelated `Ref`-suffixed name does not trigger the guard.
-    assertDoesNotThrow(
-        () ->
-            generate(
-                MODULE
-                    + struct
-                    + byValueScale
-                    + "import spreadRef return=i64 error=no_failure\n  param v type=ptr<i64>"
-                    + " nullable=false ownership=borrowed access=read\nend\n"));
+    assertDoesNotThrow(() ->
+        generate(
+            MODULE
+                + struct
+                + byValueScale
+                + "import spreadRef return=i64 error=no_failure\n  param v type=ptr<i64>"
+                + " nullable=false ownership=borrowed access=read\nend\n"));
     // Happy path: a single by-value export emits exactly one `pub fn scaleRef` extern item.
     String rust = generate(MODULE + struct + byValueScale).get("seam.rs");
     assertEquals(
@@ -492,8 +579,12 @@ class GeneratorTest {
     // would emit duplicate `pub type ParseXFn` items that rustc rejects with E0428.
     String importPair =
         MODULE
-            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n  param x type=i64\nend\n"
-            + "import ParseX symbol=myna_parse_x_upper return=i64 error=no_failure\n  param x type=i64\nend\n";
+            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n"
+            + "  param x type=i64\n"
+            + "end\n"
+            + "import ParseX symbol=myna_parse_x_upper return=i64 error=no_failure\n"
+            + "  param x type=i64\n"
+            + "end\n";
     var collision =
         assertThrows(
             IllegalArgumentException.class,
@@ -501,13 +592,18 @@ class GeneratorTest {
             "case-colliding imports must be rejected");
     assertEquals(
         "Rust alias ParseXFn collides with another function's alias", collision.getMessage());
-    // Exports lower through the isolate-thread path but keep the same name derivation, so they collide too.
+    // Exports lower through the isolate-thread path but keep the same name derivation, so they
+    // collide too.
     String exportPair =
         MODULE
-            + "export parseX symbol=myna_parse_x_lower return=i64 java=fixture.Ops.px isolate=thread"
-            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n"
-            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX isolate=thread"
-            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n";
+            + "export parseX symbol=myna_parse_x_lower return=i64 java=fixture.Ops.px"
+            + " isolate=thread error=integer_sentinel sentinel=-1\n"
+            + "  param x type=i64\n"
+            + "end\n"
+            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX"
+            + " isolate=thread error=integer_sentinel sentinel=-1\n"
+            + "  param x type=i64\n"
+            + "end\n";
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(exportPair),
@@ -515,9 +611,13 @@ class GeneratorTest {
     // The alias set is shared across directions in one module.
     String mixedPair =
         MODULE
-            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n  param x type=i64\nend\n"
-            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX isolate=thread"
-            + " error=integer_sentinel sentinel=-1\n  param x type=i64\nend\n";
+            + "import parseX symbol=myna_parse_x_lower return=i64 error=no_failure\n"
+            + "  param x type=i64\n"
+            + "end\n"
+            + "export ParseX symbol=myna_parse_x_upper return=i64 java=fixture.Ops.pX"
+            + " isolate=thread error=integer_sentinel sentinel=-1\n"
+            + "  param x type=i64\n"
+            + "end\n";
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(mixedPair),
@@ -526,11 +626,16 @@ class GeneratorTest {
     // both distinct, so both must remain valid (guards against an over-eager case-insensitive fix).
     String caseSensitive =
         MODULE
-            + "import parseX symbol=myna_parse_x return=i64 error=no_failure\n  param x type=i64\nend\n"
-            + "import PARSEX symbol=myna_parse_upper return=i64 error=no_failure\n  param x type=i64\nend\n";
+            + "import parseX symbol=myna_parse_x return=i64 error=no_failure\n"
+            + "  param x type=i64\n"
+            + "end\n"
+            + "import PARSEX symbol=myna_parse_upper return=i64 error=no_failure\n"
+            + "  param x type=i64\n"
+            + "end\n";
     var rust = generate(caseSensitive).get("seam.rs");
     assertTrue(rust.contains("pub type ParseXFn ="), "parseX emits ParseXFn");
-    assertTrue(rust.contains("pub type PARSEXFn ="), "PARSEX emits PARSEXFn, distinct from ParseXFn");
+    assertTrue(
+        rust.contains("pub type PARSEXFn ="), "PARSEX emits PARSEXFn, distinct from ParseXFn");
   }
 
   @Test
@@ -579,14 +684,19 @@ class GeneratorTest {
     String ffm = output.get("MynaFFM.java");
     assertTrue(ffm.contains("static final MethodHandle HANDLE"));
     assertTrue(ffm.contains("public static long inspect(MemorySegment value) throws Throwable"));
-    assertTrue(ffm.contains("return (long) MynaFFM.inspect_Downcall.HANDLE.invokeExact(MynaFFM.inspect_Binding.ADDRESS, value)"));
+    assertTrue(
+        ffm.contains(
+            "return (long)"
+                + " MynaFFM.inspect_Downcall.HANDLE.invokeExact(MynaFFM.inspect_Binding.ADDRESS,"
+                + " value)"));
     assertTrue(ffm.contains("static final MemorySegment ADDRESS = SymbolLookup.loaderLookup()"));
     assertTrue(ffm.contains("downcallHandle(MynaFFM.inspect_DESCRIPTOR)"));
     assertFalse(ffm.contains("invokeWithArguments"));
     String feature = output.get("MynaForeignFeature.java");
     assertTrue(feature.contains("duringSetup"));
-    assertTrue(feature.contains(
-        "initializeAtBuildTime(\"dev.elide.myna.generated.MynaFFM$inspect_Downcall\")"));
+    assertTrue(
+        feature.contains(
+            "initializeAtBuildTime(\"dev.elide.myna.generated.MynaFFM$inspect_Downcall\")"));
     assertTrue(
         feature.contains("RuntimeForeignAccess.registerForDowncall(MynaFFM.inspect_DESCRIPTOR)"));
     assertTrue(
@@ -742,8 +852,8 @@ class GeneratorTest {
     assertTrue(
         generate(
                 MODULE
-                    + "import halt return=void error=no_failure native_leaf=false@explicit_contract noreturn=true@explicit_contract"
-                    + " nofree=true@explicit_contract\n"
+                    + "import halt return=void error=no_failure native_leaf=false@explicit_contract"
+                    + " noreturn=true@explicit_contract nofree=true@explicit_contract\n"
                     + "end\n")
             .get("seam.ll")
             .contains("nofree noreturn"));

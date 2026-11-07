@@ -16,6 +16,7 @@ for profile in work.glob("*.profraw"):
     profile.unlink()
 os.environ["MYNA_LLVM"] = str(work / "myna-llvm")
 os.environ["LLVM_PROFILE_FILE"] = str(work / "%p.profraw")
+run(work / "myna-llvm-unit")
 import llvm_integration
 from support import main
 try:
@@ -27,7 +28,8 @@ profiles = list(work.glob("*.profraw"))
 if not profiles:
     raise AssertionError("No native coverage profiles were produced")
 run(llvm / "llvm-profdata", "merge", "-sparse", *profiles, "-o", work / "merged.profdata")
-args = [work / "myna-llvm", f"-instr-profile={work / 'merged.profdata'}", ROOT / "llvm/main.cpp"]
+args = [work / "myna-llvm", f"-object={work / 'myna-llvm-unit'}",
+        f"-instr-profile={work / 'merged.profdata'}", ROOT / "llvm/main.cpp"]
 result = run(llvm / "llvm-cov", "export", "-format=lcov", *args)
 (ROOT / "build/reports/llvm.lcov").write_text(result.stdout)
 print(run(llvm / "llvm-cov", "report", *args).stdout)

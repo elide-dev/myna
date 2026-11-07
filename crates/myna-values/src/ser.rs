@@ -83,7 +83,7 @@ impl<'a, A: Allocator + Clone> ser::Serializer for Serializer<'a, A> {
         self.serialize_f64(f64::from(value))
     }
     fn serialize_f64(self, value: f64) -> Result<(), Error> {
-        if !value.is_finite() {
+        if !self.doc.options.allow_non_finite && !value.is_finite() {
             return Err(Error::NonFinite);
         }
         self.scalar(F64, value.to_bits())

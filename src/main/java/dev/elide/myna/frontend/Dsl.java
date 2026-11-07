@@ -215,17 +215,14 @@ public final class Dsl {
 
   private static SortedMap<String, Fact> facts(Map<String, String> options) {
     var result = new TreeMap<String, Fact>();
-    options.forEach(
-        (key, value) -> {
-          String[] pieces = value.split("@", -1);
-          require(pieces.length == 2, "contract " + key + " requires VALUE@PROVENANCE");
-          result.put(
-              key,
-              new Fact(
-                  pieces[0],
-                  Provenance.valueOf(pieces[1].toUpperCase(Locale.ROOT)),
-                  "DSL contract"));
-        });
+    options.forEach((key, value) -> {
+      String[] pieces = value.split("@", -1);
+      require(pieces.length == 2, "contract " + key + " requires VALUE@PROVENANCE");
+      result.put(
+          key,
+          new Fact(
+              pieces[0], Provenance.valueOf(pieces[1].toUpperCase(Locale.ROOT)), "DSL contract"));
+    });
     return result;
   }
 

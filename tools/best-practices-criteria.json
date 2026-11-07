@@ -1,0 +1,494 @@
+{
+  "passing": {
+    "description_good": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "interact": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "contribution": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "contribution_requirements": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "floss_license": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "floss_license_osi": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "license_location": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "documentation_basics": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "documentation_interface": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "sites_https": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "discussion": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "english": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "maintained": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "repo_public": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "repo_track": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "repo_interim": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "repo_distributed": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "version_unique": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "version_semver": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "version_tags": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "release_notes": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "release_notes_vulns": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "report_process": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "report_tracker": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "report_responses": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "enhancement_responses": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "report_archive": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "vulnerability_report_process": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "vulnerability_report_private": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "vulnerability_report_response": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "build": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "build_common_tools": {
+      "category": "SUGGESTED",
+      "na_allowed": true
+    },
+    "build_floss_tools": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "test": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "test_invocation": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "test_most": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "test_continuous_integration": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "test_policy": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "tests_are_added": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "tests_documented_added": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "warnings": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "warnings_fixed": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "warnings_strict": {
+      "category": "SUGGESTED",
+      "na_allowed": true
+    },
+    "know_secure_design": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "know_common_errors": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "crypto_published": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_call": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_floss": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_keylength": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_working": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_weaknesses": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_pfs": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_password_storage": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_random": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "delivery_mitm": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "delivery_unsigned": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "vulnerabilities_fixed_60_days": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "vulnerabilities_critical_fixed": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "no_leaked_credentials": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "static_analysis": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "static_analysis_common_vulnerabilities": {
+      "category": "SUGGESTED",
+      "na_allowed": true
+    },
+    "static_analysis_fixed": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "static_analysis_often": {
+      "category": "SUGGESTED",
+      "na_allowed": true
+    },
+    "dynamic_analysis": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "dynamic_analysis_unsafe": {
+      "category": "SUGGESTED",
+      "na_allowed": true
+    },
+    "dynamic_analysis_enable_assertions": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "dynamic_analysis_fixed": {
+      "category": "MUST",
+      "na_allowed": true
+    }
+  },
+  "silver": {
+    "achieve_passing": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "contribution_requirements": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "dco": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "governance": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "code_of_conduct": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "roles_responsibilities": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "access_continuity": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "bus_factor": {
+      "category": "SHOULD",
+      "na_allowed": false
+    },
+    "documentation_roadmap": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "documentation_architecture": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "documentation_security": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "documentation_quick_start": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "documentation_current": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "documentation_achievements": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "accessibility_best_practices": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "internationalization": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "sites_password_security": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "maintenance_or_update": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "report_tracker": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "vulnerability_report_credit": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "vulnerability_response_process": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "coding_standards": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "coding_standards_enforced": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "build_standard_variables": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "build_preserve_debug": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "build_non_recursive": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "build_repeatable": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "installation_common": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "installation_standard_variables": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "installation_development_quick": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "external_dependencies": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "dependency_monitoring": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "updateable_reused_components": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "interfaces_current": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "automated_integration_testing": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "regression_tests_added50": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "test_statement_coverage80": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "test_policy_mandated": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "tests_documented_added": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "warnings_strict": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "implement_secure_design": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_weaknesses": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_algorithm_agility": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_credential_agility": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_used_network": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_tls12": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "crypto_certificate_verification": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "crypto_verification_private": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "signed_releases": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "version_tags_signed": {
+      "category": "SUGGESTED",
+      "na_allowed": false
+    },
+    "input_validation": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "hardening": {
+      "category": "SHOULD",
+      "na_allowed": true
+    },
+    "assurance_case": {
+      "category": "MUST",
+      "na_allowed": false
+    },
+    "static_analysis_common_vulnerabilities": {
+      "category": "MUST",
+      "na_allowed": true
+    },
+    "dynamic_analysis_unsafe": {
+      "category": "MUST",
+      "na_allowed": true
+    }
+  }
+}

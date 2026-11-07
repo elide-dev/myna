@@ -31,8 +31,11 @@ impl<'a, A: Allocator + Clone> Builder<'a, A> {
         Self::with_limits_in(allocator, Limits::default())
     }
     pub fn with_limits_in(allocator: A, limits: Limits) -> Self {
+        Self::with_options_in(allocator, limits, Options::default())
+    }
+    pub fn with_options_in(allocator: A, limits: Limits, options: Options) -> Self {
         Self {
-            doc: Document::with_limits_in(allocator.clone(), limits),
+            doc: Document::with_options_in(allocator.clone(), limits, options),
             regions: Vec::new_in(allocator.clone()),
             stack: Vec::new_in(allocator),
             roots: 0,
@@ -196,6 +199,11 @@ impl<'a, A: Allocator + Clone> Builder<'a, A> {
             nodes: &self.doc.nodes,
             bytes: &self.doc.bytes,
             regions: &self.regions,
+            flags: if self.doc.options.allow_non_finite {
+                ALLOW_NON_FINITE
+            } else {
+                0
+            },
         })
     }
 }

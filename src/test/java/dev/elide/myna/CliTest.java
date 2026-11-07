@@ -87,9 +87,13 @@ class CliTest {
 
   @Test
   void generatedMetadataIsNestedAndCannotEscapeTheOutputDirectory() throws Exception {
-    Main.write(Map.of("META-INF/native-image/example/native-image.properties", "Args = test\n"), temp);
-    assertEquals("Args = test\n", Files.readString(temp.resolve("META-INF/native-image/example/native-image.properties")));
-    assertThrows(IllegalArgumentException.class, () -> Main.write(Map.of("../escaped", "bad"), temp));
+    Main.write(
+        Map.of("META-INF/native-image/example/native-image.properties", "Args = test\n"), temp);
+    assertEquals(
+        "Args = test\n",
+        Files.readString(temp.resolve("META-INF/native-image/example/native-image.properties")));
+    assertThrows(
+        IllegalArgumentException.class, () -> Main.write(Map.of("../escaped", "bad"), temp));
   }
 
   @Test

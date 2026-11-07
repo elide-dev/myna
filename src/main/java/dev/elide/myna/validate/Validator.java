@@ -35,18 +35,19 @@ public final class Validator {
                + " uses provides with transitive crate as Self macro macro_rules alignas alignof"
                + " constexpr consteval constinit delete friend inline namespace operator noexcept"
                + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
-               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT BINDING_ABI_VERSION MynaSymbols Literals MynaFFM"
-               + " MynaNative MynaForeignFeature LibraryBinding CriticalLibraryBinding getClass hashCode equals toString clone finalize"
-               + " wait notify notifyAll")
+               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT"
+               + " BINDING_ABI_VERSION MynaSymbols Literals MynaFFM MynaNative MynaForeignFeature"
+               + " LibraryBinding CriticalLibraryBinding getClass hashCode equals toString clone"
+               + " finalize wait notify notifyAll")
               .split(" "));
 
   /**
    * Names that declared types (opaque, struct, callback) may not take because they are emitted as
    * crate-root Rust type names beside generated code that depends on them: {@code core} backs the
-   * unconditional {@code core::mem::...} ABI assertions, and {@code Option} backs the
-   * {@code Option<...>} callback alias and the {@code Option<Self>} ownership API. Function and
-   * parameter names live in Rust's value namespace and do not collide, so they stay governed by
-   * {@link #identifier(String)}.
+   * unconditional {@code core::mem::...} ABI assertions, and {@code Option} backs the {@code
+   * Option<...>} callback alias and the {@code Option<Self>} ownership API. Function and parameter
+   * names live in Rust's value namespace and do not collide, so they stay governed by {@link
+   * #identifier(String)}.
    */
   private static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
 
@@ -77,8 +78,7 @@ public final class Validator {
       identifier(opaque);
       require(types.add(opaque), "duplicate type: " + opaque);
       require(!isScalarName(opaque), "type shadows scalar: " + opaque);
-      require(
-          !RESERVED_TYPE_NAMES.contains(opaque), "type shadows generated name: " + opaque);
+      require(!RESERVED_TYPE_NAMES.contains(opaque), "type shadows generated name: " + opaque);
     }
     for (Struct struct : module.structs()) {
       identifier(struct.name());
@@ -92,11 +92,13 @@ public final class Validator {
     for (Signature signature : module.callbacks()) {
       identifier(signature.name());
       if (signature.javaType() != null) qualifiedType(signature.javaType());
-      require((signature.ffmTarget() == null) == (signature.ffmSentinel() == null),
+      require(
+          (signature.ffmTarget() == null) == (signature.ffmSentinel() == null),
           "FFM callback target and sentinel must be declared together");
       if (signature.ffmTarget() != null) {
         qualifiedType(signature.ffmTarget());
-        require(signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
+        require(
+            signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
             "static FFM callbacks require an i32/i64 status return");
         try {
           if (signature.returns() == Scalar.I32) Integer.parseInt(signature.ffmSentinel());
@@ -114,12 +116,14 @@ public final class Validator {
     }
     for (Signature signature : module.callbacks()) {
       for (String generated : List.of(signature.name() + "Callback", signature.name() + "Upcalls"))
-        require(!types.contains(generated) && !module.ffmClass().equals(generated),
+        require(
+            !types.contains(generated) && !module.ffmClass().equals(generated),
             "type collides with generated FFM callback helper: " + generated);
     }
     // The JDK FFM linker rejects by-value struct layouts that are not the natural C ABI, so
     // imports (which keep the real by-value layout, unlike _myna_ref-lowered exports) need
-    // canonical structs or the generated <clinit> downcallHandle throws ExceptionInInitializerError.
+    // canonical structs or the generated <clinit> downcallHandle throws
+    // ExceptionInInitializerError.
     Set<String> byValueImportStructs = new HashSet<>();
     for (Function function : module.functions()) {
       if (function.direction() != Direction.IMPORT) continue;
@@ -157,7 +161,8 @@ public final class Validator {
       require(
           !byValueImportStructs.contains(struct.name()) || canonical(struct),
           "by-value import struct must match the natural C layout (the FFM linker rejects reserved"
-              + " gaps and over-declared sizes): " + struct.name());
+              + " gaps and over-declared sizes): "
+              + struct.name());
     }
     for (Signature signature : module.callbacks()) {
       type(signature.returns(), types, signatures, true);
@@ -174,7 +179,9 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
-    Set<String> symbols = new HashSet<>(), logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
+    Set<String> symbols = new HashSet<>(),
+        logicalNames = new HashSet<>(),
+        rustAliases = new HashSet<>();
     for (Function function : module.functions()) {
       identifier(function.name());
       identifier(function.symbol());
@@ -214,15 +221,23 @@ public final class Validator {
       for (String suffix : List.of("_Downcall", "_CriticalDowncall")) {
         String generated = function.name() + suffix;
         // All callback signatures are already present in types.
-        require(!types.contains(generated),
+        require(
+            !types.contains(generated),
             "type collides with generated FFM adapter for " + function.name());
       }
       if (Seam.nativeLeaf(function)) {
-        require(!enabled(function.facts(), "noreturn"), "noreturn requires native_leaf=false in binding ABI 2");
-        require(!types.contains(function.name() + "_Leaf") && !signatures.contains(function.name() + "_Leaf")
-                && !types.contains(function.name() + "_Binding") && !signatures.contains(function.name() + "_Binding"),
+        require(
+            !enabled(function.facts(), "noreturn"),
+            "noreturn requires native_leaf=false in binding ABI 2");
+        require(
+            !types.contains(function.name() + "_Leaf")
+                && !signatures.contains(function.name() + "_Leaf")
+                && !types.contains(function.name() + "_Binding")
+                && !signatures.contains(function.name() + "_Binding"),
             "type collides with generated native leaf binding for " + function.name());
-        require(module.functions().stream().noneMatch(other -> other.name().equals(function.name() + "LeafPointer")),
+        require(
+            module.functions().stream()
+                .noneMatch(other -> other.name().equals(function.name() + "LeafPointer")),
             "function collides with generated native leaf pointer accessor for " + function.name());
       }
       require(
@@ -254,9 +269,8 @@ public final class Validator {
               module.callbacks().stream()
                   .filter(c -> c.name().equals(function.callback()))
                   .findFirst()
-                  .orElseThrow(
-                      () ->
-                          new IllegalArgumentException("unknown callback: " + function.callback()));
+                  .orElseThrow(() ->
+                      new IllegalArgumentException("unknown callback: " + function.callback()));
           require(
               signature.returns().equals(function.returns())
                   && signature.parameters().stream()
@@ -391,7 +405,8 @@ public final class Validator {
           "pointers to function pointers or isolates are not supported");
       if (p.pointee() instanceof Named n) {
         require(names.contains(n.name()), "unknown pointee: " + n.name());
-        require(!signatures.contains(n.name()),
+        require(
+            !signatures.contains(n.name()),
             "pointers to callbacks are not supported; use fn<" + n.name() + ">");
       } else if (p.pointee() instanceof Pointer) type(p.pointee(), names, signatures, false);
     } else if (type instanceof FunctionPointer f)
@@ -403,17 +418,16 @@ public final class Validator {
   }
 
   private static void facts(Map<String, Fact> facts, Set<String> allowed, boolean strict) {
-    facts.forEach(
-        (key, fact) -> {
-          require(allowed.contains(key), "unknown or unsupported contract: " + key);
-          if (!key.equals("align") && !key.equals("dereferenceable"))
-            require(
-                fact.value().equals("true") || fact.value().equals("false"),
-                "boolean contract required for " + key);
-          require(
-              !strict || !fact.enabled() || fact.approved(),
-              "unapproved provenance for " + key + ": " + fact.provenance());
-        });
+    facts.forEach((key, fact) -> {
+      require(allowed.contains(key), "unknown or unsupported contract: " + key);
+      if (!key.equals("align") && !key.equals("dereferenceable"))
+        require(
+            fact.value().equals("true") || fact.value().equals("false"),
+            "boolean contract required for " + key);
+      require(
+          !strict || !fact.enabled() || fact.approved(),
+          "unapproved provenance for " + key + ": " + fact.provenance());
+    });
   }
 
   public static boolean enabled(Map<String, Fact> facts, String key) {

@@ -23,11 +23,10 @@ public final class Llvm implements Backend {
                 + "source_filename = \"seam-contracts\"\n");
     out.append("target triple = ").append(SeamJson.quote(m.targetTriple())).append("\n\n");
     // By-value lowering is target-specific (registers, byval, sret), so a record-passing function
-    // is declared only in its reference form; its by-value symbol could never match compiler output.
+    // is declared only in its reference form; its by-value symbol could never match compiler
+    // output.
     for (Function f : m.functions()) declaration(m, ByValue.lower(m, f), out);
-    out.append("\n!myna.contract = !{!0}\n!0 = !{!\"")
-        .append(fingerprint)
-        .append("\"}\n");
+    out.append("\n!myna.contract = !{!0}\n!0 = !{!\"").append(fingerprint).append("\"}\n");
     return out.toString();
   }
 
@@ -41,19 +40,18 @@ public final class Llvm implements Backend {
             String.join(
                 ", ",
                 f.abiParameters().stream()
-                    .map(
-                        p -> {
-                          String attributes =
-                              String.join(
-                                      " ",
-                                      Types.extension(p.type(), m.targetTriple()),
-                                      attributes(p.facts()))
-                                  .strip();
-                          return Types.llvm(p.type())
-                              + (attributes.isEmpty() ? "" : " " + attributes)
-                              + " %"
-                              + p.name();
-                        })
+                    .map(p -> {
+                      String attributes =
+                          String.join(
+                                  " ",
+                                  Types.extension(p.type(), m.targetTriple()),
+                                  attributes(p.facts()))
+                              .strip();
+                      return Types.llvm(p.type())
+                          + (attributes.isEmpty() ? "" : " " + attributes)
+                          + " %"
+                          + p.name();
+                    })
                     .toList()))
         .append(')');
     String attrs = attributes(f.facts());
@@ -63,17 +61,16 @@ public final class Llvm implements Backend {
 
   private static String attributes(Map<String, Fact> facts) {
     var attrs = new ArrayList<String>();
-    facts.forEach(
-        (name, fact) -> {
-          if (!fact.enabled() || !fact.approved() || name.equals("native_leaf")) return;
-          attrs.add(
-              switch (name) {
-                case "nocapture" -> "captures(none)";
-                case "align" -> "align " + fact.value();
-                case "dereferenceable" -> "dereferenceable(" + fact.value() + ")";
-                default -> name;
-              });
-        });
+    facts.forEach((name, fact) -> {
+      if (!fact.enabled() || !fact.approved() || name.equals("native_leaf")) return;
+      attrs.add(
+          switch (name) {
+            case "nocapture" -> "captures(none)";
+            case "align" -> "align " + fact.value();
+            case "dereferenceable" -> "dereferenceable(" + fact.value() + ")";
+            default -> name;
+          });
+    });
     return String.join(" ", attrs);
   }
 }

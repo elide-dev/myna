@@ -18,7 +18,9 @@ public final class RustFfi implements Backend {
     out.append("pub const ABI_FINGERPRINT: &str = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
-    out.append("pub const BINDING_ABI_VERSION: u32 = ").append(Seam.BINDING_ABI_VERSION).append(";\n");
+    out.append("pub const BINDING_ABI_VERSION: u32 = ")
+        .append(Seam.BINDING_ABI_VERSION)
+        .append(";\n");
     out.append("const _: () = assert!(core::mem::size_of::<*const ()>() == 8);\n");
     for (String name : m.opaqueTypes())
       out.append("#[repr(C)]\npub struct ").append(name).append(" { _private: [u8; 0] }\n");
@@ -131,7 +133,11 @@ public final class RustFfi implements Backend {
       out.append("        };\n    };\n    ($($seam:ident)::+) => {\n        const _: () = {\n");
       pins(imports, "$($seam)::+::", out);
       out.append(
-          "        };\n    };\n}\n#[allow(unused_imports)]\npub(crate) use assert_implementations;\n");
+          "        };\n"
+              + "    };\n"
+              + "}\n"
+              + "#[allow(unused_imports)]\n"
+              + "pub(crate) use assert_implementations;\n");
       var byValue = imports.stream().filter(ByValue::applies).toList();
       if (!byValue.isEmpty()) shims(m, byValue, out);
     }
@@ -156,7 +162,8 @@ public final class RustFfi implements Backend {
         .append('(')
         .append(
             String.join(
-                ", ", f.abiParameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList()))
+                ", ",
+                f.abiParameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList()))
         .append(')');
     if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
     out.append(" {\n");
@@ -196,7 +203,8 @@ public final class RustFfi implements Backend {
           .append('(')
           .append(
               String.join(
-                  ", ", ref.parameters().stream().map(p -> p.name() + ": " + Types.rust(p, q)).toList()))
+                  ", ",
+                  ref.parameters().stream().map(p -> p.name() + ": " + Types.rust(p, q)).toList()))
           .append(')');
       if (ref.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(ref.returns(), q));
       String call =

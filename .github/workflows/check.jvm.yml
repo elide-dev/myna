@@ -26,6 +26,10 @@ jobs:
         uses: ./.github/actions/setup
       - name: Validate workflows
         run: mise run lint
+      - name: Enforce primary-language coding styles
+        run: mise run check:style
+      - name: Enforce production Java warnings
+        run: mise run check:java
       - name: Build JVM artifacts
         run: mise run build:jvm
       - name: Run JVM tests and coverage gate

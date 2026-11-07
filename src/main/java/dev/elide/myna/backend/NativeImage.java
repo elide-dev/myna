@@ -125,50 +125,90 @@ public final class NativeImage implements Backend {
         + ".class";
   }
 
-  private static String leafType(Function f) { return f.name() + "_Leaf"; }
+  private static String leafType(Function f) {
+    return f.name() + "_Leaf";
+  }
 
   private static String leafParameters(Module m, Function f) {
-    return String.join(", ", f.abiParameters().stream().map(p ->
-        (unsignedSmall(p.type()) ? "int" : carrier(m, p)) + " " + p.name()).toList());
+    return String.join(
+        ", ",
+        f.abiParameters().stream()
+            .map(p -> (unsignedSmall(p.type()) ? "int" : carrier(m, p)) + " " + p.name())
+            .toList());
   }
 
   private static void leafBindings(Module m, StringBuilder out) {
-    var leaves = m.functions().stream().map(f -> ByValue.lower(m, f)).filter(Seam::nativeLeaf).toList();
+    var leaves =
+        m.functions().stream().map(f -> ByValue.lower(m, f)).filter(Seam::nativeLeaf).toList();
     if (leaves.isEmpty()) return;
     for (Function f : leaves) {
-      out.append("    public interface ").append(leafType(f)).append(" extends CFunctionPointer {\n")
+      out.append("    public interface ")
+          .append(leafType(f))
+          .append(" extends CFunctionPointer {\n")
           .append("        @AlwaysInline(\"Myna binding ABI 2 native leaf\")\n")
-          .append("        @Uninterruptible(reason = \"Bounded primitive/word native leaf; no Java reentry\", mayBeInlined = true)\n")
-          .append("        @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)\n")
-          .append("        ").append(javaType(m, f.returns())).append(" invoke(")
-          .append(leafParameters(m, f)).append(");\n    }\n");
+          .append(
+              "        @Uninterruptible(reason = \"Bounded primitive/word native leaf; no Java"
+                  + " reentry\", mayBeInlined = true)\n")
+          .append(
+              "        @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)\n")
+          .append("        ")
+          .append(javaType(m, f.returns()))
+          .append(" invoke(")
+          .append(leafParameters(m, f))
+          .append(");\n    }\n");
     }
     out.append("    /** Linker metadata only: initialized at image build time. */\n")
         .append("    private static final class MynaSymbols {\n");
     for (Function f : leaves)
-      out.append("        static final CGlobalData<").append(leafType(f)).append("> ")
-          .append(f.name()).append(" = CGlobalDataFactory.forSymbol(")
-          .append(SeamJson.quote(f.symbol())).append(");\n");
+      out.append("        static final CGlobalData<")
+          .append(leafType(f))
+          .append("> ")
+          .append(f.name())
+          .append(" = CGlobalDataFactory.forSymbol(")
+          .append(SeamJson.quote(f.symbol()))
+          .append(");\n");
     out.append("    }\n");
     for (Function f : leaves)
       out.append("    /** Runtime address: never initialized in the build host. */\n")
-          .append("    private static final class ").append(f.name()).append("_Binding {\n")
-          .append("        static final ").append(leafType(f)).append(" ADDRESS = MynaSymbols.")
-          .append(f.name()).append(".get();\n    }\n");
+          .append("    private static final class ")
+          .append(f.name())
+          .append("_Binding {\n")
+          .append("        static final ")
+          .append(leafType(f))
+          .append(" ADDRESS = MynaSymbols.")
+          .append(f.name())
+          .append(".get();\n    }\n");
   }
 
   private static void leafWrapper(Module m, Function f, StringBuilder out) {
-    out.append("    /** Resolve before entering an uninterruptible caller; retain the linked library. */\n")
+    out.append(
+            "    /** Resolve before entering an uninterruptible caller; retain the linked library."
+                + " */\n")
         .append("    @AlwaysInline(\"Myna native leaf address\")\n    public static ")
-        .append(leafType(f)).append(' ').append(f.name()).append("LeafPointer() {\n")
-        .append("        return ").append(f.name()).append("_Binding.ADDRESS;\n    }\n")
+        .append(leafType(f))
+        .append(' ')
+        .append(f.name())
+        .append("LeafPointer() {\n")
+        .append("        return ")
+        .append(f.name())
+        .append("_Binding.ADDRESS;\n    }\n")
         .append("    @AlwaysInline(\"Myna native leaf call\")\n    public static ")
-        .append(javaType(m, f.returns())).append(' ').append(f.name()).append('(')
-        .append(params(m, f.abiParameters())).append(") {\n        ")
+        .append(javaType(m, f.returns()))
+        .append(' ')
+        .append(f.name())
+        .append('(')
+        .append(params(m, f.abiParameters()))
+        .append(") {\n        ")
         .append(f.returns() == Scalar.VOID ? "" : "return ")
-        .append("MynaSymbols.").append(f.name()).append(".get().invoke(")
-        .append(String.join(", ", f.abiParameters().stream().map(p ->
-            unsignedSmall(p.type()) ? widened(p.type(), p.name()) : p.name()).toList()))
+        .append("MynaSymbols.")
+        .append(f.name())
+        .append(".get().invoke(")
+        .append(
+            String.join(
+                ", ",
+                f.abiParameters().stream()
+                    .map(p -> unsignedSmall(p.type()) ? widened(p.type(), p.name()) : p.name())
+                    .toList()))
         .append(");\n    }\n");
   }
 
@@ -200,7 +240,9 @@ public final class NativeImage implements Backend {
     out.append("    public static final String ABI_FINGERPRINT = ")
         .append(SeamJson.quote(SeamJson.fingerprint(m)))
         .append(";\n");
-    out.append("    public static final int BINDING_ABI_VERSION = ").append(Seam.BINDING_ABI_VERSION).append(";\n");
+    out.append("    public static final int BINDING_ABI_VERSION = ")
+        .append(Seam.BINDING_ABI_VERSION)
+        .append(";\n");
     leafBindings(m, out);
     for (Struct st : m.structs()) accessors(m, st, out);
     for (Signature c : m.callbacks()) {
@@ -284,14 +326,11 @@ public final class NativeImage implements Backend {
           String.join(
               ", ",
               f.abiParameters().stream()
-                  .map(
-                      p ->
-                          (f.direction() == Direction.EXPORT && readOnlyPointer(p)
-                                  ? "@CConst "
-                                  : "")
-                              + (lowered && unsignedSmall(p.type()) ? "int" : carrier(m, p))
-                              + " "
-                              + p.name())
+                  .map(p ->
+                      (f.direction() == Direction.EXPORT && readOnlyPointer(p) ? "@CConst " : "")
+                          + (lowered && unsignedSmall(p.type()) ? "int" : carrier(m, p))
+                          + " "
+                          + p.name())
                   .toList()));
       if (f.direction() == Direction.IMPORT) {
         out.append(");\n");

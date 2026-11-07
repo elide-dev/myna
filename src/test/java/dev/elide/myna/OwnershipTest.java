@@ -64,10 +64,12 @@ class OwnershipTest {
                       .replace("param count type=u64", "param count type=" + length)
                       .replace(
                           "import ticketCreate symbol=ticket_create return=ptr<Ticket>"
-                              + " error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+                              + " error=no_failure nounwind=true@explicit_contract"
+                              + " native_leaf=false@explicit_contract\n"
                               + "end",
                           "import ticketCreate symbol=ticket_create return=ptr<Ticket>"
-                              + " error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+                              + " error=no_failure nounwind=true@explicit_contract"
+                              + " native_leaf=false@explicit_contract\n"
                               + "param size type=u64\n"
                               + "end")),
               true);
@@ -232,7 +234,8 @@ class OwnershipTest {
     "Option, type shadows generated name: Option",
     "core, type shadows generated name: core"
   })
-  void rejectsReservedResourceNamesInOwnershipScope(String reserved, String message) throws Exception {
+  void rejectsReservedResourceNamesInOwnershipScope(String reserved, String message)
+      throws Exception {
     assertTrue(source().contains("opaque Ticket"), "fixture must name a resource Ticket");
     String changed = source().replace("Ticket", reserved);
     // Globally reserved type names are rejected before ownership-specific validation.
@@ -354,23 +357,17 @@ class OwnershipTest {
   }
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "NativeBuffer",
-        "NativeDestructor",
-        "ResourceFactory",
-        "java",
-        "org"
-      })
+  @ValueSource(strings = {"NativeBuffer", "NativeDestructor", "ResourceFactory", "java", "org"})
   void keepsOwnershipReservedNamesAllowedForDeclaredTypesInBareModules(String name) {
     String source =
         "module demo target=aarch64-apple-darwin\n"
-            + "opaque " + name + "\n"
+            + "opaque "
+            + name
+            + "\n"
             + "import inspect return=i64 error=no_failure\n"
             + "  param value type=ptr<i64> nullable=false ownership=borrowed access=read\n"
             + "end\n";
-    assertDoesNotThrow(
-        () -> Generator.generate(Dsl.parse(source), false), "relaxed: " + name);
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), false), "relaxed: " + name);
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), true), "strict: " + name);
   }
 }

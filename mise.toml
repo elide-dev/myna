@@ -74,6 +74,26 @@ run = "scripts/test.sh"
 description = "Validate GitHub Actions workflows"
 run = "actionlint"
 
+[tasks."check:style"]
+description = "Enforce Google Java, LLVM C/C++, and rustfmt styles"
+run = "python3 scripts/quality.py style"
+
+[tasks.format]
+description = "Format maintained primary-language sources"
+run = "python3 scripts/quality.py format"
+
+[tasks."check:java"]
+description = "Compile production Java with all warnings fatal"
+run = "python3 scripts/quality.py java"
+
+[tasks."check:native"]
+description = "Analyze native production code for common vulnerabilities"
+run = "python3 scripts/quality.py native"
+
+[tasks."check:repeatable"]
+description = "Rebuild distributables twice and compare exact bytes"
+run = "python3 scripts/check-repeatable.py"
+
 [tasks."test:cpp"]
 description = "Sanitize the direct C++ producer and pinned simdjson adapter"
 run = "scripts/python.sh tests/values_cpp.py"

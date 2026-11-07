@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+mise run check:style
+mise run check:java
+mise run check:native
+python3 -m unittest discover -s tests -p test_build_policy.py
 mise run test:rust
 mise run test:cpp
 mise run test:rust-coverage

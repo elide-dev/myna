@@ -133,8 +133,7 @@ public final class Main {
               StandardCopyOption.ATOMIC_MOVE,
               StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
-          Files.move(
-              temporary, target, StandardCopyOption.REPLACE_EXISTING);
+          Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         }
       } finally {
         Files.deleteIfExists(temporary);
