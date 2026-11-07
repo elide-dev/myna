@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Standard-library test runner with JUnit XML, also used for native-binary tests."""
 import os
 from pathlib import Path

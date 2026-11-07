@@ -1,7 +1,7 @@
 {
   "benchmarks/comparison/baselines/leaf-floor-linux-arm64.json": "ca5268e1530e19988991aada1e0f1a1374cb932411fb9dcd654559b2bf2ca0ee",
   "benchmarks/comparison/baselines/leaf-floor-macos-arm64.json": "af4ccdcaf51226fd7924929a1db8e7bedf63caeaab34a3bdb70a01388e0224a6",
-  "benchmarks/comparison/floor-chart.py": "4fd367db4358c68f767c4732cb577cd6547d4213ba8ea6b3f8118fd4fd46c471",
+  "benchmarks/comparison/floor-chart.py": "b5186095a229a167614c3ec734ac82475e68ab88f80dbb6e8a70fce069ee6422",
   "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
   "docs/charts/leaf-floor.svg": "8e87f7d0436eaa39e9b23b6bb83ce3143627f09a25c1bceba19107b2e4aad76a",
   "docs/charts/leaf-floor.png": "b0e57c3729fbeca204555738c31541aaf9345381cefa125bc89f2e827b12a123"

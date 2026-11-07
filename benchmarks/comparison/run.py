@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Standalone comparisons; no CodSpeed instrumentation or cross-machine ratios."""
 import argparse
 import hashlib

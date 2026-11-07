@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Rebuild distributables twice in one environment and retain byte/hash evidence.
 
 This is a same-host repeatability check, not a cross-host reproducibility claim.

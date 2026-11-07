@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 # Upstream Clang does not infer Apple's SDK from SDKROOT as Apple Clang does.
 set -eu
 case "$(uname -s)-$(uname -m)" in

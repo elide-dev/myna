@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Regression tests for the coverage gate used with Elide's JaCoCo reports."""
 from pathlib import Path
 import sys

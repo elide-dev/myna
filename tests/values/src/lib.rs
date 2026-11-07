@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 use myna_values::{Bump, Document, RawView};
 use serde::Serialize;
 use std::ffi::c_void;

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Add authoritative workspace license declarations missing from Cargo.lock scans."""
 import argparse
 import json

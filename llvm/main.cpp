@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // Apply generated seam contracts to actual LLVM 23 bitcode, before ThinLTO/full-LTO linking.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"

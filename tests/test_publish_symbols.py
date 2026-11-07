@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Regression checks for transient publication failures and durable receipts."""
 import importlib.util
 import io

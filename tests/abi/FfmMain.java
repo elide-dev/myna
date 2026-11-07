@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 import dev.elide.myna.generated.MynaFFM;
 import dev.elide.myna.generated.MynaNativeJNI;
 import java.lang.foreign.Arena;

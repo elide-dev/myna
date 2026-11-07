@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Invoke the pinned Native Image driver while preserving native build flags."""
 import os
 from pathlib import Path

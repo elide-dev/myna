@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 use allocator_api2::alloc::{AllocError, Global};
 use myna_values::*;
 use proptest::prelude::*;

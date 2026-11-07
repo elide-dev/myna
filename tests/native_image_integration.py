@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Build and execute real Native Image C API glue and the hosted Feature."""
 import os
 import shutil

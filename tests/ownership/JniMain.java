@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 import fixture.owned.NativeApiJNI;
 import java.nio.ByteBuffer;
 import java.lang.foreign.Arena;

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Normalize metadata in newly built, unsigned Myna JARs; never published assets."""
 import argparse
 import os

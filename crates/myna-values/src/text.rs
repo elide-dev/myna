@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Validated byte-sourced strings and caller-buffer Unicode conversion.
 use crate::Error;
 use serde::{Serialize, Serializer};

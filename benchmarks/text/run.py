@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Retain uninstrumented SVM text crossover samples with reproducibility metadata."""
 import argparse
 import hashlib

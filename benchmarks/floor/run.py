@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Matched SVM/native leaf floors and bounded batch scaling, without instrumentation."""
 import argparse
 import hashlib

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Prove actual object/rlib changes, optimization effects, and ThinLTO/full-LTO linkage."""
 import hashlib
 import json

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Pinned upstream simdjson conformance fixture; not a production JSON parser."""
 import hashlib
 import os

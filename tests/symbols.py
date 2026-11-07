@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Verify ELF sidecar identity and reject absent build IDs before modifying binaries."""
 import hashlib
 import os

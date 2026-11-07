@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 mod bindings { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }
 use core::ffi::c_void;
 unsafe extern "C" {

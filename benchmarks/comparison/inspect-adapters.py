@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Extract named ARM64 scalar adapter call sites without rebuilding or remeasuring."""
 import argparse
 import hashlib

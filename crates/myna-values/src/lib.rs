@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //! JSON-shaped, native-endian value tapes for synchronous Rust / SVM calls.
 //!
 //! Both backing buffers use the supplied [`Allocator`]. The default is a borrowed

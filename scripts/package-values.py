@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Assemble the portable value SDK and a manifest for downstream pinning."""
 import gzip
 import hashlib

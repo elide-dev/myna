@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Check primary-language style, Java warnings, and native security analysis.
 
 Run through mise. Generated outputs, vendored code and benchmark fixtures are not

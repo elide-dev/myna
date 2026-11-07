@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Measure actual LLVM applicator execution, independently of JVM/Rust coverage."""
 import json
 import os

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Render matched identity-call floors; never combine timings across hosts."""
 import argparse
 import hashlib

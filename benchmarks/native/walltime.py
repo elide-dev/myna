@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Write CodSpeed's walltime schema using native measured regions, not process time.
 
 Schema matches the pinned JMH fork's io.codspeed.result.WalltimeResults.

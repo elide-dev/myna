@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 set -eu
 cd "$(dirname "$0")/.."
 # Never let an old report satisfy the coverage gate after a failed test run.
