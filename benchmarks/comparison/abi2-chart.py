@@ -40,7 +40,7 @@ plt.rcParams.update({'font.family':'DejaVu Sans','font.size':11,'svg.hashsalt':'
 fig,axes=plt.subplots(1,2,figsize=(12,5.6),facecolor=background)
 fig.subplots_adjust(left=.25,right=.95,top=.68,bottom=.29,wspace=.30)
 limit=max(max(g[(mode,case)]) for g in groups for mode,case,_,_ in cases)*1.30
-for ax,g,title in zip(axes,groups,('Linux x86-64 · unclemax','Apple M5 Max')):
+for ax,g,title in zip(axes,groups,('Threadripper PRO 9965WX\nLinux x86-64','Apple M5 Max\nmacOS ARM64')):
     ax.set_facecolor(background)
     for y,(mode,case,label,color) in enumerate(cases):
         values=g[(mode,case)]; median=statistics.median(values)
@@ -63,7 +63,7 @@ for y,(_,_,label,color) in enumerate(cases):
                  ha='right',va='center',fontsize=11,color=color,fontweight='bold' if y==0 else 'normal')
 fig.text(.055,.91,'Native calls, measured.',fontsize=26,fontweight='bold',color=foreground)
 fig.text(.055,.835,'Identity function + caller loop · nanoseconds per call · lower is better',fontsize=11,color=muted)
-fig.text(.055,.145,'Dots: median of process medians   /   Whiskers: process min–max   /   5 fresh processes per case',
+fig.text(.055,.145,'5 fresh processes per case · Dots: median of process medians · Whiskers: min–max of those medians',
          fontsize=9,color=foreground)
 fig.text(.055,.09,'Compare within each host. No control subtraction. ¹ C pointer caller unrolled ×4.',fontsize=9,color=muted)
 fig.text(.055,.035,'Binding ABI 2 · bounded, nonblocking, no Java reentry   /   Sources: '

@@ -150,7 +150,8 @@ z
     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #a6afbd" x="200.222609" y="260.099452" transform="rotate(-0 200.222609 260.099452)">Native C pointer¹</text>
    </g>
    <g id="text_11">
-    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #edf3f8" x="216" y="109.024" transform="rotate(-0 216 109.024)">Linux x86-64 · unclemax</text>
+    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; fill: #edf3f8" transform="translate(216 94.620719)">Threadripper PRO 9965WX</text>
+    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; fill: #edf3f8" transform="translate(216 109.024)">Linux x86-64</text>
    </g>
    <g id="LineCollection_1">
     <path d="M 323.14659 160.4736
@@ -381,7 +382,8 @@ z
     <text style="font-weight: 700; font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #a6afbd" x="820.8" y="244.616142" transform="rotate(-0 820.8 244.616142)">0.488 ns</text>
    </g>
    <g id="text_19">
-    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #edf3f8" x="557.843478" y="109.024" transform="rotate(-0 557.843478 109.024)">Apple M5 Max</text>
+    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; fill: #edf3f8" transform="translate(557.843478 94.621656)">Apple M5 Max</text>
+    <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; fill: #edf3f8" transform="translate(557.843478 109.024)">macOS ARM64</text>
    </g>
    <g id="LineCollection_4">
     <path d="M 624.062921 160.4736
@@ -451,7 +453,7 @@ L 626.990882 257.2416
    <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #a8b8c8" x="47.52" y="66.528" transform="rotate(-0 47.52 66.528)">Identity function + caller loop · nanoseconds per call · lower is better</text>
   </g>
   <g id="text_22">
-   <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #edf3f8" x="47.52" y="344.736" transform="rotate(-0 47.52 344.736)">Dots: median of process medians   /   Whiskers: process min–max   /   5 fresh processes per case</text>
+   <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #edf3f8" x="47.52" y="344.736" transform="rotate(-0 47.52 344.736)">5 fresh processes per case · Dots: median of process medians · Whiskers: min–max of those medians</text>
   </g>
   <g id="text_23">
    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #a8b8c8" x="47.52" y="366.912" transform="rotate(-0 47.52 366.912)">Compare within each host. No control subtraction. ¹ C pointer caller unrolled ×4.</text>
