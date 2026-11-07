@@ -24,41 +24,51 @@ for d in datasets:
         raise SystemExit('Binding ABI 2 measurements required')
     if d['smoke'] or d['forks']<5 or not d['host']['cpu'].strip():
         raise SystemExit('Full measured baselines with CPU identity required')
-cases=[('native','identity-indirect-unrolled4','Native C pointer · unrolled ×4','#94a3b8'),
-       ('svm','identity-manual','Handwritten SVM leaf','#94a3b8'),
-       ('svm','identity-generated','Myna default · ABI 2','#166534')]
+cases=[('svm','identity-generated','Myna · default leaf','#69dfad'),
+       ('svm','identity-manual','Handwritten SVM leaf','#91b9ff'),
+       ('native','identity-indirect-unrolled4','Native C pointer¹','#a6afbd')]
 groups=[]
 for d in datasets:
     g={}
     for r in d['results']:
         g.setdefault((r['mode'],r['case']),[]).append(statistics.median(s['ns']/s['iterations'] for s in r['samples']))
     groups.append(g)
+background='#101820'
+foreground='#edf3f8'
+muted='#a8b8c8'
 plt.rcParams.update({'font.family':'DejaVu Sans','font.size':11,'svg.hashsalt':'myna-leaf-floor','svg.fonttype':'none'})
-fig,axes=plt.subplots(2,1,figsize=(11,7.2),sharex=True,facecolor='white')
-fig.subplots_adjust(left=.30,right=.94,top=.79,bottom=.22,hspace=.55)
-limit=max(max(g[(mode,case)]) for g in groups for mode,case,_,_ in cases)*1.17
-for ax,g,title in zip(axes,groups,('Linux ARM64 · hosted runner','macOS ARM64 · Apple M5 Max')):
+fig,axes=plt.subplots(1,2,figsize=(12,5.6),facecolor=background)
+fig.subplots_adjust(left=.25,right=.95,top=.68,bottom=.29,wspace=.30)
+limit=max(max(g[(mode,case)]) for g in groups for mode,case,_,_ in cases)*1.30
+for ax,g,title in zip(axes,groups,('Linux ARM64','Apple M5 Max')):
+    ax.set_facecolor(background)
     for y,(mode,case,label,color) in enumerate(cases):
         values=g[(mode,case)]; median=statistics.median(values)
-        ax.barh(y,median,height=.52,color=color,zorder=3)
-        ax.errorbar(median,y,xerr=[[median-min(values)],[max(values)-median]],fmt='none',ecolor='#243746',capsize=3,linewidth=1,zorder=4)
-        ax.text(max(values)+limit*.018,y,f'{median:.3f} ns',va='center',fontsize=11,
-                fontweight='bold' if case=='identity-generated' else 'normal',color='#172b3a')
-    ax.set_yticks(range(len(cases)),[c[2] for c in cases],color='#172b3a')
-    ax.invert_yaxis();ax.set_xlim(0,limit)
-    ax.set_title(title,loc='left',fontweight='bold',fontsize=12,color='#172b3a',pad=13)
-    ax.grid(axis='x',color='#e7edf1',linewidth=.8,zorder=0)
+        ax.barh(y,limit,height=.38,color='#1e2b38',zorder=1)
+        ax.barh(y,median,height=.38,color=color,alpha=.28,zorder=2)
+        ax.errorbar(median,y,xerr=[[median-min(values)],[max(values)-median]],
+                    fmt='o',color=color,markersize=7,ecolor=color,capsize=4,linewidth=1.5,zorder=4)
+        ax.text(limit,y-.32,f'{median:.3f} ns',ha='right',va='center',fontsize=11,
+                fontweight='bold',color=color)
+    ax.set_ylim(2.6,-.65)
+    ax.set_xlim(0,limit)
+    ax.set_title(title,loc='left',fontweight='bold',fontsize=14,color=foreground,pad=20)
+    ax.set_yticks([])
     ax.spines[:].set_visible(False)
-    ax.tick_params(axis='both',length=0,pad=8,labelsize=10,colors='#526578')
-axes[-1].set_xlabel('Nanoseconds per identity call · lower is better',fontsize=10,color='#526578',labelpad=12)
-fig.text(.055,.93,'Native leaf call overhead',fontsize=24,fontweight='bold',color='#172b3a')
-fig.text(.055,.875,'Fast by default. Generated calls eliminate the extra SVM leaf stub.',fontsize=12,color='#526578')
-fig.text(.055,.10,'5 fresh processes/case · Median latency; whiskers show process min–max\n'
-         'Primitive identity function + caller loop; no control subtraction. Compare within each host.',
-         fontsize=9,color='#526578',linespacing=1.6)
-fig.text(.055,.035,'Binding ABI 2 · Short, bounded, nonblocking calls with no Java reentry.\n'
-         + 'Sources: '+ ' / '.join(d['build'].get('verified_source_commit',d['build']['revision'])[:7] for d in datasets),
-         fontsize=8,color='#526578',linespacing=1.6)
+    ax.tick_params(axis='x',length=0,pad=10,labelsize=9,colors=muted)
+    ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+    ax.grid(axis='x',color='#2b3a48',linewidth=.6,zorder=0)
+for y,(_,_,label,color) in enumerate(cases):
+    axes[0].text(-.06,y,label,transform=axes[0].get_yaxis_transform(),
+                 ha='right',va='center',fontsize=11,color=color,fontweight='bold' if y==0 else 'normal')
+fig.text(.055,.91,'Native calls, measured.',fontsize=26,fontweight='bold',color=foreground)
+fig.text(.055,.835,'Identity function + caller loop · nanoseconds per call · lower is better',fontsize=11,color=muted)
+fig.text(.055,.145,'Dots: median of process medians   /   Whiskers: process min–max   /   5 fresh processes per case',
+         fontsize=9,color=foreground)
+fig.text(.055,.09,'Compare within each host. No control subtraction. ¹ C pointer caller unrolled ×4.',fontsize=9,color=muted)
+fig.text(.055,.035,'Binding ABI 2 · bounded, nonblocking, no Java reentry   /   Sources: '
+         + ' / '.join(d['build'].get('verified_source_commit',d['build']['revision'])[:7] for d in datasets),
+         fontsize=8,color=muted)
 args.output.parent.mkdir(parents=True,exist_ok=True)
 fig.savefig(args.output.with_suffix('.svg'),metadata={'Date':None})
 fig.savefig(args.output.with_suffix('.png'),dpi=160,metadata={'Software':'Myna abi2-chart.py'})

@@ -12,36 +12,105 @@
 
 # Myna
 
-A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, inlineable native imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
+Generate typed bindings between Java, Rust, and C/C++ from one `.seam` file. Myna targets **GraalVM Native Image / Substrate VM first**, with Java 25 FFM bindings for JVM callers. It also emits C headers, Rust FFI, ABI descriptors, and LLVM 23 optimizer contracts.
 
-**`myna apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
+## One binding, from Seam to native code
 
-**Substrate VM is the primary runtime.** Binding ABI 2 makes inlineable no-transition native calls the default. Imports must be short, bounded, nonblocking and unable to reenter Java; other calls require `native_leaf=false@explicit_contract`. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md).
+This increment function is a complete scalar example of the default native-leaf contract: short, bounded, nonblocking, and unable to reenter Java.
 
-See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
+**1. Describe the native function.** The [tested Seam fixture](tests/fast/fast.seam) declares its symbol, argument, return type, and static library:
+
+```text
+module fast_fixture target=aarch64-apple-darwin java_package=fixture.fast java_class=FastApi c_context=fixture.fast.Directives c_library=fastfixture c_library_static=true
+import increment symbol=myna_fast_increment return=i64 error=no_failure
+  param value type=i64
+end
+```
+
+Generate the bindings after [building Myna](#build-and-use):
+
+```sh
+build/dist/myna generate tests/fast/fast.seam --out build/fast-example
+# For Linux x86-64, add: --target x86_64-unknown-linux-gnu
+```
+
+**2. Myna generates the Java declarations.** The direct SVM API exposes a typed native pointer and an inlineable call. This excerpt omits annotations and initialization helpers:
+
+```java
+// FastApi.java — generated for Native Image
+public interface increment_Leaf extends CFunctionPointer {
+    long invoke(long value);
+}
+public static long increment(long value) {
+    return MynaSymbols.increment.get().invoke(value);
+}
+```
+
+The generated JVM adapter describes the same C ABI using Java 25 FFM:
+
+```java
+// FastApiFFM.java — generated for the JVM
+public static final FunctionDescriptor increment_DESCRIPTOR =
+    FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
+public static MethodHandle increment(SymbolLookup lookup) {
+    return Linker.nativeLinker().downcallHandle(
+        lookup.find("myna_fast_increment").orElseThrow(
+            () -> new UnsatisfiedLinkError("myna_fast_increment")), increment_DESCRIPTOR);
+}
+```
+
+**3. Call the native function.** In an SVM application, the statically linked call is simply:
+
+```java
+long answer = FastApi.increment(41); // 42
+```
+
+On the JVM, resolve the shared library explicitly and keep its arena alive for the call:
+
+```java
+try (var arena = Arena.ofConfined()) {
+    var lookup = SymbolLookup.libraryLookup(libraryPath, arena);
+    var increment = FastApiFFM.increment(lookup);
+    long answer = (long) increment.invokeExact(41L); // 42
+}
+```
+
+Here `libraryPath` is a `Path` to your platform's shared library; enable JVM native access with `--enable-native-access=ALL-UNNAMED`. The caller handles `Throwable` from `invokeExact`. Both APIs reach the same C implementation:
+
+```c
+#include <stdint.h>
+
+int64_t myna_fast_increment(int64_t value) {
+    return value + 1;
+}
+```
+
+For SVM, link this implementation into `libfastfixture.a`, supply the [library-path directives](tests/fast/Directives.java), and include the generated `META-INF/native-image/` resources with the compiled bindings. The [Native Image integration test](tests/native_image_integration.py) builds and runs this path, including calls under concurrent GC. See [the adapter guide](docs/jvm-roadmap.md) for shared-library and FFM setup.
+
+Calls that can block or reenter Java must declare `native_leaf=false@explicit_contract`. Myna checks declared contracts for consistency; the native implementation must obey them.
 
 ## Call overhead
 
-**Fast native calls are the default in Myna 0.8.0 / binding ABI 2.** Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max**, versus **1.510 ns** and **0.999 ns** for handwritten Native Image `@CFunction(NO_TRANSITION)` calls in the same builds.
+Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max** in the retained binding ABI 2 runs. The same builds measure handwritten Native Image `@CFunction(NO_TRANSITION)` calls at **1.510 ns** and **0.999 ns**, respectively.
 
-![Default Myna native leaf calls compared with handwritten Native Image and native C pointer callers](docs/charts/default-leaf.svg)
+![Identity-call latency within each host: Myna default leaves, handwritten SVM leaves, and native C pointers; points show process medians and ranges](docs/charts/default-leaf.svg)
 
-The native function-pointer baselines, explicitly unrolled four times, measure **0.442 ns** and **0.512 ns** respectively. The Mac process ranges overlap. These are identity-function-plus-loop timings with no control subtraction: compare within each host, not across machines. Five fresh processes per case retain ten samples each. Arithmetic workloads, custom pointers, explicit SVM unrolling and bounded batches remain in the full results.
+These timings include the identity function and caller loop, with no control subtraction. Each case has five fresh processes with ten samples each. Compare implementations **within each host**: the Mac Myna and native-pointer ranges overlap, so these measurements do not establish a win over native C. Native pointer callers are explicitly unrolled four times.
 
-Myna generates typed inlineable pointers, symbolic linkage, and Native Image initialization metadata. Ordinary calls use the relocated symbol directly, removing the extra SVM leaf stub and runtime address-holder guard. The default contract requires **short, bounded, nonblocking calls with no Java reentry**. Other imports must specify `native_leaf=false@explicit_contract`. This backend uses internal APIs of the pinned Elide Graal compiler; see [ABI 2 migration](docs/binding-abi-2.md). Both hosts pass concurrent-GC and assembly checks.
+Myna's generated direct calls use relocated symbols and remove the extra SVM leaf stub. Both hosts pass concurrent-GC and assembly checks. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
 
-[Linux raw measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun the benchmarks](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
+[Linux measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code](benchmarks/comparison/evidence/README.md)
 
 <details>
-<summary>Portable normal-transition, native-leaf, and AOT FFM baseline</summary>
+<summary>Normal transitions and AOT FFM comparisons</summary>
 
-Direct generated SVM bindings perform on par with handwritten Native Image C calls in the retained v0.7.2 scalar benchmark. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected generated and handwritten direct-call paths produce matching instruction sequences.
+The retained v0.7.2 scalar benchmark compares generated and handwritten calls under matched contracts. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected direct-call paths produce matching instruction sequences.
 
 ![Portable Myna versus handwritten Native Image scalar call latency](docs/charts/svm-boundaries.svg)
 
-These latencies include the scalar callee and loop; the roughly 0.59 ns control is not subtracted. Transition contracts differ across pairs. These are shared-host measurements, not universal latency guarantees.
+Latencies include the callee and loop; the control is not subtracted. Transition contracts differ across pairs. These shared-host measurements are not universal latency guarantees.
 
-[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun commands](docs/benchmarking.md) · [Regenerate charts](docs/benchmarking.md#performance-charts)
+[Measurements and statistics](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Raw samples](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Benchmark commands](docs/benchmarking.md)
 
 </details>
 

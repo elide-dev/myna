@@ -13,6 +13,7 @@ name: Native call floor
       - 'benchmarks/comparison/kernel.c'
       - 'benchmarks/comparison/Measure.java'
       - '.github/workflows/benchmark.floor.yml'
+      - '!**/*.md'
 
 permissions:
   contents: read

@@ -1,8 +1,8 @@
 {
   "benchmarks/comparison/baselines/default-leaf-linux-arm64.json": "9fd3c04ec14d852a699250558531e9c488f938dd309ee9e46eb1b03b789e6210",
   "benchmarks/comparison/baselines/default-leaf-macos-arm64.json": "93ec97cf06826a51bbec85309e85be3487406b124767aef8f347058cc4e7717e",
-  "benchmarks/comparison/abi2-chart.py": "768dc91a9d92ef3262544b4788d28b7031225aba8fc5cbf38657b8bced130d59",
+  "benchmarks/comparison/abi2-chart.py": "7e8b7a949a32a97f2aa1735aa82b0f380bf4109fa60fd8402c858a8cfa88db84",
   "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
-  "docs/charts/default-leaf.svg": "416ec370d30fa084997d7b741297b74ccdcf56fca9a9ce5f0383bcf0a15663ff",
-  "docs/charts/default-leaf.png": "c0cdf8808960bdc5b36263a11569380aa944351da2b57ff7c991bea7c41742a2"
+  "docs/charts/default-leaf.svg": "159f93230ff4857ef550e4d4cf34b58cb6654758ad5ed2870f258db0fd9567af",
+  "docs/charts/default-leaf.png": "1f8e5ffe634809ee46ba370864c5029c4642b6f316cba6393aabc13d31c52fa5"
 }
