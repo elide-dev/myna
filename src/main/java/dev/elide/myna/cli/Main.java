@@ -16,7 +16,7 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.10.0 — Native Image / Rust ABI generator
+      myna 0.11.0 — Native Image / Rust ABI generator
       Usage:
         myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni]
         myna validate INPUT.seam [--target TRIPLE] [--relaxed]

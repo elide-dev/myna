@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class MynaFFM {
     private MynaFFM() {}
-    public static final String ABI_FINGERPRINT = "9a6133415199173604733b600e9bd303c8d34880adfcf2e3a0335b9aafb202d3";
+    public static final String ABI_FINGERPRINT = "f514b5c23e0c746edb90ed1a8baf9ee86956b0590163aaf4e45e725f0fd4c986";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }

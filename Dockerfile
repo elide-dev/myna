@@ -6,10 +6,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake make xz-utils python3 zlib1g-dev libzstd-dev libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN case "$TARGETARCH" in \
-      amd64) digest=f65ccbecd24c5c283216126bdacb6485381fbfce852f6359e45af69c87bf59ea; triple=x86_64-unknown-linux-gnu ;; \
-      arm64) digest=faab1f1bd9927361dec33bf0c9d521158ace9d11911212fd9caaa67a680400e5; triple=aarch64-unknown-linux-gnu ;; \
+      amd64) digest=e3841f87b3d9d29a48fd0e12eb0834fcb361f62fd14c4cf40a1a6fc83cba2d4a; triple=x86_64-unknown-linux-gnu ;; \
+      arm64) digest=296a5ebb7d56953d24de184e336be903cb1cfe5b54cdf7ad814a5ff714c47ff5; triple=aarch64-unknown-linux-gnu ;; \
       *) exit 1 ;; esac \
-    && curl -fSL "https://github.com/elide-dev/toolchain/releases/download/v2026.11.2/elide-toolchain-2026.11.2-linux-${TARGETARCH}.tar.xz" -o /tmp/toolchain.tar.xz \
+    && curl -fSL "https://github.com/elide-dev/toolchain/releases/download/v2026.11.5/elide-toolchain-2026.11.5-linux-${TARGETARCH}.tar.xz" -o /tmp/toolchain.tar.xz \
     && echo "$digest  /tmp/toolchain.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/toolchain.tar.xz -C /opt && rm /tmp/toolchain.tar.xz \
     && printf '#!/bin/sh\nexec /opt/elide-toolchain/bin/%s-clang "$@"\n' "$triple" > /opt/myna-cc \

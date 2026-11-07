@@ -40,6 +40,7 @@ use std::{fmt, marker::PhantomData};
 compile_error!("Myna value ABI v3 requires a 64-bit target");
 
 pub const ABI_VERSION: u32 = 3;
+pub const ABI_VERSION_V4: u32 = 4;
 /// Descriptor capability for IEEE-754 NaN and infinities; absent by default.
 pub const ALLOW_NON_FINITE: u32 = 1;
 pub const NULL: u32 = 0;
@@ -51,6 +52,7 @@ pub const STRING: u32 = 5;
 pub const ARRAY: u32 = 6;
 pub const OBJECT: u32 = 7;
 pub const DECIMAL: u32 = 8;
+pub const REF: u32 = 9;
 pub const REGION_TEXT: u32 = 0x100;
 pub const KIND_MASK: u32 = 0xff;
 pub const INLINE_STRING_BYTES: usize = 16;
@@ -130,6 +132,32 @@ pub struct RawView {
     pub region_count: u64,
 }
 
+/// ABI 4 object directory entry, sorted by unsigned hash then relative key offset.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DirectoryEntry {
+    pub hash: u32,
+    pub key_offset: u32,
+}
+
+/// ABI 4 preserves the 56-byte v3 prefix and adds two optional borrowed arrays.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RawViewV4 {
+    pub base: RawView,
+    pub directory: *const DirectoryEntry,
+    pub directory_count: u64,
+    pub metadata: *const u32,
+    pub metadata_count: u64,
+}
+
+/// FNV-1a over decoded UTF-8 bytes, with wrapping 32-bit multiplication.
+pub fn hash_utf8(bytes: &[u8]) -> u32 {
+    bytes.iter().fold(0x811c9dc5, |hash, b| {
+        (hash ^ u32::from(*b)).wrapping_mul(0x01000193)
+    })
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("invalid JSON number token")]
@@ -189,6 +217,8 @@ impl Default for Limits {
 /// Custom allocators must obey the allocator-api2 safety contract.
 pub struct Document<A: Allocator + Clone> {
     nodes: Vec<Node, A>,
+    metadata: Vec<u32, A>,
+    has_metadata: bool,
     bytes: Vec<u8, A>,
     limits: Limits,
     options: Options,
@@ -212,6 +242,8 @@ impl<A: Allocator + Clone> Document<A> {
     pub fn with_options_in(allocator: A, limits: Limits, options: Options) -> Self {
         Self {
             nodes: Vec::new_in(allocator.clone()),
+            metadata: Vec::new_in(allocator.clone()),
+            has_metadata: false,
             bytes: Vec::new_in(allocator),
             limits,
             options,
@@ -248,6 +280,7 @@ impl<A: Allocator + Clone> Document<A> {
         self.failed = false;
         self.utf8_len = 0;
         self.nodes.clear();
+        self.metadata.clear();
         self.bytes.clear();
     }
     pub fn view(&self) -> Option<View<'_>> {
@@ -255,6 +288,7 @@ impl<A: Allocator + Clone> Document<A> {
             nodes: &self.nodes,
             bytes: &self.bytes,
             regions: &[],
+            v4: None,
             flags: if self.options.allow_non_finite {
                 ALLOW_NON_FINITE
             } else {
@@ -271,6 +305,12 @@ impl<A: Allocator + Clone> Document<A> {
             return Err(Error::Limit);
         }
         self.nodes.try_reserve(1).map_err(|_| Error::Allocation)?;
+        if self.has_metadata {
+            self.metadata
+                .try_reserve(1)
+                .map_err(|_| Error::Allocation)?;
+            self.metadata.push(0);
+        }
         let index = self.nodes.len();
         self.nodes.push(Node {
             tag,
@@ -339,8 +379,26 @@ pub struct View<'a> {
     bytes: &'a [u8],
     regions: &'a [Region],
     flags: u32,
+    v4: Option<(&'a [DirectoryEntry], &'a [u32])>,
 }
 impl<'a> View<'a> {
+    pub fn version(self) -> u32 {
+        if self.v4.is_some() {
+            ABI_VERSION_V4
+        } else {
+            ABI_VERSION
+        }
+    }
+    pub fn directory(self) -> &'a [DirectoryEntry] {
+        self.v4.map_or(&[], |v| v.0)
+    }
+    pub fn metadata(self) -> &'a [u32] {
+        self.v4.map_or(&[], |v| v.1)
+    }
+    pub fn reference_target(self, index: usize) -> Option<usize> {
+        let n = self.nodes.get(index)?;
+        (n.kind() == REF && self.v4.is_some()).then_some(n.payload as usize)
+    }
     pub fn flags(self) -> u32 {
         self.flags
     }
@@ -385,15 +443,21 @@ impl<'a> View<'a> {
     }
     pub fn raw(self) -> BorrowedRawView<'a> {
         BorrowedRawView {
-            raw: RawView {
-                version: ABI_VERSION,
-                flags: self.flags,
-                nodes: self.nodes.as_ptr(),
-                node_count: self.nodes.len() as u64,
-                bytes: self.bytes.as_ptr(),
-                byte_count: self.bytes.len() as u64,
-                regions: self.regions.as_ptr(),
-                region_count: self.regions.len() as u64,
+            raw: RawViewV4 {
+                base: RawView {
+                    version: self.version(),
+                    flags: self.flags,
+                    nodes: self.nodes.as_ptr(),
+                    node_count: self.nodes.len() as u64,
+                    bytes: self.bytes.as_ptr(),
+                    byte_count: self.bytes.len() as u64,
+                    regions: self.regions.as_ptr(),
+                    region_count: self.regions.len() as u64,
+                },
+                directory: self.directory().as_ptr(),
+                directory_count: self.directory().len() as u64,
+                metadata: self.metadata().as_ptr(),
+                metadata_count: self.metadata().len() as u64,
             },
             lifetime: PhantomData,
         }
@@ -402,11 +466,14 @@ impl<'a> View<'a> {
 /// Owns the small ABI descriptor, while borrowing the document's buffers.
 /// Keep this value alive for the entire native call. No allocation occurs.
 pub struct BorrowedRawView<'a> {
-    raw: RawView,
+    raw: RawViewV4,
     lifetime: PhantomData<&'a ()>,
 }
 impl BorrowedRawView<'_> {
+    pub fn as_v4_ptr(&self) -> Option<*const RawViewV4> {
+        (self.raw.base.version == ABI_VERSION_V4).then_some(&self.raw)
+    }
     pub fn as_ptr(&self) -> *const RawView {
-        &self.raw
+        &self.raw.base
     }
 }

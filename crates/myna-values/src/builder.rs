@@ -24,6 +24,9 @@ pub struct Builder<'a, A: Allocator + Clone> {
     regions: Vec<Region, A>,
     stack: Vec<Frame, A>,
     roots: usize,
+    v4: bool,
+    directory_threshold: u32,
+    directory: Vec<DirectoryEntry, A>,
     borrowed: PhantomData<&'a [u8]>,
 }
 impl<'a, A: Allocator + Clone> Builder<'a, A> {
@@ -37,15 +40,56 @@ impl<'a, A: Allocator + Clone> Builder<'a, A> {
         Self {
             doc: Document::with_options_in(allocator.clone(), limits, options),
             regions: Vec::new_in(allocator.clone()),
-            stack: Vec::new_in(allocator),
+            stack: Vec::new_in(allocator.clone()),
+            directory: Vec::new_in(allocator),
+            v4: false,
+            directory_threshold: 8,
             roots: 0,
             borrowed: PhantomData,
         }
+    }
+    /// Enable ABI 4 before writing. Zero threshold disables object directories.
+    pub fn enable_v4(&mut self, threshold: u32, metadata: bool) -> Result<(), Error> {
+        self.run(|s| {
+            if !s.doc.nodes.is_empty() {
+                return Err(Error::Protocol("enable ABI 4 before writing"));
+            }
+            s.v4 = true;
+            s.directory_threshold = threshold;
+            s.doc.has_metadata = metadata;
+            Ok(())
+        })
+    }
+    /// Set an opaque format-specific metadata ID. Zero means unspecified.
+    pub fn metadata(&mut self, node: usize, value: u32) -> Result<(), Error> {
+        self.run(|s| {
+            let slot = s.doc.metadata.get_mut(node).ok_or(Error::RegionBounds)?;
+            *slot = value;
+            Ok(())
+        })
+    }
+    /// Append an explicit alias of a completed earlier subtree. Never expands it.
+    pub fn reference_node(&mut self, target: usize) -> Result<(), Error> {
+        self.run(|s| {
+            if !s.v4
+                || target >= s.doc.nodes.len()
+                || s.doc.nodes[target].subtree_end(target) > s.doc.nodes.len() as u64
+                || s.stack.iter().any(|f| f.index == target)
+            {
+                return Err(Error::Protocol(
+                    "reference requires completed earlier value",
+                ));
+            }
+            s.slot(REF)?;
+            s.doc.push(REF, 0, target as u64)?;
+            Ok(())
+        })
     }
     pub fn clear(&mut self) {
         self.doc.clear();
         self.regions.clear();
         self.stack.clear();
+        self.directory.clear();
         self.roots = 0;
     }
     fn run<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Error>) -> Result<T, Error> {
@@ -143,6 +187,33 @@ impl<'a, A: Allocator + Clone> Builder<'a, A> {
                     frame.values
                 },
             );
+            if s.v4
+                && object
+                && s.directory_threshold != 0
+                && frame.values / 2 >= s.directory_threshold
+            {
+                let start = s.directory.len();
+                s.directory
+                    .try_reserve((frame.values / 2) as usize)
+                    .map_err(|_| Error::Allocation)?;
+                let mut key = frame.index + 1;
+                while key < s.doc.nodes.len() {
+                    let view = View {
+                        nodes: &s.doc.nodes,
+                        bytes: &s.doc.bytes,
+                        regions: &s.regions,
+                        flags: 0,
+                        v4: None,
+                    };
+                    let text = view.string(key).ok_or(Error::KeyType)?;
+                    let hash = hash_utf8(text.as_str().as_bytes());
+                    let key_offset = u32::try_from(key - frame.index).map_err(|_| Error::Limit)?;
+                    s.directory.push(DirectoryEntry { hash, key_offset });
+                    key = s.doc.nodes[key + 1].subtree_end(key + 1) as usize;
+                }
+                s.directory[start..].sort_unstable();
+                s.doc.nodes[frame.index].payload = start as u64 + 1;
+            }
             Ok(())
         })
     }
@@ -199,6 +270,7 @@ impl<'a, A: Allocator + Clone> Builder<'a, A> {
             nodes: &self.doc.nodes,
             bytes: &self.doc.bytes,
             regions: &self.regions,
+            v4: self.v4.then_some((&self.directory, &self.doc.metadata)),
             flags: if self.doc.options.allow_non_finite {
                 ALLOW_NON_FINITE
             } else {

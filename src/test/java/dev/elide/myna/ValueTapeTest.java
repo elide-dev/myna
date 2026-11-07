@@ -44,7 +44,7 @@ final class ValueTapeTest {
         nodes
             .putInt(
                 (int) value[0]
-                    | (version == 3 && (value[0] == STRING || value[0] == DECIMAL) && value[1] > 16
+                    | (version >= 3 && (value[0] == STRING || value[0] == DECIMAL) && value[1] > 16
                         ? REGION_TEXT
                         : 0))
             .putInt((int) value[1])
@@ -326,5 +326,236 @@ final class ValueTapeTest {
     assertEquals(-1, map.find(0, Utf8Key.of("y")));
     var badUtf8 = tape(node(STRING, 1, 0xff, 0));
     assertThrows(IllegalArgumentException.class, () -> badUtf8.stringValue(0));
+  }
+
+  private static final class V4Tape extends Tape {
+    int[] hashes;
+    long[] keys;
+
+    V4Tape(long[][] nodes, String text, String... names) {
+      super(nodes, text, 4);
+      var entries = new java.util.ArrayList<long[]>();
+      for (int i = 0; i < names.length; i++)
+        entries.add(new long[] {Integer.toUnsignedLong(Utf8Key.of(names[i]).hash()), 1 + i * 2});
+      entries.sort(
+          java.util.Comparator.<long[]>comparingLong(e -> e[0]).thenComparingLong(e -> e[1]));
+      hashes = new int[entries.size()];
+      keys = new long[entries.size()];
+      for (int i = 0; i < entries.size(); i++) {
+        hashes[i] = (int) entries.get(i)[0];
+        keys[i] = entries.get(i)[1];
+      }
+    }
+
+    @Override
+    protected long directoryCount() {
+      return hashes.length;
+    }
+
+    @Override
+    protected int directoryHash(long index) {
+      return hashes[(int) index];
+    }
+
+    @Override
+    protected long directoryKeyOffset(long index) {
+      return keys[(int) index];
+    }
+
+    @Override
+    protected int readMetadata(long node) {
+      return node == 0 ? 42 : 0;
+    }
+  }
+
+  @Test
+  void preparedKeyAndCheckedKinds() {
+    for (String value : new String[] {"", "hello", "abcdefghijklmno", "abcdefghijklmnopq", "é🦀"}) {
+      var key = Utf8Key.of(value);
+      byte[] utf8 = value.getBytes(StandardCharsets.UTF_8);
+      assertEquals(utf8.length, key.byteLength());
+      assertEquals(hashUtf8(utf8), key.hash());
+      long low = 0, high = 0;
+      for (int i = 0; i < utf8.length; i++) {
+        assertEquals(utf8[i], key.byteAt(i));
+        if (i < 8) low |= (utf8[i] & 255L) << (8 * i);
+        else if (i < 16) high |= (utf8[i] & 255L) << (8 * (i - 8));
+      }
+      assertEquals(low, key.lowWord());
+      assertEquals(high, key.highWord());
+      var t = new Tape(new long[][] {node(STRING, utf8.length, 0, 1)}, value);
+      assertTrue(t.keyMatches(0, key));
+      assertFalse(t.keyMatches(0, Utf8Key.of(value + "x")));
+      assertEquals(STRING, t.kindAt(0));
+      assertEquals(3, t.version());
+      assertEquals(0, t.metadata(0));
+      assertThrows(IndexOutOfBoundsException.class, () -> t.kindAt(-1));
+      assertThrows(IndexOutOfBoundsException.class, () -> t.kindAt(1));
+      assertThrows(IndexOutOfBoundsException.class, () -> t.metadata(1));
+      assertThrows(NullPointerException.class, () -> t.keyMatches(0, null));
+    }
+    assertEquals(0x4f9f2cab, Utf8Key.of("hello").hash());
+    var scalar = tape(node(NULL, 0, 0, 1));
+    assertThrows(IllegalArgumentException.class, () -> scalar.keyMatches(0, Utf8Key.of("")));
+    assertThrows(IllegalArgumentException.class, () -> tape(node(99, 0, 0, 1)).kindAt(0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new Tape(new long[][] {node(DECIMAL, 1, 0, 1)}, "1", 2).kindAt(0));
+  }
+
+  @Test
+  void abi4ReferenceContracts() {
+    var t =
+        new Tape(
+            new long[][] {
+              node(ARRAY, 3, 0, 4), node(STRING, 1, 0, 2), node(REF, 0, 1, 3), node(REF, 0, 2, 4)
+            },
+            "a",
+            4);
+    t.validate();
+    assertEquals(REF, t.kindAt(2));
+    assertEquals(1, t.referenceTarget(2));
+    assertEquals(2, t.referenceTarget(3));
+    assertEquals(0, t.metadata(1));
+    for (long target : new long[] {-1, 0, 2, 3, Long.MAX_VALUE}) {
+      var bad =
+          new Tape(
+              new long[][] {node(ARRAY, 2, 0, 3), node(NULL, 0, 0, 2), node(REF, 0, target, 3)},
+              "",
+              4);
+      assertThrows(IllegalArgumentException.class, bad::validate);
+    }
+    var legacy =
+        new Tape(
+            new long[][] {node(ARRAY, 2, 0, 3), node(NULL, 0, 0, 2), node(REF, 0, 1, 3)}, "", 3);
+    assertThrows(IllegalArgumentException.class, legacy::validate);
+    assertThrows(IllegalArgumentException.class, () -> legacy.referenceTarget(2));
+    assertThrows(IllegalArgumentException.class, () -> t.referenceTarget(1));
+  }
+
+  @Test
+  void abi4DirectoriesAndCollisions() {
+    String[] names = {"costarring", "liquid", "costarring"};
+    assertEquals(Utf8Key.of(names[0]).hash(), Utf8Key.of(names[1]).hash());
+    long[][] nodes = {
+      node(OBJECT, 3, 1, 7),
+      node(STRING, 10, 0, 2),
+      node(I64, 0, 11, 3),
+      node(STRING, 6, 10, 4),
+      node(I64, 0, 22, 5),
+      node(STRING, 10, 0, 6),
+      node(I64, 0, 33, 7)
+    };
+    var t = new V4Tape(nodes, "costarringliquid", names);
+    t.validate();
+    assertEquals(42, t.metadata(0));
+    assertEquals(2, t.find(0, Utf8Key.of(names[0])));
+    assertEquals(4, t.find(0, Utf8Key.of(names[1])));
+    assertEquals(2, t.find(0, names[0].getBytes(StandardCharsets.UTF_8)));
+    assertEquals(4, t.find(0, names[1].getBytes(StandardCharsets.UTF_8)));
+    assertEquals(-1, t.find(0, Utf8Key.of("missing")));
+    assertEquals(-1, t.find(0, new byte[0]));
+    for (long payload : new long[] {-1, 5, Long.MAX_VALUE}) {
+      t.nodes.putLong(8, payload);
+      assertThrows(IllegalArgumentException.class, t::validate);
+      assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("liquid")));
+    }
+    t.nodes.putLong(8, 1);
+    for (long offset : new long[] {0, 6, 2}) {
+      t.keys[0] = offset;
+      assertThrows(IllegalArgumentException.class, t::validate);
+      assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("liquid")));
+    }
+    t.keys[0] = 1;
+    t.keys[1] = 1;
+    assertThrows(IllegalArgumentException.class, t::validate);
+    t.keys[1] = 3;
+    t.hashes[0]++;
+    assertThrows(IllegalArgumentException.class, t::validate);
+    t.hashes[0] -= 2;
+    assertThrows(IllegalArgumentException.class, t::validate);
+    t.hashes[0]++;
+    t.nodes.putInt(4, 2);
+    assertThrows(IllegalArgumentException.class, t::validate);
+    var absent = new Tape(nodes, "costarringliquid", 4);
+    assertThrows(IllegalArgumentException.class, absent::validate);
+  }
+
+  @Test
+  void abi4RejectsMalformedDirectoriesAndSupportsUnindexedObjects() {
+    long[][] nodes = {
+      node(OBJECT, 2, 1, 5), node(STRING, 1, 0, 2), node(I64, 0, 11, 3),
+      node(STRING, 1, 1, 4), node(I64, 0, 22, 5), node(NULL, 0, 0, 6)
+    };
+    var t = new V4Tape(nodes, "ab", "a", "b");
+    assertEquals(2, t.find(0, Utf8Key.of("a")));
+    t.nodes.putLong(8, 0);
+    assertEquals(4, t.find(0, Utf8Key.of("b")));
+    t.nodes.putLong(8, 2);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+    t.nodes.putLong(8, 1);
+    // A non-inline key must still occupy exactly one node.
+    t.nodes.putInt(NODE_SIZE, STRING | REGION_TEXT);
+    t.nodes.putLong(NODE_SIZE + 16, 3);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+    t.nodes.putInt(NODE_SIZE, STRING);
+    t.nodes.putLong(NODE_SIZE + 16, 0);
+    t.nodes.putLong(2 * NODE_SIZE + 16, 6);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+
+    // Directory validation must reject values escaping a nested object's extent.
+    var nested =
+        new V4Tape(
+            new long[][] {
+              node(ARRAY, 2, 0, 5),
+              node(OBJECT, 1, 1, 4),
+              node(STRING, 1, 0, 3),
+              node(I64, 0, 11, 5),
+              node(NULL, 0, 0, 5)
+            },
+            "a",
+            "a");
+    assertThrows(IllegalArgumentException.class, nested::validate);
+
+    var valid =
+        new V4Tape(
+            new long[][] {
+              node(OBJECT, 2, 1, 5),
+              node(STRING, 1, 0, 2),
+              node(I64, 0, 11, 3),
+              node(STRING, 1, 1, 4),
+              node(I64, 0, 22, 5)
+            },
+            "ab",
+            "a",
+            "b");
+    valid.validate();
+    valid.hashes[1]++;
+    assertThrows(IllegalArgumentException.class, valid::validate);
+
+    // Default directory hooks must fail clearly for adapters without directory storage.
+    class MissingDirectory extends Tape {
+      MissingDirectory() {
+        super(
+            new long[][] {node(OBJECT, 1, 1, 3), node(STRING, 1, 0, 2), node(NULL, 0, 0, 3)},
+            "a",
+            4);
+      }
+
+      @Override
+      protected long directoryCount() {
+        return 1;
+      }
+    }
+    var missing = new MissingDirectory();
+    assertThrows(IllegalArgumentException.class, missing::validate);
+    assertThrows(IllegalArgumentException.class, () -> missing.find(0, Utf8Key.of("a")));
+  }
+
+  @Test
+  void preparedKeysRejectSameLengthMismatchesInEitherWord() {
+    var t = new Tape(new long[][] {node(STRING, 16, 0, 1)}, "abcdefghijklmnop");
+    assertFalse(t.keyMatches(0, Utf8Key.of("Abcdefghijklmnop")));
+    assertFalse(t.keyMatches(0, Utf8Key.of("abcdefghijklmnoP")));
   }
 }
