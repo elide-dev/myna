@@ -93,7 +93,7 @@ int64_t myna_fast_increment(int64_t value) {
 
 For SVM, compile the C implementation into `libfastfixture.a` and compile the [library-path directives](tests/fast/Directives.java) alongside the bindings. Pass `-Dmyna.fast.libraryPath=/absolute/path/to/library-directory` to the Native Image builder, and include the generated `META-INF/native-image/` resources with the compiled classes. The [Native Image integration test](tests/native_image_integration.py) builds and runs this path, including default calls under concurrent GC. See [the adapter guide](docs/jvm-roadmap.md) for shared-library and FFM setup.
 
-Direct leaf bindings can also be called from Truffle-compiled code. The [Truffle guest guide](docs/truffle-guests.md) lists the compiler-version requirements for transitioning and FFM calls.
+Direct leaf bindings can also be called from Truffle-compiled code. The [Truffle guest guide](docs/truffle-guests.md) lists the compiler-version requirements for transitioning and FFM calls. With `truffle_cells=true` the generator also emits [Truffle native cells](docs/truffle-cells.md): one guest-callable cell per import, measured at the direct call's cost for leaves and transitions.
 
 Calls that cannot meet the bounded, nonblocking, non-reentrant leaf contract must declare `native_leaf=false@explicit_contract`. Myna checks declared contracts for consistency; the native implementation must obey them.
 
@@ -152,7 +152,7 @@ The initial frontend is a strict, line-oriented text DSL with `#` comments. See 
 Generation produces:
 
 - `seam.h` and `seam.rs` for C and Rust consumers.
-- A direct Native Image API, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiFFM.java`, and `FastApiForeignFeature.java`.
+- A direct Native Image API, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiFFM.java`, and `FastApiForeignFeature.java`; `truffle_cells=true` adds `FastApiTruffle.java`, one Truffle cell per import (see [Truffle native cells](docs/truffle-cells.md)).
 - `seam.json` with optimizer-fact provenance and `seam.abi` with the descriptor's SHA-256 fingerprint.
 - `META-INF/native-image/` initialization metadata to package with the compiled Java bindings.
 - `seam.ll`, consumed by `myna apply` to annotate compiled LLVM objects and archives.

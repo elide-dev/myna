@@ -1,0 +1,1137 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+package dev.elide.myna.truffle;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.nodes.Node;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.lang.ref.Cleaner;
+import java.math.BigInteger;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+
+/** The language-neutral runtime on HotSpot with Truffle's default runtime. */
+class TruffleRuntimeTest {
+  private static final InteropLibrary INTEROP = InteropLibrary.getUncached();
+
+  /** A hand-written cell shaped like a generated one: coerces, calls, converts. */
+  static final class SumCell extends NativeCell {
+    @Node.Child private IntegerCoercion left;
+    @Node.Child private IntegerCoercion right;
+
+    SumCell(CoercionPolicy policy) {
+      super("sum", 2);
+      left = new IntegerCoercion("sum", "left", 32, false, policy);
+      right = new IntegerCoercion("sum", "right", 32, false, policy);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      return (int) left.execute(arguments[0]) + (int) right.execute(arguments[1]);
+    }
+  }
+
+  /** A buffer that is neither {@link NativeBytes} nor {@link HeapBytes}: the generic copy path. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignBuffer implements TruffleObject {
+    final byte[] data;
+    final boolean writable;
+
+    ForeignBuffer(byte[] data, boolean writable) {
+      this.data = data;
+      this.writable = writable;
+    }
+
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return writable;
+    }
+
+    @ExportMessage
+    long getBufferSize() {
+      return data.length;
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) throws InvalidBufferOffsetException {
+      if (offset < 0 || offset >= data.length) throw InvalidBufferOffsetException.create(offset, 1);
+      return data[(int) offset];
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length)
+        throws InvalidBufferOffsetException {
+      if (offset < 0 || offset + length > data.length)
+        throw InvalidBufferOffsetException.create(offset, length);
+      System.arraycopy(data, (int) offset, destination, destinationOffset, length);
+    }
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value)
+        throws InvalidBufferOffsetException, UnsupportedMessageException {
+      if (!writable) throw UnsupportedMessageException.create();
+      if (offset < 0 || offset >= data.length) throw InvalidBufferOffsetException.create(offset, 1);
+      data[(int) offset] = value;
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  /** An interop pointer from another source, like an NFI value. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignPointer implements TruffleObject {
+    final long address;
+
+    ForeignPointer(long address) {
+      this.address = address;
+    }
+
+    @ExportMessage
+    boolean isPointer() {
+      return true;
+    }
+
+    @ExportMessage
+    long asPointer() {
+      return address;
+    }
+  }
+
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignNull implements TruffleObject {
+    @ExportMessage
+    boolean isNull() {
+      return true;
+    }
+  }
+
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignString implements TruffleObject {
+    @ExportMessage
+    boolean isString() {
+      return true;
+    }
+
+    @ExportMessage
+    String asString() {
+      return "héllo";
+    }
+  }
+
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignBoolean implements TruffleObject {
+    @ExportMessage
+    boolean isBoolean() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean asBoolean() {
+      return true;
+    }
+  }
+
+  private static String bytesAt(long address, int length) {
+    byte[] bytes = new byte[length];
+    MemorySegment.copy(
+        MemorySegment.ofAddress(address).reinterpret(length),
+        ValueLayout.JAVA_BYTE,
+        0,
+        bytes,
+        0,
+        length);
+    return new String(bytes, StandardCharsets.UTF_8);
+  }
+
+  @Test
+  void cellsRunThroughInteropAndHostCalls() throws Exception {
+    NativeFunction sum = new SumCell(CoercionPolicy.STRICT).function();
+    assertTrue(INTEROP.isExecutable(sum));
+    assertTrue(INTEROP.hasExecutableName(sum));
+    assertEquals("sum", INTEROP.getExecutableName(sum));
+    assertEquals(42, INTEROP.execute(sum, 40, 2));
+    assertEquals(42, INTEROP.execute(sum, 40L, 2.0));
+    assertEquals(42, sum.call(41, 1));
+    assertEquals("sum", sum.name());
+    assertEquals(2, sum.arity());
+    assertEquals("NativeFunction sum/2", sum.toString());
+    assertEquals("sum", sum.callTarget().getRootNode().getName());
+    assertTrue(sum.callTarget().getRootNode().isInternal());
+    assertEquals("NativeCell sum", sum.callTarget().getRootNode().toString());
+    assertEquals("sum", ((NativeCellRootNode) sum.callTarget().getRootNode()).cell().name());
+    var arity = assertThrows(NativeCellException.class, () -> INTEROP.execute(sum, 1));
+    assertEquals("sum expects 2 arguments, got 1", arity.getMessage());
+    var type = assertThrows(NativeCellException.class, () -> sum.call(1, "two"));
+    assertEquals(
+        "sum: parameter right expects i32 in [-2147483648, 2147483647], got string \"two\"",
+        type.getMessage());
+    // A second function over a fresh cell, through the same cached interop node shape.
+    NativeFunction other = new SumCell(CoercionPolicy.WRAP).function();
+    assertEquals(3, INTEROP.execute(other, 1, 2));
+    assertEquals(-2147483648, INTEROP.execute(other, 2147483647, 1));
+  }
+
+  @Test
+  void integerCoercionsHonorWidthSignAndPolicy() {
+    var i8 = new IntegerCoercion("f", "p", 8, false, CoercionPolicy.STRICT);
+    var u8 = new IntegerCoercion("f", "p", 8, true, CoercionPolicy.STRICT);
+    var u16 = new IntegerCoercion("f", "p", 16, true, CoercionPolicy.WRAP);
+    var i32 = new IntegerCoercion("f", "p", 32, false, CoercionPolicy.WRAP);
+    var u32 = new IntegerCoercion("f", "p", 32, true, CoercionPolicy.STRICT);
+    var i64 = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.STRICT);
+    var u64 = new IntegerCoercion("f", "p", 64, true, CoercionPolicy.STRICT);
+    var u64wrap = new IntegerCoercion("f", "p", 64, true, CoercionPolicy.WRAP);
+    // Doubles beyond the long range wrap modulo 2^64 rather than saturating.
+    assertEquals(0, i32.execute(0x1p64));
+    assertEquals(4096, u16.execute(0x1p63 + 4096.0));
+    assertEquals(-8446744073709551616L, u64wrap.execute(1e19));
+    assertEquals(-1, i32.execute(-1.0));
+    assertEquals(8, i8.bits());
+    assertTrue(u8.unsigned());
+    assertFalse(i8.unsigned());
+    assertEquals(-1, i8.execute(-1));
+    assertEquals(127, i8.execute(127L));
+    assertEquals(255, u8.execute(255));
+    assertEquals((byte) -1, (byte) u8.execute(255));
+    assertThrows(NativeCellException.class, () -> i8.execute(128));
+    assertThrows(NativeCellException.class, () -> u8.execute(-1));
+    assertThrows(NativeCellException.class, () -> u8.execute(256L));
+    assertEquals(0, u16.execute(65536));
+    assertEquals(65535, u16.execute(-1));
+    assertEquals(-2147483648L, i32.execute(2147483648L));
+    assertEquals(5, i32.execute(4294967301L));
+    assertEquals(4294967295L, u32.execute(4294967295L));
+    assertThrows(NativeCellException.class, () -> u32.execute(4294967296L));
+    assertEquals(Long.MIN_VALUE, i64.execute(Long.MIN_VALUE));
+    assertEquals(Long.MAX_VALUE, u64.execute(Long.MAX_VALUE));
+    assertThrows(NativeCellException.class, () -> u64.execute(-1));
+    // Doubles: integral values are accepted everywhere; fractions and non-finite depend on policy.
+    assertEquals(3, i64.execute(3.0));
+    assertThrows(NativeCellException.class, () -> i64.execute(3.5));
+    assertEquals(3, i32.execute(3.75));
+    assertEquals(-3, i32.execute(-3.75));
+    assertEquals(0, i32.execute(Double.NaN));
+    assertEquals(0, i32.execute(Double.POSITIVE_INFINITY));
+    assertEquals(0x80, u16.execute(65536.0 + 128));
+    // Big integers: u64 takes the full unsigned range strictly, anything else needs wrap.
+    assertEquals(-1L, u64.execute(big("18446744073709551615")));
+    assertThrows(NativeCellException.class, () -> u64.execute(big("18446744073709551616")));
+    assertThrows(
+        NativeCellException.class,
+        () -> u64.execute(new ForeignNumber(BigInteger.ONE.negate().shiftLeft(70))));
+    assertEquals(0L, u64wrap.execute(big("18446744073709551616")));
+    assertThrows(NativeCellException.class, () -> i64.execute(big("18446744073709551615")));
+    assertEquals(3, i64.execute(big("3")));
+    assertEquals(3, u64.execute(big("3")));
+    var message = assertThrows(NativeCellException.class, () -> u64.execute("x"));
+    assertEquals("f: parameter p expects u64 in [0, 2^64), got string \"x\"", message.getMessage());
+    assertThrows(NativeCellException.class, () -> i32.execute(new ForeignNull()));
+    assertEquals("p", i32.parameterName());
+    assertThrows(
+        IllegalArgumentException.class, () -> new IntegerCoercion("f", "p", 12, false, null));
+  }
+
+  @Test
+  void booleanAndFloatingCoercions() {
+    var flag = new BooleanCoercion("f", "flag");
+    assertTrue(flag.execute(true));
+    assertFalse(flag.execute(false));
+    assertTrue(flag.execute(new ForeignBoolean()));
+    assertThrows(NativeCellException.class, () -> flag.execute(1));
+    var number = new FloatingCoercion("f", "x");
+    assertEquals(1.5, number.execute(1.5));
+    assertEquals(2.0, number.execute(2));
+    assertEquals(3.0, number.execute(3L));
+    assertEquals(0.5, number.execute(0.5f));
+    assertEquals(0.5, number.execute((Object) Float.valueOf(0.5f)));
+    assertEquals(9007199254740993.0, number.execute(big("9007199254740993")));
+    assertEquals(1.0, number.execute((Object) Short.valueOf((short) 1)));
+    assertThrows(NativeCellException.class, () -> number.execute("1"));
+    assertThrows(
+        NativeCellException.class,
+        () -> number.execute(new ForeignNumber(BigInteger.ONE.shiftLeft(100))));
+  }
+
+  @Test
+  void pointerCoercionsAcceptInteropPointersAndGuardNullsAndNumbers() {
+    var strict = new PointerCoercion("f", "p", false, false);
+    var nullable = new PointerCoercion("f", "p", true, false);
+    var raw = new PointerCoercion("f", "p", true, true);
+    assertEquals(0x1000, strict.execute(NativePointer.of(0x1000)));
+    assertEquals(0x2000, strict.execute(new ForeignPointer(0x2000)));
+    assertThrows(NativeCellException.class, () -> strict.execute(NativePointer.NULL));
+    assertThrows(NativeCellException.class, () -> strict.execute(new ForeignNull()));
+    assertThrows(NativeCellException.class, () -> strict.execute(new ForeignPointer(0)));
+    assertEquals(0, nullable.execute(NativePointer.of(0)));
+    assertEquals(0, nullable.execute(new ForeignNull()));
+    var numbers = assertThrows(NativeCellException.class, () -> nullable.execute(0x3000L));
+    assertEquals("f: parameter p expects pointer or null, got Long 12288", numbers.getMessage());
+    assertEquals(
+        "f: parameter p expects pointer, got Integer 1",
+        assertThrows(NativeCellException.class, () -> strict.execute(1)).getMessage());
+    assertEquals(0x3000, raw.execute(0x3000L));
+    assertEquals(0x3000, raw.execute(0x3000));
+    assertThrows(NativeCellException.class, () -> raw.execute("0x3000"));
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment segment = arena.allocate(16);
+      NativeBytes bytes = NativeBytes.of(segment, true);
+      assertEquals(segment.address(), strict.execute(bytes));
+    }
+    var resource = new NativeResource("Ticket", 0x4000, address -> {}, null);
+    assertEquals(0x4000, strict.execute(resource));
+    resource.close();
+    var closed = assertThrows(NativeCellException.class, () -> strict.execute(resource));
+    assertEquals("f: parameter p received a closed Ticket", closed.getMessage());
+  }
+
+  @Test
+  void nativePointersAndVoidAreInteropValues() throws Exception {
+    NativePointer p = NativePointer.of(0x10);
+    assertTrue(INTEROP.isPointer(p));
+    assertEquals(0x10, INTEROP.asPointer(p));
+    assertFalse(INTEROP.isNull(p));
+    assertTrue(INTEROP.isNull(NativePointer.of(0)));
+    assertSame(NativePointer.NULL, NativePointer.of(0));
+    assertEquals(0x10, p.address());
+    assertEquals(NativePointer.of(0x10), p);
+    assertEquals(NativePointer.of(0x10).hashCode(), p.hashCode());
+    assertNotEquals(p, NativePointer.of(0x11));
+    assertNotEquals(p, "0x10");
+    assertEquals("NativePointer(0x10)", p.toString());
+    assertTrue(INTEROP.isNull(NativeVoid.INSTANCE));
+    assertEquals("NativeVoid", NativeVoid.INSTANCE.toString());
+    assertSame(NativeVoid.INSTANCE, Carriers.none());
+    assertEquals(NativePointer.of(7), Carriers.pointer(7));
+    assertEquals(255, Carriers.u8((byte) -1));
+    assertEquals(65535, Carriers.u16((short) -1));
+    assertEquals(4294967295L, Carriers.u32(-1));
+    assertEquals(7, Carriers.length32(7, false, null));
+    assertEquals(-1, Carriers.length32(4294967295L, true, null));
+    assertThrows(NativeCellException.class, () -> Carriers.length32(2147483648L, false, null));
+    assertThrows(NativeCellException.class, () -> Carriers.length32(4294967296L, true, null));
+    assertEquals("null", NativeCellException.describe(null));
+    assertEquals("Character a", NativeCellException.describe('a'));
+    assertEquals("Boolean true", NativeCellException.describe(true));
+    assertEquals("NativeVoid", NativeCellException.describe(NativeVoid.INSTANCE));
+  }
+
+  @Test
+  void nativeBytesReadAndWriteThroughInteropWithBounds() throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment segment = arena.allocate(16);
+      NativeBytes bytes = NativeBytes.of(segment.address(), 16, true);
+      assertEquals(segment.address(), bytes.address());
+      assertEquals(16, bytes.size());
+      assertTrue(bytes.isWritable());
+      assertEquals(16, bytes.segment().byteSize());
+      assertTrue(INTEROP.hasBufferElements(bytes));
+      assertTrue(INTEROP.isBufferWritable(bytes));
+      assertEquals(16, INTEROP.getBufferSize(bytes));
+      assertTrue(INTEROP.isPointer(bytes));
+      assertEquals(segment.address(), INTEROP.asPointer(bytes));
+      INTEROP.writeBufferByte(bytes, 0, (byte) 1);
+      INTEROP.writeBufferShort(bytes, ByteOrder.LITTLE_ENDIAN, 2, (short) 2);
+      INTEROP.writeBufferInt(bytes, ByteOrder.BIG_ENDIAN, 4, 3);
+      INTEROP.writeBufferLong(bytes, ByteOrder.LITTLE_ENDIAN, 8, 4);
+      assertEquals(1, INTEROP.readBufferByte(bytes, 0));
+      assertEquals(2, INTEROP.readBufferShort(bytes, ByteOrder.LITTLE_ENDIAN, 2));
+      assertEquals(512, INTEROP.readBufferShort(bytes, ByteOrder.BIG_ENDIAN, 2));
+      assertEquals(3, INTEROP.readBufferInt(bytes, ByteOrder.BIG_ENDIAN, 4));
+      assertEquals(0x03000000, INTEROP.readBufferInt(bytes, ByteOrder.LITTLE_ENDIAN, 4));
+      assertEquals(4, INTEROP.readBufferLong(bytes, ByteOrder.LITTLE_ENDIAN, 8));
+      assertEquals(0x0400000000000000L, INTEROP.readBufferLong(bytes, ByteOrder.BIG_ENDIAN, 8));
+      INTEROP.writeBufferFloat(bytes, ByteOrder.LITTLE_ENDIAN, 0, 1.5f);
+      assertEquals(1.5f, INTEROP.readBufferFloat(bytes, ByteOrder.LITTLE_ENDIAN, 0));
+      INTEROP.writeBufferFloat(bytes, ByteOrder.BIG_ENDIAN, 0, 2.5f);
+      assertEquals(2.5f, INTEROP.readBufferFloat(bytes, ByteOrder.BIG_ENDIAN, 0));
+      INTEROP.writeBufferDouble(bytes, ByteOrder.LITTLE_ENDIAN, 8, 3.5);
+      assertEquals(3.5, INTEROP.readBufferDouble(bytes, ByteOrder.LITTLE_ENDIAN, 8));
+      INTEROP.writeBufferDouble(bytes, ByteOrder.BIG_ENDIAN, 8, 4.5);
+      assertEquals(4.5, INTEROP.readBufferDouble(bytes, ByteOrder.BIG_ENDIAN, 8));
+      byte[] copy = new byte[4];
+      INTEROP.readBuffer(bytes, 0, copy, 0, 4);
+      assertEquals(copy[3], INTEROP.readBufferByte(bytes, 3));
+      assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, 16));
+      assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, -1));
+      assertThrows(
+          InvalidBufferOffsetException.class,
+          () -> INTEROP.readBufferLong(bytes, ByteOrder.LITTLE_ENDIAN, 9));
+      assertThrows(
+          InvalidBufferOffsetException.class, () -> INTEROP.readBuffer(bytes, 14, copy, 0, 4));
+      assertThrows(
+          InvalidBufferOffsetException.class, () -> INTEROP.readBuffer(bytes, 0, copy, 0, -1));
+      NativeBytes readOnly = NativeBytes.of(segment.asReadOnly(), true);
+      assertFalse(readOnly.isWritable());
+      assertFalse(INTEROP.isBufferWritable(readOnly));
+      assertThrows(
+          UnsupportedMessageException.class, () -> INTEROP.writeBufferByte(readOnly, 0, (byte) 1));
+      assertThrows(
+          UnsupportedMessageException.class,
+          () -> INTEROP.writeBufferInt(readOnly, ByteOrder.LITTLE_ENDIAN, 0, 1));
+      assertEquals(
+          "NativeBytes(0x" + Long.toHexString(segment.address()) + ", 16)", bytes.toString());
+    }
+    assertThrows(IllegalArgumentException.class, () -> NativeBytes.of(0, 4, true));
+    assertThrows(IllegalArgumentException.class, () -> NativeBytes.of(16, -1, true));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> NativeBytes.of(MemorySegment.ofArray(new byte[4]), true));
+    assertEquals(0, NativeBytes.of(0, 0, false).size());
+  }
+
+  @Test
+  void heapBytesReadAndWriteThroughInteropWithBounds() throws Exception {
+    byte[] array = new byte[16];
+    HeapBytes bytes = new HeapBytes(array, true);
+    assertSame(array, bytes.array());
+    assertTrue(bytes.isWritable());
+    assertTrue(INTEROP.hasBufferElements(bytes));
+    assertTrue(INTEROP.isBufferWritable(bytes));
+    assertEquals(16, INTEROP.getBufferSize(bytes));
+    assertFalse(INTEROP.isPointer(bytes));
+    INTEROP.writeBufferByte(bytes, 0, (byte) 1);
+    INTEROP.writeBufferShort(bytes, ByteOrder.LITTLE_ENDIAN, 2, (short) 2);
+    INTEROP.writeBufferInt(bytes, ByteOrder.BIG_ENDIAN, 4, 3);
+    INTEROP.writeBufferLong(bytes, ByteOrder.LITTLE_ENDIAN, 8, 4);
+    assertEquals(1, array[0]);
+    assertEquals(2, array[2]);
+    assertEquals(3, array[7]);
+    assertEquals(4, array[8]);
+    assertEquals(1, INTEROP.readBufferByte(bytes, 0));
+    assertEquals(2, INTEROP.readBufferShort(bytes, ByteOrder.LITTLE_ENDIAN, 2));
+    assertEquals(3, INTEROP.readBufferInt(bytes, ByteOrder.BIG_ENDIAN, 4));
+    assertEquals(4, INTEROP.readBufferLong(bytes, ByteOrder.LITTLE_ENDIAN, 8));
+    INTEROP.writeBufferFloat(bytes, ByteOrder.BIG_ENDIAN, 0, 1.5f);
+    assertEquals(1.5f, INTEROP.readBufferFloat(bytes, ByteOrder.BIG_ENDIAN, 0));
+    INTEROP.writeBufferDouble(bytes, ByteOrder.LITTLE_ENDIAN, 8, 2.5);
+    assertEquals(2.5, INTEROP.readBufferDouble(bytes, ByteOrder.LITTLE_ENDIAN, 8));
+    byte[] copy = new byte[8];
+    INTEROP.readBuffer(bytes, 8, copy, 0, 8);
+    assertEquals(
+        2.5,
+        ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN
+            ? Double.longBitsToDouble(
+                java.nio.ByteBuffer.wrap(copy).order(ByteOrder.LITTLE_ENDIAN).getLong())
+            : 2.5);
+    assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, 16));
+    assertThrows(
+        InvalidBufferOffsetException.class, () -> INTEROP.readBuffer(bytes, 12, copy, 0, 8));
+    assertThrows(
+        InvalidBufferOffsetException.class, () -> INTEROP.readBuffer(bytes, 0, copy, 0, -1));
+    HeapBytes readOnly = new HeapBytes(array, false);
+    assertThrows(
+        UnsupportedMessageException.class, () -> INTEROP.writeBufferByte(readOnly, 0, (byte) 1));
+    assertThrows(
+        UnsupportedMessageException.class,
+        () -> INTEROP.writeBufferDouble(readOnly, ByteOrder.LITTLE_ENDIAN, 0, 1));
+    assertEquals("HeapBytes(16)", bytes.toString());
+  }
+
+  @Test
+  void bytesCoercionLendsNativeMemoryCopiesHeapBytesAndEncodesStrings() throws Exception {
+    var cString = new BytesCoercion("f", "text", false, false, false);
+    var readBuffer = new BytesCoercion("f", "bytes", false, false, true);
+    var writeBuffer = new BytesCoercion("f", "bytes", false, true, true);
+    var nullable = new BytesCoercion("f", "text", true, false, false);
+    // Strings: UTF-8, NUL-terminated for C strings, bare bytes for borrows.
+    Borrow text = cString.execute("héllo");
+    assertEquals(6, text.length());
+    assertEquals("héllo\0", bytesAt(text.address(), 7));
+    text.release();
+    text.release();
+    Borrow foreign = readBuffer.execute(new ForeignString());
+    assertEquals(6, foreign.length());
+    assertEquals("héllo", bytesAt(foreign.address(), 6));
+    foreign.release();
+    assertThrows(NativeCellException.class, () -> writeBuffer.execute("immutable"));
+    // Native memory is lent in place.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment segment = arena.allocate(8);
+      NativeBytes bytes = NativeBytes.of(segment, true);
+      Borrow direct = writeBuffer.execute(bytes);
+      assertEquals(segment.address(), direct.address());
+      assertEquals(8, direct.length());
+      direct.release();
+      NativeBytes readOnly = NativeBytes.of(segment.asReadOnly(), true);
+      assertThrows(NativeCellException.class, () -> writeBuffer.execute(readOnly));
+      assertEquals(segment.address(), readBuffer.execute(readOnly).address());
+      Borrow empty = readBuffer.execute(NativeBytes.of(0, 0, false));
+      assertNotEquals(0, empty.address());
+      assertEquals(0, empty.length());
+      // A C string parameter takes a bare pointer; a borrow needs a size for its derived count.
+      Borrow pointer = cString.execute(new ForeignPointer(segment.address()));
+      assertEquals(segment.address(), pointer.address());
+      assertEquals(0, pointer.length());
+      assertEquals(
+          segment.address(), cString.execute(NativePointer.of(segment.address())).address());
+      assertEquals(
+          "f: parameter bytes expects string, sized buffer, got NativePointer",
+          assertThrows(
+                  NativeCellException.class,
+                  () -> readBuffer.execute(NativePointer.of(segment.address())))
+              .getMessage());
+      assertThrows(
+          NativeCellException.class,
+          () -> writeBuffer.execute(new ForeignPointer(segment.address())));
+    }
+    // Heap bytes are copied on HotSpot and written back when writable.
+    byte[] array = {1, 2, 3, 4};
+    Borrow copy = writeBuffer.execute(new HeapBytes(array, true));
+    assertEquals(4, copy.length());
+    MemorySegment view = MemorySegment.ofAddress(copy.address()).reinterpret(4);
+    assertEquals(3, view.get(ValueLayout.JAVA_BYTE, 2));
+    view.set(ValueLayout.JAVA_BYTE, 0, (byte) 9);
+    copy.release();
+    assertEquals(9, array[0]);
+    assertThrows(NativeCellException.class, () -> writeBuffer.execute(new HeapBytes(array, false)));
+    Borrow readCopy = readBuffer.execute(new HeapBytes(array, false));
+    MemorySegment.ofAddress(readCopy.address())
+        .reinterpret(4)
+        .set(ValueLayout.JAVA_BYTE, 0, (byte) 7);
+    readCopy.release();
+    assertEquals(9, array[0]);
+    Borrow emptyCopy = readBuffer.execute(new HeapBytes(new byte[0], false));
+    assertNotEquals(0, emptyCopy.address());
+    emptyCopy.release();
+    // Any other interop buffer goes through the library, element by element on the way back.
+    byte[] data = {5, 6, 7};
+    Borrow generic = writeBuffer.execute(new ForeignBuffer(data, true));
+    assertEquals(3, generic.length());
+    MemorySegment.ofAddress(generic.address())
+        .reinterpret(3)
+        .set(ValueLayout.JAVA_BYTE, 1, (byte) 8);
+    generic.release();
+    assertArrayEquals(new byte[] {5, 8, 7}, data);
+    var readOnlyForeign =
+        assertThrows(
+            NativeCellException.class, () -> writeBuffer.execute(new ForeignBuffer(data, false)));
+    assertEquals(
+        "f: parameter bytes: read-only buffer for a writable borrow", readOnlyForeign.getMessage());
+    Borrow readGeneric = readBuffer.execute(new ForeignBuffer(data, false));
+    assertEquals(3, readGeneric.length());
+    readGeneric.release();
+    // Nulls and mismatches.
+    assertEquals(0, nullable.execute(new ForeignNull()).address());
+    assertEquals(0, nullable.execute(NativePointer.NULL).address());
+    assertSame(Borrow.none(), nullable.execute(new ForeignNull()));
+    assertEquals(
+        "f: parameter text expects string, buffer or pointer, got Integer 1",
+        assertThrows(NativeCellException.class, () -> cString.execute(1)).getMessage());
+    assertEquals(
+        "f: parameter text expects string, buffer or pointer, got NativePointer",
+        assertThrows(NativeCellException.class, () -> cString.execute(NativePointer.NULL))
+            .getMessage());
+    assertEquals(
+        "f: parameter bytes expects sized buffer, got Boolean true",
+        assertThrows(NativeCellException.class, () -> writeBuffer.execute(true)).getMessage());
+    assertEquals(
+        "f: parameter text expects string, buffer or pointer or null, got Long 3",
+        assertThrows(NativeCellException.class, () -> nullable.execute(3L)).getMessage());
+    assertTrue(Borrow.pinThreshold() > 0);
+  }
+
+  @Test
+  void borrowsOfLargeArraysCopyOnHotSpot() {
+    byte[] large = new byte[Borrow.pinThreshold() + 1];
+    large[Borrow.pinThreshold()] = 42;
+    Borrow borrow = Borrow.ofArray(large, true, false);
+    MemorySegment view = MemorySegment.ofAddress(borrow.address()).reinterpret(large.length);
+    assertEquals(42, view.get(ValueLayout.JAVA_BYTE, Borrow.pinThreshold()));
+    view.set(ValueLayout.JAVA_BYTE, 0, (byte) 1);
+    borrow.release();
+    assertEquals(1, large[0]);
+    Borrow direct = Borrow.direct(0x10, 3);
+    assertEquals(0x10, direct.address());
+    assertEquals(3, direct.length());
+    direct.release();
+  }
+
+  @Test
+  void resourcesCloseOnceAndRespectConfinement() throws Exception {
+    AtomicLong destroyed = new AtomicLong();
+    var shared = new NativeResource("Ticket", 0x20, destroyed::set, null);
+    assertEquals("Ticket", shared.type());
+    assertNull(shared.requiredThread());
+    assertEquals(0x20, shared.address());
+    assertTrue(INTEROP.isPointer(shared));
+    assertEquals(0x20, INTEROP.asPointer(shared));
+    assertTrue(INTEROP.hasMembers(shared));
+    assertTrue(INTEROP.isMemberInvocable(shared, "close"));
+    assertFalse(INTEROP.isMemberInvocable(shared, "address"));
+    Object members = INTEROP.getMembers(shared);
+    assertEquals(1, INTEROP.getArraySize(members));
+    assertEquals("close", INTEROP.readArrayElement(members, 0));
+    assertTrue(INTEROP.isArrayElementReadable(members, 0));
+    assertFalse(INTEROP.isArrayElementReadable(members, 1));
+    assertThrows(
+        com.oracle.truffle.api.interop.InvalidArrayIndexException.class,
+        () -> INTEROP.readArrayElement(members, 1));
+    assertEquals("Ticket(0x20)", shared.toString());
+    assertThrows(
+        com.oracle.truffle.api.interop.UnknownIdentifierException.class,
+        () -> INTEROP.invokeMember(shared, "open"));
+    assertThrows(NativeCellException.class, () -> INTEROP.invokeMember(shared, "close", 1));
+    assertSame(NativeVoid.INSTANCE, INTEROP.invokeMember(shared, "close"));
+    assertEquals(0x20, destroyed.get());
+    assertTrue(shared.isClosed());
+    assertFalse(INTEROP.isPointer(shared));
+    assertThrows(UnsupportedMessageException.class, () -> INTEROP.asPointer(shared));
+    assertEquals(
+        "Ticket is closed", assertThrows(NativeCellException.class, shared::address).getMessage());
+    destroyed.set(0);
+    shared.close();
+    assertEquals(0, destroyed.get(), "second close is a no-op");
+    assertEquals("Ticket(closed)", shared.toString());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("Ticket", 0, destroyed::set, null));
+    assertThrows(IllegalArgumentException.class, () -> new NativeResource("Ticket", 1, null, null));
+
+    var confined = new NativeResource("Ticket", 0x30, destroyed::set, Thread.currentThread());
+    assertSame(Thread.currentThread(), confined.requiredThread());
+    assertEquals(0x30, confined.address());
+    var failure = new AtomicReference<Throwable>();
+    var seen = new AtomicReference<Boolean>();
+    Thread other =
+        new Thread(
+            () -> {
+              seen.set(INTEROP.isPointer(confined));
+              try {
+                confined.address();
+              } catch (NativeCellException expected) {
+                failure.set(expected);
+              }
+              try {
+                confined.close();
+              } catch (NativeCellException expected) {
+                failure.set(expected);
+              }
+            },
+            "foreign");
+    other.start();
+    other.join();
+    assertEquals(Boolean.FALSE, seen.get());
+    assertTrue(failure.get().getMessage().startsWith("Ticket is confined to "));
+    assertTrue(failure.get().getMessage().endsWith("; accessed from foreign"));
+    assertFalse(confined.isClosed());
+    assertThrows(IllegalStateException.class, () -> confined.registerCleanup(Cleaner.create()));
+    confined.close();
+    assertEquals(0x30, destroyed.get());
+
+    var cleaned = new NativeResource("Ticket", 0x40, destroyed::set, null);
+    Cleaner.Cleanable cleanable = cleaned.registerCleanup(Cleaner.create());
+    cleanable.clean();
+    assertEquals(0x40, destroyed.get());
+    assertTrue(cleaned.isClosed());
+  }
+
+  @Test
+  void coercionsInsertOneInteropLibraryAndReuseIt() {
+    var coercion = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.STRICT);
+    List<Node> before = new ArrayList<>();
+    coercion.getChildren().forEach(before::add);
+    assertTrue(before.isEmpty());
+    assertEquals(3, coercion.execute(big("3")));
+    assertEquals(3, coercion.execute(big("3")));
+    List<Node> after = new ArrayList<>();
+    coercion.getChildren().forEach(after::add);
+    assertEquals(1, after.size());
+  }
+
+  /** An object whose messages contradict each other: every coercion must still fail safely. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class Liar implements TruffleObject {
+    @ExportMessage
+    boolean isNumber() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean fitsInByte() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInShort() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInInt() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInLong() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean fitsInBigInteger() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInFloat() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInDouble() {
+      return true;
+    }
+
+    @ExportMessage
+    byte asByte() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short asShort() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int asInt() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long asLong() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    BigInteger asBigInteger() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float asFloat() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double asDouble() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    boolean isBoolean() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean asBoolean() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    boolean isPointer() {
+      return true;
+    }
+
+    @ExportMessage
+    long asPointer() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    boolean isString() {
+      return true;
+    }
+
+    @ExportMessage
+    String asString() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  /** A buffer whose size and contents disagree. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class ShrinkingBuffer implements TruffleObject {
+    final long size;
+
+    ShrinkingBuffer(long size) {
+      this.size = size;
+    }
+
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return true;
+    }
+
+    @ExportMessage
+    long getBufferSize() {
+      return size;
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) throws InvalidBufferOffsetException {
+      throw InvalidBufferOffsetException.create(offset, 1);
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length)
+        throws InvalidBufferOffsetException {
+      throw InvalidBufferOffsetException.create(offset, length);
+    }
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value) throws InvalidBufferOffsetException {
+      throw InvalidBufferOffsetException.create(offset, 1);
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  @Test
+  void misbehavingInteropObjectsFailSafely() {
+    Liar liar = new Liar();
+    assertThrows(
+        Throwable.class,
+        () -> new IntegerCoercion("f", "p", 32, false, CoercionPolicy.STRICT).execute(liar));
+    assertThrows(Throwable.class, () -> new FloatingCoercion("f", "p").execute(liar));
+    assertThrows(Throwable.class, () -> new BooleanCoercion("f", "p").execute(liar));
+    assertThrows(Throwable.class, () -> new PointerCoercion("f", "p", true, true).execute(liar));
+    assertThrows(
+        Throwable.class, () -> new BytesCoercion("f", "p", true, false, false).execute(liar));
+    var read = new BytesCoercion("f", "p", false, false, true);
+    var shrank =
+        assertThrows(NativeCellException.class, () -> read.execute(new ShrinkingBuffer(4)));
+    assertEquals("f: parameter p: buffer shrank while being borrowed", shrank.getMessage());
+    var huge =
+        assertThrows(NativeCellException.class, () -> read.execute(new ShrinkingBuffer(1L << 40)));
+    assertTrue(huge.getMessage().contains("too large to copy"));
+    // A buffer that rejects the write-back after lending writable bytes.
+    Borrow borrow = new BytesCoercion("f", "p", false, true, true).execute(new RefusingBuffer());
+    assertThrows(Throwable.class, borrow::release);
+  }
+
+  /** Lends writable bytes, then refuses the write-back. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class RefusingBuffer implements TruffleObject {
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return true;
+    }
+
+    @ExportMessage
+    long getBufferSize() {
+      return 2;
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length) {}
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  @Test
+  void executableWrapperDispatchesCachedAndMegamorphic() throws Exception {
+    NativeFunction sum = new SumCell(CoercionPolicy.STRICT).function();
+    InteropLibrary cached = InteropLibrary.getFactory().create(sum);
+    assertEquals(3, cached.execute(sum, 1, 2));
+    assertEquals(4, cached.execute(sum, 2, 2));
+    InteropLibrary dispatched = InteropLibrary.getFactory().createDispatched(3);
+    for (int i = 0; i < 5; i++) {
+      NativeFunction fresh = new SumCell(CoercionPolicy.STRICT).function();
+      assertEquals(i + 1, dispatched.execute(fresh, i, 1));
+      assertEquals(i + 2, dispatched.execute(fresh, i, 2));
+    }
+  }
+
+  static ForeignNumber big(String value) {
+    return new ForeignNumber(new BigInteger(value));
+  }
+
+  /** An interop number of any magnitude, like a guest big integer. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class ForeignNumber implements TruffleObject {
+    final BigInteger value;
+
+    ForeignNumber(BigInteger value) {
+      this.value = value;
+    }
+
+    @ExportMessage
+    boolean isNumber() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean fitsInByte() {
+      return value.bitLength() < 8;
+    }
+
+    @ExportMessage
+    boolean fitsInShort() {
+      return value.bitLength() < 16;
+    }
+
+    @ExportMessage
+    boolean fitsInInt() {
+      return value.bitLength() < 32;
+    }
+
+    @ExportMessage
+    boolean fitsInLong() {
+      return value.bitLength() < 64;
+    }
+
+    @ExportMessage
+    boolean fitsInBigInteger() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean fitsInFloat() {
+      return value.bitLength() < 24;
+    }
+
+    @ExportMessage
+    boolean fitsInDouble() {
+      return value.bitLength() < 53;
+    }
+
+    @ExportMessage
+    byte asByte() throws UnsupportedMessageException {
+      if (!fitsInByte()) throw UnsupportedMessageException.create();
+      return value.byteValue();
+    }
+
+    @ExportMessage
+    short asShort() throws UnsupportedMessageException {
+      if (!fitsInShort()) throw UnsupportedMessageException.create();
+      return value.shortValue();
+    }
+
+    @ExportMessage
+    int asInt() throws UnsupportedMessageException {
+      if (!fitsInInt()) throw UnsupportedMessageException.create();
+      return value.intValue();
+    }
+
+    @ExportMessage
+    long asLong() throws UnsupportedMessageException {
+      if (!fitsInLong()) throw UnsupportedMessageException.create();
+      return value.longValue();
+    }
+
+    @ExportMessage
+    BigInteger asBigInteger() {
+      return value;
+    }
+
+    @ExportMessage
+    float asFloat() throws UnsupportedMessageException {
+      if (!fitsInFloat()) throw UnsupportedMessageException.create();
+      return value.floatValue();
+    }
+
+    @ExportMessage
+    double asDouble() throws UnsupportedMessageException {
+      if (!fitsInDouble()) throw UnsupportedMessageException.create();
+      return value.doubleValue();
+    }
+  }
+}

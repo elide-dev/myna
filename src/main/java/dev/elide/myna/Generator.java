@@ -29,6 +29,10 @@ public final class Generator {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
     }
+    if (module.truffleConfig() != null) {
+      var cells = new TruffleCells();
+      outputs.put(cells.filename(module), cells.generate(module));
+    }
     return Collections.unmodifiableSortedMap(outputs);
   }
 }

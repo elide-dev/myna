@@ -8,7 +8,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.11.0";
+  public static final String VERSION = "0.12.0";
   public static final int BINDING_ABI_VERSION = 2;
 
   /** Binding ABI 2 makes bounded, nonblocking, non-reentrant native imports the default. */
@@ -225,6 +225,39 @@ public final class Seam {
   /** Optional Native Image build integration, without dependencies on hosted SDK classes. */
   public record NativeConfig(String cContext, String cLibrary, boolean requireStatic) {}
 
+  /** Which generated binding a Truffle cell calls. */
+  public enum TruffleBackend {
+    /** The Native Image bindings: inlined leaves, or the transitioning stub. */
+    NATIVE,
+    /** The FFM bindings, for consumers that also run on HotSpot. */
+    FFM
+  }
+
+  /** How cells treat integer arguments outside a carrier's range. */
+  public enum TruffleCoercion {
+    STRICT,
+    WRAP
+  }
+
+  /** How a cell over a transitioning Native Image binding reaches its AOT stub. */
+  public enum TruffleTransitions {
+    /** Compiled guest code calls the stub directly; needs elide-dev/graal#196 (25.5.5-elide.26). */
+    DIRECT,
+    /** The call sits behind a Truffle boundary, which any fork compiles, at a boundary's cost. */
+    BOUNDARY
+  }
+
+  /** Opt-in Truffle cell generation for a module's imports. */
+  public record TruffleConfig(
+      TruffleBackend backend, TruffleCoercion coercion, TruffleTransitions transitions) {}
+
+  /** Whether a module import gets a Truffle cell: every import does unless it opts out. */
+  public static boolean truffleCell(Module module, Function function) {
+    if (module.truffleConfig() == null || function.direction() != Direction.IMPORT) return false;
+    Fact fact = function.facts().get("truffle_cell");
+    return fact == null || fact.enabled();
+  }
+
   public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.myna.generated";
 
   /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
@@ -240,7 +273,37 @@ public final class Seam {
       List<Function> functions,
       List<Resource> resources,
       List<BufferBorrow> borrows,
-      NativeConfig nativeConfig) {
+      NativeConfig nativeConfig,
+      TruffleConfig truffleConfig) {
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          null);
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -265,6 +328,7 @@ public final class Seam {
           functions,
           resources,
           borrows,
+          null,
           null);
     }
 
@@ -337,7 +401,8 @@ public final class Seam {
           functions,
           resources,
           borrows,
-          nativeConfig);
+          nativeConfig,
+          truffleConfig);
     }
 
     public String javaPackageName() {
@@ -359,6 +424,10 @@ public final class Seam {
 
     public String foreignFeatureClass() {
       return javaClass == null ? "MynaForeignFeature" : javaClass + "ForeignFeature";
+    }
+
+    public String truffleClass() {
+      return javaClass == null ? "MynaTruffle" : javaClass + "Truffle";
     }
   }
 }

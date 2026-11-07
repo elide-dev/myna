@@ -7,6 +7,7 @@ formatter inputs; their bytes and upstream styles are intentionally preserved.
 """
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -53,6 +54,20 @@ def java_warnings():
                for p in sorted((ROOT / "src" / scope).rglob("*.java"))]
     run(home / "bin/javac", "-Xlint:all", "-Werror", "-cp", os.pathsep.join(map(str, sdk)),
         "-d", ROOT / "build/quality/classes", *sources)
+    # myna-truffle compiles against the public Truffle API with the Truffle DSL processor. Elide
+    # resolves both into its dependency cache; `restricted` is MemorySegment.reinterpret, which the
+    # native buffer view needs, and `processing` is javac's note that the processor leaves @Cached
+    # to the library exports it generates.
+    graal = ROOT / ".dev/dependencies/m2/org/graalvm"
+    version = json.loads((ROOT / "tools/truffle.json").read_text())["version"]
+    processor = sorted(graal.glob(f"truffle/truffle-dsl-processor/{version}/truffle-dsl-processor-*.jar"))
+    truffle = [jar for jar in sorted(graal.rglob(f"*/{version}/*.jar"))
+               if "dsl-processor" not in jar.name and not jar.name.endswith(("-sources.jar", "-javadoc.jar"))]
+    if not processor or not truffle:
+        raise RuntimeError("Truffle dependencies are missing; run `elide build :truffle-jar` first")
+    run(home / "bin/javac", "-Xlint:all,-restricted,-processing", "-Werror",
+        "-processorpath", str(processor[-1]), "-cp", os.pathsep.join(map(str, truffle)),
+        "-d", ROOT / "build/quality/truffle", *sorted((ROOT / "src/truffle").rglob("*.java")))
 
 
 def compiler_includes():

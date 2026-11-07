@@ -138,6 +138,10 @@ Omit `callback=` on an export if its entry-point literal should also remain hand
 
 Both linkage configuration and handwritten type mappings are serialized and fingerprinted; target overrides preserve them. The executable [Bemo integration fixture](../tests/bemo/bemo.seam) links a static Rust archive using only the generated annotations and consumer directives, then calls back through a handwritten interface and literal.
 
+## Truffle cells
+
+`truffle_cells=true` on the module generates `<NativeClass>Truffle.java`: one Truffle cell per import, calling the module's existing bindings with language-neutral coercions from `myna-truffle`. `truffle_backend=native|ffm`, `truffle_coercion=strict|wrap` and `truffle_transitions=direct|boundary` refine it and require the option. Per import, `truffle_cell=false@explicit_contract` opts out (required for by-value records and callback parameters) and `truffle_raw_pointers=true@explicit_contract` accepts guest numbers as pointers. The configuration is serialized under `"truffle"` and fingerprinted; descriptors without it keep their fingerprints. See [Truffle native cells](truffle-cells.md).
+
 ## FFM callback targets and static JNI
 
 Callbacks may additionally declare `ffm_java=qualified.Class.method ffm_sentinel=INTEGER`. Both fields are required together, and the signature must return `i32` or `i64`. The generated FFM upcall invokes the public static target with FFM carriers, catches Java exceptions and returns the reserved sentinel. The hosted Feature registers this static target for AOT upcalls. These fields are independent of the SVM `java_type` interface mapping and are included in the ABI fingerprint.

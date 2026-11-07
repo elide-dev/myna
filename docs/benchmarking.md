@@ -288,6 +288,20 @@ The plot separates normal transitions, native leaves, and AOT FFM. Bars show med
 
 To update the baseline, run the complete comparison workflow, verify workload correctness and hardware/toolchain provenance, retain its JSON, and regenerate its table and charts in the same PR. `compare.py` rejects mismatched profiles and incomplete CPU identities. Refresh `requirements.txt` from `requirements.in` with `uv pip compile --generate-hashes --output-file benchmarks/comparison/requirements.txt benchmarks/comparison/requirements.in` when upgrading plotting dependencies.
 
+## Truffle cell costs
+
+`mise run bench:cells-build` and `mise run bench:cells` measure generated Truffle cells from
+runtime-compiled code on a Native Image: direct Java calls to the Native Image and AOT FFM bindings
+against the same cells through consumer glue and through the generic interop wrapper, Truffle NFI
+as the dynamic-FFI baseline, string borrows, and native, pinned and copied byte borrows by size.
+Each case is a fresh process whose single compiled root must observe compiled code and print its
+compilation trace; samples carry the current-thread allocation count. The
+[harness contract](../benchmarks/cells/README.md) and the checked-in advisory
+[Linux amd64 baseline](../benchmarks/cells/baselines/wsl2-linux-amd64-2026-11-07.md) describe the
+cases; [Truffle native cells](truffle-cells.md#measurement) summarizes the results. Runtime-compiled
+code is not in the image disassembly, so the inlining evidence is parity with the direct call plus
+zero allocation, not assembly.
+
 ## Native call floor
 
 Run `mise run bench:floor-build` and `mise run bench:floor` for matched native/SVM identity and arithmetic workloads. The [harness contract](../benchmarks/floor/README.md) specifies the exact calls, controls, unrolling, bounded batches, independent checksum oracle, and concurrent-GC test. The dedicated Native call floor workflow retains build commands, source/binary hashes, CPU identity, full assembly, sample logs and summaries. It is also manually dispatchable; the same controlled ARM runner variable applies.

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 set -eu
 cd "$(dirname "$0")/.."
-elide build :jar :feature-jar :values-jar
+elide build :jar :feature-jar :values-jar :truffle-jar
 mkdir -p build/dist
 # Native Image emits DWARF on Linux; macOS preserves method names in a dSYM.
 case "$(uname -s)" in
@@ -20,6 +20,7 @@ cp scripts/compile-native-bindings.py build/dist/compile-native-bindings.py
 python3 scripts/reproducible_zip.py .dev/artifacts/jar/myna/myna.jar build/dist/myna.jar
 python3 scripts/reproducible_zip.py .dev/artifacts/jar/myna-feature/myna-feature.jar build/dist/myna-feature.jar
 python3 scripts/reproducible_zip.py .dev/artifacts/jar/myna-values/myna-values.jar build/dist/myna-values.jar
+python3 scripts/reproducible_zip.py .dev/artifacts/jar/myna-truffle/myna-truffle.jar build/dist/myna-truffle.jar
 if [ "${1:-}" = "--llvm" ]; then
   LLVM_CONFIG=${LLVM_CONFIG:-llvm-config}
   cmake --fresh -S llvm -B build/llvm -DLLVM_DIR="$("$LLVM_CONFIG" --cmakedir)" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -g" \

@@ -7,7 +7,7 @@ import "elide:Testing.pkl" as Testing
 import "elide:Coverage.pkl" as Coverage
 
 name = "myna"
-version = "0.11.0"
+version = "0.12.0"
 jvm {
   main = "dev.elide.myna.cli.Main"
   target = 25
@@ -23,8 +23,11 @@ sources {
     dependsOn { "main" }
     paths { "src/feature/java/**/*.java" }
   }
+  ["truffle"] = new Sources.SourceSetSpec {
+    paths { "src/truffle/java/**/*.java" }
+  }
   ["test"] = new Sources.SourceSetSpec {
-    dependsOn { "main"; "feature"; "values" }
+    dependsOn { "main"; "feature"; "values"; "truffle" }
     paths { "src/test/java/**/*.java" }
   }
 }
@@ -57,14 +60,32 @@ artifacts {
     }
     sources { "main"; "feature" }
   }
+  ["truffle-jar"] = new Jvm.Jar {
+    name = "myna-truffle"
+    resources {
+      new { from = "LICENSE"; into = "META-INF" }
+      new { from = "LICENSE-APACHE"; into = "META-INF" }
+      new { from = "LICENSE-MIT"; into = "META-INF" }
+      new {
+        from = "src/truffle/resources/META-INF/native-image/dev.elide.myna/myna-truffle/native-image.properties"
+        into = "META-INF/native-image/dev.elide.myna/myna-truffle"
+      }
+    }
+    sources { "truffle" }
+  }
 
 }
 
 dependencies {
   maven {
     repositories { ["gvm-elide"] = "https://maven.elide.dev/gvm-elide/25.5.5-elide.26" }
-    compileOnly { "org.graalvm.sdk:nativeimage:25.5.5-elide.26" }
-    testPackages { "org.junit.jupiter:junit-jupiter:6.1.3"; "org.graalvm.sdk:nativeimage:25.5.5-elide.26" }
+    compileOnly { "org.graalvm.sdk:nativeimage:25.5.5-elide.26"; "org.graalvm.truffle:truffle-api:25.5.5-elide.26" }
+    processors { "org.graalvm.truffle:truffle-dsl-processor:25.5.5-elide.26" }
+    testPackages {
+      "org.junit.jupiter:junit-jupiter:6.1.3"
+      "org.graalvm.sdk:nativeimage:25.5.5-elide.26"
+      "org.graalvm.truffle:truffle-api:25.5.5-elide.26"
+    }
   }
 }
 
