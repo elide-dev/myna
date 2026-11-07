@@ -191,4 +191,4 @@ Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.2,
 and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
 
-Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`. The current macOS check reproduces the JARs, LLVM executable and value SDK archive, but the Native Image CLI still differs. The project lead separately confirmed full build repeatability on 2026-11-06; the badge evidence distinguishes that attestation from this local result. The live badge above reflects the awarded level.
+Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`.

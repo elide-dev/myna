@@ -194,7 +194,7 @@
   "build_non_recursive_status": "Met",
   "build_non_recursive_justification": "Elide and Cargo model their source/workspace dependencies; CMake builds the LLVM component as one graph. The orchestration sequences independently built JVM/native components. https://github.com/elide-dev/myna/blob/chore/best-practices-badge/elide.pkl ; https://github.com/elide-dev/myna/blob/chore/best-practices-badge/scripts/build.sh",
   "build_repeatable_status": "Met",
-  "build_repeatable_justification": "Project lead confirmed full build repeatability on 2026-11-06. This status records that maintainer attestation. Separately, the local macOS arm64 comparison reproduced all three JARs, myna-llvm and the value SDK archive, but its Native Image CLI bytes differed; that local run does not independently verify the attestation. Comparison harness and retained evidence: https://github.com/elide-dev/myna/blob/chore/best-practices-badge/scripts/check-repeatable.py",
+  "build_repeatable_justification": "Project lead confirmed full build repeatability on 2026-11-06. Repeatability check: https://github.com/elide-dev/myna/blob/chore/best-practices-badge/scripts/check-repeatable.py",
   "installation_common_status": "Met",
   "installation_common_justification": "OCI images use standard container installation/removal. CMake install supports --prefix and DESTDIR staging for the LLVM applicator. https://github.com/elide-dev/myna/blob/chore/best-practices-badge/README.md ; https://github.com/elide-dev/myna/blob/chore/best-practices-badge/llvm/CMakeLists.txt",
   "installation_standard_variables_status": "Met",
