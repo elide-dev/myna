@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 /** Consumer-owned thread and disposal guards shared by the FFM and direct SVM fixtures. */
 final class ConfinedOwner<T> {
   @FunctionalInterface interface Destructor<T> { void destroy(T address) throws Throwable; }

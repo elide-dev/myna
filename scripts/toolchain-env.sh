@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 # Called by mise after loading tools; tolerate a not-yet-installed tool during
 # initial setup, without falling back to an unrelated system compiler.
 myna_user_cc=${CC-}

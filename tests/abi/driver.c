@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // Clang relies on callee extension of narrow returns on x86-64 and Apple arm64; Rust does not.
 #include <stdio.h>
 #include "seam.h"

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Select production sources from JaCoCo's combined test/production report."""
 from pathlib import Path
 import xml.etree.ElementTree as ET

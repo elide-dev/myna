@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // The pinned CodSpeed fork targets x86_64 by default. Build its JNI libraries
 // for the hosted ARM builder and dedicated ARM measurement runner instead.
 allprojects {

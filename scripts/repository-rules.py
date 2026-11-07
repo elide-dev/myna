@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Apply or verify the reviewed Myna rulesets; preserve all unrelated rulesets."""
 import argparse
 import json

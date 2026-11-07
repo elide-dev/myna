@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 package fixture;
 
 import dev.elide.myna.generated.MynaNative;

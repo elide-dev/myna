@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 # Elide does not forward host env into Python, even with --allow-env.
 # Keep this tool-only allowlist until elide-dev/runtime#2690 is implemented.
 set -euo pipefail

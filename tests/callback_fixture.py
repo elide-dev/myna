@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """One callback fixture for JVM FFM and SVM FFM/static JNI."""
 import os
 import shutil

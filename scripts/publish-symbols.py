@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Publish matching sidecars through Myna's managed Elide Cloud symbol connection."""
 import argparse
 import hashlib

@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #include <stdint.h>
 extern int64_t myna_bench_leaf(int64_t);
 // Fixed bounded batches preserve every noinline scalar call. No algebraic fusion.

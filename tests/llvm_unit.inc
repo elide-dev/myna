@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // Test-only entry point for the production applicator translation unit.
 #include "llvm/IR/IRBuilder.h"
 

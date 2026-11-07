@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 package bench;
 
 /** Single case per process: no polymorphic callsite shares compilation profiles. */

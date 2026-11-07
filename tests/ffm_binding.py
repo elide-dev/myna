@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Shared fixture for JVM and SVM library lifetime conformance."""
 import sys
 import shutil

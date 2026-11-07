@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Compare compatible saved runs without rebuilding or remeasuring."""
 import argparse
 import json

@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #ifndef MYNA_VALUES_H
 #define MYNA_VALUES_H
 #include <stddef.h>

@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 use allocator_api2::alloc::Global;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use myna_values::{Bump, Document};

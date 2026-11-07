@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Run against the built native CLI, never an in-process generator."""
 import json
 import os

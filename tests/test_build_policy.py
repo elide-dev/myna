@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Regression checks for native flag preservation and deterministic SDK packaging."""
 import hashlib
 import importlib.util

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Check local documentation links, licensing metadata, and release policy files."""
 from pathlib import Path
 import hashlib
@@ -46,4 +48,5 @@ if errors:
 for manifest in (ROOT / 'docs/charts').glob('*.manifest.json'):
     for name, digest in json.loads(manifest.read_text()).items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, f'Stale chart input/output: {name}'
+subprocess.run(['python3', str(ROOT / 'scripts/source-notices.py')], cwd=ROOT, check=True)
 print('Licensing, policy files, and local documentation links verified')

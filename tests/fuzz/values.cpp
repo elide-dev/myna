@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #include <myna/values.hpp>
 #include <algorithm>
 #include <cstdlib>

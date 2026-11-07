@@ -1,4 +1,6 @@
 #![no_std]
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 use core::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 static LIVE: AtomicI64 = AtomicI64::new(0);
 static FAIL: AtomicBool = AtomicBool::new(false);

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Compile binding ABI 2 Java sources and retain their Native Image configuration.
 
 The pinned Graal SDK jars are compile-only; they must not be bundled into the app.

@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #include "seam.h"
 #include <pthread.h>
 #include <stdlib.h>

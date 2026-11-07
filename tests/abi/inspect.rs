@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #[allow(dead_code, non_snake_case)]
 mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }
 seam::assert_implementations!(seam);

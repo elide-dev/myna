@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Retain call-site evidence from a floor workflow's full disassembly artifact."""
 import argparse
 import hashlib

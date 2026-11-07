@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 amends "elide:project.pkl"
 import "elide:Jvm.pkl" as Jvm
 import "elide:Sources.pkl" as Sources

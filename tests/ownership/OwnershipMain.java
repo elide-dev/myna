@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 import fixture.owned.NativeApi;
 import fixture.owned.NativeApiOwnership;
 import fixture.owned.ConfinedApiOwnership;

@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.validate;
 
 import dev.elide.myna.model.Seam;

@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Exercise Elide's sanitizer runtimes, then run bounded, replayable native fuzzing."""
 import argparse
 import hashlib

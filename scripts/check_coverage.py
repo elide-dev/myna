@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Enforce Myna's coverage floor on the production-only JaCoCo XML report.
 
 Remove this compatibility gate when elide-dev/runtime#2691 is available.

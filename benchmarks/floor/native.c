@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #define _POSIX_C_SOURCE 200809L
 #include <inttypes.h>
 #include <stdio.h>

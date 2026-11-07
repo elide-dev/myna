@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Run a Python script under Elide with explicitly supplied tool environment."""
 import argparse
 import os

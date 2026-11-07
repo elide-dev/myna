@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 package bench;
 
 /** AOT-only timing: identity and recurrence have distinct correctness oracles. */

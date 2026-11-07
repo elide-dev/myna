@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 # Extract symbols before stripping; keep the original build ID/UUID for lookup.
 set -eu
 binary=${1:?Usage: symbols.sh BINARY}

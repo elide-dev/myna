@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 package bench;
 import org.graalvm.nativeimage.c.function.CFunction;
 import com.oracle.svm.shared.Uninterruptible;

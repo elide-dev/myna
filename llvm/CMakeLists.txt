@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 cmake_minimum_required(VERSION 3.20)
 project(myna_llvm LANGUAGES C CXX)
 find_package(LLVM REQUIRED CONFIG)

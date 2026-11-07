@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Build own-workload CodSpeed hooks from the PR #29 pinned submodule."""
 import os
 import platform

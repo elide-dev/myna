@@ -27,3 +27,9 @@ Production Java must compile with `-Xlint:all -Werror`; the LLVM applicator uses
 ## Dependency maintenance
 
 Dependabot security alerts and security updates are enabled; dependency review runs on pull requests. The version-update schedules in `.github/dependabot.yml` cover Cargo, Maven, Actions, containers, benchmark packages and submodules. Maintainers must triage security alerts and either update affected components or document why the reported vulnerability is not exploitable in Myna. Before a release, and at least monthly, also review upstream security notices for the checksum-pinned GraalVM/toolchain bundles, Java formatter, and simdjson conformance fixture in `tests/values_cpp.py`; these explicit downloads are not all covered by package-manager alerts. Record the versions, advisories, and disposition in the release checklist or an issue. Keep their version and checksum declarations together when updating.
+
+## Source licensing notices
+
+Maintained Java, Rust, C/C++, Python, shell, Gradle, Pkl, Docker and CMake source files carry a copyright notice and `SPDX-License-Identifier: Apache-2.0 OR MIT`. New files must preserve this convention. Run `python3 scripts/source-notices.py` to check tracked sources or add `--fix` to insert missing notices; shebangs remain on the first line. Repository hygiene enforces the check.
+
+Vendored sources retain their upstream licenses. Generated seam goldens and archived benchmark source snapshots retain their original bytes and are excluded from this maintained-source check. This check alone does not establish the gold badge requirement for notices in every source file, including generated distributions.

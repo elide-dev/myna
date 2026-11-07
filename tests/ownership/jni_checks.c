@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #include "seam-jni.h"
 
 /* Enter generated error paths directly, including ones the Java convenience wrapper rejects. */

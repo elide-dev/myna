@@ -1,3 +1,5 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 """Generate OpenSSF autofill links from reviewed evidence, without credentials.
 
 Run python3 scripts/best-practices.py, open the printed HTML file, and save
