@@ -16,7 +16,7 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.9.1 — Native Image / Rust ABI generator
+      myna 0.10.0 — Native Image / Rust ABI generator
       Usage:
         myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni]
         myna validate INPUT.seam [--target TRIPLE] [--relaxed]
@@ -133,8 +133,7 @@ public final class Main {
               StandardCopyOption.ATOMIC_MOVE,
               StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
-          Files.move(
-              temporary, target, StandardCopyOption.REPLACE_EXISTING);
+          Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         }
       } finally {
         Files.deleteIfExists(temporary);

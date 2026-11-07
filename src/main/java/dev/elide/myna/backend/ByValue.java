@@ -17,7 +17,8 @@ public final class ByValue {
   public static final String RESULT = "result";
 
   public static boolean applies(Function f) {
-    return f.returns() instanceof Named || f.parameters().stream().anyMatch(p -> p.type() instanceof Named);
+    return f.returns() instanceof Named
+        || f.parameters().stream().anyMatch(p -> p.type() instanceof Named);
   }
 
   public static String symbol(Function f) {
@@ -46,7 +47,12 @@ public final class ByValue {
     facts.put("align", contract(Integer.toString(s.alignment())));
     facts.put("dereferenceable", contract(Long.toString(s.size())));
     return new Parameter(
-        name, new Pointer(type), false, Ownership.BORROWED, result ? Access.WRITE : Access.READ, facts);
+        name,
+        new Pointer(type),
+        false,
+        Ownership.BORROWED,
+        result ? Access.WRITE : Access.READ,
+        facts);
   }
 
   /** The reference form; identity for functions without by-value records. */

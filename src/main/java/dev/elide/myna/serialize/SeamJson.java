@@ -27,44 +27,45 @@ public final class SeamJson {
         + ",\n  \"structs\": "
         + array(
             m.structs().stream()
-                .map(
-                    s ->
-                        "{\"name\":"
-                            + quote(s.name())
-                            + ",\"size\":"
-                            + s.size()
-                            + ",\"alignment\":"
-                            + s.alignment()
-                            + ",\"fields\":"
-                            + array(
-                                s.fields().stream()
-                                    .map(
-                                        f ->
-                                            "{\"name\":"
-                                                + quote(f.name())
-                                                + ",\"type\":"
-                                                + quote(f.type().text())
-                                                + ",\"offset\":"
-                                                + f.offset()
-                                                + "}")
-                                    .toList())
-                            + "}")
+                .map(s ->
+                    "{\"name\":"
+                        + quote(s.name())
+                        + ",\"size\":"
+                        + s.size()
+                        + ",\"alignment\":"
+                        + s.alignment()
+                        + ",\"fields\":"
+                        + array(
+                            s.fields().stream()
+                                .map(f ->
+                                    "{\"name\":"
+                                        + quote(f.name())
+                                        + ",\"type\":"
+                                        + quote(f.type().text())
+                                        + ",\"offset\":"
+                                        + f.offset()
+                                        + "}")
+                                .toList())
+                        + "}")
                 .toList())
         + ",\n  \"callbacks\": "
         + array(
             m.callbacks().stream()
-                .map(
-                    c ->
-                        "{\"name\":"
-                            + quote(c.name())
-                            + (c.javaType() == null ? "" : ",\"javaType\":" + quote(c.javaType()))
-                            + (c.ffmTarget() == null ? "" : ",\"ffmTarget\":" + quote(c.ffmTarget())
-                                + ",\"ffmSentinel\":" + quote(c.ffmSentinel()))
-                            + ",\"returnType\":"
-                            + quote(c.returns().text())
-                            + ",\"parameters\":"
-                            + array(c.parameters().stream().map(SeamJson::parameter).toList())
-                            + "}")
+                .map(c ->
+                    "{\"name\":"
+                        + quote(c.name())
+                        + (c.javaType() == null ? "" : ",\"javaType\":" + quote(c.javaType()))
+                        + (c.ffmTarget() == null
+                            ? ""
+                            : ",\"ffmTarget\":"
+                                + quote(c.ffmTarget())
+                                + ",\"ffmSentinel\":"
+                                + quote(c.ffmSentinel()))
+                        + ",\"returnType\":"
+                        + quote(c.returns().text())
+                        + ",\"parameters\":"
+                        + array(c.parameters().stream().map(SeamJson::parameter).toList())
+                        + "}")
                 .toList())
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
@@ -91,32 +92,30 @@ public final class SeamJson {
           ",\n  \"resources\": "
               + array(
                   m.resources().stream()
-                      .map(
-                          r ->
-                              "{\"name\":"
-                                  + quote(r.name())
-                                  + ",\"representation\":\"native\",\"threading\":"
-                                  + quote(r.shared() ? "shared" : "confined")
-                                  + ",\"create\":"
-                                  + quote(r.create())
-                                  + ",\"destroy\":"
-                                  + quote(r.destroy())
-                                  + "}")
+                      .map(r ->
+                          "{\"name\":"
+                              + quote(r.name())
+                              + ",\"representation\":\"native\",\"threading\":"
+                              + quote(r.shared() ? "shared" : "confined")
+                              + ",\"create\":"
+                              + quote(r.create())
+                              + ",\"destroy\":"
+                              + quote(r.destroy())
+                              + "}")
                       .toList());
     if (!m.borrows().isEmpty())
       result +=
           ",\n  \"borrows\": "
               + array(
                   m.borrows().stream()
-                      .map(
-                          b ->
-                              "{\"function\":"
-                                  + quote(b.function())
-                                  + ",\"parameter\":"
-                                  + quote(b.parameter())
-                                  + ",\"length\":"
-                                  + quote(b.length())
-                                  + ",\"lifetime\":\"call\"}")
+                      .map(b ->
+                          "{\"function\":"
+                              + quote(b.function())
+                              + ",\"parameter\":"
+                              + quote(b.parameter())
+                              + ",\"length\":"
+                              + quote(b.length())
+                              + ",\"lifetime\":\"call\"}")
                       .toList());
     return result;
   }
@@ -138,7 +137,9 @@ public final class SeamJson {
         + quote(f.symbol())
         + ",\"direction\":"
         + quote(f.direction().name())
-        + (f.direction() == Direction.IMPORT ? ",\"nativeCallPolicy\":" + quote(Seam.nativeLeaf(f) ? "INLINE_LEAF" : "TRANSITION") : "")
+        + (f.direction() == Direction.IMPORT
+            ? ",\"nativeCallPolicy\":" + quote(Seam.nativeLeaf(f) ? "INLINE_LEAF" : "TRANSITION")
+            : "")
         + ",\"callingConvention\":\"C\",\"returnType\":"
         + quote(f.returns().text())
         + ",\"errorConvention\":"
@@ -178,17 +179,16 @@ public final class SeamJson {
 
   private static String facts(Map<String, Fact> facts) {
     var pieces = new ArrayList<String>();
-    facts.forEach(
-        (name, fact) ->
-            pieces.add(
-                quote(name)
-                    + ":{\"value\":"
-                    + quote(fact.value())
-                    + ",\"provenance\":"
-                    + quote(fact.provenance().name())
-                    + ",\"explanation\":"
-                    + quote(fact.explanation())
-                    + "}"));
+    facts.forEach((name, fact) ->
+        pieces.add(
+            quote(name)
+                + ":{\"value\":"
+                + quote(fact.value())
+                + ",\"provenance\":"
+                + quote(fact.provenance().name())
+                + ",\"explanation\":"
+                + quote(fact.explanation())
+                + "}"));
     return "{" + String.join(",", pieces) + "}";
   }
 

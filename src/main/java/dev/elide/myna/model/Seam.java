@@ -6,7 +6,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.9.1";
+  public static final String VERSION = "0.10.0";
   public static final int BINDING_ABI_VERSION = 2;
 
   /** Binding ABI 2 makes bounded, nonblocking, non-reentrant native imports the default. */
@@ -186,8 +186,13 @@ public final class Seam {
   }
 
   /** A callback signature, referenced as {@code fn<name>}. */
-  public record Signature(String name, Type returns, List<Parameter> parameters, String javaType,
-                          String ffmTarget, String ffmSentinel) {
+  public record Signature(
+      String name,
+      Type returns,
+      List<Parameter> parameters,
+      String javaType,
+      String ffmTarget,
+      String ffmSentinel) {
     public Signature(String name, Type returns, List<Parameter> parameters) {
       this(name, returns, parameters, null, null, null);
     }

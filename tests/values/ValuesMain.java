@@ -18,6 +18,17 @@ public final class ValuesMain {
   }
   public static long consume(PointerBase descriptor, int mode) {
     var tape = new NativeValueTape((Pointer) descriptor);
+    if (mode >= 5 && mode <= 8) {
+      for (ValueTape reader : new ValueTape[] {tape, new SimdNativeValueTape((Pointer) descriptor)}) {
+        reader.validate();
+        check(reader.flags() == ValueTape.ALLOW_NON_FINITE);
+        check(reader.doubleValue(1) == Double.POSITIVE_INFINITY);
+        check(reader.doubleValue(2) == Double.NEGATIVE_INFINITY);
+        check(Double.isNaN(reader.doubleValue(3)));
+        check(reader.bits(3) == 0x7ff8000000000042L);
+      }
+      return 5;
+    }
     if (mode == 100) {
       tape.validate();
       check(tape.length(0) == 6 && tape.byteCount() == 0);
@@ -85,6 +96,10 @@ public final class ValuesMain {
     check(ValueApi.drive(callback, thread, 1, 2) == 9);
     check(ValueApi.drive(callback, thread, 1, 3) == -999); // Reject ABI v1.
     check(ValueApi.drive(callback, thread, 1, 4) == -999); // Reject unknown flags.
+    check(ValueApi.drive(callback, thread, 1, 5) == 5); // Opt-in YAML floats, both native readers.
+    check(ValueApi.drive(callback, thread, 1, 6) == -999); // Non-finite without the flag.
+    check(ValueApi.drive(callback, thread, 1, 7) == -999); // v2 cannot use the capability.
+    check(ValueApi.drive(callback, thread, 1, 8) == -999); // Known flag plus an unknown bit.
     check(ValueApi.drive(callback, thread, 0, 0) == 0);
     check(ValueApi.drive(callback, thread, 1000, 1) == 6000);
     if (args.length != 0 && args[0].equals("strings")) {

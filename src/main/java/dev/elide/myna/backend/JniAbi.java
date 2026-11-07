@@ -10,15 +10,17 @@ public final class JniAbi {
 
   public record Carrier(String java, String c, String llvm, String descriptor) {
     public String llvmArgument(String target) {
-      Type scalar = switch (c) {
-        case "jboolean" -> Scalar.U8;
-        case "jbyte" -> Scalar.I8;
-        case "jshort" -> Scalar.I16;
-        default -> Scalar.I64;
-      };
+      Type scalar =
+          switch (c) {
+            case "jboolean" -> Scalar.U8;
+            case "jbyte" -> Scalar.I8;
+            case "jshort" -> Scalar.I16;
+            default -> Scalar.I64;
+          };
       String extension = Types.extension(scalar, target);
       return llvm + (extension.isEmpty() ? "" : " " + extension);
     }
+
     public String rust() {
       return switch (c) {
         case "void" -> "()";
@@ -33,18 +35,35 @@ public final class JniAbi {
       };
     }
   }
+
   public record Argument(String name, Carrier carrier) {}
-  public record Method(Function implementation, String name, String symbol, Carrier returns,
-                       List<Argument> arguments, BufferBorrow borrow) {
-    public Method { arguments = List.copyOf(arguments); }
+
+  public record Method(
+      Function implementation,
+      String name,
+      String symbol,
+      Carrier returns,
+      List<Argument> arguments,
+      BufferBorrow borrow) {
+    public Method {
+      arguments = List.copyOf(arguments);
+    }
+
     public String descriptor() {
-      return "(" + String.join("", arguments.stream().skip(2)
-          .map(a -> a.carrier().descriptor()).toList()) + ")" + returns.descriptor();
+      return "("
+          + String.join("", arguments.stream().skip(2).map(a -> a.carrier().descriptor()).toList())
+          + ")"
+          + returns.descriptor();
     }
   }
 
-  public static String className(Module m) { return m.nativeClass() + "JNI"; }
-  public static String library(Module m) { return m.name() + "_jni"; }
+  public static String className(Module m) {
+    return m.nativeClass() + "JNI";
+  }
+
+  public static String library(Module m) {
+    return m.name() + "_jni";
+  }
 
   public static Carrier carrier(Type type) {
     if (!(type instanceof Scalar s)) return new Carrier("long", "jlong", "i64", "J");
@@ -68,7 +87,8 @@ public final class JniAbi {
       for (BufferBorrow b : m.borrows()) {
         if (b.function().equals(f.name())) {
           if (m.functions().stream().anyMatch(other -> other.name().equals(f.name() + "Buffer")))
-            throw new IllegalArgumentException("JNI buffer adapter name collision: " + f.name() + "Buffer");
+            throw new IllegalArgumentException(
+                "JNI buffer adapter name collision: " + f.name() + "Buffer");
           result.add(lower(m, f, b));
         }
       }
@@ -84,21 +104,41 @@ public final class JniAbi {
     for (Parameter p : f.abiParameters()) {
       String name = "arg" + i++;
       if (borrow != null && p.name().equals(borrow.length())) continue;
-      args.add(new Argument(name, borrow != null && p.name().equals(borrow.parameter())
-          ? new Carrier("java.nio.ByteBuffer", "jobject", "ptr", "Ljava/nio/ByteBuffer;")
-          : carrier(p.type())));
+      args.add(
+          new Argument(
+              name,
+              borrow != null && p.name().equals(borrow.parameter())
+                  ? new Carrier("java.nio.ByteBuffer", "jobject", "ptr", "Ljava/nio/ByteBuffer;")
+                  : carrier(p.type())));
     }
-    if (f.returns() instanceof Named) args.add(new Argument("result", carrier(new Pointer(f.returns()))));
+    if (f.returns() instanceof Named)
+      args.add(new Argument("result", carrier(new Pointer(f.returns()))));
     String name = f.name() + (borrow == null ? "" : "Buffer");
     // Long JNI names also distinguish a raw native method from a Java buffer overload.
-    String descriptor = String.join("", args.stream().skip(2).map(a -> a.carrier().descriptor()).toList());
-    String symbol = "Java_" + mangle(m.javaPackageName() + "." + className(m)) + "_"
-        + mangle(name) + "__" + mangle(descriptor);
-    return new Method(f, name, symbol, carrier(f.returns() instanceof Named ? Scalar.VOID : f.returns()), args, borrow);
+    String descriptor =
+        String.join("", args.stream().skip(2).map(a -> a.carrier().descriptor()).toList());
+    String symbol =
+        "Java_"
+            + mangle(m.javaPackageName() + "." + className(m))
+            + "_"
+            + mangle(name)
+            + "__"
+            + mangle(descriptor);
+    return new Method(
+        f,
+        name,
+        symbol,
+        carrier(f.returns() instanceof Named ? Scalar.VOID : f.returns()),
+        args,
+        borrow);
   }
 
   private static String mangle(String value) {
-    return value.replace("_", "_1").replace(";", "_2").replace("[", "_3")
-        .replace('.', '_').replace('/', '_');
+    return value
+        .replace("_", "_1")
+        .replace(";", "_2")
+        .replace("[", "_3")
+        .replace('.', '_')
+        .replace('/', '_');
   }
 }

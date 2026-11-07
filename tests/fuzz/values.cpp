@@ -56,12 +56,49 @@ static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned dept
   return myna_value_next(&n, index);
 }
 
+extern "C" int LLVMFuzzerInitialize(int *, char ***) {
+  bool unknown_rejected = false;
+  try { myna::value_builder invalid(std::pmr::get_default_resource(), {}, 2); }
+  catch (const std::invalid_argument &) { unknown_rejected = true; }
+  assert(unknown_rejected);
+  myna::value_builder yaml(std::pmr::get_default_resource(), {}, MYNA_VALUE_ALLOW_NON_FINITE);
+  for (uint64_t bits : {UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
+                        UINT64_C(0x7ff8000000000042), UINT64_C(0x8000000000000000)}) {
+    double value;
+    std::memcpy(&value, &bits, sizeof(value));
+    yaml.clear();
+    yaml.floating(value);
+    auto view = yaml.view();
+    assert(view.flags == MYNA_VALUE_ALLOW_NON_FINITE && view.nodes[0].payload == bits);
+  }
+  // Deterministic boundaries that random valid documents rarely reach.
+  myna::value_builder empty(std::pmr::get_default_resource(), {0, 256, 8});
+  bool rejected = false;
+  try { empty.null(); } catch (const std::length_error &) { rejected = true; }
+  assert(rejected);
+  rejected = false;
+  try { empty.view(); } catch (const std::logic_error &) { rejected = true; }
+  assert(rejected);
+
+  const std::string token = "-123456789.000e-12";
+  myna::value_builder decimal;
+  auto region = decimal.region(token);
+  decimal.validated_number_ref(region, 0, token.size());
+  auto view = decimal.view();
+  assert(view.node_count == 1 && myna_value_kind(view.nodes) == MYNA_VALUE_DECIMAL);
+  assert(myna_value_region_id(view.nodes) == region);
+  assert(view.nodes[0].length == token.size());
+  assert(std::memcmp(view.regions[region - 1].data, token.data(), token.size()) == 0);
+  return 0;
+}
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::string backing(64, 'a');
   bounded_resource resource(256 + (size ? data[0] : 255) * 64,
       size > 1 && (data[1] & 1) ? data[1] / 2 : SIZE_MAX);
   {
-  myna::value_builder builder(&resource, {64, 256, 8});
+  myna::value_builder builder(&resource, {64, 256, 8},
+      size > 2 && (data[2] & 1) ? MYNA_VALUE_ALLOW_NON_FINITE : 0);
   for (size_t i = 0; i < size && i < 1024; ++i) {
     unsigned operation = data[i] % 17;
     try {

@@ -25,7 +25,7 @@ class CliTest {
   void helpVersionAndBadUsage() {
     assertEquals(0, run().code());
     assertTrue(run("--help").out().contains("myna apply"));
-    assertEquals("0.9.1\n", run("--version").out());
+    assertEquals("0.10.0\n", run("--version").out());
     for (String[] args :
         List.of(
             new String[] {"bad"},
@@ -87,9 +87,13 @@ class CliTest {
 
   @Test
   void generatedMetadataIsNestedAndCannotEscapeTheOutputDirectory() throws Exception {
-    Main.write(Map.of("META-INF/native-image/example/native-image.properties", "Args = test\n"), temp);
-    assertEquals("Args = test\n", Files.readString(temp.resolve("META-INF/native-image/example/native-image.properties")));
-    assertThrows(IllegalArgumentException.class, () -> Main.write(Map.of("../escaped", "bad"), temp));
+    Main.write(
+        Map.of("META-INF/native-image/example/native-image.properties", "Args = test\n"), temp);
+    assertEquals(
+        "Args = test\n",
+        Files.readString(temp.resolve("META-INF/native-image/example/native-image.properties")));
+    assertThrows(
+        IllegalArgumentException.class, () -> Main.write(Map.of("../escaped", "bad"), temp));
   }
 
   @Test

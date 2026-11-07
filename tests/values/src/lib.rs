@@ -41,7 +41,7 @@ pub unsafe extern "C" fn myna_value_drive(
                 } else {
                     myna_values::ABI_VERSION
                 },
-                flags: if mode == 4 { 1 } else { 0 },
+                flags: if mode == 4 { 2 } else { 0 },
                 nodes: nodes.as_ptr(),
                 node_count: 1,
                 bytes: bytes.as_ptr(),
@@ -51,6 +51,35 @@ pub unsafe extern "C" fn myna_value_drive(
             };
             // SAFETY: caller guarantees callback; this deliberately invalid
             // UTF-8 producer still supplies live allocations and valid layout.
+            return unsafe { consumer(isolate, &raw, mode) };
+        }
+        if (5..=8).contains(&mode) {
+            let mut doc = Document::with_options_in(
+                myna_values::allocator_api2::alloc::Global,
+                myna_values::Limits::default(),
+                myna_values::Options {
+                    allow_non_finite: true,
+                },
+            );
+            let view = doc
+                .encode(&[
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::from_bits(0x7ff8_0000_0000_0042),
+                ])
+                .unwrap();
+            let descriptor = view.raw();
+            // SAFETY: descriptor and all backing storage remain live through callback.
+            let mut raw = unsafe { *descriptor.as_ptr() };
+            if mode == 6 {
+                raw.flags = 0;
+            }
+            if mode == 7 {
+                raw.version = 2;
+            }
+            if mode == 8 {
+                raw.flags |= 2;
+            }
             return unsafe { consumer(isolate, &raw, mode) };
         }
         if mode >= 10 {

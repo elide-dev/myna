@@ -64,6 +64,17 @@ extern "C" int64_t myna_cpp_values(consumer call, void *isolate) noexcept {
     assert(view.region_count >= 5);
     assert(view.byte_count == 0); // All keys inline; all text/number values borrowed.
     auto result = call(isolate, &view, 100);
+    myna::value_builder yaml(&arena, {}, MYNA_VALUE_ALLOW_NON_FINITE);
+    yaml.begin_array();
+    yaml.floating(std::numeric_limits<double>::infinity());
+    yaml.floating(-std::numeric_limits<double>::infinity());
+    uint64_t nan_bits = UINT64_C(0x7ff8000000000042);
+    double nan;
+    std::memcpy(&nan, &nan_bits, sizeof(nan));
+    yaml.floating(nan);
+    yaml.end();
+    auto yaml_view = yaml.view();
+    if (call(isolate, &yaml_view, 5) != 5) return -801;
     return result;
   } catch (...) { return -800; }
 }
@@ -101,6 +112,13 @@ int main() {
   myna::value_builder failed(std::pmr::null_memory_resource());
   bool oom = false; try { failed.null(); } catch (const std::bad_alloc &) { oom = true; } assert(oom);
   auto callback = +[](void *, const myna_value_view *v, int32_t mode) -> int64_t {
+    if (mode == 5) {
+      assert(v->flags == MYNA_VALUE_ALLOW_NON_FINITE && v->node_count == 4);
+      assert(v->nodes[1].payload == UINT64_C(0x7ff0000000000000));
+      assert(v->nodes[2].payload == UINT64_C(0xfff0000000000000));
+      assert(v->nodes[3].payload == UINT64_C(0x7ff8000000000042));
+      return 5;
+    }
     assert(mode == 100 && v->version == 3 && v->nodes[0].length == 6);
     for (uint64_t i = 0; i < v->node_count; ++i) assert(myna_value_next(&v->nodes[i], i) <= v->node_count);
     return 100;

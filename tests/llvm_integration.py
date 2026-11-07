@@ -41,6 +41,56 @@ __attribute__((noinline)) int64_t c_probe(void) { int64_t value = 42; (void)seam
     def test_real_c_and_rust_objects_optimize_and_link_thin_lto(self):
         self.prove_lto("thin")
 
+    def test_file_errors_and_malformed_containers_preserve_outputs(self):
+        original = self.c_object()
+        output = self.work / "existing.o"
+        output.write_bytes(b"preserve")
+        bad_contract = self.work / "syntax.ll"
+        bad_contract.write_text("this is not LLVM IR")
+        malformed = self.work / "malformed.a"
+        malformed.write_bytes(b"!<arch>\n" + b"invalid archive member" * 4)
+        thin = self.work / "thin.a"
+        run(llvm("llvm-ar"), "rcsT", thin, original)
+        truncated_elf = self.work / "truncated.o"
+        truncated_elf.write_bytes(b"\x7fELF\x02\x01\x01" + b"\0" * 9 + b"\x01\0\x3e\0")
+        unknown_object = self.work / "unknown.o"
+        unknown_object.write_bytes(b"not an object or bitcode")
+        cases = [(self.work / "absent.ll", original, output),
+                 (self.contracts, unknown_object, output),
+                 (bad_contract, original, output),
+                 (self.contracts, self.work / "absent.o", output),
+                 (self.contracts, malformed, output),
+                 (self.contracts, thin, output),
+                 (self.contracts, truncated_elf, output),
+                 (self.contracts, original, self.work / "missing-directory/output.o"),
+                 (self.contracts, original, self.work)]
+        for contract, obj, dest in cases:
+            with self.subTest(input=obj.name, contract=contract.name, output=str(dest)):
+                result = run(HELPER, "--contracts", contract, "--input", obj, "--output", dest, ok=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(output.read_bytes(), b"preserve")
+
+    def test_invalid_applied_metadata_and_conflicting_call_attributes(self):
+        prefix = f'target triple = "{TARGET}"\n'
+        cases = [
+            ('declare i64 @seam_inspect(ptr)\n!myna.applied = !{}\n', 'fingerprint'),
+            ('@seam_inspect = global i64 0\n', 'alias or non-function'),
+            ('declare i64 @seam_inspect(ptr) noreturn\n', 'contradict'),
+            ('declare i64 @seam_inspect(ptr)\ndefine i64 @caller(ptr %p) {\n'
+             '%r = call i64 @seam_inspect(ptr writeonly %p)\nret i64 %r\n}\n', 'contradict'),
+            ('declare i64 @seam_inspect(ptr)\ndefine i64 @caller(ptr %p) {\n'
+             '%r = call i64 @seam_inspect(ptr byval(i64) %p)\nret i64 %r\n}\n', 'unsupported ABI'),
+        ]
+        for i, (body, expected) in enumerate(cases):
+            with self.subTest(case=i):
+                source = self.work / f"negative-{i}.ll"
+                source.write_text(prefix + body)
+                obj = source.with_suffix(".bc")
+                run(llvm("llvm-as"), source, "-o", obj)
+                result = self.apply(obj, self.work / f"negative-{i}.o", ok=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stdout + result.stderr)
+
     def test_real_c_and_rust_objects_optimize_and_link_full_lto(self):
         self.prove_lto("full")
 

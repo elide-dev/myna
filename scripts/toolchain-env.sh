@@ -1,6 +1,8 @@
 #!/bin/sh
 # Called by mise after loading tools; tolerate a not-yet-installed tool during
 # initial setup, without falling back to an unrelated system compiler.
+myna_user_cc=${CC-}
+myna_user_cxx=${CXX-}
 myna_toolchain_install=$(mise where github:elide-dev/toolchain 2>/dev/null || true)
 if [ -x "$myna_toolchain_install/elide-toolchain/bin/elide-toolchain" ]; then
   ELIDE_TOOLCHAIN_HOME="$myna_toolchain_install/elide-toolchain"
@@ -18,8 +20,8 @@ if [ -x "$myna_toolchain_install/elide-toolchain/bin/elide-toolchain" ]; then
     *) echo "Unsupported Myna native host" >&2; return 1 ;;
   esac
   eval "$("$LLVM_BIN/elide-toolchain" env --target "$myna_target")"
-  CC="$MYNA_ROOT/scripts/native-cc"
-  CXX="$MYNA_ROOT/scripts/native-cxx"
+  CC=${myna_user_cc:-"$MYNA_ROOT/scripts/native-cc"}
+  CXX=${myna_user_cxx:-"$MYNA_ROOT/scripts/native-cxx"}
   export CC CXX
   if [ "$myna_target" = arm64-apple-darwin ]; then
     CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER="$CC"

@@ -30,6 +30,15 @@ gh attestation verify oci://ghcr.io/elide-dev/myna@sha256:DIGEST --repo elide-de
 
 Verify the attestation's source revision, workflow identity, and artifact digest against the intended release. A signature alone is not an assertion that a build was audited or vulnerability-free. Do not substitute a similarly named manual-run artifact for the published release asset.
 
+The current release tags use X.509 signatures. The public certificate and chain travel with the signed tag; verify them with a trusted S/MIME verifier such as [smimesign](https://github.com/github/smimesign):
+
+```sh
+git fetch origin tag v0.9.1
+git -c gpg.format=x509 -c gpg.x509.program=smimesign verify-tag v0.9.1
+```
+
+For v0.9.1 the signer certificate ID is `8db2725ec24ba177cd2adef718a9da68f0785972`. Validate both certificate trust and the intended release identity; simply extracting a certificate from an untrusted tag does not establish trust. Later signer changes must be documented in a reviewed release change. Signing private keys stay with the authorized signer, never on the public distribution service. CI artifact attestations instead use short-lived Sigstore signing identities: `gh attestation verify` obtains the public verification material and checks the signed bundle against the named repository. The source archive and SDK have their own signed artifact digests; a tag signature alone does not authenticate an arbitrary binary download.
+
 The GitHub-generated source archive and the workflow's attested `git archive` asset are separate byte streams with separate checksums. Existing v0.7.2 SDK bytes and hashes remain unchanged; CI provenance is not retroactively claimed for that locally packaged artifact. Its license texts and recovered Linux/macOS symbol receipts are attached to the release. Later CI-built releases use the provenance workflow above.
 
 ## Symbols and recovery

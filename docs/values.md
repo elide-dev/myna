@@ -60,7 +60,7 @@ A descriptor is 56 bytes, aligned to 8:
 | Offset | Type | Meaning |
 | --- | --- | --- |
 | 0 | u32 | ABI version, currently 3 |
-| 4 | u32 | Reserved flags, currently 0 |
+| 4 | u32 | Descriptor capabilities: bit 0 permits non-finite F64; other bits must be 0 |
 | 8 | pointer | Read-only node storage |
 | 16 | u64 | Node count, including the root at index 0 |
 | 24 | pointer | Read-only UTF-8 storage |
@@ -81,7 +81,15 @@ Each node is 24 bytes, aligned to 8:
 
 Region 0 is the descriptor's owned byte buffer. Region IDs 1..regionCount index a 16-byte pair of pointer and u64 byte length in the region table. Each reference's offset and length are u32, even if the underlying allocation is larger. Regions may represent original input, parser unescape storage, or caller-owned text. All must remain live and immutable. Empty regions may have null pointers; they must never be dereferenced.
 
-The v3 Java reader also accepts v2 descriptors (40 bytes, implicit external storage for strings longer than 16). It rejects v1 and unknown versions/flags. V3 producers always emit v3. Rebuild generated bindings for the 56-byte descriptor. The canonical C ABI is [values.h](../include/myna/values.h); the example seam mirrors its record layouts. Semantic changes require an ABI version change, independently of the generated seam fingerprint.
+The v3 Java reader also accepts v2 descriptors (40 bytes, implicit external storage for strings longer than 16). It rejects v1 and unknown versions/flags. V2 descriptors require flags=0. V3 producers always emit v3. Rebuild generated bindings for the 56-byte descriptor. The canonical C ABI is [values.h](../include/myna/values.h); the example seam mirrors its record layouts. Changes to the layout or existing flags=0 semantics require an ABI version change, independently of the generated seam fingerprint. Optional capabilities may use previously reserved flag bits: older readers reject such descriptors rather than silently misinterpreting them.
+
+### Non-finite binary floats for YAML
+
+Set `MYNA_VALUE_ALLOW_NON_FINITE` (descriptor flag bit 0) to permit positive infinity, negative infinity and NaN in F64 nodes. This is an opt-in tape capability, not a different node layout or an instruction to parse YAML. With flags=0 the existing finite-only behavior is unchanged. Consumers using the capability must upgrade their readers; older v3 readers reject nonzero flags even when every value happens to be finite.
+
+Rust `Document::with_options_in(allocator, limits, Options { allow_non_finite: true })` and `Builder::with_options_in` enable it for Serde and direct producers. The C++ equivalent is `myna::value_builder(allocator, limits, MYNA_VALUE_ALLOW_NON_FINITE)`. The choice persists through `clear()` and subsequent encodes. Rust `View::flags()`/`RawView.flags` and Java `ValueTape.flags()` expose the capability. Java subclasses adapting other storage can use the protected `(nodeCount, byteCount, version, flags)` constructor.
+
+F64 payloads carry IEEE-754 binary64 bits. `doubleValue` returns the represented value; `bits` exposes the stored bits directly. Signed zero is preserved. Do not rely on a particular NaN payload surviving arithmetic, f32 widening, or conversions outside the tape. A YAML adapter resolves `.inf`, `-.inf`, and `.nan` itself, then writes binary F64 nodes. The DECIMAL kind still requires an RFC 8259 number token; this flag does not make `.inf`, `.nan`, or `NaN` valid decimal text. A JSON exporter must explicitly reject non-finite values or implement a documented caller-selected conversion; the tape never silently converts them to null or strings.
 
 Containers precede their children. Arrays contain value subtrees; objects alternate a string-key node and a value subtree. The first child is `container + 1`; skipping a child uses its `next` index. Empty containers have `next == container + 1`. Scalars and external strings also have `next == index + 1`; inline strings use the implicit end described above. The root subtree ends at the total node count. Duplicate object keys and serializer iteration order are preserved; the Java `find` helper returns the first matching key.
 
@@ -175,7 +183,7 @@ No normalization, case folding, or Unicode-equivalence matching is performed. UT
 | `Some`, newtype struct | Wrapped value |
 | Signed / unsigned integers through 64 bits | Separate i64/u64 tags; no floating conversion |
 | i128 / u128 | Accepted only if representable by i64 or u64; otherwise error |
-| f32 / f64 | f64; f32 widens, negative zero preserved; NaN/infinity are errors |
+| f32 / f64 | f64; f32 widens, negative zero preserved; NaN/infinity require `ALLOW_NON_FINITE` |
 | String, char, `collect_str` | Copied UTF-8 string, including embedded NUL |
 | Sequence, tuple, tuple struct, bytes | Array (bytes become unsigned numeric elements) |
 | Struct, map | Object; keys must serialize as strings |

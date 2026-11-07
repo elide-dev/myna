@@ -134,6 +134,67 @@ fn layout_and_numeric_boundaries() {
     }
 }
 
+#[test]
+fn non_finite_floats_are_explicit_and_survive_reuse() {
+    use myna_values::{ALLOW_NON_FINITE, Options};
+    let options = Options {
+        allow_non_finite: true,
+    };
+    let bits = [
+        f64::INFINITY.to_bits(),
+        f64::NEG_INFINITY.to_bits(),
+        0x7ff8_0000_0000_0042,
+        (-0.0_f64).to_bits(),
+        1.5_f64.to_bits(),
+    ];
+    let mut doc = Document::with_options_in(Global, Limits::default(), options);
+    for bits in bits {
+        let value = f64::from_bits(bits);
+        let view = doc.encode(&value).unwrap();
+        assert_eq!(view.flags(), ALLOW_NON_FINITE);
+        assert_eq!(view.nodes()[0].payload, bits);
+        let raw = view.raw();
+        // SAFETY: descriptor and borrowed document remain live for the read.
+        assert_eq!(unsafe { (*raw.as_ptr()).flags }, ALLOW_NON_FINITE);
+        doc.clear();
+    }
+    for value in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+        let view = doc.encode(&value).unwrap();
+        let actual = f64::from_bits(view.nodes()[0].payload);
+        assert!(if value.is_nan() {
+            actual.is_nan()
+        } else {
+            actual == f64::from(value)
+        });
+    }
+    let mut builder = myna_values::Builder::with_options_in(Global, Limits::default(), options);
+    for value in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+        builder.clear();
+        builder.value(&value).unwrap();
+        let view = builder.finish().unwrap();
+        assert_eq!(view.flags(), ALLOW_NON_FINITE);
+        assert_eq!(view.nodes()[0].payload, value.to_bits());
+    }
+    builder.clear();
+    assert!(matches!(
+        builder.exact_number(".inf"),
+        Err(Error::InvalidNumber)
+    ));
+    assert!(builder.finish().is_err());
+    builder.clear();
+    builder.value(&f64::INFINITY).unwrap();
+    assert_eq!(builder.finish().unwrap().flags(), ALLOW_NON_FINITE);
+    let mut strict = myna_values::Builder::new_in(Global);
+    assert!(matches!(
+        strict.value(&f64::INFINITY),
+        Err(Error::NonFinite)
+    ));
+    assert!(strict.finish().is_err());
+    strict.clear();
+    strict.value(&1.0).unwrap();
+    assert_eq!(strict.finish().unwrap().flags(), 0);
+}
+
 struct Transient;
 impl Serialize for Transient {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {

@@ -7,6 +7,9 @@
  * Descriptors are borrowed: owners keep every allocation immutable and live.
  * No retain/release policy, allocator, or parser is implied by this header. */
 #define MYNA_VALUE_ABI 3u
+/* Opt-in descriptor capability; flags=0 retains finite-only F64 semantics. */
+#define MYNA_VALUE_ALLOW_NON_FINITE 1u
+#define MYNA_VALUE_KNOWN_FLAGS MYNA_VALUE_ALLOW_NON_FINITE
 #define MYNA_VALUE_NULL 0u
 #define MYNA_VALUE_BOOL 1u
 #define MYNA_VALUE_I64 2u
@@ -26,7 +29,10 @@ typedef struct myna_value_node {
   uint64_t payload;
   uint64_t next;
 } myna_value_node;
-typedef struct myna_value_region { const uint8_t *data; uint64_t length; } myna_value_region;
+typedef struct myna_value_region {
+  const uint8_t *data;
+  uint64_t length;
+} myna_value_region;
 typedef struct myna_value_view {
   uint32_t version;
   uint32_t flags;
@@ -38,14 +44,18 @@ typedef struct myna_value_view {
   uint64_t region_count;
 } myna_value_view;
 
-static inline uint32_t myna_value_kind(const myna_value_node *n) { return n->tag & MYNA_VALUE_KIND_MASK; }
+static inline uint32_t myna_value_kind(const myna_value_node *n) {
+  return n->tag & MYNA_VALUE_KIND_MASK;
+}
 static inline int myna_value_inline(const myna_value_node *n) {
   return (n->tag == MYNA_VALUE_STRING || n->tag == MYNA_VALUE_DECIMAL) && n->length <= 16;
 }
 static inline uint64_t myna_value_next(const myna_value_node *n, uint64_t index) {
   return myna_value_inline(n) ? index + 1 : n->next;
 }
-static inline uint32_t myna_value_region_id(const myna_value_node *n) { return (uint32_t)(n->payload >> 32); }
+static inline uint32_t myna_value_region_id(const myna_value_node *n) {
+  return (uint32_t)(n->payload >> 32);
+}
 static inline uint32_t myna_value_offset(const myna_value_node *n) { return (uint32_t)n->payload; }
 /* Inline text bytes are packed into numeric words in little-endian order,
  * regardless of host endianness. This accessor does not check bounds. */

@@ -1,5 +1,19 @@
 # Optional adapters: FFM and Static JNI
 
+## Direction: November 2026 through November 2027
+
+Keep Substrate VM direct bindings as the primary runtime and performance target. Maintain JVM Panama and SVM static JNI as optional adapters over the same producer-neutral seam. Preserve explicit ownership, ABI compatibility, bounded native-leaf contracts, and consumer-controlled allocation.
+
+Over the next year, prioritize differential ABI fuzzing, generated-adapter sanitizer coverage, repeatable matched buffer/record/callback/resource benchmarks, and target-hardware conformance. Improve build reproducibility, dependency monitoring, diagnostic quality, and documented downstream migration. Schedule ABI extensions such as by-value record callbacks only with a versioned contract and executable acceptance tests; these are directions rather than promised delivery dates.
+
+Do not turn Myna into a JSON parser, object materializer, native-code sandbox, or general object/array JNI bridge. Keep parser-specific integration in downstream adapters. Dynamic JNI on HotSpot, implicit cleaners, automatic ownership inference, and unsupported-platform performance claims are outside this roadmap. Runtime support and supported toolchain changes require evidence, not just successful code generation.
+
+## Current architecture
+
+The CLI parses seam text into the typed `Seam` model, validates ABI and optimizer facts, then feeds language backends and canonical descriptor serialization. Backends generate C/Rust interfaces, direct SVM bindings, FFM adapters, and optional static JNI glue from that shared model. The separate LLVM applicator verifies and attaches approved contracts to bitcode, archive members, and FatLTO payloads before linking. Native Image hosted features register ABI adapters at image build time; symbol addresses are resolved at runtime.
+
+The value SDK is a separate producer-neutral tape ABI with Rust and C++ producers and Java readers. Allocator ownership and borrowed-region lifetimes cross the native boundary explicitly. Tests exercise each component and real end-to-end compiled bindings. The [security assurance](../SECURITY.md#security-requirements-and-assurance) describes the trust boundaries; the sections below specify the adapter interfaces.
+
 Substrate VM remains the primary target. JVM support uses Java 25 FFM (Panama); static JNI targets Substrate VM. These adapters do not change the direct C API or its default native-leaf policy. See the [Native Image performance design](performance.md).
 
 The canonical seam remains producer-neutral. FFM descriptors project the C ABI; `JniAbi` separately computes the concrete JNI carriers, implicit arguments, descriptors and mangled symbols. JNI handles never replace pointer types in the canonical seam. Generator 0.9.0 fingerprints include explicit static FFM callback policies.

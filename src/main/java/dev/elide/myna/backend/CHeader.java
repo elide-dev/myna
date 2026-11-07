@@ -40,8 +40,11 @@ public final class CHeader implements Backend {
         .append("_SEAM_ABI ")
         .append(SeamJson.quote(fingerprint))
         .append('\n');
-    out.append("#define ").append(m.name().toUpperCase(Locale.ROOT)).append("_BINDING_ABI_VERSION ")
-        .append(Seam.BINDING_ABI_VERSION).append('\n');
+    out.append("#define ")
+        .append(m.name().toUpperCase(Locale.ROOT))
+        .append("_BINDING_ABI_VERSION ")
+        .append(Seam.BINDING_ABI_VERSION)
+        .append('\n');
     out.append("SEAM_ASSERT(sizeof(void *) == 8, \"seam target requires 64-bit pointers\");\n\n");
     for (String name : m.opaqueTypes()) out.append("struct ").append(name).append(";\n");
     for (Struct s : m.structs()) out.append("struct ").append(s.name()).append(";\n");
@@ -136,11 +139,14 @@ public final class CHeader implements Backend {
         .append(' ')
         .append(f.symbol())
         .append('(')
-        .append(String.join(", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
+        .append(
+            String.join(
+                ", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
         .append(") {\n");
     if (record) out.append("  ").append(Types.c(f.returns())).append(" result;\n");
     var args = new java.util.ArrayList<String>();
-    for (Parameter p : f.abiParameters()) args.add(p.type() instanceof Named ? "&" + p.name() : p.name());
+    for (Parameter p : f.abiParameters())
+      args.add(p.type() instanceof Named ? "&" + p.name() : p.name());
     if (record) args.add("&result");
     out.append("  ")
         .append(!record && f.returns() != Scalar.VOID ? "return " : "")
