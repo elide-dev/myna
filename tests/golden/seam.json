@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.9.1",
+  "generatorVersion": "0.10.0",
   "name": "buffer",
   "abiVersion": 1,
   "targetTriple": "aarch64-apple-darwin",
