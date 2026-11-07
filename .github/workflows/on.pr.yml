@@ -11,7 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/check.changes.yml
+
   jvm:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     name: JVM
     uses: ./.github/workflows/check.jvm.yml
     permissions:
@@ -19,6 +24,8 @@ jobs:
       id-token: write
 
   native:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     name: Native
     uses: ./.github/workflows/check.native.yml
     permissions:
@@ -26,6 +33,8 @@ jobs:
       id-token: write
 
   containers:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     name: Containers
     uses: ./.github/workflows/job.container.yml
     permissions:
@@ -34,7 +43,7 @@ jobs:
   gate:
     name: Gate
     if: always()
-    needs: [jvm, native, containers]
+    needs: [changes, jvm, native, containers]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -45,5 +54,11 @@ jobs:
           egress-policy: audit
       - name: Require all checks to pass
         env:
+          FULL: ${{ needs.changes.outputs.full }}
           RESULTS: ${{ toJSON(needs) }}
-        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
+        run: |
+          if [ "$FULL" = false ]; then
+            jq -e '.changes.result == "success" and ([.jvm, .native, .containers] | all(.result == "skipped"))' <<< "$RESULTS"
+          else
+            jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
+          fi

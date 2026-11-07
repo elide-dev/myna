@@ -1,6 +1,6 @@
 # CI and dependency maintenance
 
-`on.push.yml`, `on.pr.yml`, and `on.queue.yml` run the same reusable JVM, native, and container workflows. The `Gate` job requires all of them to succeed, including on merge-queue events. Main builds are not cancelled by newer pushes; superseded PR builds are cancelled. Use the Gate check for branch rules when configuring required checks.
+`on.push.yml`, `on.pr.yml`, and `on.queue.yml` run the same reusable JVM, native, and container workflows. A small change-classification job compares the complete Git diff. Changes containing only Markdown (`*.md`) skip JVM, native, and container jobs; the required `Gate` still runs and verifies that classification succeeded and all three jobs were skipped. Any non-Markdown change requires all three jobs to succeed, including on merge-queue events. Empty diffs, first pushes, and manual dispatches use full validation; failed diff detection fails the gate. Main builds are not cancelled by newer pushes; superseded PR builds are cancelled. Use the Gate check for branch rules when configuring required checks.
 
 `check.jvm.yml` runs Elide JVM tests and coverage reports, followed by the coverage threshold checker. `check.native.yml` builds and exercises Myna on Linux and macOS, including LLVM and Native Image interoperability. `job.container.yml` builds and smoke-tests both container variants. `on.release.yml` alone grants package publication permissions, and publication additionally requires a `v*` tag and successful smoke tests. Manual runs on branches only build and test.
 
@@ -22,6 +22,8 @@ The checksum-pinned elide-dev/graal 25.5.5-elide.24 Native Image driver compiles
 
 CodSpeed maintains Myna simulation and wall-time workloads. The separate boundary-comparison workflow runs uninstrumented comparisons on dedicated hardware. SVM generated versus handwritten Native Image C calls is the primary performance target; JVM results are secondary. See [benchmarking](benchmarking.md) for rerun commands and measurement limits.
 
+
+Markdown-only PRs and main pushes also skip CodSpeed and boundary benchmarks. Repository hygiene and dependency review remain active. Changes to charts, scripts, workflow files, or mixed code/documentation still receive full validation.
 
 `hygiene.yml` checks licensing metadata, local documentation links, chart input/output hashes, and workflow syntax. It renders the charts again using hash-locked dependencies. `dependency-review.yml` blocks newly introduced high/critical known vulnerabilities on pull requests. Scorecard runs on main and weekly, publishing its report and retaining the JSON. CodeQL is intentionally not configured.
 

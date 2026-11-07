@@ -1,0 +1,9 @@
+{
+  "host": "unclemax",
+  "revision": "89bcf2a607c338d3a53efa2bded90f0bb8fcdebf",
+  "compiler_fallback": "/home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.5/elide-toolchain",
+  "uptime_after_run": "16:42:44 up 43 days, 19:06,  3 users,  load average: 0.54, 1.07, 0.58",
+  "cpu_governors": [
+    "performance"
+  ]
+}

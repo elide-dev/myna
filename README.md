@@ -12,36 +12,113 @@
 
 # Myna
 
-A Native Image command-line generator for Rust / Substrate VM seams. One typed Seam IR produces C headers, Rust raw FFI, Java FFM, inlineable native imports, `@CEntryPoint` exports, JSON descriptors, and LLVM 23 contracts.
+Generate typed C-ABI bindings between Java, Rust, and C/C++ from one `.seam` file. Myna targets **GraalVM Native Image / Substrate VM first**, with Java 25 FFM bindings for JVM callers. It also emits C headers, Rust FFI, ABI descriptors, and LLVM 23 optimizer contracts.
 
-**`myna apply` attaches those contracts to the actual LLVM objects and Rust archive members that participate in ThinLTO.** It updates matching functions and direct calls, verifies ABI signatures, and rebuilds summaries and module hashes before linkage. See [the integration design](docs/thinlto.md).
+## One binding, from Seam to native code
 
-**Substrate VM is the primary runtime.** Binding ABI 2 makes inlineable no-transition native calls the default. Imports must be short, bounded, nonblocking and unable to reenter Java; other calls require `native_leaf=false@explicit_contract`. Build-time FFM registration is an optional adapter. See [the performance design](docs/performance.md). Truffle guest languages can call the generated bindings from runtime-compiled code; see [calling Myna bindings from Truffle guest code](docs/truffle-guests.md).
+This example follows a signed 64-bit increment through the generated API to its C implementation. The function meets the default native-leaf contract: short, bounded, nonblocking, and unable to reenter Java. Its arithmetic precondition is `value < INT64_MAX`.
 
-See [releases](https://github.com/elide-dev/myna/releases) for published SDKs and checksums, and [the migration guide](docs/rename.md) for the earlier project rename. Myna is dual-licensed under **Apache-2.0 OR MIT**, at your option; see [licensing](LICENSE), [contribution guidance](CONTRIBUTING.md), and the [security policy](SECURITY.md).
+**1. Describe the native function.** The following excerpt from the [tested Seam fixture](tests/fast/fast.seam) declares its symbol, argument, return type, and static library:
 
-## Call overhead
+```text
+module fast_fixture target=aarch64-apple-darwin java_package=fixture.fast java_class=FastApi c_context=fixture.fast.Directives c_library=fastfixture c_library_static=true
+import increment symbol=myna_fast_increment return=i64 error=no_failure
+  param value type=i64
+end
+```
 
-**Fast native calls are the default in Myna 0.8.0 / binding ABI 2.** Generated identity calls measure **0.526 ns on Linux ARM64** and **0.519 ns on Apple M5 Max**, versus **1.510 ns** and **0.999 ns** for handwritten Native Image `@CFunction(NO_TRANSITION)` calls in the same builds.
+Generate the bindings after [building Myna](#build-and-use):
 
-![Default Myna native leaf calls compared with handwritten Native Image and native C pointer callers](docs/charts/default-leaf.svg)
+```sh
+build/dist/myna generate tests/fast/fast.seam --out build/fast-example
+# For Linux x86-64, add: --target x86_64-unknown-linux-gnu
+```
 
-The native function-pointer baselines, explicitly unrolled four times, measure **0.442 ns** and **0.512 ns** respectively. The Mac process ranges overlap. These are identity-function-plus-loop timings with no control subtraction: compare within each host, not across machines. Five fresh processes per case retain ten samples each. Arithmetic workloads, custom pointers, explicit SVM unrolling and bounded batches remain in the full results.
+**2. Myna generates the Java declarations.** The direct SVM backend uses internal APIs from the pinned Elide GraalVM distribution. These selected members of `FastApi` show the typed pointer and inlineable wrapper; imports, class annotations, and symbol-initialization helpers are omitted:
 
-Myna generates typed inlineable pointers, symbolic linkage, and Native Image initialization metadata. Ordinary calls use the relocated symbol directly, removing the extra SVM leaf stub and runtime address-holder guard. The default contract requires **short, bounded, nonblocking calls with no Java reentry**. Other imports must specify `native_leaf=false@explicit_contract`. This backend uses internal APIs of the pinned Elide Graal compiler; see [ABI 2 migration](docs/binding-abi-2.md). Both hosts pass concurrent-GC and assembly checks.
+```java
+// FastApi.java — generated for Native Image
+public interface increment_Leaf extends CFunctionPointer {
+    @AlwaysInline("Myna binding ABI 2 native leaf")
+    @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry",
+                     mayBeInlined = true)
+    @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
+    long invoke(long value);
+}
+@AlwaysInline("Myna native leaf call")
+public static long increment(long value) {
+    return MynaSymbols.increment.get().invoke(value);
+}
+```
 
-[Linux raw measurements](benchmarks/comparison/baselines/default-leaf-linux-arm64.json) · [Linux results](benchmarks/comparison/baselines/default-leaf-linux-arm64.md) · [Mac results](benchmarks/comparison/baselines/default-leaf-macos-arm64.md) · [Rerun the benchmarks](benchmarks/floor/README.md) · [Machine-code evidence](benchmarks/comparison/evidence/README.md)
+The generated JVM adapter describes the same signature with Java 25 FFM. This factory creates an ordinary FFM downcall; the direct SVM microbenchmark below measures a different call path:
+
+```java
+// FastApiFFM.java — generated for the JVM
+public static final FunctionDescriptor increment_DESCRIPTOR =
+    FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
+public static MethodHandle increment(SymbolLookup lookup) {
+    return Linker.nativeLinker().downcallHandle(
+        lookup.find("myna_fast_increment").orElseThrow(
+            () -> new UnsatisfiedLinkError("myna_fast_increment")), increment_DESCRIPTOR);
+}
+```
+
+**3. Call the native function.** In an SVM application, the statically linked call is simply:
+
+```java
+long answer = FastApi.increment(41); // 42
+```
+
+On the JVM, resolve the shared library explicitly and keep its arena alive for the call:
+
+```java
+try (var arena = Arena.ofConfined()) {
+    var lookup = SymbolLookup.libraryLookup(libraryPath, arena);
+    var increment = FastApiFFM.increment(lookup);
+    long answer = (long) increment.invokeExact(41L); // 42
+}
+```
+
+Here `libraryPath` is a `Path` to your platform's shared library; enable JVM native access with `--enable-native-access=ALL-UNNAMED`. The caller handles `Throwable` from `invokeExact`. Both APIs reach the same C implementation:
+
+```c
+#include <stdint.h>
+
+// Precondition: value < INT64_MAX.
+int64_t myna_fast_increment(int64_t value) {
+    return value + 1;
+}
+```
+
+For SVM, compile the C implementation into `libfastfixture.a` and compile the [library-path directives](tests/fast/Directives.java) alongside the bindings. Pass `-Dmyna.fast.libraryPath=/absolute/path/to/library-directory` to the Native Image builder, and include the generated `META-INF/native-image/` resources with the compiled classes. The [Native Image integration test](tests/native_image_integration.py) builds and runs this path, including default calls under concurrent GC. See [the adapter guide](docs/jvm-roadmap.md) for shared-library and FFM setup.
+
+Direct leaf bindings can also be called from Truffle-compiled code. The [Truffle guest guide](docs/truffle-guests.md) lists the compiler-version requirements for transitioning and FFM calls.
+
+Calls that cannot meet the bounded, nonblocking, non-reentrant leaf contract must declare `native_leaf=false@explicit_contract`. Myna checks declared contracts for consistency; the native implementation must obey them.
+
+## Native-call microbenchmark
+
+In the November 7, 2026 binding ABI 2 runs, generated SVM identity loops take **0.787 ns/call on Linux x86-64 (Threadripper PRO 9965WX)** and **0.516 ns/call on Apple M5 Max**. Handwritten Native Image `@CFunction(transition = NO_TRANSITION)` bindings to the same native function take **1.482 ns/call** and **0.997 ns/call**, respectively. These are elapsed loop time divided by call count, summarized as the median of five process medians.
+
+![Time per call in an identity loop: generated and handwritten SVM leaves, with an unrolled native C pointer reference; dots show medians and whiskers span five process medians](docs/charts/default-leaf.svg)
+
+Each case uses five fresh processes, each with ten warmup and ten retained samples. Generated and handwritten SVM paths use the same image build; all three series call the same native kernel object within each host. Timings include the callee and loop, with no control subtraction. The C function-pointer series is a reference floor with explicit four-call unrolling, so loop structure also differs. Whiskers show the min–max of the five process medians, not confidence intervals. Myna and native-pointer ranges overlap on both hosts; these runs do not establish a win over native C. Compare implementations **within each host**.
+
+The inspected generated SVM paths call the linked symbol without a standalone generated leaf stub. Separate pointer and bounded-batch workloads pass the benchmark's concurrent-GC stress check on both hosts. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
+
+[Linux measurements](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-07/README.md)
 
 <details>
-<summary>Portable normal-transition, native-leaf, and AOT FFM baseline</summary>
+<summary>Normal transitions and AOT FFM comparisons</summary>
 
-Direct generated SVM bindings perform on par with handwritten Native Image C calls in the retained v0.7.2 scalar benchmark. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected generated and handwritten direct-call paths produce matching instruction sequences.
+The retained v0.7.2 scalar benchmark compares generated and handwritten calls under matched contracts. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected direct-call paths produce matching instruction sequences.
 
 ![Portable Myna versus handwritten Native Image scalar call latency](docs/charts/svm-boundaries.svg)
 
-These latencies include the scalar callee and loop; the roughly 0.59 ns control is not subtracted. Transition contracts differ across pairs. These are shared-host measurements, not universal latency guarantees.
+Latencies include the callee and loop; the control is not subtracted. Transition contracts differ across pairs. These shared-host measurements are not universal latency guarantees.
 
-[Raw measurements](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Process statistics and interop comparisons](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Rerun commands](docs/benchmarking.md) · [Regenerate charts](docs/benchmarking.md#performance-charts)
+[Measurements and statistics](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Raw samples](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Benchmark commands](docs/benchmarking.md)
 
 </details>
 
@@ -49,52 +126,36 @@ These latencies include the scalar callee and loop; the roughly 0.59 ns control 
 
 Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.5 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
-Native builds preserve `CC`, `CXX`, `CPPFLAGS`, `CFLAGS`, `CXXFLAGS`, and `LDFLAGS`; compiler overrides must remain compatible with the pinned LLVM 23 toolchain and sysroot. Native Image receives C/preprocessor flags for its C compilation and linker flags for its native link; the C++ applicator uses CMake's standard flag handling. Debug information is retained in matching symbol sidecars before release executables are stripped. CMake installation supports `cmake --install build/llvm --prefix PREFIX` and the standard `DESTDIR` staging variable. Containers can be installed and removed with the normal `docker pull`/`docker image rm` commands.
-
 ```sh
 mise trust
 mise install --locked
 mise run setup                      # Elide Python component and dependencies
-mise run build                      # native executable, generator JAR, Feature JAR
-mise run build:llvm
+mise run build:llvm                 # native CLI, JARs, and LLVM applicator
 
 build/dist/myna generate examples/buffer.seam --out build/seam
 build/dist/myna validate examples/buffer.seam
 build/dist/myna generate examples/buffer.seam --out build/seam --check
 ```
 
-Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` remains an optional Maven compatibility build. The Java generator has no runtime dependencies. Native compilation uses the pinned external elide-dev/graal Native Image driver.
+Outputs live in `build/dist/`. `elide.pkl` is the primary application build. `pom.xml` remains an optional Maven compatibility build. The Java generator has no runtime dependencies.
+
+Native builds preserve `CC`, `CXX`, `CPPFLAGS`, `CFLAGS`, `CXXFLAGS`, and `LDFLAGS`; compiler overrides must remain compatible with the pinned LLVM 23 toolchain and sysroot. Native Image receives C/preprocessor flags for its C compilation and linker flags for its native link; the C++ applicator uses CMake's standard flag handling. Symbol sidecars are extracted before stripping: Linux retains DWARF, while macOS Native Image supplies method symbols rather than full source debugging information. CMake installation supports `cmake --install build/llvm --prefix PREFIX` and the standard `DESTDIR` staging variable.
 
 The descriptor target is explicit. Use `--target x86_64-unknown-linux-gnu` to override the example's macOS ARM64 target. The CLI never guesses an ABI from its own host.
 
-```sh
-# Compile Rust for linker-driven ThinLTO, then annotate its real archive.
-rustc --crate-type=rlib -Clinker-plugin-lto src/lib.rs -o build/libapp.rlib
-build/dist/myna apply \
-  --contracts build/seam/seam.ll \
-  --input build/libapp.rlib --output build/libapp.seam.rlib \
-  --llvm-tool build/dist/myna-llvm
-```
-
-Use the rewritten archive/object in the final LLVM 23 / LLD link. A contract-only `.ll` file is an interchange artifact; simply adding it to a link is insufficient. Keep the original object: changed contracts must be applied to fresh compiler output.
+For LLVM optimization, use `myna apply` to attach the generated `seam.ll` contracts to compiler-produced bitcode objects or archives before the LLVM 23 / LLD link. A contract-only `.ll` file is an interchange artifact; simply adding it to a link is insufficient. Keep the original object: changed contracts must be applied to fresh compiler output. See [the ThinLTO integration guide](docs/thinlto.md) for the C/C++ and Rust build pipelines.
 
 ## Binding descriptions
 
 The initial frontend is a strict, line-oriented text DSL with `#` comments. See [the DSL reference](docs/dsl.md), [the owned end-to-end fixture](examples/buffer.seam), and [the inventoried Elide LZMA ABI](examples/elide_lzma.seam).
 
-```text
-module example abi=1 target=x86_64-unknown-linux-gnu
-import readCount symbol=example_read_count return=i64 error=no_failure
-  param value type=ptr<i64> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
-end
-```
+Generation produces:
 
-Every generation produces:
-
-- `seam.h`, `seam.rs`, `MynaFFM.java`, `MynaNative.java`, `MynaForeignFeature.java`
-- `seam.json` with optimizer-fact provenance, `seam.abi` with a SHA-256 fingerprint
-- `META-INF/native-image/` initialization metadata; include it with compiled bindings
-- `seam.ll`, consumed by `myna apply` or assembled by LLVM 23's `llvm-as`
+- `seam.h` and `seam.rs` for C and Rust consumers.
+- A direct Native Image API, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiFFM.java`, and `FastApiForeignFeature.java`.
+- `seam.json` with optimizer-fact provenance and `seam.abi` with the descriptor's SHA-256 fingerprint.
+- `META-INF/native-image/` initialization metadata to package with the compiled Java bindings.
+- `seam.ll`, consumed by `myna apply` to annotate compiled LLVM objects and archives.
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.
 
@@ -137,18 +198,27 @@ mise run test:native-image
 
 Production JVM coverage gates are 99% lines and 93% branches. Rust integration coverage requires 97.5% lines; native C/C++ and LLVM coverage require 98% lines. Native-only Java readers are exercised in SVM integration tests. Golden outputs are checked in under `tests/golden/`. The LLVM suite proves load elimination in both C and Rust, checks attributes in LLD's saved ThinLTO output, preserves archive metadata/native members, and rejects stale contracts and incompatible ABIs. The Native Image suite runs Rust → Native Image → Rust and tests exception translation and a leaf call with no VM transition. It also builds and runs the generated FFM bindings as a Native Image executable.
 
-CI runs JVM tests and native integration on Linux and macOS, retaining the XML reports and built artifacts. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It uses the same mise tasks and lockfile as local development and requires LLVM major 23; update Rust and LLVM together. See [CI maintenance and Elide compatibility notes](docs/ci.md).
+Code and build changes run JVM tests plus native integration on Linux and macOS, retaining XML reports and built artifacts. Markdown-only changes retain the required Gate and hygiene checks while skipping those builds. Codecov receives JaCoCo coverage plus JVM and native JUnit test results, authenticated with GitHub OIDC. Upload errors fail CI. It uses the same mise tasks and lockfile as local development and requires LLVM major 23; update Rust and LLVM together. See [CI maintenance and Elide compatibility notes](docs/ci.md).
 
 ## Benchmarks
 
-JMH benchmarks in `benchmarks/` cover the generator pipeline (DSL parsing, validation, JSON canonicalization and fingerprinting, every backend, and end-to-end generation) on the repository's example seams plus a synthetic large module. They use the [CodSpeed](https://codspeed.io) JMH fork, vendored as the `third-party/codspeed-jvm` submodule, and run in CI on compatible hosted ARM runners in walltime mode. Configure `MYNA_ARM_BENCH_RUNNER` for controlled compatible hardware; shared-host timings remain advisory.
+The direct-call chart above comes from the uninstrumented native/SVM floor harness:
 
 ```sh
-git submodule update --init --recursive third-party/codspeed-jvm
-# The CI ARM build uses benchmarks/codspeed.init.gradle to select the JNI target.
+mise run bench:floor-build
+mise run bench:floor
+```
+
+It retains raw samples, build metadata, source and binary hashes, and disassembly. See [the harness contract](benchmarks/floor/README.md) and [the chart's measurement record](benchmarks/comparison/evidence/readme-2026-11-07/README.md).
+
+The broader interop comparison has separate build and run tasks:
+
+```sh
 mise run bench:comparison-build
 mise run bench:comparison
 ```
+
+Generator performance is tracked separately by JMH under [CodSpeed](https://codspeed.io). Its workloads cover parsing, validation, serialization, backend emission, and end-to-end generation. The [CodSpeed workflow](.github/workflows/codspeed.yml) builds the pinned `third-party/codspeed-jvm` submodule and benchmark JAR. Configure `MYNA_ARM_BENCH_RUNNER` for compatible controlled ARM hardware; shared-host wall-time changes remain advisory. See [benchmarking](docs/benchmarking.md) for commands and interpretation limits.
 
 ## Downstream distribution
 
@@ -163,7 +233,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" myna:local \
 
 The `llvm23` variant also supports `apply` and includes the LLVM tools. The default image contains the native generator and its JAR. The Feature JAR is available from `build/dist/` and CI build artifacts. Both container builds use the checksum-pinned `elide-dev/toolchain` bundle, including its LLVM libraries and compiler runtime.
 
-The container workflow builds and smoke-tests both variants on pull requests. Pushing a `v*` tag builds, tests, and publishes `ghcr.io/<owner>/<repo>:<tag>` and `<tag>-llvm23` using the repository's `GITHUB_TOKEN`. Images are Linux amd64 initially. Publication status is visible in the release workflow. Downstream builds should pin an image digest. See [release verification](docs/releases.md) for SBOM scope, provenance checks, symbols, and the draft-release process.
+The container workflow builds and smoke-tests both variants on pull requests that include non-Markdown changes. Pushing a `v*` tag builds, tests, and publishes `ghcr.io/<owner>/<repo>:<tag>` and `<tag>-llvm23` using the repository's `GITHUB_TOKEN`. Images are Linux amd64 initially. Publication status is visible in the release workflow. Downstream builds should pin an image digest. See [release verification](docs/releases.md) for SBOM scope, provenance checks, symbols, and the draft-release process.
 
 ## Native Image Feature
 
@@ -185,7 +255,7 @@ Java 25 FFM supports explicit library arenas, typed buffer borrows, consumer-own
 
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets passed by pointer or by value, and isolate-thread exports with include predicates and abort/integer/null exception translation.
 
-Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.
+Fixed-size C array fields, nested by-value records, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader design; the [current roadmap](docs/jvm-roadmap.md) distinguishes implemented features from planned work.
 
 Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.5,
 and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
