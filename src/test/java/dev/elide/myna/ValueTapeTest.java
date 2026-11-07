@@ -480,4 +480,82 @@ final class ValueTapeTest {
     var absent = new Tape(nodes, "costarringliquid", 4);
     assertThrows(IllegalArgumentException.class, absent::validate);
   }
+
+  @Test
+  void abi4RejectsMalformedDirectoriesAndSupportsUnindexedObjects() {
+    long[][] nodes = {
+      node(OBJECT, 2, 1, 5), node(STRING, 1, 0, 2), node(I64, 0, 11, 3),
+      node(STRING, 1, 1, 4), node(I64, 0, 22, 5), node(NULL, 0, 0, 6)
+    };
+    var t = new V4Tape(nodes, "ab", "a", "b");
+    assertEquals(2, t.find(0, Utf8Key.of("a")));
+    t.nodes.putLong(8, 0);
+    assertEquals(4, t.find(0, Utf8Key.of("b")));
+    t.nodes.putLong(8, 2);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+    t.nodes.putLong(8, 1);
+    // A non-inline key must still occupy exactly one node.
+    t.nodes.putInt(NODE_SIZE, STRING | REGION_TEXT);
+    t.nodes.putLong(NODE_SIZE + 16, 3);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+    t.nodes.putInt(NODE_SIZE, STRING);
+    t.nodes.putLong(NODE_SIZE + 16, 0);
+    t.nodes.putLong(2 * NODE_SIZE + 16, 6);
+    assertThrows(IllegalArgumentException.class, () -> t.find(0, Utf8Key.of("a")));
+
+    // Directory validation must reject values escaping a nested object's extent.
+    var nested =
+        new V4Tape(
+            new long[][] {
+              node(ARRAY, 2, 0, 5),
+              node(OBJECT, 1, 1, 4),
+              node(STRING, 1, 0, 3),
+              node(I64, 0, 11, 5),
+              node(NULL, 0, 0, 5)
+            },
+            "a",
+            "a");
+    assertThrows(IllegalArgumentException.class, nested::validate);
+
+    var valid =
+        new V4Tape(
+            new long[][] {
+              node(OBJECT, 2, 1, 5),
+              node(STRING, 1, 0, 2),
+              node(I64, 0, 11, 3),
+              node(STRING, 1, 1, 4),
+              node(I64, 0, 22, 5)
+            },
+            "ab",
+            "a",
+            "b");
+    valid.validate();
+    valid.hashes[1]++;
+    assertThrows(IllegalArgumentException.class, valid::validate);
+
+    // Default directory hooks must fail clearly for adapters without directory storage.
+    class MissingDirectory extends Tape {
+      MissingDirectory() {
+        super(
+            new long[][] {node(OBJECT, 1, 1, 3), node(STRING, 1, 0, 2), node(NULL, 0, 0, 3)},
+            "a",
+            4);
+      }
+
+      @Override
+      protected long directoryCount() {
+        return 1;
+      }
+    }
+    var missing = new MissingDirectory();
+    assertThrows(IllegalArgumentException.class, missing::validate);
+    assertThrows(IllegalArgumentException.class, () -> missing.find(0, Utf8Key.of("a")));
+  }
+
+  @Test
+  void preparedKeysRejectSameLengthMismatchesInEitherWord() {
+    var t = new Tape(new long[][] {node(STRING, 16, 0, 1)}, "abcdefghijklmnop");
+    assertFalse(t.keyMatches(0, Utf8Key.of("Abcdefghijklmnop")));
+    assertFalse(t.keyMatches(0, Utf8Key.of("abcdefghijklmnoP")));
+  }
 }
