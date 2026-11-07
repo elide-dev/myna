@@ -239,3 +239,89 @@ Rust-only Unicode microbenchmarks (20 samples, 0.1 s warmup, 0.3 s measurement; 
 ## Packaging
 
 `mise run build` produces the generator, hosted feature, and separate value-reader JARs. Generator-only Bazel consumers may continue using `src/main/java/**/*.java`; readers are in `src/values/java/**/*.java` and require the Graal Native Image SDK. `mise run package:values` builds the value JAR, verifies the Rust crate package, and emits a versioned SDK archive with the crate, C/C++ headers, ABI example, documentation, and SHA-256 manifest. Use the Git tag/release archive or a Git/path Rust dependency; this does not imply publication to crates.io or Maven Central.
+
+## Opt-in ABI v4 (0.11.0)
+
+ABI v3 remains the default and its 56-byte descriptor is unchanged. C++ producers
+call `enable_v4(threshold, metadata)` before writing and export `view_v4()`;
+Rust `Builder` exposes the same configuration, and `finish().raw()` exports the
+appropriate version. A v4 descriptor must never be truncated to its v3 prefix.
+Legacy readers reject its version; new Java readers accept v2, v3, and v4.
+
+The 88-byte `myna_value_view_v4` / `RawViewV4` contains the existing prefix,
+followed by directory pointer/count at offsets 56/64 and metadata pointer/count
+at offsets 72/80. Optional tables use the producer's selected allocator. Owners
+retain all allocations for the entire consumer call. A missing table has count
+zero. Metadata, when enabled, contains exactly one opaque `uint32` per node;
+zero is unspecified. `metadata(node, id)` assigns IDs; their meaning belongs to
+the downstream format adapter. JSON producers need neither extension.
+
+Objects with at least `threshold` entries receive directories when their direct
+builder container closes. The default v4 threshold is 8; zero disables indexing.
+Serde values appended as a unit remain valid linear subtrees. A directory entry
+is `(hash32, key_offset32)`: FNV-1a over decoded UTF-8 key bytes (offset basis
+2166136261, multiplier 16777619, wrapping arithmetic), followed by the key node's
+offset relative to its object. Entries sort by unsigned hash, then increasing
+key offset. Object payload is directory start plus one, or zero for linear
+lookup. The entry count is the object's member count. Java `find` binary-searches
+hashes and confirms bytes; collisions and duplicate keys retain first-match
+semantics. `validate()` checks sorted entries against all direct object keys.
+
+`REF` is tag 9: length zero, payload a target node index, and next the following
+node. The target must precede the reference and its complete subtree must end
+at or before the reference. Builders reject open ancestors. References remain
+explicit: `referenceTarget` / `reference_target` returns the target without
+expansion. Consumers choose their own traversal/expansion budgets; even acyclic
+aliases can produce exponentially large materialized trees. Object keys remain
+strings. No implicit YAML parsing or alias expansion is performed.
+
+### Reusable readers and prepared keys
+
+`NativeValueTape.rebind(descriptor)` reuses a thread-confined reader without a
+new reader allocation. Invalid descriptor fields leave the old binding intact;
+structural validation remains an explicit `validate()` call. After successful
+rebind, the previous owner may release its storage. A reader never retains the
+original descriptor pointer. Do not concurrently read and rebind a reader.
+
+`kindAt` and `keyMatches` perform their own checks and avoid trivial accessor
+chains in partially evaluated callers. `Utf8Key` provides `byteLength`, `lowWord`,
+`highWord`, `hash`, and `byteAt` without exposing mutable backing bytes. Packed
+words use little-endian byte order, independently of the host. The integration
+fixture compiles these read operations with Truffle inside Native Image and
+checks bounds-error deoptimization recovery.
+
+### Reservation and batch text
+
+C++ `reserve(nodes, bytes, regions, depth)` reserves **total** capacities without
+changing logical contents or configured limits. Depth defaults to zero; reserve
+it explicitly to avoid container-stack growth. With v4 enabled, node reservation
+also reserves directory and optional metadata capacity. `clear()` retains all
+capacities and v4 configuration. Allocation or limit failures poison the builder
+until `clear()`. Tests count allocations across repeated reserved encodes.
+
+`myna_tape_text_v1` exports all string keys, string values, and decimal tokens in
+one call into caller-owned bytes and a per-node `myna_text_entry` table. Each entry
+contains byte offset, code-unit length, encoding (0 non-text, 1 Latin-1, 2
+UTF-16LE), and reserved zero. All characters up to U+00FF fit Latin-1; other text
+uses explicit little-endian UTF-16, including surrogate pairs. Inline, owned,
+and borrowed UTF-8 are supported and validated. References are not expanded.
+
+A null output/table with both capacities zero queries required byte capacity.
+Otherwise table capacity must cover every node. Negative returns mean invalid
+UTF-8 (-1), invalid descriptor/extents (-2), or insufficient capacity (-3).
+Failures leave output unchanged. Input allocations must remain immutable and
+live; output/table allocations must be writable, correctly aligned for their
+entry types, and disjoint from each other and all inputs. The function does not
+allocate or retain pointers. It supports ABI v3 and v4.
+
+SVM `SimdNativeValueTape.batchTextBytes()` and `copyBatchText(byte[], long[])`
+expose the bridge with pinned caller arrays. The table uses three longs per node;
+`batchEncoding(table[node * 3 + 2])` handles host endianness. Conversion is explicit,
+never part of direct traversal. The normal native transition allows safepoints
+around unbounded work.
+
+`new SimdNativeValueTape(descriptor, threshold)` selects the per-reader SIMD
+crossover in UTF-8 bytes; zero forces SIMD for nonempty external strings and
+`Integer.MAX_VALUE` selects Java for practical sizes. The compatibility default
+remains 256 until deployment measurements support a change. See
+[the text benchmark](../benchmarks/text/README.md).

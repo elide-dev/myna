@@ -6,7 +6,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.10.0";
+  public static final String VERSION = "0.11.0";
   public static final int BINDING_ABI_VERSION = 2;
 
   /** Binding ABI 2 makes bounded, nonblocking, non-reentrant native imports the default. */

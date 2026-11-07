@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           eval "$(mise env -s bash)"
-          test "$(elide-toolchain version)" = 2026.11.2
+          test "$(elide-toolchain version)" = 2026.11.5
           test "$("$LLVM_CONFIG" --version | cut -d. -f1)" = 23
           test "$(rustc -vV | awk '/LLVM version:/ {split($3, version, "."); print version[1]}')" = 23
       - name: Build native CLI and object applicator
@@ -69,6 +69,8 @@ jobs:
         run: mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 600
       - run: mise run test:tsan
       - run: mise run test:native-image
+      - name: Measure SVM text crossover
+        run: mise exec -- python3 benchmarks/text/run.py --output build/reports/text-crossover.json
       - run: mise run bench:comparison-build
         if: runner.os == 'Linux'
       - run: mise run bench:comparison-smoke

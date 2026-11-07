@@ -47,7 +47,7 @@ These latencies include the scalar callee and loop; the roughly 0.59 ns control 
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.2 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.5 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.24 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 Native builds preserve `CC`, `CXX`, `CPPFLAGS`, `CFLAGS`, `CXXFLAGS`, and `LDFLAGS`; compiler overrides must remain compatible with the pinned LLVM 23 toolchain and sysroot. Native Image receives C/preprocessor flags for its C compilation and linker flags for its native link; the C++ applicator uses CMake's standard flag handling. Debug information is retained in matching symbol sidecars before release executables are stripped. CMake installation supports `cmake --install build/llvm --prefix PREFIX` and the standard `DESTDIR` staging variable. Containers can be installed and removed with the normal `docker pull`/`docker image rm` commands.
 
@@ -187,7 +187,7 @@ The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and poin
 
 Arrays and nested by-value fields, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader roadmap.
 
-Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.2,
+Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.5,
 and Elide GraalVM 25.5.5-elide.24. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
 

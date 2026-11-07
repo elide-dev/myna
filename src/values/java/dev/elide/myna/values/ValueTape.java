@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
  */
 public abstract class ValueTape {
   public static final int ABI_VERSION = 3;
+  public static final int ABI_VERSION_V4 = 4;
 
   /** Descriptor flag permitting non-finite binary F64 values, not decimal tokens. */
   public static final int ALLOW_NON_FINITE = 1;
@@ -21,13 +22,14 @@ public abstract class ValueTape {
       STRING = 5,
       ARRAY = 6,
       OBJECT = 7,
-      DECIMAL = 8;
+      DECIMAL = 8,
+      REF = 9;
   public static final int REGION_TEXT = 0x100, KIND_MASK = 0xff;
   public static final int NODE_SIZE = 24;
-  private final long nodeCount;
-  private final long byteCount;
-  private final int version;
-  private final int flags;
+  private long nodeCount;
+  private long byteCount;
+  private int version;
+  private int flags;
 
   protected ValueTape(long nodeCount, long byteCount) {
     this(nodeCount, byteCount, ABI_VERSION);
@@ -38,14 +40,19 @@ public abstract class ValueTape {
   }
 
   protected ValueTape(long nodeCount, long byteCount, int version, int flags) {
-    if (version != 2 && version != ABI_VERSION)
+    resetDescriptor(nodeCount, byteCount, version, flags);
+  }
+
+  /** Thread-confined rebinding: validate all descriptor fields before committing. */
+  protected final void resetDescriptor(long nodeCount, long byteCount, int version, int flags) {
+    if (version != 2 && version != ABI_VERSION && version != ABI_VERSION_V4)
       throw new IllegalArgumentException("Unsupported value ABI");
-    this.version = version;
     if ((flags & ~ALLOW_NON_FINITE) != 0 || (version == 2 && flags != 0))
       throw new IllegalArgumentException("Unsupported value descriptor flags");
-    this.flags = flags;
     if (nodeCount <= 0 || nodeCount > Long.MAX_VALUE / NODE_SIZE || byteCount < 0)
       throw new IllegalArgumentException("Invalid value storage extent");
+    this.version = version;
+    this.flags = flags;
     this.nodeCount = nodeCount;
     this.byteCount = byteCount;
   }
@@ -71,6 +78,49 @@ public abstract class ValueTape {
   private long offset(long node) {
     if (node < 0 || node >= nodeCount) throw new IndexOutOfBoundsException("Node index");
     return node * NODE_SIZE;
+  }
+
+  public final int version() {
+    return version;
+  }
+
+  /** Checked kind accessor with its own bounds and tag validation. */
+  public final int kindAt(long node) {
+    if (node < 0 || node >= nodeCount) throw new IndexOutOfBoundsException("Node index");
+    int kind = readInt(node * NODE_SIZE) & KIND_MASK;
+    if (kind > (version == 4 ? REF : version == 2 ? OBJECT : DECIMAL))
+      throw new IllegalArgumentException("Unknown value tag");
+    return kind;
+  }
+
+  /** Explicit reference access; never expands aliases or allocates a value tree. */
+  public final long referenceTarget(long node) {
+    require(node, REF);
+    long target = bits(node);
+    if (version != 4 || target < 0 || target >= node || next(target) > node)
+      throw new IllegalArgumentException("Reference must target a completed earlier subtree");
+    return target;
+  }
+
+  protected long directoryCount() {
+    return 0;
+  }
+
+  protected int directoryHash(long index) {
+    throw new IllegalArgumentException("No directory");
+  }
+
+  protected long directoryKeyOffset(long index) {
+    throw new IllegalArgumentException("No directory");
+  }
+
+  protected int readMetadata(long node) {
+    return 0;
+  }
+
+  public final int metadata(long node) {
+    offset(node);
+    return version == 4 ? readMetadata(node) : 0;
   }
 
   public final int tag(long node) {
@@ -243,6 +293,7 @@ public abstract class ValueTape {
   public static final class Utf8Key {
     private final byte[] bytes;
     private final long low, high;
+    private final int hash;
 
     private Utf8Key(byte[] bytes) {
       this.bytes = bytes;
@@ -253,6 +304,27 @@ public abstract class ValueTape {
       }
       low = lo;
       high = hi;
+      hash = hashUtf8(bytes);
+    }
+
+    public int byteLength() {
+      return bytes.length;
+    }
+
+    public long lowWord() {
+      return low;
+    }
+
+    public long highWord() {
+      return high;
+    }
+
+    public int hash() {
+      return hash;
+    }
+
+    public byte byteAt(int index) {
+      return bytes[index];
     }
 
     public static Utf8Key of(String text) {
@@ -265,6 +337,24 @@ public abstract class ValueTape {
         throw new IllegalArgumentException("Unpaired UTF-16 surrogate", error);
       }
     }
+  }
+
+  public static int hashUtf8(byte[] bytes) {
+    int hash = 0x811c9dc5;
+    for (byte b : bytes) hash = (hash ^ (b & 255)) * 0x01000193;
+    return hash;
+  }
+
+  /** Prepared-key comparison including type/extent checks, without materialization. */
+  public final boolean keyMatches(long node, Utf8Key key) {
+    java.util.Objects.requireNonNull(key);
+    long at = offset(node);
+    if ((readInt(at) & KIND_MASK) != STRING)
+      throw new IllegalArgumentException("Expected string key");
+    if (Integer.toUnsignedLong(readInt(at + 4)) != key.bytes.length) return false;
+    if (!isInlineText(node)) return stringEquals(node, key.bytes);
+    return (readLong(at + 8) & mask(key.bytes.length)) == key.low
+        && (readLong(at + 16) & mask(Math.max(0, key.bytes.length - 8))) == key.high;
   }
 
   private static long mask(int bytes) {
@@ -322,6 +412,28 @@ public abstract class ValueTape {
   private long findKey(long object, byte[] utf8, Utf8Key keyValue) {
     require(object, OBJECT);
     long end = next(object);
+    if (version == 4 && bits(object) != 0) {
+      long start = bits(object) - 1, count = length(object);
+      if (start < 0 || start > directoryCount() || count > directoryCount() - start)
+        throw new IllegalArgumentException("Invalid directory extent");
+      int hash = keyValue == null ? hashUtf8(utf8) : keyValue.hash;
+      long low = start, high = start + count;
+      while (low < high) {
+        long mid = low + (high - low) / 2;
+        if (Integer.compareUnsigned(directoryHash(mid), hash) < 0) low = mid + 1;
+        else high = mid;
+      }
+      for (long entry = low; entry < start + count && directoryHash(entry) == hash; entry++) {
+        long key = object + directoryKeyOffset(entry);
+        if (key <= object
+            || key >= end - 1
+            || tag(key) != STRING
+            || next(key) != key + 1
+            || next(key + 1) > end) throw new IllegalArgumentException("Invalid directory entry");
+        if (keyValue == null ? stringEquals(key, utf8) : keyMatches(key, keyValue)) return key + 1;
+      }
+      return -1;
+    }
     for (long key = object + 1; key < end; ) {
       long value = next(key);
       if (tag(key) != STRING || value != key + 1 || value >= end)
@@ -339,12 +451,44 @@ public abstract class ValueTape {
    * already be trustworthy; this cannot validate arbitrary native pointers or their owner.
    * Rust-produced tapes need not repeat this scan on each crossing.
    */
+  private void validateDirectory(long object) {
+    long start = bits(object) - 1, count = length(object), end = next(object);
+    if (start < 0 || start > directoryCount() || count > directoryCount() - start)
+      throw new IllegalArgumentException("Invalid directory extent");
+    for (long i = start; i < start + count; i++) {
+      long key = object + directoryKeyOffset(i);
+      if (key <= object || key >= end - 1 || tag(key) != STRING)
+        throw new IllegalArgumentException("Invalid directory key");
+      if (i > start) {
+        int order = Integer.compareUnsigned(directoryHash(i - 1), directoryHash(i));
+        if (order > 0 || (order == 0 && directoryKeyOffset(i - 1) >= directoryKeyOffset(i)))
+          throw new IllegalArgumentException("Unsorted or duplicate directory entry");
+      }
+    }
+    for (long key = object + 1; key < end; key = next(key + 1)) {
+      if (tag(key) != STRING || key + 1 >= end || next(key + 1) > end)
+        throw new IllegalArgumentException("Invalid object entry");
+      int hash = 0x811c9dc5;
+      for (long b = 0; b < length(key); b++)
+        hash = (hash ^ (stringByte(key, b) & 255)) * 0x01000193;
+      long low = start, high = start + count, relative = key - object;
+      while (low < high) {
+        long mid = low + (high - low) / 2;
+        int order = Integer.compareUnsigned(directoryHash(mid), hash);
+        if (order < 0 || (order == 0 && directoryKeyOffset(mid) < relative)) low = mid + 1;
+        else high = mid;
+      }
+      if (low == start + count || directoryHash(low) != hash || directoryKeyOffset(low) != relative)
+        throw new IllegalArgumentException("Directory does not match object keys");
+    }
+  }
+
   public final void validate() {
     if (next(0) != nodeCount) throw new IllegalArgumentException("Multiple root values");
     for (long node = 0; node < nodeCount; node++) {
       int tag = tag(node);
       long end = next(node), len = length(node), payload = bits(node);
-      if (tag < NULL || tag > DECIMAL || (version == 2 && tag == DECIMAL))
+      if (tag < NULL || tag > (version == 4 ? REF : DECIMAL) || (version == 2 && tag == DECIMAL))
         throw new IllegalArgumentException("Unknown value tag");
       int raw = storageTag(node);
       if (raw != tag && raw != (tag | REGION_TEXT))
@@ -365,10 +509,13 @@ public abstract class ValueTape {
           }
           case STRING -> stringOffset(node);
           case DECIMAL -> numberText(node);
+          case REF -> referenceTarget(node);
           default -> {}
         }
       } else {
-        if (payload != 0) throw new IllegalArgumentException("Invalid container payload");
+        if (payload != 0 && (version != 4 || tag != OBJECT))
+          throw new IllegalArgumentException("Invalid container payload");
+        if (payload != 0) validateDirectory(node);
         long cursor = node + 1, count = 0;
         while (cursor < end) {
           if (tag == OBJECT) {

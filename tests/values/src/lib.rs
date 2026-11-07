@@ -82,19 +82,41 @@ pub unsafe extern "C" fn myna_value_drive(
             }
             return unsafe { consumer(isolate, &raw, mode) };
         }
+        if mode == 9 {
+            let arena = Bump::new();
+            let mut b = myna_values::Builder::new_in(&arena);
+            b.enable_v4(2, true).unwrap();
+            b.begin_array().unwrap();
+            b.begin_object().unwrap();
+            b.value("costarring").unwrap();
+            b.value("café").unwrap();
+            b.value("liquid").unwrap();
+            b.value("🦀").unwrap();
+            b.value("costarring").unwrap();
+            b.value("duplicate").unwrap();
+            b.end().unwrap();
+            b.metadata(1, 42).unwrap();
+            b.reference_node(1).unwrap();
+            b.end().unwrap();
+            let view = b.finish().unwrap();
+            let raw = view.raw();
+            // SAFETY: all storage remains live throughout the synchronous callback.
+            return unsafe { consumer(isolate, raw.as_ptr(), mode) };
+        }
         if mode >= 10 {
-            let (size, pattern) = match (mode - 10) / 2 {
-                0 => (16, "a"),
-                1 => (256, "a"),
-                2 => (4096, "a"),
-                3 => (16, "🦀"),
-                4 => (256, "🦀"),
-                _ => (4096, "🦀"),
+            let which = ((mode - 10) / 2) as usize;
+            let size = [16, 32, 64, 128, 256, 512, 1024, 4096][which % 8];
+            let pattern = match which / 8 {
+                0 => "a",
+                1 => "🦀",
+                _ => "\n\t\\\"",
             };
             let value = pattern.repeat(size / pattern.len());
             let arena = Bump::new();
-            let mut document = Document::new(&arena);
-            let view = document.encode(&value).unwrap();
+            let mut builder = myna_values::Builder::new_in(&arena);
+            let region = builder.region(value.as_bytes()).unwrap();
+            builder.string_ref(region, 0, value.len() as u32).unwrap();
+            let view = builder.finish().unwrap();
             let raw = view.raw();
             let mut total = 0;
             for _ in 0..iterations {

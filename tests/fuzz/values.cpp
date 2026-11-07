@@ -42,6 +42,10 @@ static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned dept
     assert(cursor == n.next);
     return cursor;
   }
+  if (kind == MYNA_VALUE_REF) {
+    assert(view.version == 4 && n.payload < index);
+    assert(myna_value_next(&view.nodes[n.payload], n.payload) <= index);
+  }
   if (n.tag & MYNA_VALUE_REGION_TEXT) {
     auto region = myna_value_region_id(&n);
     auto offset = myna_value_offset(&n);
@@ -99,8 +103,31 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   {
   myna::value_builder builder(&resource, {64, 256, 8},
       size > 2 && (data[2] & 1) ? MYNA_VALUE_ALLOW_NON_FINITE : 0);
+  bool v4 = size > 3 && (data[3] & 1);
+  if (v4) builder.enable_v4(2, true);
+  auto view = [&]() {
+    if (!v4) return builder.view();
+    auto extended = builder.view_v4();
+    assert(extended.metadata_count == extended.base.node_count);
+    for (uint64_t i = 0; i < extended.base.node_count; ++i) {
+      const auto &node = extended.base.nodes[i];
+      if (node.tag != MYNA_VALUE_OBJECT || !node.payload) continue;
+      uint64_t start = node.payload - 1;
+      assert(start <= extended.directory_count && node.length <= extended.directory_count - start);
+      for (uint64_t j = start; j < start + node.length; ++j) {
+        const auto &entry = extended.directory[j];
+        assert(entry.key_offset > 0 && entry.key_offset < node.next - i);
+        assert(myna_value_kind(&extended.base.nodes[i + entry.key_offset]) == MYNA_VALUE_STRING);
+        if (j > start) {
+          const auto &prior = extended.directory[j-1];
+          assert(prior.hash < entry.hash || (prior.hash == entry.hash && prior.key_offset < entry.key_offset));
+        }
+      }
+    }
+    return extended.base;
+  };
   for (size_t i = 0; i < size && i < 1024; ++i) {
-    unsigned operation = data[i] % 17;
+    unsigned operation = data[i] % 20;
     try {
       switch (operation) {
         case 0: builder.begin_array(); break;
@@ -112,7 +139,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         case 6: builder.region(backing); break;
         case 7: builder.string_ref(data[i] % 3, data[i] % 65, data[i] % 32); break;
         case 8: builder.clear(); break;
-        case 9: { auto v = builder.view(); assert(visit(v, 0) == v.node_count); break; }
+        case 9: { auto v = view(); assert(visit(v, 0) == v.node_count); break; }
         case 10: builder.validated_number("-1234567890123456789.000e-123"); break;
         case 11: builder.boolean(data[i] & 1); break;
         case 12: builder.floating(data[i] / 2.0); break;
@@ -120,13 +147,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         case 14: builder.floating(std::numeric_limits<double>::infinity()); break;
         case 15: { myna::value_builder invalid(nullptr); std::abort(); }
         case 16: builder.validated_number("123"); break;
+        case 17: builder.reserve(data[i] % 70, data[i], data[i] % 8, data[i] % 10); break;
+        case 18: builder.ref(data[i] % 64); break;
+        case 19: builder.metadata(data[i] % 64, data[i]); break;
       }
     } catch (const std::exception &) {
       // Failed mutations poison until clear; view() may reject incompleteness.
       // A failed view or independent invalid constructor does not mutate builder.
       if (operation != 9 && operation != 15) {
         bool rejected = false;
-        try { (void)builder.view(); } catch (const std::logic_error &) { rejected = true; }
+        try { (void)view(); } catch (const std::logic_error &) { rejected = true; }
         assert(rejected);
         rejected = false;
         try { builder.null(); } catch (const std::logic_error &) { rejected = true; }
@@ -137,10 +167,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   }
   // Removing failure injection and clearing must restore a usable document.
   // Retained capacity stays bounded; allow one final node allocation if needed.
-  resource.budget += sizeof(myna_value_node);
+  resource.budget += sizeof(myna_value_node) + sizeof(uint32_t);
   resource.fail_after = SIZE_MAX;
   builder.clear(); builder.null();
-  assert(builder.view().node_count == 1);
+  assert(view().node_count == 1);
   assert(resource.peak <= resource.budget);
   }
   assert(resource.live == 0 && resource.allocated == resource.freed);

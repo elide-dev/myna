@@ -8,6 +8,7 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
 public final class ValuesMain {
+  static java.util.function.Consumer<NativeValueTape> compiledCheck;
   private static volatile String materialized;
   private static ValueTape.Utf8Key key(String text) { return ValueTape.Utf8Key.of(text); }
   private static final ValueTape.Utf8Key ID = key("id"), NAME = key("name"), ACTIVE = key("active"),
@@ -16,8 +17,62 @@ public final class ValuesMain {
   private static void check(boolean condition) {
     if (!condition) throw new IllegalStateException("Incorrect Rust/SVM value mapping");
   }
+  private static SimdNativeValueTape javaBench, simdBench;
   public static long consume(PointerBase descriptor, int mode) {
+    if (mode >= 10 && mode < 100) {
+      SimdNativeValueTape reader;
+      if (mode % 2 == 0) {
+        if (javaBench == null) javaBench = new SimdNativeValueTape((Pointer) descriptor, Integer.MAX_VALUE);
+        reader = javaBench;
+      } else {
+        if (simdBench == null) simdBench = new SimdNativeValueTape((Pointer) descriptor, 0);
+        reader = simdBench;
+      }
+      reader.rebind((Pointer) descriptor);
+      String value = reader.stringValue(0);
+      materialized = value;
+      return value.length();
+    }
     var tape = new NativeValueTape((Pointer) descriptor);
+    if (mode == 9) {
+      tape.validate();
+      check(tape.version() == 4 && tape.nodeCount() == 9 && tape.metadata(1) == 42);
+      check(tape.referenceTarget(8) == 1);
+      check(tape.find(1, key("costarring")) == 3);
+      check(tape.find(1, key("liquid")) == 5);
+      check(tape.kindAt(2) == ValueTape.STRING && tape.keyMatches(2, key("costarring")));
+      var simd = new SimdNativeValueTape((Pointer) descriptor, 0);
+      check(simd.simdThreshold() == 0);
+      check(simd.stringValue(3).equals("café"));
+      long size = simd.batchTextBytes();
+      byte[] packed = new byte[Math.toIntExact(size)];
+      long[] entries = new long[Math.toIntExact(tape.nodeCount() * 3)];
+      check(simd.copyBatchText(packed, entries) == size);
+      for (int i = 0; i < tape.nodeCount(); i++) {
+        int encoding = SimdNativeValueTape.batchEncoding(entries[i * 3 + 2]);
+        if (tape.tag(i) != ValueTape.STRING) { check(encoding == 0); continue; }
+        var charset = encoding == 1 ? java.nio.charset.StandardCharsets.ISO_8859_1
+            : java.nio.charset.StandardCharsets.UTF_16LE;
+        String text = new String(packed, (int) entries[i * 3], (int) entries[i * 3 + 1] * encoding, charset);
+        check(text.equals(tape.stringValue(i)));
+      }
+      boolean rejected = false;
+      try { simd.copyBatchText(new byte[0], entries); } catch (IllegalArgumentException expected) { rejected = true; }
+      check(rejected);
+      // A failed descriptor bind must preserve all old fields.
+      Pointer invalid = org.graalvm.nativeimage.StackValue.get(88);
+      for (int offset = 0; offset < 88; offset += 8) invalid.writeLong(offset, ((Pointer) descriptor).readLong(offset));
+      invalid.writeLong(16, -1);
+      rejected = false;
+      try { tape.rebind(invalid); } catch (IllegalArgumentException expected) { rejected = true; }
+      check(rejected && tape.nodeCount() == 9 && tape.metadata(1) == 42);
+      tape.rebind((Pointer) descriptor); tape.validate();
+      check(tape.stringValue(tape.find(1, key("liquid"))).equals("🦀"));
+      if (compiledCheck != null) {
+        try { compiledCheck.accept(tape); } catch (Throwable failure) { failure.printStackTrace(); throw failure; }
+      }
+      return 9;
+    }
     if (mode >= 5 && mode <= 8) {
       for (ValueTape reader : new ValueTape[] {tape, new SimdNativeValueTape((Pointer) descriptor)}) {
         reader.validate();
@@ -38,11 +93,6 @@ public final class ValuesMain {
       check(tape.numberText(tape.find(0, key("exact"))).equals("1.234567890123456789012345678901"));
       check(tape.numberText(tape.find(0, key("tiny"))).equals("1e-999999999999"));
       return 100;
-    }
-    if (mode >= 10) {
-      String value = (mode % 2 == 0 ? tape : new SimdNativeValueTape((Pointer) descriptor)).stringValue(0);
-      materialized = value;
-      return value.length();
     }
     if (mode == 2) {
       int rejected = 0;
@@ -100,20 +150,21 @@ public final class ValuesMain {
     check(ValueApi.drive(callback, thread, 1, 6) == -999); // Non-finite without the flag.
     check(ValueApi.drive(callback, thread, 1, 7) == -999); // v2 cannot use the capability.
     check(ValueApi.drive(callback, thread, 1, 8) == -999); // Known flag plus an unknown bit.
+    check(ValueApi.drive(callback, thread, 1, 9) == 9);
     check(ValueApi.drive(callback, thread, 0, 0) == 0);
     check(ValueApi.drive(callback, thread, 1000, 1) == 6000);
     if (args.length != 0 && args[0].equals("strings")) {
       int iterations = args.length > 1 ? Integer.parseInt(args[1]) : 10000;
       if (iterations <= 0) throw new IllegalArgumentException("positive iterations required");
-      for (int mode = 10; mode < 22; mode++) {
+      for (int mode = 10; mode < 58; mode++) {
         int which = (mode - 10) / 2;
-        int size = new int[]{16, 256, 4096}[which % 3];
-        int units = which < 3 ? size : size / 2;
+        int size = new int[]{16, 32, 64, 128, 256, 512, 1024, 4096}[which % 8];
+        int units = which / 8 == 1 ? size / 2 : size;
         check(ValueApi.drive(callback, thread, 1000, mode) == 1000L * units);
         long start = System.nanoTime();
         check(ValueApi.drive(callback, thread, iterations, mode) == (long) iterations * units);
         long elapsed = System.nanoTime() - start;
-        System.out.println("materialize " + (which < 3 ? "ASCII " : "Unicode ") + size
+        System.out.println("materialize " + (new String[]{"ASCII ", "Unicode ", "Escaped "}[which / 8]) + size
             + " bytes " + (mode % 2 == 0 ? "Java" : "SIMD reader") + ": "
             + ((double) elapsed / iterations) + " ns/string (includes callback and volatile sink)");
       }

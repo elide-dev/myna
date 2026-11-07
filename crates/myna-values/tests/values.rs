@@ -899,3 +899,184 @@ fn native_unicode_bridge_checks_extents_and_unicode() {
         assert_eq!(convert(b"ab".as_ptr(), 2, output.as_mut_ptr(), 1), -2);
     }
 }
+
+#[test]
+fn abi4_directories_metadata_references_and_recovery() {
+    assert_eq!(std::mem::size_of::<RawViewV4>(), 88);
+    assert_eq!(std::mem::size_of::<DirectoryEntry>(), 8);
+    assert_eq!(hash_utf8(b"hello"), 0x4f9f2cab);
+    let arena = Bump::new();
+    let mut b = Builder::new_in(&arena);
+    b.enable_v4(2, true).unwrap();
+    b.begin_array().unwrap();
+    b.begin_object().unwrap();
+    b.value("z").unwrap();
+    b.value(&1).unwrap();
+    b.value("a").unwrap();
+    b.value(&2).unwrap();
+    b.value("z").unwrap();
+    b.value(&3).unwrap();
+    b.end().unwrap();
+    b.metadata(1, 42).unwrap();
+    b.reference_node(1).unwrap();
+    b.reference_node(8).unwrap();
+    b.end().unwrap();
+    let v = b.finish().unwrap();
+    assert_eq!(v.version(), 4);
+    assert_eq!(v.metadata().len(), 10);
+    assert_eq!(v.metadata()[1], 42);
+    assert_eq!(v.reference_target(8), Some(1));
+    assert_eq!(v.reference_target(9), Some(8));
+    assert_eq!(v.reference_target(0), None);
+    assert_eq!(v.reference_target(99), None);
+    assert_eq!(v.nodes()[1].payload, 1);
+    assert_eq!(v.directory().len(), 3);
+    assert!(v.directory().windows(2).all(|pair| pair[0] < pair[1]));
+    let raw = v.raw();
+    // SAFETY: raw is borrowed from the live builder.
+    let descriptor = unsafe { &*raw.as_v4_ptr().unwrap() };
+    assert_eq!(descriptor.base.version, 4);
+    assert_eq!(descriptor.metadata_count, 10);
+    b.clear();
+    b.begin_array().unwrap();
+    assert!(b.reference_node(0).is_err()); // Open ancestor would form a cycle.
+    assert!(b.end().is_err());
+    b.clear();
+    assert!(b.reference_node(100).is_err());
+    b.clear();
+    b.value(&0).unwrap();
+    assert!(b.enable_v4(8, false).is_err());
+    b.clear();
+    b.enable_v4(0, false).unwrap();
+    b.begin_object().unwrap();
+    b.value("key").unwrap();
+    b.value(&1).unwrap();
+    b.end().unwrap();
+    let v = b.finish().unwrap();
+    assert!(v.directory().is_empty() && v.metadata().is_empty());
+    assert_eq!(v.nodes()[0].payload, 0);
+    assert!(b.metadata(0, 1).is_err());
+    let mut legacy = Builder::new_in(&arena);
+    legacy.value(&7).unwrap();
+    assert!(legacy.finish().unwrap().raw().as_v4_ptr().is_none());
+    assert!(legacy.reference_node(0).is_err());
+}
+
+#[test]
+fn batch_text_mixed_storage_sizing_and_transactional_errors() {
+    use myna_values::text::{TextEntry, myna_tape_text_v1};
+    let arena = Bump::new();
+    let mut b = Builder::new_in(&arena);
+    b.enable_v4(0, false).unwrap();
+    let borrowed = "borrowed é 🦀";
+    let r = b.region(borrowed.as_bytes()).unwrap();
+    b.begin_array().unwrap();
+    b.value("ASCII").unwrap();
+    b.value("café").unwrap();
+    b.value("🦀").unwrap();
+    b.value(&42).unwrap();
+    b.value("").unwrap();
+    b.value("long owned text with Ελληνικά").unwrap();
+    b.string_ref(r, 0, borrowed.len() as u32).unwrap();
+    b.exact_number("123.4500e+7").unwrap();
+    b.reference_node(1).unwrap();
+    b.end().unwrap();
+    let v = b.finish().unwrap();
+    let raw = v.raw();
+    // SAFETY: live borrowed descriptor, disjoint owned output buffers.
+    unsafe {
+        let size = myna_tape_text_v1(
+            raw.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            0,
+        );
+        assert!(size > 0);
+        let mut out = vec![0xcc; size as usize];
+        let mut table = vec![TextEntry::default(); v.nodes().len()];
+        assert_eq!(
+            myna_tape_text_v1(
+                raw.as_ptr(),
+                out.as_mut_ptr(),
+                size as u64 - 1,
+                table.as_mut_ptr(),
+                table.len() as u64
+            ),
+            -3
+        );
+        assert!(out.iter().all(|b| *b == 0xcc));
+        assert_eq!(
+            myna_tape_text_v1(
+                raw.as_ptr(),
+                out.as_mut_ptr(),
+                out.len() as u64,
+                table.as_mut_ptr(),
+                table.len() as u64
+            ),
+            size
+        );
+        for (i, entry) in table.iter().enumerate() {
+            let text = v.string(i).or_else(|| v.number_text(i));
+            if let Some(text) = text {
+                let start = entry.offset as usize;
+                let decoded = if entry.encoding == 1 {
+                    out[start..start + entry.length as usize]
+                        .iter()
+                        .map(|b| char::from(*b))
+                        .collect::<String>()
+                } else {
+                    let units = out[start..start + entry.length as usize * 2]
+                        .chunks_exact(2)
+                        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                        .collect::<Vec<_>>();
+                    String::from_utf16(&units).unwrap()
+                };
+                assert_eq!(decoded, text.as_str());
+            } else {
+                assert_eq!(entry.encoding, 0);
+            }
+        }
+        let mut descriptor = *raw.as_ptr();
+        descriptor.version = 2;
+        assert_eq!(
+            myna_tape_text_v1(
+                &descriptor,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                0
+            ),
+            -2
+        );
+        descriptor.version = 3;
+        let malformed = [Node {
+            tag: STRING,
+            len: 1,
+            payload: 255,
+            next: 0,
+        }];
+        descriptor.nodes = malformed.as_ptr();
+        descriptor.node_count = 1;
+        assert_eq!(
+            myna_tape_text_v1(
+                &descriptor,
+                out.as_mut_ptr(),
+                out.len() as u64,
+                table.as_mut_ptr(),
+                table.len() as u64
+            ),
+            -1
+        );
+        assert_eq!(
+            myna_tape_text_v1(
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                0
+            ),
+            -2
+        );
+    }
+}

@@ -117,6 +117,28 @@ class NativeImageIntegrationTests(unittest.TestCase):
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.ValuesMain", "-o", app)
         self.assertIn("Serde Rust -> SVM value mapping passed", run(app).stdout)
+        # Compile an actual Truffle call target; plain SVM calls cannot catch missing
+        # deoptimization targets caused by analysis-time trivial inlining.
+        import hashlib
+        import json
+        deps = []
+        for item in json.loads((fixture / "truffle-deps.json").read_text()):
+            jar = ROOT / "build/truffle-deps" / item["url"].rsplit("/", 1)[1]
+            jar.parent.mkdir(parents=True, exist_ok=True)
+            if not jar.exists() or hashlib.sha256(jar.read_bytes()).hexdigest() != item["sha256"]:
+                run("curl", "-fsSL", item["url"], "-o", jar)
+            if hashlib.sha256(jar.read_bytes()).hexdigest() != item["sha256"]:
+                raise AssertionError("Truffle dependency checksum mismatch")
+            deps.append(jar)
+        compile_native(classes, generated, fixture / "TruffleValuesMain.java", classpath=[classes, *deps])
+        truffle_app = work / "truffle-values-app"
+        native_image("-O2", "--add-exports=org.graalvm.truffle.runtime/com.oracle.truffle.runtime=ALL-UNNAMED",
+            "-cp", os.pathsep.join(map(str, [classes, *deps])),
+            "--initialize-at-build-time=fixture.values.ValueApi$Literals",
+            "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
+            "fixture.values.TruffleValuesMain", "-o", truffle_app)
+        self.assertIn("Truffle reader runtime compilation passed", run(truffle_app).stdout)
+
 
     def test_bemo_static_linkage_and_handwritten_callbacks(self):
         work = ROOT / "build/bemo-test"
