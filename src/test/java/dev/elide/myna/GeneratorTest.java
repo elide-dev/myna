@@ -4,9 +4,12 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.serialize.SeamJson;
+import dev.elide.myna.validate.Validator;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
@@ -640,6 +643,45 @@ class GeneratorTest {
         rust.contains("pub type PARSEXFn ="), "PARSEX emits PARSEXFn, distinct from ParseXFn");
   }
 
+  /** Issue #61: one platform-neutral binding must accept every same-layout target's library. */
+  @Test
+  void sameLayoutTargetsShareFingerprintsAndPlatformNeutralOutputs() throws Exception {
+    for (String example :
+        List.of("examples/buffer.seam", "examples/ownership.seam", "examples/truffle.seam")) {
+      var base = Dsl.parse(Files.readString(Path.of(example)));
+      var reference = Generator.generate(base.withTarget("x86_64-unknown-linux-gnu"), true);
+      var referenceJni = StaticJni.generate(base.withTarget("x86_64-unknown-linux-gnu"));
+      for (String target : Validator.TARGETS) {
+        var module = base.withTarget(target);
+        var outputs = Generator.generate(module, true);
+        assertEquals(reference.keySet(), outputs.keySet(), target);
+        for (var output : outputs.entrySet()) {
+          if (output.getKey().equals("seam.ll")) {
+            assertTrue(output.getValue().contains("target triple = \"" + target + "\""), target);
+            assertTrue(output.getValue().contains(reference.get("seam.abi").strip()), target);
+          } else
+            assertEquals(
+                reference.get(output.getKey()), output.getValue(), example + " " + output.getKey());
+        }
+        assertFalse(outputs.get("seam.json").contains(target), target);
+        assertTrue(
+            outputs
+                .get("seam.json")
+                .contains("\"targetAbi\": {\"dataModel\":\"LP64\",\"byteOrder\":\"little\"}"));
+        assertEquals(
+            SeamJson.fingerprint(module) + "\n",
+            reference.get("seam.abi"),
+            "fingerprint is the descriptor hash for " + target);
+        for (var output : StaticJni.generate(module).entrySet())
+          if (!output.getKey().endsWith(".ll"))
+            assertEquals(referenceJni.get(output.getKey()), output.getValue(), output.getKey());
+      }
+    }
+    assertThrows(IllegalArgumentException.class, () -> Seam.targetAbi("riscv64-unknown-linux-gnu"));
+    assertThrows(IllegalArgumentException.class, () -> Seam.targetAbi(null));
+    assertEquals("LP64, little-endian", Seam.targetAbi("aarch64-apple-darwin").toString());
+  }
+
   @Test
   void goldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/buffer.seam")));
@@ -670,11 +712,11 @@ class GeneratorTest {
   }
 
   @Test
-  void abiFingerprintChangesWithTargetSignatureAndContracts() {
+  void abiFingerprintChangesWithSignatureAndContractsButNotSameLayoutTarget() {
     String original = generate(VALID).get("seam.abi");
+    assertEquals(original, generate(VALID.replace("aarch64", "x86_64")).get("seam.abi"));
     for (String change :
         List.of(
-            VALID.replace("aarch64", "x86_64"),
             VALID.replace("return=i64", "return=i32"),
             VALID.replace("access=read", "access=read readonly=true@explicit_contract")))
       assertNotEquals(original, generate(change).get("seam.abi"));

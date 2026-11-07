@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.12.0",
+  "generatorVersion": "0.13.0",
   "name": "truffle_demo",
   "abiVersion": 1,
-  "targetTriple": "aarch64-apple-darwin",
+  "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
   "java": {"package":"fixture.cells","class":"CellApi"},
   "truffle": {"cells":true,"backend":"NATIVE","coercion":"STRICT","transitions":"DIRECT"},
   "opaqueTypes": ["Counter"],
