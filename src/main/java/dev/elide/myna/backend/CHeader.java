@@ -161,11 +161,8 @@ public final class CHeader implements Backend {
                 + " `native_image_shims!`). */\n");
     out.append(Types.c(lowered.returns())).append(' ').append(lowered.symbol()).append('(');
     out.append(
-        lowered.abiParameters().isEmpty()
-            ? "void"
-            : String.join(
-                ", ",
-                lowered.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
+        String.join(
+            ", ", lowered.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
     out.append(");\n");
   }
 
