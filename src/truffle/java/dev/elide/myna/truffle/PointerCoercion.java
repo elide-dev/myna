@@ -44,6 +44,13 @@ public final class PointerCoercion extends Coercion {
       if (interop.isNull(value)) return checked(0, value);
       if (rawNumbers && interop.fitsInLong(value)) return checked(interop.asLong(value), value);
     } catch (UnsupportedMessageException e) {
+      // A shared NativeResource can be closed by another thread between the isPointer() guard and
+      // the asPointer() dispatch; that is a normal interop outcome, not an internal invariant.
+      if (value instanceof NativeResource resource && resource.isClosed()) {
+        CompilerDirectives.transferToInterpreter();
+        throw NativeCellException.of(
+            this, function, ": parameter ", parameter, " received a closed ", resource.type());
+      }
       throw CompilerDirectives.shouldNotReachHere(e);
     }
     throw mismatch(nullable ? "pointer or null" : "pointer", value);

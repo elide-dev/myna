@@ -20,6 +20,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,26 @@ class TruffleRuntimeTest {
     public Object execute(Object[] arguments) {
       checkArity(arguments);
       return (int) left.execute(arguments[0]) + (int) right.execute(arguments[1]);
+    }
+  }
+
+  /** A one-argument cell shaped like a generated {@code ptr<T>} binding, for coercion tests. */
+  static final class PointerCell extends NativeCell {
+    @Node.Child private PointerCoercion pointer;
+
+    PointerCell(boolean nullable, boolean rawNumbers) {
+      super("f", 1);
+      pointer = new PointerCoercion("f", "p", nullable, rawNumbers);
+    }
+
+    long coerce(Object value) {
+      return pointer.execute(value);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      return pointer.execute(arguments[0]);
     }
   }
 
@@ -355,6 +376,65 @@ class TruffleRuntimeTest {
     resource.close();
     var closed = assertThrows(NativeCellException.class, () -> strict.execute(resource));
     assertEquals("f: parameter p received a closed Ticket", closed.getMessage());
+  }
+
+  @Test
+  void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
+    // A threading=shared NativeResource may be closed from any thread; the close can land between
+    // interop.isPointer() and interop.asPointer(), so the coercion must surface a guest-visible
+    // NativeCellException instead of the internal CompilerDirectives.shouldNotReachHere crash.
+    var cell = new PointerCell(false, false);
+    cell.function(); // adopt the coercion under a RootNode so its InteropLibrary dispatch is usable
+    var internalError = new AtomicReference<AssertionError>();
+    var guestError = new AtomicReference<NativeCellException>();
+    for (int round = 0; round < 200 && internalError.get() == null; round++) {
+      var resource = new NativeResource("Ticket", 0x5000L + round, address -> {}, null);
+      var stop = new AtomicBoolean();
+      var coercer =
+          new Thread(
+              () -> {
+                while (!stop.get()) {
+                  try {
+                    cell.coerce(resource);
+                  } catch (NativeCellException expected) {
+                    stop.compareAndSet(false, true);
+                    guestError.compareAndSet(null, expected);
+                  } catch (AssertionError e) {
+                    stop.compareAndSet(false, true);
+                    internalError.compareAndSet(null, e);
+                  }
+                }
+              },
+              "coercer-" + round);
+      var closer =
+          new Thread(
+              () -> {
+                try {
+                  Thread.sleep(1);
+                } catch (InterruptedException e) {
+                  return;
+                }
+                resource.close();
+                stop.set(true);
+              },
+              "closer-" + round);
+      coercer.start();
+      closer.start();
+      coercer.join(5000);
+      closer.join(5000);
+      assertFalse(coercer.isAlive(), "coercer should have terminated by round " + round);
+      assertFalse(closer.isAlive(), "closer should have terminated by round " + round);
+    }
+    assertNull(internalError.get(), "concurrent close must raise a guest error, not a VM crash");
+    assertNotNull(guestError.get(), "expected the coercion to report the closed resource");
+    // The close can land at three points, all producing a NativeCellException, never an
+    // AssertionError: before isPointer() (mismatch), between isClosed() and isPointer()
+    // (received a closed Ticket), or between isPointer() and asPointer() (the race the fix
+    // targets — received a closed Ticket from the catch block).
+    assertTrue(
+        guestError.get().getMessage().contains("received a closed Ticket")
+            || guestError.get().getMessage().contains("expects pointer"),
+        "guest error message: " + guestError.get().getMessage());
   }
 
   @Test
