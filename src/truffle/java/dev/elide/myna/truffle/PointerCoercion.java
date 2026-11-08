@@ -46,7 +46,7 @@ public final class PointerCoercion extends Coercion {
     } catch (UnsupportedMessageException e) {
       // A shared NativeResource can be closed by another thread between the isPointer() guard and
       // the asPointer() dispatch; that is a normal interop outcome, not an internal invariant.
-      if (value instanceof NativeResource resource && resource.isClosed()) {
+      if (value instanceof NativeResource resource) {
         CompilerDirectives.transferToInterpreter();
         throw NativeCellException.of(
             this, function, ": parameter ", parameter, " received a closed ", resource.type());
