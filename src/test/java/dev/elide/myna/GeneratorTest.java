@@ -15,6 +15,7 @@ import java.util.*;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 class GeneratorTest {
@@ -1047,7 +1048,97 @@ class GeneratorTest {
             + "struct X size=8 align=4\nfield a type=i32 offset=0\nfield a type=i32 offset=4\nend",
         MODULE + "struct X size=0 align=8\nfield a type=i64 offset=0\nend",
         MODULE + "opaque X\nstruct X size=8 align=8\nfield a type=i64 offset=0\nend",
-        MODULE + "struct i64 size=8 align=8\nfield a type=i64 offset=0\nend");
+        MODULE + "struct i64 size=8 align=8\nfield a type=i64 offset=0\nend",
+        MODULE + "import box return=i64 error=no_failure\nend",
+        MODULE + "import f symbol=box return=i64 error=no_failure\nend",
+        MODULE + "import f return=i64 error=no_failure\nparam gen type=i64\nend",
+        MODULE + "opaque box",
+        MODULE + "struct unsized size=8 align=8\nfield a type=i64 offset=0\nend",
+        MODULE + "callback become return=void\nend");
+  }
+
+  static Stream<Arguments> rustReservedKeywordsAndPositions() {
+    return Stream.of("box", "become", "override", "priv", "typeof", "unsized", "gen")
+        .flatMap(keyword ->
+            Stream.of(
+                Arguments.of(
+                    "module-name", keyword, "module " + keyword + " target=aarch64-apple-darwin\n"),
+                Arguments.of(
+                    "function-name",
+                    keyword,
+                    MODULE + "import " + keyword + " return=i64 error=no_failure\n" + "end\n"),
+                Arguments.of(
+                    "function-symbol",
+                    keyword,
+                    MODULE
+                        + "import f symbol="
+                        + keyword
+                        + " return=i64 error=no_failure\n"
+                        + "end\n"),
+                Arguments.of(
+                    "parameter-name",
+                    keyword,
+                    MODULE
+                        + "import f return=i64 error=no_failure\n"
+                        + "param "
+                        + keyword
+                        + " type=i64\n"
+                        + "end\n"),
+                Arguments.of("opaque-name", keyword, MODULE + "opaque " + keyword + "\n"),
+                Arguments.of(
+                    "struct-name",
+                    keyword,
+                    MODULE
+                        + "struct "
+                        + keyword
+                        + " size=8 align=8\n"
+                        + "field a type=i64 offset=0\n"
+                        + "end\n"),
+                Arguments.of(
+                    "callback-name",
+                    keyword,
+                    MODULE + "callback " + keyword + " return=void\n" + "end\n"),
+                Arguments.of(
+                    "field-name",
+                    keyword,
+                    MODULE
+                        + "struct S size=8 align=8\n"
+                        + "field "
+                        + keyword
+                        + " type=i64 offset=0\n"
+                        + "end\n"),
+                Arguments.of(
+                    "java-package-segment",
+                    keyword,
+                    MODULE.replace(
+                            "module sample target=aarch64-apple-darwin",
+                            "module sample java_package=fixture."
+                                + keyword
+                                + " target=aarch64-apple-darwin")
+                        + "import f return=i64 error=no_failure\n"
+                        + "end\n"),
+                Arguments.of(
+                    "java-class-name",
+                    keyword,
+                    MODULE.replace(
+                            "module sample target=aarch64-apple-darwin",
+                            "module sample java_class=" + keyword + " target=aarch64-apple-darwin")
+                        + "import f return=i64 error=no_failure\n"
+                        + "end\n")));
+  }
+
+  @ParameterizedTest(name = "{0}={1}")
+  @MethodSource("rustReservedKeywordsAndPositions")
+  void rejectsRustReservedKeywordsAsIdentifiers(String position, String keyword, String source) {
+    var error = assertThrows(IllegalArgumentException.class, () -> generate(source), source);
+    assertEquals("invalid or reserved identifier: " + keyword, error.getMessage());
+  }
+
+  @Test
+  void validRustMethodNamesAreStillAccepted() {
+    String source = MODULE + "import resize return=i64 error=no_failure\n" + "end\n";
+    var output = assertDoesNotThrow(() -> generate(source), source);
+    assertTrue(output.get("seam.rs").contains("pub fn resize() -> i64"));
   }
 
   @ParameterizedTest

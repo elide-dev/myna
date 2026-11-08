@@ -36,13 +36,13 @@ public final class Validator {
                + " switch synchronized this throw throws trait transient true false try type"
                + " typedef union unsigned unsafe use var void volatile while yield async await dyn"
                + " where null instanceof sealed permits non_sealed module requires exports opens"
-               + " uses provides with transitive crate as Self macro macro_rules alignas alignof"
-               + " constexpr consteval constinit delete friend inline namespace operator noexcept"
-               + " nullptr template typename virtual wchar_t dynamic_cast static_cast"
-               + " reinterpret_cast const_cast isolate_thread __padding ABI_FINGERPRINT"
-               + " BINDING_ABI_VERSION MynaSymbols Literals MynaFFM MynaNative MynaForeignFeature"
-               + " MynaTruffle LibraryBinding CriticalLibraryBinding getClass hashCode equals"
-               + " toString clone finalize wait notify notifyAll")
+               + " box become override priv typeof unsized gen uses provides with transitive crate"
+               + " as Self macro macro_rules alignas alignof constexpr consteval constinit delete"
+               + " friend inline namespace operator noexcept nullptr template typename virtual"
+               + " wchar_t dynamic_cast static_cast reinterpret_cast const_cast isolate_thread"
+               + " __padding ABI_FINGERPRINT BINDING_ABI_VERSION MynaSymbols Literals MynaFFM"
+               + " MynaNative MynaForeignFeature MynaTruffle LibraryBinding CriticalLibraryBinding"
+               + " getClass hashCode equals toString clone finalize wait notify notifyAll")
               .split(" "));
 
   /**
