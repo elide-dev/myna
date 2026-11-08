@@ -28,12 +28,18 @@ public final class TruffleCells implements Backend {
         && (p.pointee() == Scalar.U8 || p.pointee() == Scalar.I8 || p.pointee() == Scalar.CHAR);
   }
 
-  private static boolean unsigned(Type type) {
+  /**
+   * Whether an integer scalar narrows as unsigned. The fixed unsigned scalars are always zero;
+   * {@code char} is target-dependent and follows {@code charUnsigned} (AAPCS64 Linux treats it as
+   * unsigned, x86-64 and Apple arm64 as signed).
+   */
+  private static boolean unsigned(Type type, boolean charUnsigned) {
     return type == Scalar.U8
         || type == Scalar.U16
         || type == Scalar.U32
         || type == Scalar.U64
-        || type == Scalar.USIZE;
+        || type == Scalar.USIZE
+        || (charUnsigned && type == Scalar.CHAR);
   }
 
   /** The guest-facing shape of one cell. */
@@ -64,13 +70,14 @@ public final class TruffleCells implements Backend {
     TruffleConfig config = m.truffleConfig();
     boolean ffm = config.backend() == TruffleBackend.FFM;
     String bindings = ffm ? m.ffmClass() : m.nativeClass();
+    boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
     var cells = new ArrayList<Cell>();
     for (Function f : m.functions()) if (Seam.truffleCell(m, f)) cells.add(cell(m, f));
     var imports = new TreeSet<String>();
     imports.add(RUNTIME + "NativeCell");
     imports.add(RUNTIME + "NativeFunction");
     var body = new StringBuilder();
-    for (Cell cell : cells) emit(m, cell, config, ffm, bindings, imports, body);
+    for (Cell cell : cells) emit(m, cell, config, ffm, bindings, charUnsigned, imports, body);
     if (ffm && !cells.isEmpty()) helpers(imports, body);
     var out =
         new StringBuilder(
@@ -128,6 +135,7 @@ public final class TruffleCells implements Backend {
       TruffleConfig config,
       boolean ffm,
       String bindings,
+      boolean charUnsigned,
       Set<String> imports,
       StringBuilder out) {
     Function f = cell.function();
@@ -276,7 +284,7 @@ public final class TruffleCells implements Backend {
                 .append(", ")
                 .append(s.bytes * 8)
                 .append(", ")
-                .append(unsigned(s))
+                .append(unsigned(s, charUnsigned))
                 .append(", CoercionPolicy.")
                 .append(config.coercion().name())
                 .append(");\n");
@@ -413,7 +421,10 @@ public final class TruffleCells implements Backend {
               .append(ffm ? ".address()" : boundary ? "" : ".rawValue()")
               .append(");\n");
         else
-          result.append("            return ").append(converted((Scalar) r, invoke)).append(";\n");
+          result
+              .append("            return ")
+              .append(converted((Scalar) r, invoke, charUnsigned))
+              .append(";\n");
       }
     }
     if (ffm && cell.destroys() == null) {
@@ -542,11 +553,16 @@ public final class TruffleCells implements Backend {
     return "WordFactory.pointer(" + expression + ")";
   }
 
-  /** Guest-visible results: unsigned carriers become their numeric value, except raw u64. */
-  private static String converted(Scalar r, String invoke) {
+  /**
+   * Guest-visible results: unsigned carriers become their numeric value, except raw u64. {@code
+   * char} follows the target ABI: signed on x86-64 and Apple arm64 (sign-extended like {@code i8}),
+   * unsigned on AAPCS64 Linux (masked with {@code Carriers.u8} like {@code u8}).
+   */
+  private static String converted(Scalar r, String invoke, boolean charUnsigned) {
     return switch (r) {
       case BOOL, I32, I64, U64, USIZE, ISIZE, F64 -> invoke;
-      case CHAR, I8, I16 -> "(int) " + invoke;
+      case CHAR -> charUnsigned ? "Carriers.u8(" + invoke + ")" : "(int) " + invoke;
+      case I8, I16 -> "(int) " + invoke;
       case U8 -> "Carriers.u8(" + invoke + ")";
       case U16 -> "Carriers.u16(" + invoke + ")";
       case U32 -> "Carriers.u32(" + invoke + ")";
