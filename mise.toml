@@ -5,7 +5,7 @@ rust = "nightly-2026-10-09"
 cmake = "4.4.5"
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
-"github:taiki-e/cargo-llvm-cov" = "0.8.7"
+"github:taiki-e/cargo-llvm-cov" = "0.9.1"
 
 [tools."github:elide-dev/elide"]
 version = "1.6.2"

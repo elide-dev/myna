@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.13.0",
+  "generatorVersion": "0.14.0",
   "name": "truffle_demo",
   "abiVersion": 1,
   "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
