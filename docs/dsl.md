@@ -111,7 +111,7 @@ Declarations and fact keys are sorted, parameter/field order is preserved, and o
 
 ## Native Image leaf-call policy
 
-Imports default to the binding ABI 2 leaf contract: short, bounded, nonblocking execution with no Java reentry. Use `native_leaf=false@explicit_contract` to opt out and retain a normal `@CFunction` transition. Explicit `native_leaf=true@explicit_contract` is accepted but redundant. Exports retain normal isolate entry; `noreturn` imports must opt out. The effective policy is recorded in schema 2 JSON as `nativeCallPolicy`, with a separate `bindingAbiVersion: 2`; the module's `abi` remains the consumer's own protocol version. Leaf policy changes fingerprints but emits no LLVM attributes. See [migration](binding-abi-2.md) and [performance](performance.md).
+Imports default to the binding ABI 2 leaf contract: short, bounded, nonblocking execution with no Java reentry. Use `native_leaf=false@explicit_contract` to opt out and retain a normal `@CFunction` transition. Explicit `native_leaf=true@explicit_contract` is accepted but redundant. Exports retain normal isolate entry; `noreturn` imports must opt out. The effective policy is recorded in schema 3 JSON as `nativeCallPolicy`, with a separate `bindingAbiVersion: 2`; the module's `abi` remains the consumer's own protocol version. Leaf policy changes fingerprints but emits no LLVM attributes. See [migration](binding-abi-2.md) and [performance](performance.md).
 
 ## Resource lifecycles and call borrows
 

@@ -1,6 +1,6 @@
 # Migrating to Myna 0.8.0 / binding ABI 2
 
-Binding ABI 2 makes the inlineable native leaf path the default for imports. Regenerate bindings and rebuild consumers together; do not combine old generated artifacts with new descriptors. Canonical descriptor schema 2 records `bindingAbiVersion: 2` and each import's effective `nativeCallPolicy`. Generated Java, C and Rust expose `BINDING_ABI_VERSION`. A module's `abi=...` remains its independent application protocol version. The value-tape layout remains ABI v3.
+Binding ABI 2 makes the inlineable native leaf path the default for imports. Regenerate bindings and rebuild consumers together; do not combine old generated artifacts with new descriptors. Canonical descriptor schema 3 records `bindingAbiVersion: 2` and each import's effective `nativeCallPolicy`. Generated Java, C and Rust expose `BINDING_ABI_VERSION`. A module's `abi=...` remains its independent application protocol version. The value-tape layout remains ABI v3.
 
 ## Audit imports
 
