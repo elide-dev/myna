@@ -178,7 +178,7 @@ mise run test:jvm              # Elide JVM tests, coverage reports, and threshol
 mise run test                  # also builds and tests native CLI, LLVM, and Native Image ABI
 ```
 
-The full suite uses Elide's Python component, Rust 1.99.1 (pinned in `mise.toml`, using LLVM 23), and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
+The full suite uses Elide's Python component, Rust nightly-2026-10-09 (pinned in `mise.toml` to elide-dev/toolchain's recommended `rustversion`, using LLVM 23; `check:style` fails if they diverge), and LLD 23. Set `LLVM_BIN` to that toolchain's `bin` directory and `LLVM_CONFIG` to its `llvm-config`. The LLVM helper must be built against the same LLVM toolchain used for linking; generic system LLVM is not a hermetic substitute for Elide's toolchain in production.
 
 Individual integration tests can run against existing builds:
 
