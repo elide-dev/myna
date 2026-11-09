@@ -138,8 +138,23 @@ contract states, and every borrow is released in a `finally`, in reverse acquisi
   costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
   arena of their own. Because cells release in reverse order, nested borrows and calls back into
   guest code are last-in, first-out; releasing out of order or on another thread throws
-  `IllegalStateException` and leaves the stack unchanged. A thread's block (4 KiB, growing to at
-  most 64 KiB) is freed by the collector once the thread has ended.
+  `IllegalStateException` and leaves the stack unchanged.
+
+The scratch stack's lifetimes have three caveats:
+
+- every thread that copies, virtual threads included, gets its own block of 4 KiB, growing to at
+  most 64 KiB. The block comes from an automatic arena, so it is freed only after the thread and
+  its `ThreadLocal` entry become unreachable, when the arena's `Cleaner` runs. Many short-lived
+  virtual threads that each borrow can therefore hold up to 64 KiB of native memory apiece until
+  the collector reclaims them;
+- a borrow that is never released keeps its bytes reserved on that thread's stack for the
+  thread's lifetime. Later copies stack above it, and once the block is full they fall back to
+  arenas of their own;
+- generated cells release in a `finally`, so if `release()` ever throws its misuse
+  `IllegalStateException` while an exception is already propagating, the new exception replaces
+  the original one. Generated code always releases in order on the acquiring thread, so this means
+  an invariant was violated (for example, a consumer released a cell's borrow by hand). It is not
+  expected behaviour.
 
 A pinned array does not move, so its address stays valid across any safepoint between the pin and
 the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
@@ -211,7 +226,11 @@ baseline, and the three borrow strategies by size, retaining raw samples, hashes
 compilation traces as [benchmarking](benchmarking.md) requires.
 
 The checked-in [Linux amd64 baseline](../benchmarks/cells/baselines/wsl2-linux-amd64-2026-11-07.md)
-(five processes per case, a shared WSL2 workstation, so advisory) shows, in ns per call:
+(five processes per case, a shared WSL2 workstation, so advisory) was measured at source revision
+`83229a2`, before the per-thread scratch stack and the typed `execute*` methods. Its copy and
+string figures therefore show the earlier per-call confined arena, its FFM figures include the
+boxed result, and it has no `typed-*` cases. It has not been regenerated since; the figures below
+are that baseline's, in ns per call:
 
 | Path | Direct Java call | Cell via glue | Cell via interop wrapper |
 |---|---:|---:|---:|
@@ -254,7 +273,7 @@ Findings from the first measurement that are tracked, not blocking:
   [Borrows](#borrows)). On a shared Apple M5 Max, same build settings before and after, five
   processes per case, `glue-text` went from 32.5 ns and 208 B to about 21 ns and 72 B, and
   `glue-sum-copy-16` from 26.0 ns and 184 B to about 15 ns and 48 B (advisory: the host was not
-  quiet). The baseline above predates the change and has not been re-measured.
+  quiet). These Mac figures are local before/after runs, not a checked-in baseline.
 - The generator has no FFM critical cell variant; the direct FFM leaf (5.5 ns) already beats the
   measured critical downcall figures on this fork, so none is planned until a consumer asks.
 - Truffle NFI is an internal language: host code cannot `eval("nfi", ...)`, so the benchmark
