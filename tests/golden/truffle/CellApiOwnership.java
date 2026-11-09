@@ -74,9 +74,12 @@ public final class CellApiOwnership {
             org.graalvm.nativeimage.c.type.CCharPointer pointer = org.graalvm.nativeimage.StackValue.get(1);
             return CellApi.checksum(pointer, length);
         }
-        try (org.graalvm.nativeimage.PinnedObject pin = org.graalvm.nativeimage.PinnedObject.create(arg0)) {
+        org.graalvm.nativeimage.PinnedObject pin = org.graalvm.nativeimage.PinnedObject.create(arg0);
+        try {
             org.graalvm.nativeimage.c.type.CCharPointer pointer = pin.addressOfArrayElement(0);
             return CellApi.checksum(pointer, length);
+        } finally {
+            pin.close();
         }
     }
     public static void fill(NativeBuffer arg0, byte arg2) {
@@ -102,9 +105,12 @@ public final class CellApiOwnership {
             CellApi.fill(pointer, (int) length, arg2);
             return;
         }
-        try (org.graalvm.nativeimage.PinnedObject pin = org.graalvm.nativeimage.PinnedObject.create(arg0)) {
+        org.graalvm.nativeimage.PinnedObject pin = org.graalvm.nativeimage.PinnedObject.create(arg0);
+        try {
             org.graalvm.nativeimage.c.type.CCharPointer pointer = pin.addressOfArrayElement(0);
             CellApi.fill(pointer, (int) length, arg2);
+        } finally {
+            pin.close();
         }
     }
 }

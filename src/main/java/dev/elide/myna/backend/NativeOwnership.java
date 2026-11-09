@@ -230,17 +230,19 @@ public final class NativeOwnership implements Backend {
           .append(invoke)
           .append(f.returns() == Scalar.VOID ? "\n            return;" : "")
           .append("\n        }\n")
+          // A plain try/finally: try-with-resources compiles to Throwable.addSuppressed, which
+          // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
           .append(
-              "        try (org.graalvm.nativeimage.PinnedObject pin ="
+              "        org.graalvm.nativeimage.PinnedObject pin ="
                   + " org.graalvm.nativeimage.PinnedObject.create(")
           .append(bufferName)
-          .append(")) {\n")
+          .append(");\n        try {\n")
           .append(
               "            org.graalvm.nativeimage.c.type.CCharPointer pointer ="
                   + " pin.addressOfArrayElement(0);\n"
                   + "            ")
           .append(invoke)
-          .append("\n        }\n    }\n");
+          .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
     }
     return out.append("}\n").toString();
   }
