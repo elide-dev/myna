@@ -68,6 +68,7 @@ public final class IntegerCoercion extends Coercion {
   }
 
   private long slow(Object value) {
+    if (value == null) throw mismatch(range(), value);
     InteropLibrary interop = interop();
     try {
       if (interop.fitsInLong(value)) return narrow(interop.asLong(value), value);

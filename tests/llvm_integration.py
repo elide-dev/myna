@@ -40,6 +40,29 @@ __attribute__((noinline)) int64_t c_probe(void) { int64_t value = 42; (void)seam
         return output
     def optimized(self, path):
         return run(llvm("opt"), "-passes=default<O2>", "-S", path, "-o", "-").stdout
+    def test_truffle_provider_facts_parse_and_apply_to_real_bitcode(self):
+        descriptor = self.work / "truffle.seam"
+        descriptor.write_text((ROOT / "examples/truffle.seam").read_text().replace(
+            "truffle_raw_pointers=true@explicit_contract",
+            "truffle_raw_pointers=true@explicit_contract truffle_cell=true@explicit_contract"))
+        generated = self.work / "truffle"
+        run(BINARY, "generate", descriptor, "--out", generated, "--target", TARGET)
+        contracts = generated / "seam.ll"
+        run(llvm("llvm-as"), contracts, "-o", self.work / "contracts.bc")
+        source = self.work / "truffle.c"
+        source.write_text("#include <stdint.h>\n#include <stddef.h>\n"
+                          "extern size_t cells_raw_length(void *);\n"
+                          "size_t probe(void *p) { return cells_raw_length(p); }\n")
+        original = self.work / "truffle.bc"
+        annotated = self.work / "truffle.annotated.bc"
+        run(llvm("clang"), "-O1", "-flto=thin", "-c", source, "-o", original)
+        self.apply(original, annotated, contracts=contracts)
+        ir = self.ir(annotated)
+        self.assertIn("@cells_raw_length", ir)
+        self.assertIn("!myna.applied", ir)
+        self.assertNotIn("truffle_raw_pointers", ir)
+        self.assertNotIn("truffle_cell", ir)
+
     def test_real_c_and_rust_objects_optimize_and_link_thin_lto(self):
         self.prove_lto("thin")
 

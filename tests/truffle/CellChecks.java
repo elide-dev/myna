@@ -20,6 +20,19 @@ public final class CellChecks {
     throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
   }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
+    // Host Java null bypasses guest interop values; exercise the public host call API.
+    for (Object[] sample : new Object[][] {
+        {"add", 1, null}, {"widen", 0, 0, 0, null}, {"scale", null, 2},
+        {"peek", null}, {"strlen", null}, {"checksum", null}, {"fill", null, 1}}) {
+      String name = (String) sample[0];
+      try {
+        cells.apply(name).call(java.util.Arrays.copyOfRange(sample, 1, sample.length));
+        throw new AssertionError(name + " accepted host null");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("got null"), name + " host null diagnostic");
+      }
+    }
+    check(cells.apply("rawLength").call((Object) null).equals(0L), "nullable host null");
     check(call(cells, "add", 40, 2).equals(42), "add");
     check(call(cells, "add", 40L, 2.0).equals(42), "add from long and double");
     rejects(cells, "add", 1);

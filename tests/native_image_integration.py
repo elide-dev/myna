@@ -85,7 +85,8 @@ class NativeImageIntegrationTests(unittest.TestCase):
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True)
         run(BINARY, "generate", fixture / "fast.seam", "--out", generated, "--target", TARGET)
-        run("cc", "-O3", "-fPIC", "-c", fixture / "native.c", "-o", work / "native.o")
+        run("cc", "-O3", "-fPIC", "-Wall", "-Werror", "-Wmissing-prototypes", "-I", generated,
+            "-c", fixture / "native.c", "-o", work / "native.o")
         run("ar", "rcs", work / "libfastfixture.a", work / "native.o")
         compile_native(classes, generated, generated / "FastApi.java", *sorted(fixture.glob("*.java")))
         app = work / "fast-app"

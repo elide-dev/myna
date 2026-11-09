@@ -48,6 +48,7 @@ public final class BytesCoercion extends Coercion {
   }
 
   private Borrow slow(Object value) {
+    if (value == null) return pointer(0, value);
     if (value instanceof NativePointer pointer) return pointer(pointer.address(), value);
     InteropLibrary interop = interop();
     try {

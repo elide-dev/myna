@@ -20,6 +20,7 @@ public final class FloatingCoercion extends Coercion {
     if (value instanceof Integer i) return i;
     if (value instanceof Long l) return l;
     if (value instanceof Float f) return f;
+    if (value == null) throw mismatch("number", value);
     InteropLibrary interop = interop();
     try {
       if (interop.fitsInDouble(value)) return interop.asDouble(value);

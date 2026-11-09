@@ -20,9 +20,6 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -441,68 +438,86 @@ class TruffleRuntimeTest {
   }
 
   @Test
-  void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
-    // A threading=shared NativeResource may be closed from any thread; the close can land between
-    // interop.isPointer() and interop.asPointer(), so the coercion must surface a guest-visible
-    // NativeCellException instead of the internal CompilerDirectives.shouldNotReachHere crash.
-    var cell = new PointerCell(false, false);
-    cell.function(); // adopt the coercion under a RootNode so its InteropLibrary dispatch is usable
-    var internalError = new AtomicReference<AssertionError>();
-    var guestError = new AtomicReference<NativeCellException>();
-    for (int round = 0; round < 500 && internalError.get() == null; round++) {
-      var resource = new NativeResource("Ticket", 0x5000L + round, address -> {}, null);
-      var stop = new AtomicBoolean();
-      // Gate the close on the coercer having already dispatched at least one successful coercion,
-      // so the close lands while the coercer is actively in its isPointer/asPointer hammer loop
-      // rather than before the coercer thread has been scheduled (which would let the next call
-      // hit the top-of-method isClosed() guard and never exercise the catch-block race path).
-      var coercing = new CountDownLatch(1);
-      var coercer =
-          new Thread(
-              () -> {
-                while (!stop.get()) {
-                  try {
-                    cell.coerce(resource);
-                    coercing.countDown();
-                  } catch (NativeCellException expected) {
-                    stop.compareAndSet(false, true);
-                    guestError.compareAndSet(null, expected);
-                  } catch (AssertionError e) {
-                    stop.compareAndSet(false, true);
-                    internalError.compareAndSet(null, e);
-                  }
-                }
-              },
-              "coercer-" + round);
-      var closer =
-          new Thread(
-              () -> {
-                try {
-                  coercing.await(5, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                  return;
-                }
-                resource.close();
-                stop.set(true);
-              },
-              "closer-" + round);
-      coercer.start();
-      closer.start();
-      coercer.join(5000);
-      closer.join(5000);
-      assertFalse(coercer.isAlive(), "coercer should have terminated by round " + round);
-      assertFalse(closer.isAlive(), "closer should have terminated by round " + round);
+  void hostNullUsesCoercionErrorsAndNullablePointerSemantics() {
+    var sum = new SumCell(CoercionPolicy.STRICT).function();
+    assertEquals(
+        "sum: parameter right expects i32 in [-2147483648, 2147483647], got null",
+        assertThrows(NativeCellException.class, () -> sum.call(1, null)).getMessage());
+    assertEquals(
+        "f: parameter p expects bool, got null",
+        assertThrows(NativeCellException.class, () -> new BooleanCoercion("f", "p").execute(null))
+            .getMessage());
+    assertEquals(
+        "f: parameter p expects number, got null",
+        assertThrows(NativeCellException.class, () -> new FloatingCoercion("f", "p").execute(null))
+            .getMessage());
+    for (boolean raw : new boolean[] {false, true}) {
+      assertEquals(0L, new PointerCell(true, raw).function().call((Object) null));
+      assertEquals(
+          "f: parameter p expects non-null pointer, got null",
+          assertThrows(
+                  NativeCellException.class,
+                  () -> new PointerCell(false, raw).function().call((Object) null))
+              .getMessage());
     }
-    assertNull(internalError.get(), "concurrent close must raise a guest error, not a VM crash");
-    assertNotNull(guestError.get(), "expected the coercion to report the closed resource");
-    // The close can land at three points, all producing a NativeCellException, never an
-    // AssertionError: before isPointer() (mismatch), between isClosed() and isPointer()
-    // (received a closed Ticket), or between isPointer() and asPointer() (the race the fix
-    // targets — received a closed Ticket from the catch block).
-    assertTrue(
-        guestError.get().getMessage().contains("received a closed Ticket")
-            || guestError.get().getMessage().contains("expects pointer"),
-        "guest error message: " + guestError.get().getMessage());
+    for (boolean writable : new boolean[] {false, true}) {
+      for (boolean buffer : new boolean[] {false, true}) {
+        Borrow borrow = new BytesCoercion("f", "p", true, writable, buffer).execute(null);
+        assertEquals(0, borrow.address());
+        assertEquals(0, borrow.length());
+        borrow.release();
+        assertTrue(
+            assertThrows(
+                    NativeCellException.class,
+                    () -> new BytesCoercion("f", "p", false, writable, buffer).execute(null))
+                .getMessage()
+                .endsWith("got null"));
+      }
+    }
+  }
+
+  @Test
+  void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
+    var resource = new NativeResource("Ticket", 0x5000L, address -> {}, null);
+    var cell = new PointerCell(false, false);
+    // Force a close after the real isPointer probe and before the real asPointer dispatch.
+    // Inject only the scheduling library, keeping production free of test hooks.
+    var interop =
+        new InteropLibrary() {
+          @Override
+          public boolean accepts(Object receiver) {
+            return receiver == resource;
+          }
+
+          @Override
+          public boolean isPointer(Object receiver) {
+            boolean pointer = INTEROP.isPointer(receiver);
+            Thread closer = new Thread(resource::close, "close-between-pointer-messages");
+            closer.start();
+            try {
+              closer.join(5000);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              throw new AssertionError(e);
+            }
+            assertFalse(closer.isAlive());
+            assertTrue(pointer);
+            assertTrue(resource.isClosed());
+            return pointer;
+          }
+
+          @Override
+          public long asPointer(Object receiver) throws UnsupportedMessageException {
+            return INTEROP.asPointer(receiver);
+          }
+        };
+    var field = Coercion.class.getDeclaredField("interop");
+    field.setAccessible(true);
+    field.set(cell.pointer, interop);
+    var function = cell.function();
+    assertEquals(
+        "f: parameter p received a closed Ticket",
+        assertThrows(NativeCellException.class, () -> function.call(resource)).getMessage());
   }
 
   @Test
@@ -511,7 +526,7 @@ class TruffleRuntimeTest {
     // path (fall through to shouldNotReachHere), so the coercion still fails safely.
     var cell = new PointerCell(true, true);
     cell.function();
-    assertThrows(Throwable.class, () -> cell.coerce(new LyingPointer()));
+    assertThrows(AssertionError.class, () -> cell.coerce(new LyingPointer()));
   }
 
   @Test
