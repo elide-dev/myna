@@ -124,7 +124,7 @@ Latencies include the callee and loop; the control is not subtracted. Transition
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.5 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.26 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.5 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.27 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 ```sh
 mise trust

@@ -2,7 +2,7 @@
 
 SVM is the primary runtime and performance target. Generated direct C bindings should meet or beat equivalent handwritten Native Image `@CFunction` calls. Binding ABI 2 defaults imports to short, bounded, nonblocking, non-reentrant leaves; require native_leaf=false@explicit_contract for other calls. Compare normal transitions and default native leaves separately, against the same native function and build settings. JVM measurements are secondary. Inspect optimized instructions as well as repeated timings; noisy intervals do not establish a performance win.
 
-Use the pinned tools through `mise`: Elide 1.6.2, elide-dev/toolchain 2026.11.5, and the checksum-verified elide-dev/graal 25.5.5-elide.26 distribution. Native builds use the external GraalVM driver. Keep Rust bitcode compatible with the pinned LLVM reader and linker. Run Elide builds/tests sequentially within one checkout because they share incremental output directories.
+Use the pinned tools through `mise`: Elide 1.6.2, elide-dev/toolchain 2026.11.5, and the checksum-verified elide-dev/graal 25.5.5-elide.27 distribution. Native builds use the external GraalVM driver. Keep Rust bitcode compatible with the pinned LLVM reader and linker. Run Elide builds/tests sequentially within one checkout because they share incremental output directories.
 
 Keep AOT FFM ABI adapters initialized at image build time and native symbol addresses initialized at runtime. Never embed process addresses in the image heap. Preserve the explicit SymbolLookup factory and test real Native Image execution for carrier, record, pointer and ownership changes.
 

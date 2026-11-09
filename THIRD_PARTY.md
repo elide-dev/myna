@@ -9,4 +9,4 @@ Myna's own code is available under `Apache-2.0 OR MIT`. Dependencies retain thei
 
 Preserve upstream notices when redistributing a bundled dependency or toolchain. Review the SBOM and the original package's license text for the exact distribution being shipped.
 
-- The Truffle Native Image regression fixture uses checksum-pinned GraalVM 25.5.5-elide.26 Java dependencies listed in `tests/values/truffle-deps.json`. They are test-only and are not bundled in the portable value SDK.
+- The Truffle Native Image regression fixture uses checksum-pinned GraalVM 25.5.5-elide.27 Java dependencies listed in `tests/values/truffle-deps.json`. They are test-only and are not bundled in the portable value SDK.

@@ -23,7 +23,7 @@ the baseline requires a real optimization available under the same contract.
 ## Toolchain and execution modes
 
 Pin Elide 1.6.2, the native toolchain 2026.11.5, and GraalVM
-25.5.5-elide.26. The latter is an explicit external distribution: Elide 1.6.2's
+25.5.5-elide.27. The latter is an explicit external distribution: Elide 1.6.2's
 embedded Native Image compiler reports 25.5.5-elide.21. Retain archive checksums,
 compiler versions, edition, target, JVM flags and native link flags with results.
 Rust and LLVM must pass bitcode compatibility tests, beyond a version-major check.

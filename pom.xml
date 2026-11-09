@@ -12,11 +12,11 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <dependencies>
-    <dependency><groupId>org.graalvm.sdk</groupId><artifactId>nativeimage</artifactId><version>25.5.5-elide.26</version><scope>provided</scope></dependency>
-    <dependency><groupId>org.graalvm.truffle</groupId><artifactId>truffle-api</artifactId><version>25.5.5-elide.26</version><scope>provided</scope></dependency>
+    <dependency><groupId>org.graalvm.sdk</groupId><artifactId>nativeimage</artifactId><version>25.5.5-elide.27</version><scope>provided</scope></dependency>
+    <dependency><groupId>org.graalvm.truffle</groupId><artifactId>truffle-api</artifactId><version>25.5.5-elide.27</version><scope>provided</scope></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>6.1.3</version><scope>test</scope></dependency>
   </dependencies>
-  <repositories><repository><id>gvm-elide</id><url>https://maven.elide.dev/gvm-elide/25.5.5-elide.26</url></repository></repositories>
+  <repositories><repository><id>gvm-elide</id><url>https://maven.elide.dev/gvm-elide/25.5.5-elide.27</url></repository></repositories>
   <build>
     <resources>
       <resource><directory>${project.basedir}</directory><targetPath>META-INF</targetPath><includes><include>LICENSE</include><include>LICENSE-APACHE</include><include>LICENSE-MIT</include></includes></resource>
@@ -28,7 +28,7 @@
       <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><version>3.11.0</version></plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.16.0</version>
-        <configuration><annotationProcessorPaths><path><groupId>org.graalvm.truffle</groupId><artifactId>truffle-dsl-processor</artifactId><version>25.5.5-elide.26</version></path></annotationProcessorPaths></configuration>
+        <configuration><annotationProcessorPaths><path><groupId>org.graalvm.truffle</groupId><artifactId>truffle-dsl-processor</artifactId><version>25.5.5-elide.27</version></path></annotationProcessorPaths></configuration>
       </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.2</version>
