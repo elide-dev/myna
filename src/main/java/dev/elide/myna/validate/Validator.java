@@ -411,6 +411,9 @@ public final class Validator {
         function.parameters().stream().noneMatch(p -> p.type() instanceof FunctionPointer),
         "Truffle cells do not support callback parameters" + advice);
     require(
+        function.parameters().stream().noneMatch(p -> p.type() instanceof Isolate),
+        "Truffle cells do not support isolate_thread parameters" + advice);
+    require(
         !enabled(function.facts(), "noreturn"),
         "Truffle cells require a returning import" + advice);
     String cell = function.name() + "_Cell";

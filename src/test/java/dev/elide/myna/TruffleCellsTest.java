@@ -521,6 +521,22 @@ class TruffleCellsTest {
         assertThrows(IllegalArgumentException.class, () -> generate(callbacks))
             .getMessage()
             .contains("callback parameters"));
+    // Found by SeamFuzzTest: an isolate_thread parameter crashed the cell emitter with a
+    // ClassCastException instead of being rejected with opt-out advice.
+    String isolate =
+        MODULE
+            + "import poke return=void error=no_failure\n"
+            + "  param value type=i64\n  param isolate type=isolate_thread\nend\n";
+    var isolateError = assertThrows(IllegalArgumentException.class, () -> generate(isolate));
+    assertTrue(
+        isolateError.getMessage().contains("isolate_thread parameters"), isolateError.getMessage());
+    assertTrue(isolateError.getMessage().contains("truffle_cell=false@explicit_contract on poke"));
+    assertTrue(
+        generate(
+                isolate.replace(
+                    "error=no_failure\n",
+                    "error=no_failure truffle_cell=false@explicit_contract\n"))
+            .containsKey("MynaTruffle.java"));
     String noreturn =
         MODULE
             + "import die return=void error=no_failure native_leaf=false@explicit_contract"
