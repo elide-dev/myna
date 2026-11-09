@@ -71,8 +71,7 @@ public final class IntegerCoercion extends Coercion {
     InteropLibrary interop = interop();
     try {
       if (interop.fitsInLong(value)) return narrow(interop.asLong(value), value);
-      if (unsigned && bits == 64 && interop.fitsInBigInteger(value))
-        return big(interop.asBigInteger(value), value);
+      if (interop.fitsInBigInteger(value)) return big(interop.asBigInteger(value), value);
       if (interop.fitsInDouble(value)) {
         double d = interop.asDouble(value);
         if (policy == CoercionPolicy.STRICT) throw mismatch(range(), value);
@@ -94,9 +93,12 @@ public final class IntegerCoercion extends Coercion {
   /** Big-integer arithmetic stays out of compiled code. */
   @CompilerDirectives.TruffleBoundary
   private long big(BigInteger big, Object value) {
-    if (big.signum() >= 0 && big.bitLength() <= 64) return big.longValue();
-    if (policy == CoercionPolicy.STRICT) throw mismatch(range(), value);
-    return big.longValue();
+    if (policy == CoercionPolicy.STRICT) {
+      if (unsigned && bits == 64 && big.signum() >= 0 && big.bitLength() <= 64)
+        return big.longValue();
+      throw mismatch(range(), value);
+    }
+    return truncate(big.longValue());
   }
 
   @CompilerDirectives.TruffleBoundary
