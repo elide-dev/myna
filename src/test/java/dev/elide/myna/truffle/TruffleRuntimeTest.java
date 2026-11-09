@@ -544,7 +544,8 @@ class TruffleRuntimeTest {
           }
         });
     var function = cell.function();
-    assertThrows(AssertionError.class, () -> function.call(value));
+    var error = assertThrows(AssertionError.class, () -> function.call(value));
+    assertInstanceOf(UnsupportedMessageException.class, error.getCause());
   }
 
   @Test
