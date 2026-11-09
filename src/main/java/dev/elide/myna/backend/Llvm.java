@@ -64,7 +64,11 @@ public final class Llvm implements Backend {
   private static String attributes(Map<String, Fact> facts) {
     var attrs = new ArrayList<String>();
     facts.forEach((name, fact) -> {
-      if (!fact.enabled() || !fact.approved() || name.equals("native_leaf")) return;
+      if (!fact.enabled() || !fact.approved()) return;
+      // These facts configure binding providers; they are not LLVM IR attributes.
+      if (name.equals("native_leaf")
+          || name.equals("truffle_cell")
+          || name.equals("truffle_raw_pointers")) return;
       attrs.add(
           switch (name) {
             case "nocapture" -> "captures(none)";

@@ -7,3 +7,14 @@ end
 import unused symbol=myna_intentionally_missing return=i64 error=no_failure
   param value type=i64
 end
+# C providers implement the by-value symbol and the advertised Native Image reference ABI.
+struct Pair size=8 align=4
+  field x type=i32 offset=0
+  field y type=i32 offset=4
+end
+import flip symbol=myna_fast_flip return=Pair error=no_failure
+  param value type=Pair
+end
+import total symbol=myna_fast_total return=i32 error=no_failure
+  param value type=Pair
+end

@@ -75,6 +75,24 @@ class TruffleCellsTest {
   }
 
   @Test
+  void providerFactsStayOutOfLlvmContracts() {
+    String plain =
+        MODULE + "import f return=i64 error=no_failure nounwind=true@explicit_contract\nend\n";
+    var baseline = generate(plain);
+    for (String fact : List.of("native_leaf", "truffle_cell", "truffle_raw_pointers")) {
+      for (String value : List.of("true", "false")) {
+        var output =
+            generate(
+                plain.replace("nounwind=", fact + "=" + value + "@explicit_contract nounwind="));
+        String llvm = output.get("seam.ll");
+        assertTrue(llvm.contains("declare i64 @f() nounwind\n"), llvm);
+        assertFalse(llvm.contains(fact), llvm);
+        assertNotEquals(baseline.get("seam.abi"), output.get("seam.abi"));
+      }
+    }
+  }
+
+  @Test
   void nativeCellsCoerceCallAndConvert() throws Exception {
     String truffle = generate(example()).get("CellApiTruffle.java");
     assertTrue(truffle.contains("public static final class add_Cell extends NativeCell"));

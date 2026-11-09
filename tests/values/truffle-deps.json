@@ -1,34 +1,34 @@
 [
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/truffle/truffle-api/25.5.5-elide.26/truffle-api-25.5.5-elide.26.jar",
-    "sha256": "6b3e6518fba40aa7d720c9de188b391e760f00c7632c9e2344e8ef23122007e9"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/truffle/truffle-api/25.5.5-elide.28/truffle-api-25.5.5-elide.28.jar",
+    "sha256": "8d4a1366a2fa828bd1bc9dc7222b21d49e78961bb115417fd347cd29c0186442"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/truffle/truffle-runtime/25.5.5-elide.26/truffle-runtime-25.5.5-elide.26.jar",
-    "sha256": "5a9f8b333eed5e2f160534d0e3f7519bdeb767ea1acbc59f27e63b333f60758b"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/truffle/truffle-runtime/25.5.5-elide.28/truffle-runtime-25.5.5-elide.28.jar",
+    "sha256": "8f64968acf04eaae94d43f6f70d937784da815c94db40d3c254737ae435a0a86"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/truffle/truffle-compiler/25.5.5-elide.26/truffle-compiler-25.5.5-elide.26.jar",
-    "sha256": "0f41ac15bd63ff81f7a1028826ab2b20c00a87506537abae600c387e9ac482b1"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/truffle/truffle-compiler/25.5.5-elide.28/truffle-compiler-25.5.5-elide.28.jar",
+    "sha256": "2df893af9aa72815b8a20c83417da0393a5dd486799fd3b51c881cee09362d61"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/sdk/collections/25.5.5-elide.26/collections-25.5.5-elide.26.jar",
-    "sha256": "c501474f2bb9554444328699509e6a351c9e0bf91f533a5dbb121c2bc3a6dd56"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/sdk/collections/25.5.5-elide.28/collections-25.5.5-elide.28.jar",
+    "sha256": "a86ac0d32318395b4af7a4e445afd7af0111194c4a12fc40ae75fc56023c0164"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/sdk/jniutils/25.5.5-elide.26/jniutils-25.5.5-elide.26.jar",
-    "sha256": "7f4c270c7817acc41295f16005ad72494109a4a06b466fd78923657934cfbb93"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/sdk/jniutils/25.5.5-elide.28/jniutils-25.5.5-elide.28.jar",
+    "sha256": "db08bf185e676283728c44dab38c3fc4803824763e97590cadfb1ef098883175"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/sdk/nativeimage/25.5.5-elide.26/nativeimage-25.5.5-elide.26.jar",
-    "sha256": "791cb2cc91e356bf8225bb85a1cba70411b920f454b448c99c02545b7873428d"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/sdk/nativeimage/25.5.5-elide.28/nativeimage-25.5.5-elide.28.jar",
+    "sha256": "461477057c380d3551d004641708733722ed7e09535d75043c8122a6aa683cdd"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/sdk/word/25.5.5-elide.26/word-25.5.5-elide.26.jar",
-    "sha256": "2b58b5b6b6c51690148e35fa6c184e8df4d06ea0964f62447caef2af5922204b"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/sdk/word/25.5.5-elide.28/word-25.5.5-elide.28.jar",
+    "sha256": "05261758e6a95c7e9820558fd2ac26c68c63caab844dab639140606cf4f78a4d"
   },
   {
-    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.26/org/graalvm/polyglot/polyglot/25.5.5-elide.26/polyglot-25.5.5-elide.26.jar",
-    "sha256": "88b7c1e8fd9d777a8a05cc4e9d093c7ee117a44de82305267631f8b1905130cd"
+    "url": "https://maven.elide.dev/gvm-elide/25.5.5-elide.28/org/graalvm/polyglot/polyglot/25.5.5-elide.28/polyglot-25.5.5-elide.28.jar",
+    "sha256": "c47e0a861d8a045db7c4116d7bd62b8bc97fee5d1f0a4dbcdd02b3330094f4c4"
   }
 ]

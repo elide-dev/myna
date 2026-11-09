@@ -14,6 +14,7 @@ public final class BooleanCoercion extends Coercion {
 
   public boolean execute(Object value) {
     if (value instanceof Boolean b) return b;
+    if (value == null) throw mismatch("bool", value);
     InteropLibrary interop = interop();
     if (interop.isBoolean(value)) {
       try {

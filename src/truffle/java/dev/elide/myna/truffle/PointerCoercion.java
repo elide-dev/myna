@@ -33,6 +33,7 @@ public final class PointerCoercion extends Coercion {
   }
 
   private long slow(Object value) {
+    if (value == null) return checked(0, value);
     if (value instanceof NativeResource resource && resource.isClosed()) {
       CompilerDirectives.transferToInterpreter();
       throw NativeCellException.of(

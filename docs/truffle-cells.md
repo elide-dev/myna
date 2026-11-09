@@ -247,3 +247,5 @@ Findings from the first measurement that are tracked, not blocking:
 In `myna-truffle` and the generator: cells, coercions, pointers, buffers, borrows, ownership, the
 executable wrapper. In each consumer: exposing a cell as a real JS function or Python callable,
 `bun:ffi`-style modules, `toArrayBuffer`, and dynamic (`dlopen` + signature) FFI over Truffle NFI.
+
+Host Java `null` arguments follow the same nullable pointer and byte-buffer rules as interop null values. Non-nullable pointers, byte buffers, and scalar coercions reject them with `NativeCellException`.

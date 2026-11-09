@@ -12,7 +12,7 @@ declare void @cells_fill(ptr captures(none) %bytes, i32 %count, i8 zeroext %valu
 declare i8 @cells_low_byte(i64 %value)
 declare i64 @cells_peek(ptr nonnull readonly %cell)
 declare void @cells_poke(ptr %cell, i64 %value)
-declare i64 @cells_raw_length(ptr %text) truffle_raw_pointers
+declare i64 @cells_raw_length(ptr %text)
 declare double @cells_scale(float %value, double %factor)
 declare i64 @cells_sleepy_add(i64 %left, i64 %right)
 declare i64 @cells_strlen(ptr nonnull readonly %text)
