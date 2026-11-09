@@ -115,7 +115,8 @@ class value_builder {
         if (bytes_.size() > UINT32_MAX)
           throw std::length_error("Myna region offset limit");
         push(kind | MYNA_VALUE_REGION_TEXT, static_cast<uint32_t>(value.size()), bytes_.size());
-        bytes_.insert(bytes_.end(), value.begin(), value.end());
+        auto first = reinterpret_cast<const uint8_t *>(value.data());
+        bytes_.insert(bytes_.end(), first, first + value.size());
       }
     });
   }
@@ -257,18 +258,16 @@ public:
         size_t start = directory_.size();
         for (uint64_t key = f.index + 1; key < nodes_.size();) {
           const auto &n = nodes_[key];
-          uint32_t hash = UINT32_C(2166136261);
-          for (uint32_t i = 0; i < n.length; ++i) {
-            uint8_t b;
-            if (myna_value_inline(&n))
-              b = myna_value_inline_byte(&n, i);
-            else {
-              auto region = myna_value_region_id(&n);
-              auto data = region ? regions_[region - 1].data : bytes_.data();
-              b = data[uint64_t(myna_value_offset(&n)) + i];
-            }
-            hash = (hash ^ b) * UINT32_C(16777619);
+          uint8_t packed[MYNA_VALUE_INLINE_BYTES];
+          const uint8_t *text = packed;
+          if (myna_value_inline(&n)) {
+            for (uint32_t i = 0; i < n.length; ++i)
+              packed[i] = myna_value_inline_byte(&n, i);
+          } else {
+            auto region = myna_value_region_id(&n);
+            text = (region ? regions_[region - 1].data : bytes_.data()) + myna_value_offset(&n);
           }
+          uint32_t hash = myna_value_hash(text, n.length);
           if (key - f.index > UINT32_MAX)
             throw std::length_error("Myna directory offset");
           directory_.push_back({hash, static_cast<uint32_t>(key - f.index)});

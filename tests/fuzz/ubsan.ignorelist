@@ -1,0 +1,11 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Narrow exemptions from -fsanitize=integer for arithmetic whose wraparound is
+# the specified behavior. Every other unsigned overflow, shift and implicit
+# conversion in the producer and harness remains fatal.
+#
+# ABI 4 directory hashes are FNV-1a with wrapping 32-bit multiplication
+# (values.h, crates/myna-values hash_utf8). The builder hashes through this one
+# helper, so no other code is exempted.
+[unsigned-integer-overflow]
+fun:*myna_value_hash*

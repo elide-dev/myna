@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <climits>
 #include <chrono>
+#include <cstdint>
 #if defined(MYNA_RACE_CANARY)
 volatile int shared = 0;
 int main() {
@@ -31,6 +32,19 @@ int main(int argc, char **) {
 int main(int argc, char **) {
   volatile int largest = INT_MAX;
   return largest + argc;
+}
+#elif defined(MYNA_TRUNCATION_CANARY)
+// -fsanitize=implicit-conversion: a silently narrowed length or offset.
+int main(int argc, char **) {
+  volatile uint64_t wide = UINT64_C(0x100000000) + uint64_t(argc);
+  uint32_t narrow = wide;
+  return narrow == 0 ? 1 : 0;
+}
+#elif defined(MYNA_UNSIGNED_CANARY)
+// -fsanitize=unsigned-integer-overflow outside the FNV-1a ignorelist entry.
+int main(int argc, char **) {
+  volatile uint32_t largest = UINT32_MAX;
+  return largest + uint32_t(argc) == 0 ? 1 : 0;
 }
 #else
 int main(int argc, char **) {

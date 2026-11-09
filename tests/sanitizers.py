@@ -45,7 +45,8 @@ if triple == "x86_64-unknown-linux-gnu":
 compiler = home / "bin" / f"{triple}-{args.mode}-clang++"
 flags = ["-std=c++17", "-O1", "-g", "-fno-omit-frame-pointer", "-pthread", "-I", ROOT / "include"]
 if args.mode == "asan":
-    flags += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
+    flags += ["-fsanitize=undefined,integer,implicit-conversion",
+              f"-fsanitize-ignorelist={ROOT / 'tests/fuzz/ubsan.ignorelist'}", "-fno-sanitize-recover=all"]
 # CI must fail on the first report, even if an inherited environment disabled it.
 options = {"ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1:abort_on_error=1:quarantine_size_mb=64",
            "LSAN_OPTIONS": "exitcode=23:report_objects=1",
@@ -127,6 +128,8 @@ else:
     canary("canary", None, "AddressSanitizer: heap-buffer-overflow")
     canary("leak-canary", "MYNA_LEAK_CANARY", "LeakSanitizer: detected memory leaks")
     canary("undefined-canary", "MYNA_UB_CANARY", "runtime error: signed integer overflow")
+    canary("truncation-canary", "MYNA_TRUNCATION_CANARY", "runtime error: implicit conversion from type")
+    canary("unsigned-canary", "MYNA_UNSIGNED_CANARY", "runtime error: unsigned integer overflow")
     canary("rss-canary", "MYNA_RSS_CANARY", "Myna runner: RSS limit exhausted")
 resource = Path(run(compiler, "--print-resource-dir").stdout.strip())
 runtime_files = [path for path in (resource / "lib").rglob("libclang_rt.*") if path.is_file()
@@ -192,4 +195,4 @@ else:
     lines = details["data"][0]["totals"]["lines"]
     if lines["percent"] < 98:
         raise AssertionError(f"C++ production line coverage below 98%: {lines}")
-print(f"{args.mode}: {'race canary' if args.mode == 'tsan' else 'overflow, UB, leak and RSS canaries'} and workload passed")
+print(f"{args.mode}: {'race canary' if args.mode == 'tsan' else 'overflow, UB, integer, leak and RSS canaries'} and workload passed")
