@@ -10,6 +10,8 @@ import java.nio.file.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CliTest {
   @TempDir Path temp;
@@ -153,6 +155,27 @@ class CliTest {
     assertFalse(Files.exists(out));
     assertEquals(0, run("generate", input.toString(), "--out", out.toString(), "--relaxed").code());
     assertFalse(Files.readString(out.resolve("seam.ll")).contains("readonly"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"box", "become", "override", "priv", "typeof", "unsized", "gen"})
+  void reservedRustKeywordsAreRejectedBeforeAnyOutput(String keyword) throws Exception {
+    Path input = temp.resolve("reserved-" + keyword + ".seam");
+    Path out = temp.resolve("out-" + keyword);
+    Files.writeString(
+        input,
+        "module demo target=aarch64-apple-darwin\n"
+            + "import "
+            + keyword
+            + " return=i64 error=no_failure\n"
+            + "  param become type=u64\n"
+            + "end\n");
+    var validate = run("validate", input.toString());
+    assertEquals(2, validate.code(), keyword);
+    assertFalse(validate.out().contains("valid demo"), keyword);
+    assertTrue(validate.err().contains("invalid or reserved identifier: " + keyword), keyword);
+    assertEquals(2, run("generate", input.toString(), "--out", out.toString()).code(), keyword);
+    assertFalse(Files.exists(out), keyword);
   }
 
   @Test
