@@ -128,8 +128,8 @@ contract states, and every borrow is released in a `finally`, in reverse acquisi
 - copies of writable borrows are written back on release.
 
 A pinned array does not move, so its address stays valid across any safepoint between the pin and
-the call. The pin/copy threshold is provisional (`-Dmyna.truffle.pinThreshold`, default 1024) until
-the crossover is measured from compiled Truffle code; see [Measurement](#measurement).
+the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
+[Measurement](#measurement).
 
 ## Ownership
 
