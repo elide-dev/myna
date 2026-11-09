@@ -191,6 +191,20 @@ class TruffleRuntimeTest {
     }
   }
 
+  /** A clean pointer that answers isPointer but refuses asPointer, for the coercion's catch path. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class LyingPointer implements TruffleObject {
+    @ExportMessage
+    boolean isPointer() {
+      return true;
+    }
+
+    @ExportMessage
+    long asPointer() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
   @ExportLibrary(InteropLibrary.class)
   static final class ForeignNull implements TruffleObject {
     @ExportMessage
@@ -443,7 +457,7 @@ class TruffleRuntimeTest {
     // path (fall through to shouldNotReachHere), so the coercion still fails safely.
     var cell = new PointerCell(true, true);
     cell.function();
-    assertThrows(Throwable.class, () -> cell.coerce(new Liar()));
+    assertThrows(Throwable.class, () -> cell.coerce(new LyingPointer()));
   }
 
   @Test
