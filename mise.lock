@@ -156,9 +156,9 @@ url_api = "https://api.github.com/repos/taiki-e/cargo-llvm-cov/releases/assets/4
 provenance = "github-attestations"
 
 [[tools.rust]]
-version = "1.99.1"
+version = "nightly-2026-10-09"
 backend = "core:rust"
-specifiers = ["1.99.1"]
+specifiers = ["nightly-2026-10-09"]
 
 [[tools.shellcheck]]
 version = "0.11.0"
