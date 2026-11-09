@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
@@ -176,8 +175,9 @@ public final class Borrow {
 
   /**
    * Guest code can shrink or detach the source buffer while the call runs (from a callback or
-   * another thread). Bytes that no longer exist cannot be written back: that is a guest error,
-   * reported after every surviving byte has been written, not an internal one.
+   * another thread). Bytes that no longer exist, or a buffer that no longer accepts writes, cannot
+   * be written back: that is a guest error, reported after every surviving byte has been written,
+   * not an internal one.
    */
   private void writeBackInterop() {
     InteropLibrary interop = InteropLibrary.getUncached(interopSource);
@@ -187,7 +187,8 @@ public final class Borrow {
       throw NativeCellException.of(
           null, "borrowed buffer shrank before write-back of byte ", e.getByteOffset());
     } catch (UnsupportedMessageException e) {
-      throw CompilerDirectives.shouldNotReachHere(e);
+      throw NativeCellException.of(
+          null, "borrowed buffer stopped accepting writes before write-back");
     }
   }
 

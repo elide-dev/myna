@@ -1575,6 +1575,7 @@ class TruffleRuntimeTest {
   static final class ResizableBuffer implements TruffleObject {
     final byte[] data;
     int size;
+    boolean detached;
 
     ResizableBuffer(int size) {
       this.data = new byte[size];
@@ -1588,7 +1589,7 @@ class TruffleRuntimeTest {
 
     @ExportMessage
     boolean isBufferWritable() {
-      return true;
+      return !detached;
     }
 
     @ExportMessage
@@ -1611,7 +1612,9 @@ class TruffleRuntimeTest {
     }
 
     @ExportMessage
-    void writeBufferByte(long offset, byte value) throws InvalidBufferOffsetException {
+    void writeBufferByte(long offset, byte value)
+        throws InvalidBufferOffsetException, UnsupportedMessageException {
+      if (detached) throw UnsupportedMessageException.create();
       if (offset < 0 || offset >= size) throw InvalidBufferOffsetException.create(offset, 1);
       data[(int) offset] = value;
     }
@@ -1683,6 +1686,19 @@ class TruffleRuntimeTest {
     var error = assertThrows(NativeCellException.class, borrow::release);
     assertEquals("borrowed buffer shrank before write-back of byte 2", error.getMessage());
     assertArrayEquals(new byte[] {7, 7, 0, 0}, buffer.data, "surviving bytes are written back");
+    borrow.release();
+  }
+
+  @Test
+  void writeBackToABufferDetachedDuringTheCallIsAGuestError() {
+    var buffer = new ResizableBuffer(4);
+    Borrow borrow = new BytesCoercion("f", "p", false, true, true).execute(buffer);
+    MemorySegment.ofAddress(borrow.address()).reinterpret(4).fill((byte) 7);
+    // A guest callback detaches the source buffer: it stops accepting writes altogether.
+    buffer.detached = true;
+    var error = assertThrows(NativeCellException.class, borrow::release);
+    assertEquals("borrowed buffer stopped accepting writes before write-back", error.getMessage());
+    assertArrayEquals(new byte[4], buffer.data, "nothing is written to a detached buffer");
     borrow.release();
   }
 
