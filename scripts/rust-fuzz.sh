@@ -2,24 +2,20 @@
 # Copyright the Myna contributors.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Fuzz the Rust value-tape reader (myna_tape_text_v1) and UTF-8 bridge with
-# cargo-fuzz: libFuzzer plus AddressSanitizer on the pinned nightly. The stable
-# toolchain stays the project default; nightly is used only for these binaries,
-# which never enter Myna's LLVM/ThinLTO bitcode. An expected-failure canary must
-# be reported by ASan before any campaign counts.
+# cargo-fuzz: libFuzzer plus AddressSanitizer (-Zsanitizer) on the project's
+# pinned nightly Rust. These binaries never enter Myna's LLVM/ThinLTO bitcode.
+# An expected-failure canary must be reported by ASan before any campaign counts.
 #   scripts/rust-fuzz.sh [seconds per target, default 60]
 set -eu
 cd "$(dirname "$0")/.."
-toolchain=${MYNA_RUST_NIGHTLY:?run through mise so the pinned nightly is set}
 seconds=${1:-60}
 fuzz=crates/myna-values/fuzz
 tools=build/tools/cargo-fuzz
 work=build/rust-fuzz
-rustup toolchain install "$toolchain" --profile minimal --no-self-update
-# Build cargo-fuzz for this host with the stable toolchain and its own lockfile.
+# Build cargo-fuzz for this host with its own lockfile.
 if [ "$("$tools/bin/cargo-fuzz" --version 2>/dev/null || true)" != "cargo-fuzz 0.13.1" ]; then
   cargo install cargo-fuzz --version 0.13.1 --locked --root "$tools"
 fi
-export RUSTUP_TOOLCHAIN="$toolchain"
 cargo fetch --locked --manifest-path "$fuzz/Cargo.toml"
 rm -rf "$work"
 mkdir -p "$work"

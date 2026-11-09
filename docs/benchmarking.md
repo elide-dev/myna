@@ -210,14 +210,14 @@ arbitrary bytes into such tables and checks every result against a safe referenc
 model; `cargo test` runs it as proptests. `mise run test:rust-fuzz` runs the same
 harness under cargo-fuzz with libFuzzer and ASan (`scripts/rust-fuzz.sh [seconds]`,
 60 per target by default, five minutes in CI) after an expected-failure ASan canary,
-and `mise run test:miri` runs the value tests under Miri. Both use the nightly
-pinned as `MYNA_RUST_NIGHTLY` in `mise.toml`, installed beside the pinned stable;
-its binaries never enter Myna's LLVM bitcode. `mise run test` runs both lanes, so its first run downloads that nightly (with
-Miri and rust-src) through rustup and builds cargo-fuzz into `build/tools`; set
-`MYNA_SKIP_NIGHTLY=1` to skip them locally, since CI still runs them. Miri cannot interpret simdutf's C++,
+and `mise run test:miri` runs the value tests under Miri. Both use the project's
+pinned nightly Rust from `mise.toml`; their binaries never enter Myna's LLVM
+bitcode. `mise run test` runs both lanes: the first run adds the `miri` and
+`rust-src` components and builds cargo-fuzz into `build/tools`, and together they
+take a few minutes. Set `MYNA_SKIP_MIRI_FUZZ=1` to skip them locally; CI always
+runs them. Miri cannot interpret simdutf's C++,
 so tests that must reach it are ignored under `cfg(miri)`. Replay a Rust crash with
-`build/tools/cargo-fuzz/bin/cargo-fuzz fuzz run --fuzz-dir crates/myna-values/fuzz TARGET FILE`
-under `RUSTUP_TOOLCHAIN=$MYNA_RUST_NIGHTLY`.
+`mise exec -- build/tools/cargo-fuzz/bin/cargo-fuzz fuzz run --fuzz-dir crates/myna-values/fuzz TARGET FILE`.
 The RSS watcher polls
 the process; it is a test termination limit, not an exact allocator budget.
 The value workload separately enforces actual live PMR allocation budgets and
