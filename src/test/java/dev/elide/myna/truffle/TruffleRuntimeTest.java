@@ -55,8 +55,10 @@ class TruffleRuntimeTest {
       pointer = new PointerCoercion("f", "p", nullable, rawNumbers);
     }
 
-    long coerce(Object value) {
-      return pointer.execute(value);
+    void useInterop(InteropLibrary library) throws ReflectiveOperationException {
+      var field = Coercion.class.getDeclaredField("interop");
+      field.setAccessible(true);
+      field.set(pointer, library);
     }
 
     @Override
@@ -511,9 +513,7 @@ class TruffleRuntimeTest {
             return INTEROP.asPointer(receiver);
           }
         };
-    var field = Coercion.class.getDeclaredField("interop");
-    field.setAccessible(true);
-    field.set(cell.pointer, interop);
+    cell.useInterop(interop);
     var function = cell.function();
     assertEquals(
         "f: parameter p received a closed Ticket",
@@ -521,12 +521,30 @@ class TruffleRuntimeTest {
   }
 
   @Test
-  void pointerCoercionFailsSafelyOnMisbehavingInterop() {
-    // A non-NativeResource that answers isPointer but throws in asPointer takes the catch's other
-    // path (fall through to shouldNotReachHere), so the coercion still fails safely.
+  void pointerCoercionFailsSafelyOnMisbehavingInterop() throws Exception {
+    var value = new LyingPointer();
     var cell = new PointerCell(true, true);
-    cell.function();
-    assertThrows(AssertionError.class, () -> cell.coerce(new LyingPointer()));
+    // Dispatch the messages directly: Truffle's assertion wrapper otherwise rejects the liar
+    // before the coercion sees UnsupportedMessageException, hiding the assertions-off behavior.
+    cell.useInterop(
+        new InteropLibrary() {
+          @Override
+          public boolean accepts(Object receiver) {
+            return receiver == value;
+          }
+
+          @Override
+          public boolean isPointer(Object receiver) {
+            return value.isPointer();
+          }
+
+          @Override
+          public long asPointer(Object receiver) throws UnsupportedMessageException {
+            return value.asPointer();
+          }
+        });
+    var function = cell.function();
+    assertThrows(AssertionError.class, () -> function.call(value));
   }
 
   @Test
