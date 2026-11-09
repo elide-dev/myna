@@ -910,7 +910,15 @@ fn native_unicode_bridge_checks_extents_and_unicode() {
 fn abi4_directories_metadata_references_and_recovery() {
     assert_eq!(std::mem::size_of::<RawViewV4>(), 88);
     assert_eq!(std::mem::size_of::<DirectoryEntry>(), 8);
-    assert_eq!(hash_utf8(b"hello"), 0x4f9f2cab);
+    // Published FNV-1a 32 vectors, shared with the C++ fuzzer's reference.
+    for (text, expected) in [
+        (&b""[..], 0x811c9dc5),
+        (b"a", 0xe40c292c),
+        (b"foobar", 0xbf9cf968),
+        (b"hello", 0x4f9f2cab),
+    ] {
+        assert_eq!(hash_utf8(text), expected);
+    }
     let arena = Bump::new();
     let mut b = Builder::new_in(&arena);
     b.enable_v4(2, true).unwrap();

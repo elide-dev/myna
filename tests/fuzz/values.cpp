@@ -29,6 +29,15 @@ struct bounded_resource final : std::pmr::memory_resource {
   bool do_is_equal(const std::pmr::memory_resource &other) const noexcept override { return this == &other; }
 };
 
+// Independent FNV-1a 32 reference, so a change to myna_value_hash (which the
+// builder now uses for directories) cannot drift unnoticed. 64-bit arithmetic
+// reduced mod 2^32 never wraps, so it needs no sanitizer exemption.
+static uint32_t reference_fnv1a(std::string_view bytes) {
+  uint64_t hash = UINT64_C(2166136261);
+  for (unsigned char b : bytes) hash = ((hash ^ b) * UINT64_C(16777619)) & UINT32_MAX;
+  return static_cast<uint32_t>(hash);
+}
+
 // Text bytes as published, read through the ABI rather than builder internals.
 static std::string_view text(const myna_value_view &view, const myna_value_node &n, char (&scratch)[16]) {
   if (myna_value_inline(&n)) {
@@ -139,7 +148,13 @@ extern "C" int LLVMFuzzerInitialize(int *, char ***) {
   auto extended = indexed.view_v4();
   assert(extended.directory_count == 4 && extended.metadata_count == 11);
   assert(extended.metadata[1] == 42 && extended.base.nodes[10].payload == 1);
-  assert(myna_value_hash(reinterpret_cast<const uint8_t *>("hello"), 5) == UINT32_C(0x4f9f2cab));
+  // Published FNV-1a 32 vectors, shared with the Rust hash_utf8 test.
+  for (auto [text, expected] : {std::pair<std::string_view, uint32_t>{"", UINT32_C(0x811c9dc5)},
+                                {"a", UINT32_C(0xe40c292c)}, {"foobar", UINT32_C(0xbf9cf968)},
+                                {"hello", UINT32_C(0x4f9f2cab)}}) {
+    assert(myna_value_hash(reinterpret_cast<const uint8_t *>(text.data()), text.size()) == expected);
+    assert(reference_fnv1a(text) == expected);
+  }
   rejected = false; try { indexed.view(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
   rejected = false; try { decimal.view_v4(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
   rejected = false; try { indexed.enable_v4(); } catch (const std::logic_error &) { rejected = true; } assert(rejected);
@@ -194,7 +209,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         assert(myna_value_kind(&key) == MYNA_VALUE_STRING);
         char scratch[16];
         auto bytes = text(extended.base, key, scratch);
-        assert(entry.hash == myna_value_hash(reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()));
+        assert(entry.hash == reference_fnv1a(bytes));
         if (j > start) {
           const auto &prior = extended.directory[j-1];
           assert(prior.hash < entry.hash || (prior.hash == entry.hash && prior.key_offset < entry.key_offset));

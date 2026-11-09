@@ -212,7 +212,9 @@ harness under cargo-fuzz with libFuzzer and ASan (`scripts/rust-fuzz.sh [seconds
 60 per target by default, five minutes in CI) after an expected-failure ASan canary,
 and `mise run test:miri` runs the value tests under Miri. Both use the nightly
 pinned as `MYNA_RUST_NIGHTLY` in `mise.toml`, installed beside the pinned stable;
-its binaries never enter Myna's LLVM bitcode. Miri cannot interpret simdutf's C++,
+its binaries never enter Myna's LLVM bitcode. `mise run test` runs both lanes, so its first run downloads that nightly (with
+Miri and rust-src) through rustup and builds cargo-fuzz into `build/tools`; set
+`MYNA_SKIP_NIGHTLY=1` to skip them locally, since CI still runs them. Miri cannot interpret simdutf's C++,
 so tests that must reach it are ignored under `cfg(miri)`. Replay a Rust crash with
 `build/tools/cargo-fuzz/bin/cargo-fuzz fuzz run --fuzz-dir crates/myna-values/fuzz TARGET FILE`
 under `RUSTUP_TOOLCHAIN=$MYNA_RUST_NIGHTLY`.

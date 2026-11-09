@@ -2,7 +2,7 @@
 
 Use the pinned tools described in [README](README.md). Run `mise install --locked` and `mise run setup`, then make changes on a branch and open a pull request. Keep discussions respectful and focused on the code and evidence.
 
-Run `mise run lint` and the tests relevant to the change. `mise run test` runs the full suite. Run Elide builds and tests sequentially in one checkout because they share output directories. CI exercises Linux and macOS; native changes need real SVM checks, not just JVM tests. See [AGENTS.md](AGENTS.md) for implementation constraints and [benchmarking](docs/benchmarking.md) for coverage, sanitizers, and reproducible performance checks.
+Run `mise run lint` and the tests relevant to the change. `mise run test` runs the full suite; it installs the pinned Rust nightly for Miri and cargo-fuzz on first use, which `MYNA_SKIP_NIGHTLY=1` skips (see [benchmarking](docs/benchmarking.md)). Run Elide builds and tests sequentially in one checkout because they share output directories. CI exercises Linux and macOS; native changes need real SVM checks, not just JVM tests. See [AGENTS.md](AGENTS.md) for implementation constraints and [benchmarking](docs/benchmarking.md) for coverage, sanitizers, and reproducible performance checks.
 
 For ABI, allocator, or ownership changes, explain the compatibility impact and failure behavior. Regenerate golden outputs when versioned descriptors change. Add automated tests for major new functionality and include a minimal regression test for a bug fix. For performance claims, preserve raw samples, source and binary hashes, toolchain and CPU identity, and matched transition/ownership contracts. SVM direct-call behavior is the primary target; shared-host timing changes are advisory.
 

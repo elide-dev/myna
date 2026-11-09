@@ -12,8 +12,13 @@ mise run test:cpp
 mise run test:rust-coverage
 mise run test:asan
 mise run test:tsan
-mise run test:miri
-mise run test:rust-fuzz
+# Both lanes install the pinned nightly (MYNA_RUST_NIGHTLY) on first use.
+if [ "${MYNA_SKIP_NIGHTLY:-0}" != 1 ]; then
+  mise run test:miri
+  mise run test:rust-fuzz
+else
+  echo "MYNA_SKIP_NIGHTLY=1: skipping Miri and Rust fuzzing (CI still runs them)" >&2
+fi
 scripts/test-jvm.sh
 scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py
