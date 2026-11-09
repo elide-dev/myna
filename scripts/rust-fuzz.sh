@@ -14,7 +14,11 @@ tools=build/tools/cargo-fuzz
 work=build/rust-fuzz
 # Build cargo-fuzz for this host with its own lockfile.
 if [ "$("$tools/bin/cargo-fuzz" --version 2>/dev/null || true)" != "cargo-fuzz 0.13.1" ]; then
-  cargo install cargo-fuzz --version 0.13.1 --locked --root "$tools"
+  # cargo-fuzz's lockfile pins rustix 0.36, whose Linux backend no longer builds on
+  # current nightlies. Build the tool itself with a pinned stable Rust; the fuzz
+  # targets still compile with the project's nightly (RUSTUP_TOOLCHAIN).
+  rustup toolchain install 1.99.1 --profile minimal
+  cargo +1.99.1 install cargo-fuzz --version 0.13.1 --locked --root "$tools"
 fi
 cargo fetch --locked --manifest-path "$fuzz/Cargo.toml"
 rm -rf "$work"
