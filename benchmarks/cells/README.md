@@ -25,6 +25,8 @@ the shared comparison kernel, each call depending on the previous result:
 - `direct-ffm-leaf`, `direct-ffm-step`: plain Java calls to the generated AOT FFM bindings.
 - `glue-*`: language-specific glue, a consumer node that adopts the generated cell as a child and
   calls `execute` directly, for the Native Image and FFM backends.
+- `typed-*`: the same glue holding the concrete generated cell type and calling its primitive
+  `executeLong`, so the result is never boxed and no `UnexpectedResultException` handler is needed.
 - `interop-*`: the generic path, the cell's executable wrapper called through a dispatched
   `InteropLibrary`.
 - `nfi-leaf`: Truffle NFI (libffi backend) bound to the same leaf symbol, the dynamic-FFI

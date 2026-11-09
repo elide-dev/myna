@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
@@ -27,8 +28,10 @@ import org.graalvm.nativeimage.PinnedObject;
  *   <li>Strings are encoded as UTF-8, NUL-terminated when the parameter is a C string.
  * </ul>
  *
- * <p>A pinned array does not move, so its address stays valid across any safepoint between the pin
- * and the call; an unpinned heap address is never handed to native code.
+ * <p>Copies of up to {@link Scratch#LARGEST} bytes come from the current thread's scratch stack
+ * ({@link Scratch}); larger copies, and copies that do not fit beside outstanding ones, get a
+ * confined arena of their own. A pinned array does not move, so its address stays valid across any
+ * safepoint between the pin and the call; an unpinned heap address is never handed to native code.
  */
 public final class Borrow {
   /**
@@ -49,35 +52,46 @@ public final class Borrow {
     static final int VALUE = Integer.getInteger("myna.truffle.pinThreshold", 256);
   }
 
-  private static final Borrow NONE = new Borrow(0, 0, null, null, null, null, false, null);
+  private static final Borrow NONE = new Borrow(0, 0, null, null, 0, false, null, null, false);
 
+  // Kept to the 48 bytes of a Borrow without scratch copies: what must be undone is one owner.
   private final long address;
   private final long length;
-  private final Arena arena;
+  private final Object owner;
   private final MemorySegment copy;
   private final byte[] array;
   private final Object interopSource;
+  private final int offset;
+  private final boolean terminated;
   private final boolean writeBack;
-  private final Object pin;
   private boolean released;
 
+  /**
+   * @param owner what release undoes: a {@link Scratch} stack, the copy's own {@link Arena}, a
+   *     {@link PinnedObject}, or {@code null} for lent native memory
+   * @param copy the segment holding a copy at {@code offset}: the scratch block or the arena's
+   *     allocation
+   * @param terminated whether the copy has a NUL terminator after {@code length} bytes
+   */
   private Borrow(
       long address,
       long length,
-      Arena arena,
+      Object owner,
       MemorySegment copy,
+      int offset,
+      boolean terminated,
       byte[] array,
       Object interopSource,
-      boolean writeBack,
-      Object pin) {
+      boolean writeBack) {
     this.address = address;
     this.length = length;
-    this.arena = arena;
+    this.owner = owner;
     this.copy = copy;
+    this.offset = offset;
+    this.terminated = terminated;
     this.array = array;
     this.interopSource = interopSource;
     this.writeBack = writeBack;
-    this.pin = pin;
   }
 
   /** The null borrow for a nullable parameter. */
@@ -87,7 +101,7 @@ public final class Borrow {
 
   /** Lends existing native memory for the call. */
   public static Borrow direct(long address, long length) {
-    return new Borrow(address, length, null, null, null, null, false, null);
+    return new Borrow(address, length, null, null, 0, false, null, null, false);
   }
 
   /** Lends a heap array: pinned when large and in a Native Image, otherwise copied. */
@@ -129,16 +143,42 @@ public final class Borrow {
     return copyOf(bytes, buffer, writable, nulTerminated);
   }
 
+  /**
+   * Copies into the current thread's scratch stack when the copy fits, otherwise into an arena of
+   * its own. The copy is pushed only once it is complete, so a failure leaves the stack unchanged.
+   */
   @TruffleBoundary
   private static Borrow copyOf(
       byte[] bytes, Object source, boolean writable, boolean nulTerminated) {
     long size = (long) bytes.length + (nulTerminated ? 1 : 0);
+    if (size <= Scratch.LARGEST) {
+      Scratch scratch = Scratches.CURRENT.get();
+      MemorySegment block = scratch.reserve(size);
+      if (block != null) {
+        int start = (int) scratch.top;
+        MemorySegment.copy(bytes, 0, block, ValueLayout.JAVA_BYTE, start, bytes.length);
+        if (nulTerminated) block.set(ValueLayout.JAVA_BYTE, start + bytes.length, (byte) 0);
+        Borrow borrow =
+            new Borrow(
+                block.address() + start,
+                bytes.length,
+                scratch,
+                block,
+                start,
+                nulTerminated,
+                bytes,
+                source,
+                writable);
+        scratch.top = start + Scratch.reservation(size);
+        return borrow;
+      }
+    }
     Arena arena = Arena.ofConfined();
     MemorySegment segment = arena.allocate(Math.max(size, 1));
     MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
     if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
     return new Borrow(
-        segment.address(), bytes.length, arena, segment, bytes, source, writable, null);
+        segment.address(), bytes.length, arena, segment, 0, nulTerminated, bytes, source, writable);
   }
 
   public long address() {
@@ -150,27 +190,49 @@ public final class Borrow {
     return length;
   }
 
-  /** Ends the borrow: writes copies back, unpins, frees. Idempotent; never throws for direct. */
+  /**
+   * Ends the borrow: writes copies back, unpins, frees. Idempotent; never throws for direct.
+   *
+   * @throws IllegalStateException if a scratch copy is released out of order or on another thread
+   *     than the one that acquired it; the borrow and the stack are left as they were, so releasing
+   *     in order afterwards still works
+   */
   public void release() {
     if (released) return;
-    released = true;
-    if (pin != null) {
-      Pins.unpin(pin);
+    Object owner = this.owner;
+    if (owner instanceof Scratch scratch) {
+      scratch.check(offset, offset + Scratch.reservation(length + (terminated ? 1 : 0)));
+      released = true;
+      if (writeBack) releaseScratch(scratch);
+      else scratch.top = offset;
       return;
     }
-    if (arena != null) releaseCopy();
+    released = true;
+    if (owner instanceof Arena arena) releaseCopy(arena);
+    else if (owner != null) Pins.unpin(owner);
   }
 
   @TruffleBoundary
-  private void releaseCopy() {
+  private void releaseScratch(Scratch scratch) {
     try {
-      if (writeBack) {
-        MemorySegment.copy(copy, ValueLayout.JAVA_BYTE, 0, array, 0, array.length);
-        if (interopSource != null) writeBackInterop();
-      }
+      writeBack();
+    } finally {
+      scratch.top = offset;
+    }
+  }
+
+  @TruffleBoundary
+  private void releaseCopy(Arena arena) {
+    try {
+      if (writeBack) writeBack();
     } finally {
       arena.close();
     }
+  }
+
+  private void writeBack() {
+    MemorySegment.copy(copy, ValueLayout.JAVA_BYTE, offset, array, 0, array.length);
+    if (interopSource != null) writeBackInterop();
   }
 
   /**
@@ -197,11 +259,102 @@ public final class Borrow {
     static Borrow pin(byte[] array) {
       PinnedObject pinned = PinnedObject.create(array);
       long address = pinned.addressOfArrayElement(0).rawValue();
-      return new Borrow(address, array.length, null, null, array, null, false, pinned);
+      return new Borrow(address, array.length, pinned, null, 0, false, array, null, false);
     }
 
     static void unpin(Object pin) {
       ((PinnedObject) pin).close();
+    }
+  }
+
+  /**
+   * The run-time-initialized holder of every thread's scratch stack, so that no block, and no
+   * address, is created at build time or reaches the image heap.
+   */
+  private static final class Scratches {
+    static final ThreadLocal<Scratch> CURRENT = ThreadLocal.withInitial(Scratch::new);
+  }
+
+  /**
+   * One thread's bump allocator for small copies: a single native block, pushed on acquisition and
+   * popped on release. Cells release borrows in reverse acquisition order (nested {@code finally}
+   * blocks), and a call from native code back into guest code acquires and releases above the
+   * borrows of the call it interrupts, so use is last-in, first-out by construction. Copies are
+   * contiguous, so a copy is the innermost exactly when it ends at the top; any other release, or a
+   * release on another thread, throws and leaves the stack unchanged.
+   *
+   * <p>A copy that does not fit beside outstanding copies takes the arena path; the next
+   * acquisition on an empty stack grows the block geometrically to that high-water mark, up to
+   * {@link #LIMIT} bytes. Blocks come from automatic arenas: a replaced block, and the block of a
+   * thread that has ended (with its {@code ThreadLocal} entry), is freed by the collector once
+   * unreachable, so each live thread that has copied retains at most one block of at most {@link
+   * #LIMIT} bytes. A borrow that is never released keeps its bytes reserved for the thread's
+   * lifetime; later copies stack above it or fall back to arenas.
+   */
+  static final class Scratch {
+    /** The first block's size in bytes. */
+    static final long INITIAL = 4096;
+
+    /** The largest block in bytes; offsets into it fit an {@code int}. */
+    static final long LIMIT = 64 * 1024;
+
+    /** The largest copy, terminator included, that the stack takes. */
+    static final long LARGEST = 16 * 1024;
+
+    /** Copies start on 16-byte boundaries, as {@code malloc} results do. */
+    static final long ALIGNMENT = 16;
+
+    private final Thread thread = Thread.currentThread();
+    private MemorySegment block;
+    private long wanted = INITIAL;
+
+    /** The end of the innermost copy: zero when the stack is empty. */
+    long top;
+
+    /**
+     * The bytes a copy of {@code size} bytes occupies; an empty copy still gets its own address.
+     */
+    static long reservation(long size) {
+      return (Math.max(size, 1) + ALIGNMENT - 1) & -ALIGNMENT;
+    }
+
+    /** The block to copy {@code size} bytes into at {@link #top}, or {@code null} if it is full. */
+    MemorySegment reserve(long size) {
+      long end = top + reservation(size);
+      wanted = Math.max(wanted, end);
+      if (top == 0 && (block == null || block.byteSize() < wanted)) {
+        long capacity = block == null ? INITIAL : block.byteSize();
+        while (capacity < wanted && capacity < LIMIT) capacity *= 2;
+        if (block == null || capacity != block.byteSize())
+          block = Arena.ofAuto().allocate(capacity, ALIGNMENT);
+      }
+      return end <= block.byteSize() ? block : null;
+    }
+
+    /**
+     * Fails unless the copy at {@code start} ending at {@code end} is innermost, on this thread.
+     */
+    void check(int start, long end) {
+      if (top != end || thread != Thread.currentThread()) {
+        CompilerDirectives.transferToInterpreter();
+        throw misuse(start);
+      }
+    }
+
+    @TruffleBoundary
+    private IllegalStateException misuse(int start) {
+      if (thread != Thread.currentThread())
+        return new IllegalStateException(
+            "borrow released on thread "
+                + Thread.currentThread().getName()
+                + " but acquired on "
+                + thread.getName());
+      return new IllegalStateException(
+          "borrow released out of order: the copy at offset "
+              + start
+              + " is not the innermost (top "
+              + top
+              + ")");
     }
   }
 }

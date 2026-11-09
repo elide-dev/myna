@@ -94,6 +94,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeInt(arguments);
+        }
+        @Override
+        public int executeInt(Object[] arguments) {
             checkArity(arguments);
             int value_left = (int) coerce_left.execute(arguments[0]);
             int value_right = (int) coerce_right.execute(arguments[1]);
@@ -109,6 +113,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             Borrow borrow_bytes = coerce_bytes.execute(arguments[0]);
             try {
@@ -158,6 +166,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_counter = coerce_counter.execute(arguments[0]);
             return CellApi.counterNext(WordFactory.pointer(address_counter));
@@ -195,6 +207,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeInt(arguments);
+        }
+        @Override
+        public int executeInt(Object[] arguments) {
             checkArity(arguments);
             long value_value = coerce_value.execute(arguments[0]);
             return Carriers.u8(CellApi.lowByte(value_value));
@@ -209,6 +225,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_cell = coerce_cell.execute(arguments[0]);
             return CellApi.peek(WordFactory.pointer(address_cell));
@@ -241,6 +261,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_text = coerce_text.execute(arguments[0]);
             return CellApi.rawLength(WordFactory.pointer(address_text));
@@ -257,6 +281,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeDouble(arguments);
+        }
+        @Override
+        public double executeDouble(Object[] arguments) {
             checkArity(arguments);
             float value_value = (float) coerce_value.execute(arguments[0]);
             double value_factor = coerce_factor.execute(arguments[1]);
@@ -274,6 +302,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long value_left = coerce_left.execute(arguments[0]);
             long value_right = coerce_right.execute(arguments[1]);
@@ -289,6 +321,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             Borrow borrow_text = coerce_text.execute(arguments[0]);
             try {
@@ -313,6 +349,10 @@ public final class CellApiTruffle {
         }
         @Override
         public Object execute(Object[] arguments) {
+            return executeLong(arguments);
+        }
+        @Override
+        public long executeLong(Object[] arguments) {
             checkArity(arguments);
             byte value_small = (byte) coerce_small.execute(arguments[0]);
             short value_medium = (short) coerce_medium.execute(arguments[1]);

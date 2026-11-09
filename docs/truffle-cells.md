@@ -63,6 +63,13 @@ interop dispatch, which partial evaluation inlines for a monomorphic call site. 
 the fastest path exposes the cell as one of its own function objects (for GraalJS, `JSFunctionData`
 around `NativeFunction.callTarget()`); that glue lives in the consumer.
 
+A cell with a scalar result also overrides the matching typed method, `executeLong`, `executeInt`,
+`executeDouble` or `executeBoolean` (the guest carrier: `long` for 64-bit, `usize` and `u32` results,
+`int` for narrower integers and `char`, `double` for floats), and its `execute` boxes that value.
+Language glue holding the concrete `*_Cell` type calls the typed method with no box and no exception
+handler; through `NativeCell`, the typed methods default to unboxing `execute` and throw
+`UnexpectedResultException` for any other result.
+
 Partial evaluation inlines only methods of build-time-initialized classes, so every class that
 takes part in a compiled guest call must initialize at image build time: `myna-truffle.jar` carries
 a `native-image.properties` for its own classes (keeping the empty-buffer dummy and the pin
@@ -125,7 +132,29 @@ contract states, and every borrow is released in a `finally`, in reverse acquisi
 - native memory (`NativeBytes`, interop pointers) is lent in place;
 - heap arrays are pinned for the call in a Native Image when they reach `Borrow.pinThreshold()`
   bytes, and copied into temporary native memory otherwise; HotSpot always copies;
-- copies of writable borrows are written back on release.
+- copies of writable borrows are written back on release;
+- copies (heap arrays, strings, other interop buffers) of up to 16 KiB go on a per-thread scratch
+  stack: one native block per thread, bumped on acquisition and popped on release, so a small copy
+  costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
+  arena of their own. Because cells release in reverse order, nested borrows and calls back into
+  guest code are last-in, first-out; releasing out of order or on another thread throws
+  `IllegalStateException` and leaves the stack unchanged.
+
+The scratch stack's lifetimes have three caveats:
+
+- every thread that copies, virtual threads included, gets its own block of 4 KiB, growing to at
+  most 64 KiB. The block comes from an automatic arena, so it is freed only after the thread and
+  its `ThreadLocal` entry become unreachable, when the arena's `Cleaner` runs. Many short-lived
+  virtual threads that each borrow can therefore hold up to 64 KiB of native memory apiece until
+  the collector reclaims them;
+- a borrow that is never released keeps its bytes reserved on that thread's stack for the
+  thread's lifetime. Later copies stack above it, and once the block is full they fall back to
+  arenas of their own;
+- generated cells release in a `finally`, so if `release()` ever throws its misuse
+  `IllegalStateException` while an exception is already propagating, the new exception replaces
+  the original one. Generated code always releases in order on the acquiring thread, so this means
+  an invariant was violated (for example, a consumer released a cell's borrow by hand). It is not
+  expected behaviour.
 
 A pinned array does not move, so its address stays valid across any safepoint between the pin and
 the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
@@ -197,7 +226,11 @@ baseline, and the three borrow strategies by size, retaining raw samples, hashes
 compilation traces as [benchmarking](benchmarking.md) requires.
 
 The checked-in [Linux amd64 baseline](../benchmarks/cells/baselines/wsl2-linux-amd64-2026-11-07.md)
-(five processes per case, a shared WSL2 workstation, so advisory) shows, in ns per call:
+(five processes per case, a shared WSL2 workstation, so advisory) was measured at source revision
+`83229a2`, before the per-thread scratch stack and the typed `execute*` methods. Its copy and
+string figures therefore show the earlier per-call confined arena, its FFM figures include the
+boxed result, and it has no `typed-*` cases. It has not been regenerated since; the figures below
+are that baseline's, in ns per call:
 
 | Path | Direct Java call | Cell via glue | Cell via interop wrapper |
 |---|---:|---:|---:|
@@ -230,9 +263,17 @@ Findings from the first measurement that are tracked, not blocking:
 
 - FFM cells and borrowing cells allocate 48 bytes per call in compiled code: the boxed result,
   the argument array and the `Borrow` are not scalar-replaced across the downcall's exception
-  handler and the borrow's `finally`. Native leaf and transition cells allocate nothing.
-- A Java string lent to a C string parameter costs about 27 ns per call, mostly the confined arena
-  opened for the UTF-8 copy; a pooled scratch buffer would cut it.
+  handler and the borrow's `finally`. Native leaf and transition cells allocate nothing. Since
+  scalar cells return through their typed method, the FFM handler wraps a primitive return and
+  the box is gone: FFM cells measured 32 B per call on a shared Apple M5 Max, through `execute`
+  and through `executeLong` alike; the remaining 32 B are not yet attributed, and the time
+  difference was within that host's noise.
+- A Java string lent to a C string parameter cost about 27 ns per call in this baseline, mostly the
+  confined arena opened for the UTF-8 copy. Copies now use a per-thread scratch stack (see
+  [Borrows](#borrows)). On a shared Apple M5 Max, same build settings before and after, five
+  processes per case, `glue-text` went from 32.5 ns and 208 B to about 21 ns and 72 B, and
+  `glue-sum-copy-16` from 26.0 ns and 184 B to about 15 ns and 48 B (advisory: the host was not
+  quiet). These Mac figures are local before/after runs, not a checked-in baseline.
 - The generator has no FFM critical cell variant; the direct FFM leaf (5.5 ns) already beats the
   measured critical downcall figures on this fork, so none is planned until a consumer asks.
 - Truffle NFI is an internal language: host code cannot `eval("nfi", ...)`, so the benchmark

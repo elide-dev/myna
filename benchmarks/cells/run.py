@@ -31,7 +31,7 @@ from truffle_integration import truffle_jars
 WORKLOAD = 'truffle-cells-v1'
 SIZES = (16, 256, 1024, 4096, 65536)
 SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ffm-step', 'glue-leaf', 'glue-step',
-          'glue-ffm-leaf', 'glue-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text']
+          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text']
 BORROWS = [f'{kind}-{size}' for size in SIZES for kind in ('direct-sum', 'glue-sum-native', 'glue-sum-pin', 'glue-sum-copy')]
 CASES = SCALAR + BORROWS
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',

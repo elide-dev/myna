@@ -507,9 +507,24 @@ public final class TruffleCells implements Backend {
         .append(cell.arity())
         .append(");\n")
         .append(init)
-        .append("        }\n")
-        .append("        @Override\n        public Object execute(Object[] arguments) {\n")
-        .append("            checkArity(arguments);\n")
+        .append("        }\n");
+    String[] typed =
+        cell.creates() == null && cell.destroys() == null && f.returns() instanceof Scalar s
+            ? typed(s)
+            : null;
+    if (typed != null)
+      // Scalar results get a primitive entry point; execute boxes it for the generic path.
+      out.append("        @Override\n        public Object execute(Object[] arguments) {\n")
+          .append("            return ")
+          .append(typed[1])
+          .append("(arguments);\n        }\n")
+          .append("        @Override\n        public ")
+          .append(typed[0])
+          .append(' ')
+          .append(typed[1])
+          .append("(Object[] arguments) {\n");
+    else out.append("        @Override\n        public Object execute(Object[] arguments) {\n");
+    out.append("            checkArity(arguments);\n")
         .append(locals)
         .append(callBlock)
         .append("        }\n    }\n");
@@ -568,6 +583,20 @@ public final class TruffleCells implements Backend {
       case U32 -> "Carriers.u32(" + invoke + ")";
       case F32 -> "(double) " + invoke;
       case VOID -> throw new IllegalStateException("void is handled by the caller");
+    };
+  }
+
+  /**
+   * The guest carrier and typed {@code NativeCell} method of a scalar result, matching {@link
+   * #converted}, or {@code null} for {@code void}.
+   */
+  private static String[] typed(Scalar r) {
+    return switch (r) {
+      case VOID -> null;
+      case BOOL -> new String[] {"boolean", "executeBoolean"};
+      case CHAR, I8, I16, I32, U8, U16 -> new String[] {"int", "executeInt"};
+      case I64, U64, USIZE, ISIZE, U32 -> new String[] {"long", "executeLong"};
+      case F32, F64 -> new String[] {"double", "executeDouble"};
     };
   }
 

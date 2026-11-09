@@ -11,6 +11,7 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -44,6 +45,72 @@ class TruffleRuntimeTest {
       checkArity(arguments);
       return (int) left.execute(arguments[0]) + (int) right.execute(arguments[1]);
     }
+  }
+
+  /** A cell shaped like a generated scalar-result one: the typed method, and execute boxing it. */
+  static final class TypedSumCell extends NativeCell {
+    @Node.Child
+    private IntegerCoercion left =
+        new IntegerCoercion("sum", "left", 64, false, CoercionPolicy.STRICT);
+
+    @Node.Child
+    private IntegerCoercion right =
+        new IntegerCoercion("sum", "right", 64, false, CoercionPolicy.STRICT);
+
+    TypedSumCell() {
+      super("sum", 2);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      return executeLong(arguments);
+    }
+
+    @Override
+    public long executeLong(Object[] arguments) {
+      checkArity(arguments);
+      return left.execute(arguments[0]) + right.execute(arguments[1]);
+    }
+  }
+
+  /** A cell returning whatever it is given, for the default typed methods. */
+  static final class EchoCell extends NativeCell {
+    EchoCell() {
+      super("echo", 1);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      return arguments[0];
+    }
+  }
+
+  @Test
+  void typedExecuteMatchesExecute() throws Exception {
+    var typed = new TypedSumCell();
+    for (long[] pair : new long[][] {{40, 2}, {-7, 3}, {Long.MAX_VALUE, 0}, {0, Long.MIN_VALUE}}) {
+      Object[] arguments = {pair[0], pair[1]};
+      assertEquals(typed.execute(arguments), typed.executeLong(arguments));
+      assertEquals(pair[0] + pair[1], typed.executeLong(arguments));
+    }
+    assertEquals(42L, typed.function().call(40, 2));
+    assertThrows(NativeCellException.class, () -> typed.executeLong(new Object[] {1L}));
+    // The defaults unbox execute, and report any other result instead of converting it.
+    var echo = new EchoCell();
+    assertEquals(5L, echo.executeLong(new Object[] {5L}));
+    assertEquals(6, echo.executeInt(new Object[] {6}));
+    assertEquals(1.5, echo.executeDouble(new Object[] {1.5}));
+    assertTrue(echo.executeBoolean(new Object[] {true}));
+    for (Object other : new Object[] {7, "x", NativeVoid.INSTANCE}) {
+      var e =
+          assertThrows(
+              UnexpectedResultException.class, () -> echo.executeLong(new Object[] {other}));
+      assertSame(other, e.getResult());
+    }
+    assertThrows(UnexpectedResultException.class, () -> echo.executeInt(new Object[] {7L}));
+    assertThrows(UnexpectedResultException.class, () -> echo.executeDouble(new Object[] {1f}));
+    assertThrows(UnexpectedResultException.class, () -> echo.executeBoolean(new Object[] {1}));
   }
 
   /** A one-argument cell shaped like a generated {@code ptr<T>} binding, for coercion tests. */
@@ -797,8 +864,11 @@ class TruffleRuntimeTest {
   @Test
   void foreignBufferBorrowedAsCStringIsNulTerminated() {
     var cString = new BytesCoercion("f", "text", false, false, false);
-    // 24 bytes runs past the FFM confined-arena zero-fill horizon, so a missing terminator reads
-    // as stale non-zero heap data (the OOB read the bug report describes), not allocator luck.
+    // Copies reuse the thread's scratch block without zeroing it, so a missing terminator would
+    // read stale non-zero data (the OOB read the bug report describes), not allocator luck.
+    byte[] junk = new byte[64];
+    java.util.Arrays.fill(junk, (byte) 'Z');
+    Borrow.ofArray(junk, false, false).release();
     byte[] data = new byte[24];
     java.util.Arrays.fill(data, (byte) 'A');
     Borrow borrow = cString.execute(new ForeignBuffer(data, false));
@@ -837,6 +907,377 @@ class TruffleRuntimeTest {
     assertEquals(0x10, direct.address());
     assertEquals(3, direct.length());
     direct.release();
+  }
+
+  interface ThreadBody {
+    void run() throws Exception;
+  }
+
+  /**
+   * Runs on a thread of its own, so the thread's scratch stack starts empty and at its first size.
+   */
+  private static void onFreshThread(ThreadBody body) throws Exception {
+    var failure = new AtomicReference<Throwable>();
+    Thread thread =
+        new Thread(() -> {
+          try {
+            body.run();
+          } catch (Throwable e) {
+            failure.set(e);
+          }
+        });
+    thread.start();
+    thread.join();
+    Throwable thrown = failure.get();
+    if (thrown instanceof Exception e) throw e;
+    if (thrown instanceof Error e) throw e;
+    if (thrown != null) throw new AssertionError("worker thread failed", thrown);
+  }
+
+  /**
+   * Two C strings, coerced and released exactly as a generated cell does: each borrow opens its own
+   * try, so a failure releases the earlier ones, and release runs in reverse order. The call
+   * concatenates both strings as native code would read them, through their NUL terminators, and
+   * may first run a nested call, as native code calling back into guest code would.
+   */
+  static final class PairCell extends NativeCell {
+    @Node.Child private BytesCoercion coerce_first;
+    @Node.Child private BytesCoercion coerce_second;
+    final List<Long> addresses = java.util.Collections.synchronizedList(new ArrayList<>());
+    Runnable callback = () -> {};
+
+    PairCell() {
+      super("pair", 2);
+      coerce_first = new BytesCoercion("pair", "first", false, false, false);
+      coerce_second = new BytesCoercion("pair", "second", false, false, false);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      Borrow borrow_first = coerce_first.execute(arguments[0]);
+      try {
+        Borrow borrow_second = coerce_second.execute(arguments[1]);
+        try {
+          addresses.add(borrow_first.address());
+          addresses.add(borrow_second.address());
+          callback.run();
+          return cString(borrow_first.address()) + cString(borrow_second.address());
+        } finally {
+          borrow_second.release();
+        }
+      } finally {
+        borrow_first.release();
+      }
+    }
+  }
+
+  /** Reads a C string up to its terminator, as native code would. */
+  private static String cString(long address) {
+    return MemorySegment.ofAddress(address).reinterpret(Long.MAX_VALUE).getString(0);
+  }
+
+  @Test
+  void scratchCopiesNestAndReleaseLastInFirstOut() throws Exception {
+    onFreshThread(() -> {
+      Borrow first = Borrow.ofString("first", true);
+      Borrow second = Borrow.ofString("second", true);
+      // Bump allocation: the second copy sits on the next 16-byte boundary.
+      assertEquals(first.address() + 16, second.address());
+      assertEquals("first", cString(first.address()));
+      assertEquals("second", cString(second.address()));
+      // Out of order fails loudly and changes nothing; in order afterwards still works.
+      var misuse = assertThrows(IllegalStateException.class, first::release);
+      assertEquals(
+          "borrow released out of order: the copy at offset 0 is not the innermost (top 32)",
+          misuse.getMessage());
+      assertEquals("second", cString(second.address()));
+      Borrow third = Borrow.ofString("third", true);
+      assertEquals(second.address() + 16, third.address());
+      third.release();
+      second.release();
+      first.release();
+      first.release();
+      // An empty stack reuses the block from its start; an empty copy still gets an address.
+      Borrow empty = Borrow.ofArray(new byte[0], false, false);
+      assertEquals(first.address(), empty.address());
+      Borrow next = Borrow.ofString("x", true);
+      assertEquals(first.address() + 16, next.address());
+      next.release();
+      empty.release();
+      // A borrow cannot be released by another thread, which would race the owner's stack.
+      Borrow owned = Borrow.ofString("owned", true);
+      var other = new AtomicReference<Throwable>();
+      Thread thief =
+          new Thread(() -> other.set(assertThrows(RuntimeException.class, owned::release)));
+      thief.start();
+      thief.join();
+      assertTrue(other.get().getMessage().startsWith("borrow released on thread "));
+      owned.release();
+      assertEquals(first.address(), Borrow.ofString("y", true).address());
+    });
+  }
+
+  @Test
+  void scratchCopiesWriteBackAndTerminateCStrings() throws Exception {
+    onFreshThread(() -> {
+      // Dirty the block so a missing terminator would read stale bytes.
+      byte[] junk = new byte[64];
+      java.util.Arrays.fill(junk, (byte) 'Z');
+      Borrow dirty = Borrow.ofArray(junk, false, false);
+      long base = dirty.address();
+      dirty.release();
+      Borrow text = Borrow.ofString("abc", true);
+      assertEquals(base, text.address());
+      assertEquals(3, text.length());
+      assertEquals("abc", cString(text.address()));
+      text.release();
+      var cString = new BytesCoercion("f", "text", false, false, false);
+      Borrow foreign = cString.execute(new ForeignBuffer(new byte[] {'h', 'i'}, false));
+      assertEquals(base, foreign.address());
+      assertEquals("hi", cString(foreign.address()));
+      foreign.release();
+      // Writable heap bytes and generic buffers are written back from the scratch copy, and only
+      // their own length: the terminator never reaches the source.
+      byte[] array = {1, 2, 3};
+      Borrow outer = Borrow.ofString("outer", true);
+      Borrow heap = Borrow.ofArray(array, true, true);
+      assertEquals(outer.address() + 16, heap.address());
+      MemorySegment view = MemorySegment.ofAddress(heap.address()).reinterpret(4);
+      assertEquals(0, view.get(ValueLayout.JAVA_BYTE, 3));
+      view.set(ValueLayout.JAVA_BYTE, 0, (byte) 9);
+      view.set(ValueLayout.JAVA_BYTE, 3, (byte) 8);
+      heap.release();
+      assertArrayEquals(new byte[] {9, 2, 3}, array);
+      byte[] data = {5, 6, 7};
+      var writable = new BytesCoercion("f", "bytes", false, true, true);
+      Borrow generic = writable.execute(new ForeignBuffer(data, true));
+      assertEquals(outer.address() + 16, generic.address());
+      MemorySegment.ofAddress(generic.address())
+          .reinterpret(3)
+          .set(ValueLayout.JAVA_BYTE, 2, (byte) 4);
+      generic.release();
+      assertArrayEquals(new byte[] {5, 6, 4}, data);
+      assertEquals("outer", cString(outer.address()));
+      outer.release();
+      // A write-back that fails is a guest error, and still pops the copy.
+      var refusing = new BytesCoercion("f", "bytes", false, true, true);
+      Borrow refused = refusing.execute(new LateRefusingBuffer());
+      assertThrows(NativeCellException.class, refused::release);
+      assertEquals(base, Borrow.ofString("after", true).address());
+    });
+  }
+
+  /** Writable when borrowed, then refuses the write-back: release must still pop its copy. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class LateRefusingBuffer implements TruffleObject {
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return true;
+    }
+
+    @ExportMessage
+    long getBufferSize() {
+      return 2;
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length) {}
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value) {}
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value) {}
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value) {}
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value) {}
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) {
+      return 0;
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value) {}
+  }
+
+  @Test
+  void blockGrowthStopsAtTheLimitAndIsNotReallocatedThere() throws Exception {
+    onFreshThread(() -> {
+      int copy = (int) Borrow.Scratch.LARGEST - 16; // a terminated copy reserves LARGEST bytes
+      long limit = Borrow.Scratch.LIMIT;
+      // Nest one more copy each round: every overflow raises the mark by one copy, and the next
+      // empty-stack acquisition grows the block to it, up to the limit (four copies).
+      long base = 0;
+      for (int depth = 1; depth <= 5; depth++) {
+        List<Borrow> held = new ArrayList<>();
+        for (int i = 0; i < depth; i++) held.add(Borrow.ofArray(new byte[copy], false, true));
+        base = held.get(0).address();
+        for (int i = held.size() - 1; i >= 0; i--) held.get(i).release();
+      }
+      // The fifth copy wanted more than the limit, but the block stays at the limit: four fit.
+      List<Borrow> fit = new ArrayList<>();
+      for (int i = 0; i < 4; i++) {
+        Borrow next = Borrow.ofArray(new byte[copy], false, true);
+        assertEquals(base + i * Borrow.Scratch.LARGEST, next.address());
+        fit.add(next);
+      }
+      assertEquals(limit, 4 * Borrow.Scratch.LARGEST);
+      for (int i = fit.size() - 1; i >= 0; i--) fit.get(i).release();
+    });
+  }
+
+  @Test
+  void oversizeCopiesTakeTheArenaPathAndTheBlockGrows() throws Exception {
+    onFreshThread(() -> {
+      int largest = (int) Borrow.Scratch.LARGEST;
+      Borrow anchor = Borrow.ofString("a", true);
+      long base = anchor.address();
+      anchor.release();
+      // Larger than any scratch copy: an arena of its own, written back all the same.
+      byte[] huge = new byte[largest + 1];
+      huge[largest] = 3;
+      Borrow outside = Borrow.ofArray(huge, true, false);
+      assertNotEquals(base, outside.address());
+      assertEquals(
+          3,
+          MemorySegment.ofAddress(outside.address())
+              .reinterpret(largest + 1)
+              .get(ValueLayout.JAVA_BYTE, largest));
+      MemorySegment.ofAddress(outside.address())
+          .reinterpret(1)
+          .set(ValueLayout.JAVA_BYTE, 0, (byte) 6);
+      Borrow above = Borrow.ofString("above", true);
+      assertEquals(base, above.address());
+      above.release();
+      outside.release();
+      assertEquals(6, huge[0]);
+      // The largest scratch copy fits once the empty stack grows the block (terminator included).
+      Borrow big = Borrow.ofArray(new byte[largest - 17], false, true);
+      long grown = big.address();
+      Borrow small = Borrow.ofString("s", true);
+      assertEquals(grown + largest - 16, small.address());
+      // A copy that does not fit beside outstanding ones takes an arena, and raises the mark.
+      byte[] second = new byte[largest - 1];
+      second[0] = 1;
+      Borrow overflow = Borrow.ofArray(second, false, true);
+      long overflowAddress = overflow.address();
+      assertEquals(
+          1, MemorySegment.ofAddress(overflowAddress).reinterpret(1).get(ValueLayout.JAVA_BYTE, 0));
+      // Off the stack: small is still the innermost copy, and the arena copy releases in any order.
+      small.release();
+      overflow.release();
+      big.release();
+      // The next empty-stack acquisition grows to the high-water mark: both now fit together.
+      Borrow again = Borrow.ofArray(new byte[largest - 17], false, true);
+      Borrow beside = Borrow.ofArray(new byte[largest - 1], false, true);
+      assertEquals(again.address() + largest - 16, beside.address());
+      beside.release();
+      again.release();
+    });
+  }
+
+  @Test
+  void cellBorrowsReleaseInReverseOrderAcrossFailuresAndReentry() throws Exception {
+    onFreshThread(() -> {
+      var cell = new PairCell();
+      NativeFunction pair = cell.function();
+      assertEquals("héllo, world", pair.call("héllo", ", world"));
+      long base = cell.addresses.get(0);
+      assertEquals(base + 16, (long) cell.addresses.get(1));
+      // The second coercion fails after the first borrow: the first is released.
+      assertThrows(NativeCellException.class, () -> pair.call("kept", 1));
+      assertEquals("ab", pair.call("a", "b"));
+      assertEquals(base, (long) cell.addresses.get(2));
+      // A nested call (native code calling back into guest code) borrows above the outer call
+      // and releases before it returns, leaving the outer copies intact.
+      var inner = new PairCell();
+      NativeFunction innerPair = inner.function();
+      var nested = new AtomicReference<Object>();
+      cell.callback = () -> nested.set(innerPair.call("in", "ner"));
+      assertEquals("outer", pair.call("out", "er"));
+      assertEquals("inner", nested.get());
+      assertEquals(base + 32, (long) inner.addresses.get(0));
+      assertEquals(base + 48, (long) inner.addresses.get(1));
+      cell.callback = () -> {};
+      assertEquals("xy", pair.call("x", "y"));
+      assertEquals(base, (long) cell.addresses.get(cell.addresses.size() - 2));
+    });
+  }
+
+  @Test
+  void scratchStacksArePerThreadUnderConcurrentUse() throws Exception {
+    // One cell (as for a threading=shared resource) runs on many threads at once; each thread
+    // copies into its own stack, so no thread sees another's bytes.
+    int threads = 8;
+    var cell = new PairCell();
+    NativeFunction pair = cell.function();
+    var failures = new java.util.concurrent.ConcurrentLinkedQueue<Throwable>();
+    var start = new java.util.concurrent.CountDownLatch(1);
+    var workers = new ArrayList<Thread>();
+    for (int t = 0; t < threads; t++) {
+      int id = t;
+      Thread worker =
+          new Thread(() -> {
+            try {
+              start.await();
+              for (int i = 0; i < 2000; i++) {
+                String left = "t" + id + ":" + i;
+                String right = "-".repeat(i % 40);
+                Object joined = pair.call(left, right);
+                if (!(left + right).equals(joined))
+                  throw new AssertionError(joined + " != " + left + right);
+              }
+            } catch (Throwable e) {
+              failures.add(e);
+            }
+          });
+      workers.add(worker);
+      worker.start();
+    }
+    start.countDown();
+    for (Thread worker : workers) worker.join();
+    assertTrue(failures.isEmpty(), () -> failures.toString());
+    assertEquals(threads * 2000 * 2, cell.addresses.size());
   }
 
   @Test
