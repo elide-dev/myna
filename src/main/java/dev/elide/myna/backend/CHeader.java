@@ -102,15 +102,23 @@ public final class CHeader implements Backend {
             .append(", \"field offset\");\n");
     }
     for (Function declared : m.functions()) {
-      // Native Image exports records by reference; C callers keep a by-value inline wrapper.
-      boolean wrapped = declared.direction() == Direction.EXPORT && ByValue.applies(declared);
-      Function f = wrapped ? ByValue.lower(m, declared) : declared;
+      // Native Image lowers records by reference at its C boundary, so a by-value record import
+      // has two C symbols: the by-value implementation (declared here, called by C/Rust/FFM) and
+      // the reference form `<symbol>_myna_ref` (declared below, bound by Native Image). The C
+      // provider must also define the latter — the C counterpart of `native_image_shims!` in
+      // seam.rs. Exports invert this: the binding is the prototype and the by-value form is a
+      // `static inline` wrapper.
+      boolean byValue = ByValue.applies(declared);
+      boolean wrapped = declared.direction() == Direction.EXPORT && byValue;
+      boolean importRef = declared.direction() == Direction.IMPORT && byValue;
+      Function lowered = (wrapped || importRef) ? ByValue.lower(m, declared) : declared;
+      Function header = importRef ? declared : lowered;
       out.append("\n/* ")
-          .append(f.direction())
+          .append(header.direction())
           .append("; error=")
-          .append(f.error())
+          .append(header.error())
           .append(" */\n");
-      for (Parameter p : f.abiParameters())
+      for (Parameter p : header.abiParameters())
         out.append("/* ")
             .append(p.name())
             .append(": nullable=")
@@ -120,18 +128,42 @@ public final class CHeader implements Backend {
             .append(" access=")
             .append(p.access())
             .append(" */\n");
-      out.append(Types.c(f.returns())).append(' ').append(f.symbol()).append('(');
+      out.append(Types.c(header.returns())).append(' ').append(header.symbol()).append('(');
       out.append(
-          f.abiParameters().isEmpty()
+          header.abiParameters().isEmpty()
               ? "void"
               : String.join(
-                  ", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
+                  ", ",
+                  header.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
       out.append(");\n");
-      if (wrapped) wrapper(declared, f, out);
+      if (wrapped) wrapper(declared, lowered, out);
+      if (importRef) importReference(lowered, out);
     }
     return out.append(
             "\n#ifdef __cplusplus\n}\n#endif\n#undef SEAM_ASSERT\n#undef SEAM_ALIGNOF\n#endif\n")
         .toString();
+  }
+
+  /**
+   * Declares the Native Image reference form of a by-value record import, alongside its by-value
+   * prototype above. The C provider supplies both definitions: the by-value {@code
+   * declared.symbol()} called by C/Rust/FFM, and the {@code _myna_ref} reference form bound by
+   * Native Image. This mirrors the export treatment (which emits the reference prototype and a
+   * {@code static inline} by-value wrapper) and keeps {@code seam.h} consistent with {@code
+   * seam.rs} ({@code native_image_shims!}), {@code seam.ll} (which declares only the reference
+   * form), and the Native Image backend's symbol expectations.
+   */
+  private static void importReference(Function lowered, StringBuilder out) {
+    out.append("/* Native Image binds ")
+        .append(lowered.symbol())
+        .append(
+            "; the C provider must also define it (the C counterpart of"
+                + " `native_image_shims!`). */\n");
+    out.append(Types.c(lowered.returns())).append(' ').append(lowered.symbol()).append('(');
+    out.append(
+        String.join(
+            ", ", lowered.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
+    out.append(");\n");
   }
 
   private static void wrapper(Function f, Function ref, StringBuilder out) {

@@ -394,9 +394,50 @@ class GeneratorTest {
                 + " writeonly %result)"),
         ll);
     String h = output.get("seam.h");
+    // By-value IMPORT in seam.h: declares both the by-value implementation (called by C/Rust/FFM)
+    // AND the Native Image reference form `<symbol>_myna_ref` the image binds. Without the
+    // reference-form declaration, a C provider implementing only the by-value form compiles
+    // cleanly but leaves the image's `pt_flip_myna_ref` symbol undefined, failing at first use.
     assertTrue(h.contains("struct Pt pt_flip(struct Pt p, int32_t k);"), h);
     assertTrue(
+        h.contains("void pt_flip_myna_ref(struct Pt const * p, int32_t k, struct Pt * result);"),
+        h);
+    assertTrue(
+        h.contains("Native Image binds pt_flip_myna_ref; the C provider must also define it"), h);
+    // The by-value prototype precedes the reference-form declaration so the C contract reads
+    // "implement this, plus the binding the image resolves."
+    assertTrue(h.indexOf("struct Pt pt_flip(") < h.indexOf("void pt_flip_myna_ref("), h);
+    // EXPORT keeps its two forms: the binding prototype and the by-value inline wrapper.
+    assertTrue(
+        h.contains("int32_t pt_norm_myna_ref(void * isolate_thread, struct Pt const * p);"), h);
+    assertTrue(
         h.contains("static inline int32_t pt_norm(void * isolate_thread, struct Pt p) {"), h);
+    // A by-value IMPORT with a record RETURN lowers the return to `void` plus a trailing
+    // `T *result`; the `pt_flip` case above already exercises that. A by-value IMPORT taking a
+    // record but returning a scalar must lower only the record parameter, with no `result`,
+    // mirroring the export-side `pt_norm` form.
+    String scalarReturn =
+        generate(
+                MODULE
+                    + "struct Pt size=8 align=4\n"
+                    + "  field x type=i32 offset=0\n"
+                    + "  field y type=i32 offset=4\n"
+                    + "end\n"
+                    + "import probe symbol=pt_probe return=i32 error=no_failure\n"
+                    + "  param p type=Pt\n"
+                    + "end\n")
+            .get("seam.h");
+    assertTrue(
+        scalarReturn.contains("int32_t pt_probe_myna_ref(struct Pt const * p);"), scalarReturn);
+    assertTrue(scalarReturn.contains("int32_t pt_probe(struct Pt p);"), scalarReturn);
+    assertFalse(
+        scalarReturn.contains("pt_probe_myna_ref(struct Pt const * p, struct Pt"), scalarReturn);
+    // Scalar IMPORTS (no record) gain no `_myna_ref` declaration: nothing to lower.
+    String scalar =
+        generate(MODULE + "import scalar return=i32 error=no_failure\n  param v type=i32\nend\n")
+            .get("seam.h");
+    assertTrue(scalar.contains("int32_t scalar(int32_t v);"), scalar);
+    assertFalse(scalar.contains("scalar_myna_ref"), scalar);
     assertFalse(output.get("MynaFFM.java").contains("public static Pt flip"));
     assertTrue(
         output
