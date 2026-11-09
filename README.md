@@ -124,7 +124,7 @@ Latencies include the callee and loop; the control is not subtracted. Transition
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.5 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.28 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.6 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.28 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 ```sh
 mise trust
@@ -257,8 +257,8 @@ The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and poin
 
 Fixed-size C array fields, nested by-value records, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader design; the [current roadmap](docs/jvm-roadmap.md) distinguishes implemented features from planned work.
 
-Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.5,
-and Elide GraalVM 25.5.5-elide.26. See [benchmarking and native validation](docs/benchmarking.md)
+Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.6,
+and Elide GraalVM 25.5.5-elide.28. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
 
 Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`.
