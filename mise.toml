@@ -17,13 +17,13 @@ linux-arm64 = { asset_pattern = "elide.linux-arm64.txz" }
 macos-arm64 = { asset_pattern = "elide.macos-arm64.txz" }
 
 [tools."github:elide-dev/toolchain"]
-version = "2026.11.5"
+version = "2026.11.6"
 bin_path = "elide-toolchain/bin"
 
 [tools."github:elide-dev/toolchain".platforms]
-linux-x64 = { asset_pattern = "elide-toolchain-2026.11.5-linux-amd64.tar.xz" }
-linux-arm64 = { asset_pattern = "elide-toolchain-2026.11.5-linux-arm64.tar.xz" }
-macos-arm64 = { asset_pattern = "elide-toolchain-2026.11.5-darwin-arm64.tar.xz" }
+linux-x64 = { asset_pattern = "elide-toolchain-2026.11.6-linux-amd64.tar.xz" }
+linux-arm64 = { asset_pattern = "elide-toolchain-2026.11.6-linux-arm64.tar.xz" }
+macos-arm64 = { asset_pattern = "elide-toolchain-2026.11.6-darwin-arm64.tar.xz" }
 
 [env]
 MYNA_ROOT = "{{ config_root }}"
@@ -108,7 +108,7 @@ run = "scripts/package-values.sh"
 
 [tasks."test:rust-coverage"]
 description = "Measure production Rust coverage without stale or empty test binaries"
-run = ["cargo llvm-cov clean --workspace", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
+run = ["cargo llvm-cov clean", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
 
 [tasks."test:rust-fuzz"]
 description = "Fuzz the Rust tape reader and UTF-8 bridge under ASan (cargo-fuzz)"
