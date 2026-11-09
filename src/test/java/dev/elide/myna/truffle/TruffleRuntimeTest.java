@@ -20,6 +20,8 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -403,15 +405,21 @@ class TruffleRuntimeTest {
     cell.function(); // adopt the coercion under a RootNode so its InteropLibrary dispatch is usable
     var internalError = new AtomicReference<AssertionError>();
     var guestError = new AtomicReference<NativeCellException>();
-    for (int round = 0; round < 200 && internalError.get() == null; round++) {
+    for (int round = 0; round < 500 && internalError.get() == null; round++) {
       var resource = new NativeResource("Ticket", 0x5000L + round, address -> {}, null);
       var stop = new AtomicBoolean();
+      // Gate the close on the coercer having already dispatched at least one successful coercion,
+      // so the close lands while the coercer is actively in its isPointer/asPointer hammer loop
+      // rather than before the coercer thread has been scheduled (which would let the next call
+      // hit the top-of-method isClosed() guard and never exercise the catch-block race path).
+      var coercing = new CountDownLatch(1);
       var coercer =
           new Thread(
               () -> {
                 while (!stop.get()) {
                   try {
                     cell.coerce(resource);
+                    coercing.countDown();
                   } catch (NativeCellException expected) {
                     stop.compareAndSet(false, true);
                     guestError.compareAndSet(null, expected);
@@ -426,7 +434,7 @@ class TruffleRuntimeTest {
           new Thread(
               () -> {
                 try {
-                  Thread.sleep(1);
+                  coercing.await(5, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                   return;
                 }
