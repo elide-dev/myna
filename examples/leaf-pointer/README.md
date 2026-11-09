@@ -1,6 +1,6 @@
 # Custom runtime-selected leaf pointer
 
-`LongLeaf.java` supplies a primitive-only function-pointer adapter for the pinned Elide GraalVM 25.5.5-elide.27 compiler. Myna's existing `java_type` callback mapping generates the resolver's typed return value; no generator extensions or relaxed validation are needed.
+`LongLeaf.java` supplies a primitive-only function-pointer adapter for the pinned Elide GraalVM 25.5.5-elide.28 compiler. Myna's existing `java_type` callback mapping generates the resolver's typed return value; no generator extensions or relaxed validation are needed.
 
 Generate `leaf-pointer.seam`, compile `LongLeaf.java` with the generated Native Image binding, and implement `myna_leaf_address` to return a valid `int64_t (*)(int64_t)` native target. Resolve **at runtime**, once per library lifetime, and invoke the returned `LongLeaf` directly. Do not capture Word values in Java lambdas, use generic Java functional interfaces for per-call dispatch, or freeze runtime addresses into the image heap.
 
