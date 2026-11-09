@@ -18,7 +18,7 @@ import org.graalvm.word.WordFactory;
 
 public final class CellApiTruffle {
     private CellApiTruffle() {}
-    public static final String ABI_FINGERPRINT = "32632768043a5cc31a14b966ede076a71e1d0df4d194769139d1b813aede1523";
+    public static final String ABI_FINGERPRINT = "4621933ec6bf3942d65ed00bce447ba5ff80fb552d2f6b992c26a97030868dc1";
     /** Logical names of every generated cell, in symbol order. */
     public static final String[] CELLS = {"add", "checksum", "counterCreate", "counterDestroy", "counterNext", "fill", "lowByte", "peek", "poke", "rawLength", "scale", "sleepyAdd", "strlen", "widen"};
     /** A fresh executable per call: a cell holds call-site profiles and is adopted once. */

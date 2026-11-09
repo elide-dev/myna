@@ -4,7 +4,7 @@ Myna's own code is available under **Apache-2.0 OR MIT**, at the recipient's opt
 
 ## Release process
 
-1. Update the version and regenerate versioned golden outputs. Merge the reviewed change after required checks pass.
+1. Update the version and regenerate versioned golden outputs. Refresh every lockfile that records the workspace crates, including the fuzz crate's own (`cargo update --offline -w` at the root and `cargo update --offline -p myna-values --manifest-path crates/myna-values/fuzz/Cargo.toml`); CI fetches both with `--locked`. Merge the reviewed change after required checks pass.
 2. Create a signed `v<version>` tag on the release commit. Version tags are immutable under repository rules; correct an unsuccessful candidate with a new tag rather than moving an existing one.
 3. The artifact workflow builds the portable SDK and an exact `git archive` source archive, generates checksums and a source SBOM, and attests the bytes produced in that workflow. Tag runs create or populate a **draft** release and refuse to replace existing assets or write into an already published release. Manual branch runs retain verification artifacts without modifying a release.
 4. Check Linux/macOS validation, container publication, and Linux symbol receipts. Review the draft notes and assets, then publish the draft. Do not publish before artifact jobs have attached their outputs.
