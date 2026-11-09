@@ -326,7 +326,7 @@ zero allocation, not assembly.
 
 Run `mise run bench:floor-build` and `mise run bench:floor` for matched native/SVM identity and arithmetic workloads. The [harness contract](../benchmarks/floor/README.md) specifies the exact calls, controls, unrolling, bounded batches, independent checksum oracle, and concurrent-GC test. The dedicated Native call floor workflow retains build commands, source/binary hashes, CPU identity, full assembly, sample logs and summaries. It is also manually dispatchable; the same controlled ARM runner variable applies.
 
-The checked-in [Linux default-leaf baseline](../benchmarks/comparison/baselines/default-leaf-linux-arm64.json) and [Mac default-leaf baseline](../benchmarks/comparison/baselines/default-leaf-macos-arm64.json) are separate experiments, not cross-host speedup comparisons. The hosted build's PR merge revision is preserved; `verified_source_commit` records the commit whose source hashes were independently checked. Use five or more processes and the default 16,777,216 calls/sample when refreshing them. Keep the slower cases, including nonmonotonic batch sizes, in the full report.
+The checked-in Linux and Mac default-leaf baselines are separate experiments, not cross-host speedup comparisons. Use five or more processes and the default 16,777,216 calls/sample when refreshing them. Keep the slower cases, including nonmonotonic batch sizes, in the full report.
 
 The README's leaf chart compares binding ABI 2 defaults with handwritten SVM leaves and native function-pointer callers explicitly unrolled four times. Custom pointers and explicitly unrolled SVM variants remain in the full table. Regenerate it with:
 
