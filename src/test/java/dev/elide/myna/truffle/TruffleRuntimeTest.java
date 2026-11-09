@@ -604,6 +604,35 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void foreignBufferBorrowedAsCStringIsNulTerminated() {
+    var cString = new BytesCoercion("f", "text", false, false, false);
+    // 24 bytes runs past the FFM confined-arena zero-fill horizon, so a missing terminator reads
+    // as stale non-zero heap data (the OOB read the bug report describes), not allocator luck.
+    byte[] data = new byte[24];
+    java.util.Arrays.fill(data, (byte) 'A');
+    Borrow borrow = cString.execute(new ForeignBuffer(data, false));
+    assertEquals(24, borrow.length());
+    MemorySegment view = MemorySegment.ofAddress(borrow.address()).reinterpret(25);
+    for (int i = 0; i < 24; i++) assertEquals(data[i], view.get(ValueLayout.JAVA_BYTE, i));
+    assertEquals(0, view.get(ValueLayout.JAVA_BYTE, 24));
+    borrow.release();
+    assertArrayEquals(data, data);
+    var writableCString = new BytesCoercion("f", "text", false, true, false);
+    byte[] out = new byte[24];
+    java.util.Arrays.fill(out, (byte) 'A');
+    Borrow writableBorrow = writableCString.execute(new ForeignBuffer(out, true));
+    assertEquals(24, writableBorrow.length());
+    MemorySegment writableSeg = MemorySegment.ofAddress(writableBorrow.address()).reinterpret(25);
+    writableSeg.set(ValueLayout.JAVA_BYTE, 1, (byte) 'b');
+    writableSeg.set(ValueLayout.JAVA_BYTE, 24, (byte) 0x7f);
+    writableBorrow.release();
+    byte[] expected = new byte[24];
+    java.util.Arrays.fill(expected, (byte) 'A');
+    expected[1] = 'b';
+    assertArrayEquals(expected, out);
+  }
+
+  @Test
   void borrowsOfLargeArraysCopyOnHotSpot() {
     byte[] large = new byte[Borrow.pinThreshold() + 1];
     large[Borrow.pinThreshold()] = 42;
