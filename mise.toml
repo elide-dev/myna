@@ -27,6 +27,9 @@ macos-arm64 = { asset_pattern = "elide-toolchain-2026.11.5-darwin-arm64.tar.xz" 
 
 [env]
 MYNA_ROOT = "{{ config_root }}"
+# Only for cargo-fuzz (-Zsanitizer) and Miri; stable `rust` above stays the default.
+# Its LLVM major matches the pinned toolchain, though these binaries never join LTO.
+MYNA_RUST_NIGHTLY = "nightly-2026-10-09"
 _.source = { path = "scripts/toolchain-env.sh", tools = true }
 
 [tasks.setup]
@@ -109,6 +112,14 @@ run = "scripts/package-values.sh"
 [tasks."test:rust-coverage"]
 description = "Measure production Rust coverage without stale or empty test binaries"
 run = ["cargo llvm-cov clean --workspace", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
+
+[tasks."test:rust-fuzz"]
+description = "Fuzz the Rust tape reader and UTF-8 bridge under ASan (pinned nightly, cargo-fuzz)"
+run = "scripts/rust-fuzz.sh"
+
+[tasks."test:miri"]
+description = "Run myna-values tests under Miri (pinned nightly)"
+run = "scripts/rust-miri.sh"
 
 [tasks."test:asan"]
 run = "scripts/python.sh tests/sanitizers.py asan"

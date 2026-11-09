@@ -652,6 +652,7 @@ fn formatted_strings_spill_once_and_preserve_utf8() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "simdutf is foreign C++ code")]
 fn unicode_validation_and_transcoding() {
     use myna_values::text::{Utf8, myna_utf8_to_utf16_v2, to_utf16};
     let long = "Myna\0🦀 é 東京".repeat(128);
@@ -707,10 +708,12 @@ fn unicode_validation_and_transcoding() {
 
 proptest! {
     #[test]
+    #[cfg_attr(miri, ignore = "simdutf is foreign C++ code")]
     fn simd_validation_matches_rust(bytes in proptest::collection::vec(any::<u8>(), 0..4096)) {
         prop_assert_eq!(myna_values::text::Utf8::from_bytes(&bytes).is_ok(), std::str::from_utf8(&bytes).is_ok());
     }
     #[test]
+    #[cfg_attr(miri, ignore = "simdutf is foreign C++ code")]
     fn simd_transcoding_matches_rust(text in ".{0,512}") {
         let expected: Vec<u16> = text.encode_utf16().collect();
         let mut output = vec![0; expected.len()];
@@ -874,6 +877,7 @@ fn serde_forms_and_raw_view_contract() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "simdutf is foreign C++ code")]
 fn native_unicode_bridge_checks_extents_and_unicode() {
     use myna_values::text::myna_utf8_to_utf16_v2 as convert;
     let mut output = [0_u16; 256];

@@ -1,0 +1,40 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# libFuzzer targets for untrusted value tapes. Built by cargo-fuzz with a pinned
+# nightly (see `mise run test:rust-fuzz`); excluded from the stable workspace.
+[package]
+name = "myna-values-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+myna-values = { path = ".." }
+
+[workspace]
+
+[[bin]]
+name = "tape_text"
+path = "fuzz_targets/tape_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "utf8_to_utf16"
+path = "fuzz_targets/utf8_to_utf16.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "asan_canary"
+path = "fuzz_targets/asan_canary.rs"
+test = false
+doc = false
+bench = false
