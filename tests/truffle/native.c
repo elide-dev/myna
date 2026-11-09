@@ -37,7 +37,8 @@ void cells_counter_destroy(Counter *counter) { free(counter); live--; }
 int64_t cells_counter_next(Counter *counter) { return counter->next++; }
 int64_t cells_counter_live(void) { return live; }
 int64_t cells_sleepy_add(int64_t left, int64_t right) { return left + right; }
-/* Two C strings borrowed by one call: lengths through each terminator, plus each first byte. */
+/* Two C strings borrowed by one call: each length up to its terminator, plus each first byte
+   (an empty string's first byte is its terminator, 0). */
 int64_t cells_pair(const char *left, const char *right) {
   return ((int64_t)strlen(left) << 32) | ((int64_t)strlen(right) << 16) | ((int64_t)(uint8_t)left[0] << 8) | (uint8_t)right[0];
 }

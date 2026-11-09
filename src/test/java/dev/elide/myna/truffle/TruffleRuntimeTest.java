@@ -928,8 +928,10 @@ class TruffleRuntimeTest {
         });
     thread.start();
     thread.join();
-    if (failure.get() instanceof Exception e) throw e;
-    if (failure.get() instanceof Error e) throw e;
+    Throwable thrown = failure.get();
+    if (thrown instanceof Exception e) throw e;
+    if (thrown instanceof Error e) throw e;
+    if (thrown != null) throw new AssertionError("worker thread failed", thrown);
   }
 
   /**
