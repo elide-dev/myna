@@ -34,11 +34,7 @@ public final class PointerCoercion extends Coercion {
 
   private long slow(Object value) {
     if (value == null) return checked(0, value);
-    if (value instanceof NativeResource resource && resource.isClosed()) {
-      CompilerDirectives.transferToInterpreter();
-      throw NativeCellException.of(
-          this, function, ": parameter ", parameter, " received a closed ", resource.type());
-    }
+    if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
     InteropLibrary interop = interop();
     try {
       if (interop.isPointer(value)) return checked(interop.asPointer(value), value);
@@ -47,13 +43,17 @@ public final class PointerCoercion extends Coercion {
     } catch (UnsupportedMessageException e) {
       // A shared NativeResource can be closed by another thread between the isPointer() guard and
       // the asPointer() dispatch; that is a normal interop outcome, not an internal invariant.
-      if (value instanceof NativeResource resource) {
-        CompilerDirectives.transferToInterpreter();
-        throw NativeCellException.of(
-            this, function, ": parameter ", parameter, " received a closed ", resource.type());
-      }
+      if (value instanceof NativeResource resource) throw closed(resource);
       throw CompilerDirectives.shouldNotReachHere(e);
     }
+    // Closed after the first check but before isPointer(): report the close, not a type error.
+    if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
     throw mismatch(nullable ? "pointer or null" : "pointer", value);
+  }
+
+  private NativeCellException closed(NativeResource resource) {
+    CompilerDirectives.transferToInterpreter();
+    return NativeCellException.of(
+        this, function, ": parameter ", parameter, " received a closed ", resource.type());
   }
 }

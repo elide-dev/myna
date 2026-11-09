@@ -59,12 +59,22 @@ public final class BytesCoercion extends Coercion {
       if (interop.isPointer(value)) return pointer(interop.asPointer(value), value);
       if (interop.isNull(value)) return pointer(0, value);
     } catch (UnsupportedMessageException e) {
+      // A shared NativeResource can be closed by another thread between isPointer() and
+      // asPointer(), exactly as in PointerCoercion: a guest error, not an internal invariant.
+      if (value instanceof NativeResource resource) throw closed(resource);
       throw CompilerDirectives.shouldNotReachHere(e);
     } catch (IllegalArgumentException e) {
       CompilerDirectives.transferToInterpreter();
       throw NativeCellException.of(this, function, ": parameter ", parameter, ": ", e.getMessage());
     }
+    if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
     throw mismatch(expected(), value);
+  }
+
+  private NativeCellException closed(NativeResource resource) {
+    CompilerDirectives.transferToInterpreter();
+    return NativeCellException.of(
+        this, function, ": parameter ", parameter, " received a closed ", resource.type());
   }
 
   /** A bare pointer has no size, so it cannot supply a derived byte count. */

@@ -12,6 +12,14 @@ mise run test:cpp
 mise run test:rust-coverage
 mise run test:asan
 mise run test:tsan
+# Miri adds the miri/rust-src components and the fuzz lane builds cargo-fuzz on
+# first use, then each runs for minutes; CI always runs both.
+if [ "${MYNA_SKIP_MIRI_FUZZ:-0}" != 1 ]; then
+  mise run test:miri
+  mise run test:rust-fuzz
+else
+  echo "MYNA_SKIP_MIRI_FUZZ=1: skipping Miri and Rust fuzzing (CI still runs them)" >&2
+fi
 scripts/test-jvm.sh
 scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py

@@ -110,6 +110,14 @@ run = "scripts/package-values.sh"
 description = "Measure production Rust coverage without stale or empty test binaries"
 run = ["cargo llvm-cov clean --workspace", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
 
+[tasks."test:rust-fuzz"]
+description = "Fuzz the Rust tape reader and UTF-8 bridge under ASan (cargo-fuzz)"
+run = "scripts/rust-fuzz.sh"
+
+[tasks."test:miri"]
+description = "Run myna-values tests under Miri"
+run = "scripts/rust-miri.sh"
+
 [tasks."test:asan"]
 run = "scripts/python.sh tests/sanitizers.py asan"
 

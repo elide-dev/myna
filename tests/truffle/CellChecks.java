@@ -19,6 +19,11 @@ public final class CellChecks {
     try { call(cells, name, args); } catch (NativeCellException expected) { return; }
     throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
   }
+  interface Access { void run() throws Exception; }
+  static void outOfBounds(Access access, String what) throws Exception {
+    try { access.run(); } catch (com.oracle.truffle.api.interop.InvalidBufferOffsetException expected) { return; }
+    throw new AssertionError(what + " was accepted");
+  }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
     // Host Java null bypasses guest interop values; exercise the public host call API.
     for (Object[] sample : new Object[][] {
@@ -77,6 +82,19 @@ public final class CellChecks {
       check(INTEROP.readBufferDouble(view, java.nio.ByteOrder.LITTLE_ENDIAN, 0) == 2.5, "native double");
       INTEROP.writeBufferFloat(view, java.nio.ByteOrder.BIG_ENDIAN, 4, 1.5f);
       check(INTEROP.readBufferFloat(view, java.nio.ByteOrder.BIG_ENDIAN, 4) == 1.5f, "native float");
+      // Untrusted offsets and lengths never reach the image's word accesses.
+      long before = INTEROP.readBufferLong(view, java.nio.ByteOrder.LITTLE_ENDIAN, 0);
+      for (long offset : new long[] {-1, 8, 9, Long.MIN_VALUE, Long.MAX_VALUE, Long.MAX_VALUE - 7}) {
+        outOfBounds(() -> INTEROP.readBufferByte(view, offset), "native byte read at " + offset);
+        outOfBounds(() -> INTEROP.writeBufferByte(view, offset, (byte) 0), "native byte write at " + offset);
+        outOfBounds(() -> INTEROP.readBufferLong(view, java.nio.ByteOrder.LITTLE_ENDIAN, offset), "native long read at " + offset);
+      }
+      outOfBounds(() -> INTEROP.readBufferLong(view, java.nio.ByteOrder.LITTLE_ENDIAN, 1), "native straddling long read");
+      outOfBounds(() -> INTEROP.writeBufferInt(view, java.nio.ByteOrder.BIG_ENDIAN, 5, 0), "native straddling int write");
+      outOfBounds(() -> INTEROP.readBuffer(view, 4, new byte[8], 0, 5), "native bulk read past the end");
+      outOfBounds(() -> INTEROP.readBuffer(view, 0, new byte[8], 0, -1), "native bulk read of negative length");
+      outOfBounds(() -> INTEROP.readBuffer(view, Long.MAX_VALUE, new byte[8], 0, 1), "native bulk read at a huge offset");
+      check(INTEROP.readBufferLong(view, java.nio.ByteOrder.LITTLE_ENDIAN, 0) == before, "rejected writes left memory intact");
       rejects(cells, "fill", NativeBytes.of(buffer.asReadOnly(), true), 1);
     }
     check(call(cells, "checksum", new HeapBytes(new byte[] {1, 2, 3}, false)).equals(6L), "checksum heap");

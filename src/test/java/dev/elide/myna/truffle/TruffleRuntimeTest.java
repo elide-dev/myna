@@ -1443,4 +1443,359 @@ class TruffleRuntimeTest {
       return value;
     }
   }
+
+  private static void inject(Coercion coercion, InteropLibrary library)
+      throws ReflectiveOperationException {
+    var field = Coercion.class.getDeclaredField("interop");
+    field.setAccessible(true);
+    field.set(coercion, library);
+  }
+
+  private static Object readWidth(Object buffer, int width, long offset) throws Exception {
+    return switch (width) {
+      case 1 -> INTEROP.readBufferByte(buffer, offset);
+      case 2 -> INTEROP.readBufferShort(buffer, ByteOrder.LITTLE_ENDIAN, offset);
+      case 4 -> INTEROP.readBufferInt(buffer, ByteOrder.BIG_ENDIAN, offset);
+      default -> INTEROP.readBufferLong(buffer, ByteOrder.LITTLE_ENDIAN, offset);
+    };
+  }
+
+  private static void writeWidth(Object buffer, int width, long offset) throws Exception {
+    switch (width) {
+      case 1 -> INTEROP.writeBufferByte(buffer, offset, (byte) 1);
+      case 2 -> INTEROP.writeBufferShort(buffer, ByteOrder.BIG_ENDIAN, offset, (short) 1);
+      case 4 -> INTEROP.writeBufferFloat(buffer, ByteOrder.LITTLE_ENDIAN, offset, 1);
+      default -> INTEROP.writeBufferDouble(buffer, ByteOrder.BIG_ENDIAN, offset, 1);
+    }
+  }
+
+  @Test
+  void interopBufferOffsetsRejectEveryOutOfRangeExtent() throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment segment = arena.allocate(16);
+      for (Object buffer :
+          new Object[] {NativeBytes.of(segment, true), new HeapBytes(new byte[16], true)}) {
+        long size = INTEROP.getBufferSize(buffer);
+        for (int width : new int[] {1, 2, 4, 8}) {
+          writeWidth(buffer, width, size - width);
+          readWidth(buffer, width, size - width);
+          for (long offset :
+              new long[] {
+                -1,
+                -width,
+                Long.MIN_VALUE,
+                Long.MAX_VALUE,
+                Long.MAX_VALUE - width + 1,
+                size - width + 1,
+                size,
+                Integer.MAX_VALUE + 1L,
+                Integer.MIN_VALUE
+              }) {
+            String where = buffer + " width " + width + " offset " + offset;
+            assertThrows(
+                InvalidBufferOffsetException.class, () -> readWidth(buffer, width, offset), where);
+            assertThrows(
+                InvalidBufferOffsetException.class, () -> writeWidth(buffer, width, offset), where);
+          }
+        }
+        byte[] destination = new byte[16];
+        INTEROP.readBuffer(buffer, size, destination, 0, 0);
+        for (long[] extent :
+            new long[][] {
+              {size + 1, 0},
+              {-1, 0},
+              {Long.MIN_VALUE, 1},
+              {Long.MAX_VALUE, 1},
+              {1, 16},
+              {0, -1},
+              {0, Integer.MIN_VALUE},
+              {size, 1}
+            }) {
+          assertThrows(
+              InvalidBufferOffsetException.class,
+              () -> INTEROP.readBuffer(buffer, extent[0], destination, 0, (int) extent[1]),
+              buffer + " extent " + extent[0] + "+" + extent[1]);
+        }
+        // The destination array's bounds are Java's: never a native or heap overrun.
+        assertThrows(
+            IndexOutOfBoundsException.class,
+            () -> INTEROP.readBuffer(buffer, 0, destination, 15, 2));
+        assertThrows(
+            IndexOutOfBoundsException.class,
+            () -> INTEROP.readBuffer(buffer, 0, destination, -1, 1));
+      }
+    }
+    NativeBytes empty = NativeBytes.of(0, 0, true);
+    assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(empty, 0));
+    assertThrows(
+        InvalidBufferOffsetException.class, () -> INTEROP.writeBufferByte(empty, 0, (byte) 0));
+    INTEROP.readBuffer(empty, 0, new byte[0], 0, 0);
+  }
+
+  @Test
+  void untrustedInteropBufferSizesAreGuestErrors() throws Exception {
+    // Bypass Truffle's assertion wrapper: it would reject the lie before the coercion sees it,
+    // hiding the assertions-off behavior a production image has.
+    for (long size : new long[] {-1, Integer.MIN_VALUE, Long.MIN_VALUE, -(1L << 32) + 4}) {
+      var buffer = new ShrinkingBuffer(size);
+      var coercion = new BytesCoercion("f", "p", false, false, true);
+      inject(coercion, direct(buffer));
+      var error = assertThrows(NativeCellException.class, () -> coercion.execute(buffer));
+      assertEquals("f: parameter p: negative interop buffer size: " + size, error.getMessage());
+    }
+  }
+
+  /** Dispatches buffer messages straight to an exported object, without assertion checks. */
+  private static InteropLibrary direct(ShrinkingBuffer buffer) {
+    return new InteropLibrary() {
+      @Override
+      public boolean accepts(Object receiver) {
+        return receiver == buffer;
+      }
+
+      @Override
+      public boolean hasBufferElements(Object receiver) {
+        return buffer.hasBufferElements();
+      }
+
+      @Override
+      public boolean isBufferWritable(Object receiver) {
+        return buffer.isBufferWritable();
+      }
+
+      @Override
+      public long getBufferSize(Object receiver) {
+        return buffer.getBufferSize();
+      }
+    };
+  }
+
+  /** A writable guest buffer that guest code shrinks while a native call has it borrowed. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class ResizableBuffer implements TruffleObject {
+    final byte[] data;
+    int size;
+    boolean detached;
+
+    ResizableBuffer(int size) {
+      this.data = new byte[size];
+      this.size = size;
+    }
+
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return !detached;
+    }
+
+    @ExportMessage
+    long getBufferSize() {
+      return size;
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) throws InvalidBufferOffsetException {
+      if (offset < 0 || offset >= size) throw InvalidBufferOffsetException.create(offset, 1);
+      return data[(int) offset];
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length)
+        throws InvalidBufferOffsetException {
+      if (offset < 0 || length < 0 || offset > size - length)
+        throw InvalidBufferOffsetException.create(offset, length);
+      System.arraycopy(data, (int) offset, destination, destinationOffset, length);
+    }
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value)
+        throws InvalidBufferOffsetException, UnsupportedMessageException {
+      if (detached) throw UnsupportedMessageException.create();
+      if (offset < 0 || offset >= size) throw InvalidBufferOffsetException.create(offset, 1);
+      data[(int) offset] = value;
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  @Test
+  void writeBackToABufferShrunkDuringTheCallIsAGuestError() {
+    var buffer = new ResizableBuffer(4);
+    Borrow borrow = new BytesCoercion("f", "p", false, true, true).execute(buffer);
+    assertEquals(4, borrow.length());
+    // The native side fills its copy; a guest callback then shrinks the source buffer.
+    MemorySegment.ofAddress(borrow.address()).reinterpret(4).fill((byte) 7);
+    buffer.size = 2;
+    var error = assertThrows(NativeCellException.class, borrow::release);
+    assertEquals("borrowed buffer shrank before write-back of byte 2", error.getMessage());
+    assertArrayEquals(new byte[] {7, 7, 0, 0}, buffer.data, "surviving bytes are written back");
+    borrow.release();
+  }
+
+  @Test
+  void writeBackToABufferDetachedDuringTheCallIsAGuestError() {
+    var buffer = new ResizableBuffer(4);
+    Borrow borrow = new BytesCoercion("f", "p", false, true, true).execute(buffer);
+    MemorySegment.ofAddress(borrow.address()).reinterpret(4).fill((byte) 7);
+    // A guest callback detaches the source buffer: it stops accepting writes altogether.
+    buffer.detached = true;
+    var error = assertThrows(NativeCellException.class, borrow::release);
+    assertEquals("borrowed buffer stopped accepting writes before write-back", error.getMessage());
+    assertArrayEquals(new byte[4], buffer.data, "nothing is written to a detached buffer");
+    borrow.release();
+  }
+
+  /** Closes the resource during the coercion's isPointer() probe, then answers as told. */
+  private static InteropLibrary closingDuringIsPointer(NativeResource resource, boolean answer) {
+    return new InteropLibrary() {
+      @Override
+      public boolean accepts(Object receiver) {
+        return receiver == resource;
+      }
+
+      @Override
+      public boolean isPointer(Object receiver) {
+        Thread closer = new Thread(resource::close, "closer");
+        closer.start();
+        try {
+          closer.join(5000);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new AssertionError(e);
+        }
+        assertTrue(resource.isClosed());
+        return answer;
+      }
+
+      @Override
+      public long asPointer(Object receiver) throws UnsupportedMessageException {
+        return INTEROP.asPointer(receiver);
+      }
+    };
+  }
+
+  @Test
+  void concurrentCloseOfAResourcePassedAsBytesOrPointerIsAGuestError() throws Exception {
+    // isPointer() true then close: asPointer() fails. isPointer() false after close: no type error.
+    for (boolean answer : new boolean[] {true, false}) {
+      var bytesResource = new NativeResource("Ticket", 0x7000L, address -> {}, null);
+      var bytes = new BytesCoercion("f", "p", false, false, false);
+      inject(bytes, closingDuringIsPointer(bytesResource, answer));
+      assertEquals(
+          "f: parameter p received a closed Ticket",
+          assertThrows(NativeCellException.class, () -> bytes.execute(bytesResource)).getMessage());
+      var pointerResource = new NativeResource("Ticket", 0x7000L, address -> {}, null);
+      var pointer = new PointerCoercion("f", "p", false, false);
+      inject(pointer, closingDuringIsPointer(pointerResource, answer));
+      assertEquals(
+          "f: parameter p received a closed Ticket",
+          assertThrows(NativeCellException.class, () -> pointer.execute(pointerResource))
+              .getMessage());
+    }
+  }
+
+  @Test
+  void closeRacingCellCallsYieldsTheAddressOrAGuestErrorAndDestroysOnce() throws Exception {
+    for (int round = 0; round < 100; round++) {
+      long address = 0x8000L + round * 16;
+      var destroyed = new java.util.concurrent.atomic.AtomicInteger();
+      var resource = new NativeResource("Ticket", address, a -> destroyed.incrementAndGet(), null);
+      var function = new PointerCell(false, false).function();
+      var start = new java.util.concurrent.CountDownLatch(1);
+      var unexpected = new AtomicReference<Throwable>();
+      var threads = new ArrayList<Thread>();
+      for (int t = 0; t < 4; t++) {
+        boolean closer = t >= 2;
+        threads.add(
+            new Thread(
+                () -> {
+                  try {
+                    start.await();
+                    if (closer) {
+                      resource.close();
+                      return;
+                    }
+                    for (int i = 0; i < 200; i++) {
+                      try {
+                        Object result = function.call(resource);
+                        if (!Long.valueOf(address).equals(result))
+                          unexpected.compareAndSet(null, new AssertionError("got " + result));
+                      } catch (NativeCellException e) {
+                        if (!e.getMessage().equals("f: parameter p received a closed Ticket"))
+                          unexpected.compareAndSet(null, e);
+                      }
+                    }
+                  } catch (Throwable t2) {
+                    unexpected.compareAndSet(null, t2);
+                  }
+                },
+                (closer ? "closer-" : "caller-") + t));
+      }
+      threads.forEach(Thread::start);
+      start.countDown();
+      for (Thread thread : threads) thread.join(10_000);
+      if (unexpected.get() != null) throw new AssertionError("round " + round, unexpected.get());
+      assertEquals(1, destroyed.get(), "concurrent closes destroy exactly once");
+      assertEquals(
+          "f: parameter p received a closed Ticket",
+          assertThrows(NativeCellException.class, () -> function.call(resource)).getMessage());
+    }
+  }
 }
