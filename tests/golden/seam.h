@@ -100,6 +100,8 @@ Reducer seam_reducer(void);
 /* value: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
 /* times: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
 struct Triple seam_rotate(struct Triple value, int32_t times);
+/* Native Image binds seam_rotate_myna_ref; the C provider must also define it (the C counterpart of `native_image_shims!`). */
+void seam_rotate_myna_ref(struct Triple const * value, int32_t times, struct Triple * result);
 
 /* EXPORT; error=ABORT */
 /* isolate_thread: nullable=false ownership=BORROWED access=UNSPECIFIED */
@@ -137,6 +139,8 @@ int64_t seam_sum(void * isolate_thread, uint8_t const * data, int64_t length);
 /* IMPORT; error=NO_FAILURE */
 /* value: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
 struct Pair seam_swap_pair(struct Pair value);
+/* Native Image binds seam_swap_pair_myna_ref; the C provider must also define it (the C counterpart of `native_image_shims!`). */
+void seam_swap_pair_myna_ref(struct Pair const * value, struct Pair * result);
 
 /* EXPORT; error=ABORT */
 /* isolate_thread: nullable=false ownership=BORROWED access=UNSPECIFIED */

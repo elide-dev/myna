@@ -91,6 +91,8 @@ size_t cells_strlen(char const * text);
 /* IMPORT; error=NO_FAILURE */
 /* value: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
 struct Pair cells_swap(struct Pair value);
+/* Native Image binds cells_swap_myna_ref; the C provider must also define it (the C counterpart of `native_image_shims!`). */
+void cells_swap_myna_ref(struct Pair const * value, struct Pair * result);
 
 /* IMPORT; error=NO_FAILURE */
 /* small: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
