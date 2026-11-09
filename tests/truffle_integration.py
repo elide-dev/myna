@@ -87,7 +87,7 @@ class TruffleIntegrationTests(unittest.TestCase):
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                      # The generated properties cover the cells; the probe is the consumer's own node class.
-                     "--initialize-at-build-time=fixture.cells.CellsMain$Probe",
+                     "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd",
                      "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
                      f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
         result = run(app)

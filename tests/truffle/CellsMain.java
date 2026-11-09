@@ -20,6 +20,15 @@ public final class CellsMain {
       return new Object[] {result, compiled};
     }
   }
+  /** Language glue holding the concrete cell type and calling its primitive entry point. */
+  static final class TypedAdd extends NativeCell {
+    @Node.Child private CellApiTruffle.add_Cell inner = new CellApiTruffle.add_Cell();
+    TypedAdd() { super("typed:add", 2); }
+    @Override public Object execute(Object[] arguments) {
+      int result = inner.executeInt(arguments);
+      return new Object[] {result, CompilerDirectives.inCompiledCode()};
+    }
+  }
   /** Mirrors the fork's CFunctionRuntimeCompilationTest: compile immediately, then verify results in compiled code. */
   static void compiled(String what, NativeFunction probe, java.util.function.LongFunction<Object[]> args, java.util.function.LongFunction<Object> expected) {
     boolean compiled = false;
@@ -51,6 +60,7 @@ public final class CellsMain {
       context.enter();
       try {
         compiled("add", new Probe(new CellApiTruffle.add_Cell()).function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
+        compiled("typed add", new TypedAdd().function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
         compiled("sleepyAdd", new Probe(new CellApiTruffle.sleepyAdd_Cell()).function(), i -> new Object[] {i, 2L}, i -> i + 2);
         byte[] large = new byte[Borrow.pinThreshold() * 2];
         java.util.Arrays.fill(large, (byte) 1);

@@ -4,6 +4,7 @@ package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
 
 /**
  * One native function, callable from guest code. Myna generates a subclass per binding: it owns the
@@ -41,6 +42,50 @@ public abstract class NativeCell extends Node {
    * @throws NativeCellException for wrong arity or an argument outside the declared carrier
    */
   public abstract Object execute(Object[] arguments);
+
+  /**
+   * {@link #execute} for a cell whose guest result is a {@code long}: {@code i64}, {@code u64},
+   * {@code isize}, {@code usize} and {@code u32}. Generated cells with such a result override it
+   * without the checked exception, and their {@link #execute} boxes its value, so a language node
+   * holding the concrete cell type gets the primitive with no box on any path. This default unboxes
+   * {@link #execute}.
+   *
+   * @throws UnexpectedResultException carrying the result when it is not a {@code Long}
+   */
+  public long executeLong(Object[] arguments) throws UnexpectedResultException {
+    Object result = execute(arguments);
+    if (result instanceof Long value) return value;
+    throw unexpected(result);
+  }
+
+  /**
+   * {@link #execute} for an {@code int} guest result: {@code i8}, {@code i16}, {@code i32}, {@code
+   * u8}, {@code u16} and {@code char}. See {@link #executeLong}.
+   */
+  public int executeInt(Object[] arguments) throws UnexpectedResultException {
+    Object result = execute(arguments);
+    if (result instanceof Integer value) return value;
+    throw unexpected(result);
+  }
+
+  /** {@link #execute} for a {@code double} guest result: {@code f32} and {@code f64}. */
+  public double executeDouble(Object[] arguments) throws UnexpectedResultException {
+    Object result = execute(arguments);
+    if (result instanceof Double value) return value;
+    throw unexpected(result);
+  }
+
+  /** {@link #execute} for a {@code bool} guest result. */
+  public boolean executeBoolean(Object[] arguments) throws UnexpectedResultException {
+    Object result = execute(arguments);
+    if (result instanceof Boolean value) return value;
+    throw unexpected(result);
+  }
+
+  private static UnexpectedResultException unexpected(Object result) {
+    CompilerDirectives.transferToInterpreter();
+    return new UnexpectedResultException(result);
+  }
 
   protected final void checkArity(Object[] arguments) {
     if (arguments.length != arity) {

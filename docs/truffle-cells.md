@@ -63,6 +63,13 @@ interop dispatch, which partial evaluation inlines for a monomorphic call site. 
 the fastest path exposes the cell as one of its own function objects (for GraalJS, `JSFunctionData`
 around `NativeFunction.callTarget()`); that glue lives in the consumer.
 
+A cell with a scalar result also overrides the matching typed method, `executeLong`, `executeInt`,
+`executeDouble` or `executeBoolean` (the guest carrier: `long` for 64-bit, `usize` and `u32` results,
+`int` for narrower integers and `char`, `double` for floats), and its `execute` boxes that value.
+Language glue holding the concrete `*_Cell` type calls the typed method with no box and no exception
+handler; through `NativeCell`, the typed methods default to unboxing `execute` and throw
+`UnexpectedResultException` for any other result.
+
 Partial evaluation inlines only methods of build-time-initialized classes, so every class that
 takes part in a compiled guest call must initialize at image build time: `myna-truffle.jar` carries
 a `native-image.properties` for its own classes (keeping the empty-buffer dummy and the pin
@@ -237,7 +244,11 @@ Findings from the first measurement that are tracked, not blocking:
 
 - FFM cells and borrowing cells allocate 48 bytes per call in compiled code: the boxed result,
   the argument array and the `Borrow` are not scalar-replaced across the downcall's exception
-  handler and the borrow's `finally`. Native leaf and transition cells allocate nothing.
+  handler and the borrow's `finally`. Native leaf and transition cells allocate nothing. Since
+  scalar cells return through their typed method, the FFM handler wraps a primitive return and
+  the box is gone: FFM cells measured 32 B per call on a shared Apple M5 Max, through `execute`
+  and through `executeLong` alike; the remaining 32 B are not yet attributed, and the time
+  difference was within that host's noise.
 - A Java string lent to a C string parameter cost about 27 ns per call in this baseline, mostly the
   confined arena opened for the UTF-8 copy. Copies now use a per-thread scratch stack (see
   [Borrows](#borrows)). On a shared Apple M5 Max, same build settings before and after, five

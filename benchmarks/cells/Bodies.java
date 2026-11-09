@@ -86,6 +86,10 @@ public abstract class Bodies extends NativeCell {
       case "glue-step" -> new Glue(name, new CellsTruffle.step_Cell());
       case "glue-ffm-leaf" -> new Glue(name, new FfmCellsTruffle.leaf_Cell());
       case "glue-ffm-step" -> new Glue(name, new FfmCellsTruffle.step_Cell());
+      case "typed-leaf" -> new TypedLeaf(name);
+      case "typed-step" -> new TypedStep(name);
+      case "typed-ffm-leaf" -> new TypedFfmLeaf(name);
+      case "typed-ffm-step" -> new TypedFfmStep(name);
       case "glue-text" -> new GlueText(name, new CellsTruffle.text_Cell());
       case "interop-leaf" -> new Interop(name, CellsTruffle.leaf());
       case "interop-step" -> new Interop(name, CellsTruffle.step());
@@ -208,6 +212,66 @@ public abstract class Bodies extends NativeCell {
     @Override
     long run(int count, long x, Object extra) {
       for (int i = 0; i < count; i++) x = (Long) cell.execute(new Object[] {x});
+      return x;
+    }
+  }
+
+  /**
+   * Typed glue: the consumer holds the concrete generated cell and calls its primitive {@code
+   * executeLong}, which declares no exception, so no box and no handler are involved.
+   */
+  static final class TypedLeaf extends Bodies {
+    @Node.Child private CellsTruffle.leaf_Cell cell = new CellsTruffle.leaf_Cell();
+
+    TypedLeaf(String name) {
+      super(name);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {x});
+      return x;
+    }
+  }
+
+  static final class TypedStep extends Bodies {
+    @Node.Child private CellsTruffle.step_Cell cell = new CellsTruffle.step_Cell();
+
+    TypedStep(String name) {
+      super(name);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {x});
+      return x;
+    }
+  }
+
+  static final class TypedFfmLeaf extends Bodies {
+    @Node.Child private FfmCellsTruffle.leaf_Cell cell = new FfmCellsTruffle.leaf_Cell();
+
+    TypedFfmLeaf(String name) {
+      super(name);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {x});
+      return x;
+    }
+  }
+
+  static final class TypedFfmStep extends Bodies {
+    @Node.Child private FfmCellsTruffle.step_Cell cell = new FfmCellsTruffle.step_Cell();
+
+    TypedFfmStep(String name) {
+      super(name);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {x});
       return x;
     }
   }

@@ -11,6 +11,7 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -44,6 +45,72 @@ class TruffleRuntimeTest {
       checkArity(arguments);
       return (int) left.execute(arguments[0]) + (int) right.execute(arguments[1]);
     }
+  }
+
+  /** A cell shaped like a generated scalar-result one: the typed method, and execute boxing it. */
+  static final class TypedSumCell extends NativeCell {
+    @Node.Child
+    private IntegerCoercion left =
+        new IntegerCoercion("sum", "left", 64, false, CoercionPolicy.STRICT);
+
+    @Node.Child
+    private IntegerCoercion right =
+        new IntegerCoercion("sum", "right", 64, false, CoercionPolicy.STRICT);
+
+    TypedSumCell() {
+      super("sum", 2);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      return executeLong(arguments);
+    }
+
+    @Override
+    public long executeLong(Object[] arguments) {
+      checkArity(arguments);
+      return left.execute(arguments[0]) + right.execute(arguments[1]);
+    }
+  }
+
+  /** A cell returning whatever it is given, for the default typed methods. */
+  static final class EchoCell extends NativeCell {
+    EchoCell() {
+      super("echo", 1);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      return arguments[0];
+    }
+  }
+
+  @Test
+  void typedExecuteMatchesExecute() throws Exception {
+    var typed = new TypedSumCell();
+    for (long[] pair : new long[][] {{40, 2}, {-7, 3}, {Long.MAX_VALUE, 0}, {0, Long.MIN_VALUE}}) {
+      Object[] arguments = {pair[0], pair[1]};
+      assertEquals(typed.execute(arguments), typed.executeLong(arguments));
+      assertEquals(pair[0] + pair[1], typed.executeLong(arguments));
+    }
+    assertEquals(42L, typed.function().call(40, 2));
+    assertThrows(NativeCellException.class, () -> typed.executeLong(new Object[] {1L}));
+    // The defaults unbox execute, and report any other result instead of converting it.
+    var echo = new EchoCell();
+    assertEquals(5L, echo.executeLong(new Object[] {5L}));
+    assertEquals(6, echo.executeInt(new Object[] {6}));
+    assertEquals(1.5, echo.executeDouble(new Object[] {1.5}));
+    assertTrue(echo.executeBoolean(new Object[] {true}));
+    for (Object other : new Object[] {7, "x", NativeVoid.INSTANCE}) {
+      var e =
+          assertThrows(
+              UnexpectedResultException.class, () -> echo.executeLong(new Object[] {other}));
+      assertSame(other, e.getResult());
+    }
+    assertThrows(UnexpectedResultException.class, () -> echo.executeInt(new Object[] {7L}));
+    assertThrows(UnexpectedResultException.class, () -> echo.executeDouble(new Object[] {1f}));
+    assertThrows(UnexpectedResultException.class, () -> echo.executeBoolean(new Object[] {1}));
   }
 
   /** A one-argument cell shaped like a generated {@code ptr<T>} binding, for coercion tests. */

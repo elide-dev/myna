@@ -51,6 +51,38 @@ class TruffleCellsTest {
     assertTrue(named.containsKey("ApiTruffle.java"));
     assertTrue(named.get("ApiTruffle.java").contains("return Api.add(value_left, value_right);"));
     assertTrue(named.get("ApiTruffle.java").contains("package a.b;"));
+    // Scalar results get the typed entry point, and execute boxes it.
+    assertTrue(
+        named
+            .get("ApiTruffle.java")
+            .contains(
+                "        public Object execute(Object[] arguments) {\n"
+                    + "            return executeInt(arguments);\n"
+                    + "        }\n"
+                    + "        @Override\n"
+                    + "        public int executeInt(Object[] arguments) {\n"
+                    + "            checkArity(arguments);\n"));
+    for (String[] typed :
+        new String[][] {
+          {"bool", "boolean executeBoolean"},
+          {"u8", "int executeInt"},
+          {"char", "int executeInt"},
+          {"u32", "long executeLong"},
+          {"usize", "long executeLong"},
+          {"f32", "double executeDouble"},
+          {"f64", "double executeDouble"}
+        }) {
+      String source =
+          generate(MODULE + "import f return=" + typed[0] + " error=no_failure\nend\n")
+              .get("MynaTruffle.java");
+      assertTrue(source.contains("public " + typed[1] + "(Object[] arguments) {"), typed[0]);
+    }
+    for (String untyped : List.of("void", "ptr<u8>"))
+      assertFalse(
+          generate(MODULE + "import f return=" + untyped + " error=no_failure\nend\n")
+              .get("MynaTruffle.java")
+              .contains("(Object[] arguments) {\n            return execute"),
+          untyped);
     // Options are parsed strictly and only with cells enabled.
     for (String bad :
         List.of(
