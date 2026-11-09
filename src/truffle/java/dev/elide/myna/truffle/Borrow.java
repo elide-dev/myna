@@ -115,6 +115,8 @@ public final class Borrow {
       InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
       throws UnsupportedMessageException {
     long size = interop.getBufferSize(buffer);
+    // A guest buffer's size is untrusted: a negative one must not reach the array allocation.
+    if (size < 0) throw new IllegalArgumentException("negative interop buffer size: " + size);
     if (size > Integer.MAX_VALUE - 8)
       throw new IllegalArgumentException("interop buffer too large to copy: " + size);
     if (writable && !interop.isBufferWritable(buffer))
@@ -172,11 +174,19 @@ public final class Borrow {
     }
   }
 
+  /**
+   * Guest code can shrink or detach the source buffer while the call runs (from a callback or
+   * another thread). Bytes that no longer exist cannot be written back: that is a guest error,
+   * reported after every surviving byte has been written, not an internal one.
+   */
   private void writeBackInterop() {
     InteropLibrary interop = InteropLibrary.getUncached(interopSource);
     try {
       for (int i = 0; i < array.length; i++) interop.writeBufferByte(interopSource, i, array[i]);
-    } catch (UnsupportedMessageException | InvalidBufferOffsetException e) {
+    } catch (InvalidBufferOffsetException e) {
+      throw NativeCellException.of(
+          null, "borrowed buffer shrank before write-back of byte ", e.getByteOffset());
+    } catch (UnsupportedMessageException e) {
       throw CompilerDirectives.shouldNotReachHere(e);
     }
   }
