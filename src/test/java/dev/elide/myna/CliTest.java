@@ -103,19 +103,30 @@ class CliTest {
 
   @Test
   void validateTargetsRequiresOneFingerprint() {
-    var all =
+    // The three signed-char targets (x86-64 Linux, Apple arm64, x86-64 Apple) share one ABI
+    // fingerprint; aarch64-unknown-linux-gnu (AAPCS64 Linux, unsigned char) is its own ABI
+    // class and now shares no fingerprint with the signed-char targets.
+    var signed =
         run(
             "validate",
             "examples/buffer.seam",
             "--targets",
-            "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,aarch64-apple-darwin,"
-                + "x86_64-apple-darwin");
-    assertEquals(0, all.code(), all.err());
+            "x86_64-unknown-linux-gnu,aarch64-apple-darwin,x86_64-apple-darwin");
+    assertEquals(0, signed.code(), signed.err());
     for (String target :
-        List.of("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "aarch64-apple-darwin"))
+        List.of("x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin"))
       assertEquals(
-          all.out(), run("validate", "examples/buffer.seam", "--target", target).out(), target);
-    assertTrue(all.out().matches("valid buffer [0-9a-f]{64}\n"), all.out());
+          signed.out(), run("validate", "examples/buffer.seam", "--target", target).out(), target);
+    assertTrue(signed.out().matches("valid buffer [0-9a-f]{64}\n"), signed.out());
+    var crossClass =
+        run(
+            "validate",
+            "examples/buffer.seam",
+            "--targets",
+            "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu");
+    assertEquals(2, crossClass.code(), crossClass.err());
+    assertTrue(crossClass.err().startsWith("myna:"), crossClass.err());
+    assertTrue(crossClass.err().contains("different ABI fingerprints"), crossClass.err());
     var diverged =
         assertThrows(
             IllegalArgumentException.class,
@@ -125,10 +136,13 @@ class CliTest {
                         Map.of(
                             "aa", List.of("x86_64-unknown-linux-gnu (LP64, little-endian)"),
                             "bb",
-                                List.of("a (ILP32, little-endian)", "b (ILP32, little-endian)")))));
+                                List.of(
+                                    "aarch64-unknown-linux-gnu (LP64, little-endian,"
+                                        + " unsigned char)")))));
     assertEquals(
         "targets have different ABI fingerprints: aa for x86_64-unknown-linux-gnu (LP64,"
-            + " little-endian); bb for a (ILP32, little-endian), b (ILP32, little-endian)",
+            + " little-endian); bb for aarch64-unknown-linux-gnu (LP64, little-endian,"
+            + " unsigned char)",
         diverged.getMessage());
   }
 

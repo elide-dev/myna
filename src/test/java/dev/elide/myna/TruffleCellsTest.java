@@ -317,6 +317,87 @@ class TruffleCellsTest {
     assertTrue(ffm.contains("MynaFFM.r_void();\n                return Carriers.none();"));
   }
 
+  /**
+   * The C {@code char} scalar is target-dependent (signed on x86-64 and Apple arm64, unsigned on
+   * AAPCS64 Linux). The cell's {@code char} coercion's {@code unsigned} flag and the {@code char}
+   * return conversion follow the module's resolved ABI class, instead of always emitting {@code (8,
+   * false)} and a sign-extending {@code (int)} cast that broke AAPCS64 Linux.
+   */
+  @Test
+  void charSignednessFollowsTargetAbi() {
+    String source =
+        MODULE
+            + "import r_char return=char error=no_failure\nend\n"
+            + "import p_char return=i32 error=no_failure\n"
+            + "  param c type=char\n  param i type=i8\n  param u type=u8\nend\n";
+    // Signed-char target (aarch64-apple-darwin): char coerces as i8, return sign-extends, and the
+    // ABI descriptor records no charUnsigned field so existing fingerprints are unchanged.
+    var signedOutputs = generate(source);
+    String signed = signedOutputs.get("MynaTruffle.java");
+    assertTrue(
+        signed.contains("new IntegerCoercion(\"p_char\", \"c\", 8, false, CoercionPolicy.STRICT)"),
+        "signed-char target: char coerces as i8 in [-128, 127]");
+    assertTrue(
+        signed.contains("new IntegerCoercion(\"p_char\", \"i\", 8, false, CoercionPolicy.STRICT)"),
+        "i8 stays signed on a signed-char target");
+    assertTrue(
+        signed.contains("new IntegerCoercion(\"p_char\", \"u\", 8, true, CoercionPolicy.STRICT)"),
+        "u8 stays unsigned on a signed-char target");
+    assertTrue(
+        signed.contains("return (int) MynaNative.r_char();"), "signed char return sign-extends");
+    assertFalse(
+        signedOutputs.get("seam.json").contains("\"charUnsigned\""),
+        "no charUnsigned for signed-char");
+    // Unsigned-char target (aarch64-unknown-linux-gnu, AAPCS64 Linux): char coerces as u8 in
+    // [0, 255] — a guest passing 200 no longer raises — and the return is masked to its numeric
+    // value via Carriers.u8, so a char returning 200 surfaces as 200 instead of -56. i8 and u8
+    // are unaffected; the carrier stays a raw byte in both bindings.
+    var unsignedSource =
+        source.replace("target=aarch64-apple-darwin", "target=aarch64-unknown-linux-gnu");
+    var unsignedOutputs = generate(unsignedSource);
+    String unsigned = unsignedOutputs.get("MynaTruffle.java");
+    assertTrue(
+        unsigned.contains("new IntegerCoercion(\"p_char\", \"c\", 8, true, CoercionPolicy.STRICT)"),
+        "AAPCS64 Linux: char coerces as u8 in [0, 255]");
+    assertTrue(
+        unsigned.contains(
+            "new IntegerCoercion(\"p_char\", \"i\", 8, false, CoercionPolicy.STRICT)"),
+        "i8 stays signed on AAPCS64 Linux");
+    assertTrue(
+        unsigned.contains("new IntegerCoercion(\"p_char\", \"u\", 8, true, CoercionPolicy.STRICT)"),
+        "u8 stays unsigned on AAPCS64 Linux");
+    assertTrue(
+        unsigned.contains("byte value_c = (byte) coerce_c.execute(arguments[0]);"),
+        "char still lowers to the raw byte carrier the binding expects");
+    assertTrue(
+        unsigned.contains("return Carriers.u8(MynaNative.r_char());"),
+        "AAPCS64 Linux char return surfaces as 0..255, not sign-extended");
+    assertFalse(
+        unsigned.contains("return (int) MynaNative.r_char();"),
+        "AAPCS64 Linux char return does not sign-extend");
+    assertTrue(
+        unsignedOutputs.get("seam.json").contains("\"charUnsigned\":true"),
+        "charUnsigned recorded for AAPCS64 Linux");
+    // The two ABI classes no longer share one fingerprint: charUnsigned is part of the ABI class.
+    assertNotEquals(
+        signedOutputs.get("seam.abi"),
+        unsignedOutputs.get("seam.abi"),
+        "AAPCS64 Linux has a distinct ABI fingerprint from the signed-char targets");
+    // The same fix applies to FFM-backend cells, which call MynaFFM (same carrier, same masking).
+    var unsignedFfm =
+        generate(
+                unsignedSource.replace(
+                    "truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        unsignedFfm.contains(
+            "new IntegerCoercion(\"p_char\", \"c\", 8, true, CoercionPolicy.STRICT)"),
+        "FFM cells on AAPCS64 Linux: char coerces as u8");
+    assertTrue(
+        unsignedFfm.contains("return Carriers.u8(MynaFFM.r_char());"),
+        "FFM cells on AAPCS64 Linux: char return masks to 0..255");
+  }
+
   @Test
   void parameterShapesSelectCoercions() {
     String truffle =

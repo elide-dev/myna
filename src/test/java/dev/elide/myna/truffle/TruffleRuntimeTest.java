@@ -296,6 +296,50 @@ class TruffleRuntimeTest {
     assertThrows(NativeCellException.class, () -> i64.execute(big("18446744073709551615")));
     assertEquals(3, i64.execute(big("3")));
     assertEquals(3, u64.execute(big("3")));
+    // Big integers that fit neither a long nor an exact double: STRICT rejects them on every
+    // carrier except u64 (the full unsigned 64-bit range), and WRAP truncates them to the
+    // carrier width in two's complement on every carrier.
+    var i8wrap = new IntegerCoercion("f", "p", 8, false, CoercionPolicy.WRAP);
+    var u8wrap = new IntegerCoercion("f", "p", 8, true, CoercionPolicy.WRAP);
+    var i16wrap = new IntegerCoercion("f", "p", 16, false, CoercionPolicy.WRAP);
+    var u32wrap = new IntegerCoercion("f", "p", 32, true, CoercionPolicy.WRAP);
+    var i64wrap = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.WRAP);
+    var p2_63p1 = big("9223372036854775809");
+    var p2_64p1 = big("18446744073709551617");
+    var p2_1024 = new ForeignNumber(BigInteger.ONE.shiftLeft(1024));
+    var n2_63p1 = big("-9223372036854775809");
+    // STRICT: u64 accepts 2^63+1 (within [0, 2^64)); every other carrier rejects out-of-range bigs.
+    assertEquals(-9223372036854775807L, u64.execute(p2_63p1));
+    assertThrows(NativeCellException.class, () -> i64.execute(p2_63p1));
+    assertThrows(NativeCellException.class, () -> u64.execute(p2_64p1));
+    var bigReject = assertThrows(NativeCellException.class, () -> u32.execute(p2_63p1));
+    assertEquals(
+        "f: parameter p expects u32 in [0, 4294967295], got ForeignNumber", bigReject.getMessage());
+    // WRAP: 2^63+1 truncates to the carrier width; the low 64 bits are 0x8000000000000001, so
+    // the 64-bit carriers keep -9223372036854775807 and every narrower carrier narrows to 1.
+    assertEquals(-9223372036854775807L, i64wrap.execute(p2_63p1));
+    assertEquals(-9223372036854775807L, u64wrap.execute(p2_63p1));
+    assertEquals(1, i8wrap.execute(p2_63p1));
+    assertEquals(1, u8wrap.execute(p2_63p1));
+    assertEquals(1, i16wrap.execute(p2_63p1));
+    assertEquals(1, u16.execute(p2_63p1));
+    assertEquals(1, i32.execute(p2_63p1));
+    assertEquals(1, u32wrap.execute(p2_63p1));
+    // WRAP: 2^64+1 and 2^1024 truncate to the low 64 bits (1 and 0 respectively).
+    assertEquals(1, i64wrap.execute(p2_64p1));
+    assertEquals(0L, i64wrap.execute(p2_1024));
+    // WRAP: a negative big integer truncates to its low 64 bits too.
+    assertEquals(9223372036854775807L, i64wrap.execute(n2_63p1));
+    assertEquals(-1, i8wrap.execute(n2_63p1));
+    assertEquals(255, u8wrap.execute(n2_63p1));
+    // Doubles beyond the long range that are NOT big integers still truncate through modular():
+    // fitsInBigInteger is false, so they skip big() and reach the double path, whose magnitude
+    // is >= 2^63 and therefore routes through modular() rather than the (long) cast. Fresh
+    // coercion nodes keep the LargeDouble type under the interop dispatch limit.
+    var modI32 = new IntegerCoercion("f", "p", 32, false, CoercionPolicy.WRAP);
+    var modU16 = new IntegerCoercion("f", "p", 16, true, CoercionPolicy.WRAP);
+    assertEquals(0, modI32.execute(new LargeDouble(0x1p64)));
+    assertEquals(4096, modU16.execute(new LargeDouble(0x1p63 + 4096.0)));
     var message = assertThrows(NativeCellException.class, () -> u64.execute("x"));
     assertEquals("f: parameter p expects u64 in [0, 2^64), got string \"x\"", message.getMessage());
     assertThrows(NativeCellException.class, () -> i32.execute(new ForeignNull()));
@@ -601,6 +645,35 @@ class TruffleRuntimeTest {
         "f: parameter text expects string, buffer or pointer or null, got Long 3",
         assertThrows(NativeCellException.class, () -> nullable.execute(3L)).getMessage());
     assertTrue(Borrow.pinThreshold() > 0);
+  }
+
+  @Test
+  void foreignBufferBorrowedAsCStringIsNulTerminated() {
+    var cString = new BytesCoercion("f", "text", false, false, false);
+    // 24 bytes runs past the FFM confined-arena zero-fill horizon, so a missing terminator reads
+    // as stale non-zero heap data (the OOB read the bug report describes), not allocator luck.
+    byte[] data = new byte[24];
+    java.util.Arrays.fill(data, (byte) 'A');
+    Borrow borrow = cString.execute(new ForeignBuffer(data, false));
+    assertEquals(24, borrow.length());
+    MemorySegment view = MemorySegment.ofAddress(borrow.address()).reinterpret(25);
+    for (int i = 0; i < 24; i++) assertEquals(data[i], view.get(ValueLayout.JAVA_BYTE, i));
+    assertEquals(0, view.get(ValueLayout.JAVA_BYTE, 24));
+    borrow.release();
+    assertArrayEquals(data, data);
+    var writableCString = new BytesCoercion("f", "text", false, true, false);
+    byte[] out = new byte[24];
+    java.util.Arrays.fill(out, (byte) 'A');
+    Borrow writableBorrow = writableCString.execute(new ForeignBuffer(out, true));
+    assertEquals(24, writableBorrow.length());
+    MemorySegment writableSeg = MemorySegment.ofAddress(writableBorrow.address()).reinterpret(25);
+    writableSeg.set(ValueLayout.JAVA_BYTE, 1, (byte) 'b');
+    writableSeg.set(ValueLayout.JAVA_BYTE, 24, (byte) 0x7f);
+    writableBorrow.release();
+    byte[] expected = new byte[24];
+    java.util.Arrays.fill(expected, (byte) 'A');
+    expected[1] = 'b';
+    assertArrayEquals(expected, out);
   }
 
   @Test
@@ -1132,6 +1205,95 @@ class TruffleRuntimeTest {
     double asDouble() throws UnsupportedMessageException {
       if (!fitsInDouble()) throw UnsupportedMessageException.create();
       return value.doubleValue();
+    }
+  }
+
+  /**
+   * An interop number that fits in neither {@code long} nor {@code BigInteger} but does fit in
+   * {@code double}; a magnitude at or beyond {@code 2^63} drives it through {@code modular()}
+   * instead of {@code big()}. Exercises the double-beyond-long-range truncation path.
+   */
+  @ExportLibrary(InteropLibrary.class)
+  static final class LargeDouble implements TruffleObject {
+    final double value;
+
+    LargeDouble(double value) {
+      this.value = value;
+    }
+
+    @ExportMessage
+    boolean isNumber() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean fitsInByte() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInShort() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInInt() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInLong() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInBigInteger() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInFloat() {
+      return false;
+    }
+
+    @ExportMessage
+    boolean fitsInDouble() {
+      return true;
+    }
+
+    @ExportMessage
+    byte asByte() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short asShort() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int asInt() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long asLong() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    BigInteger asBigInteger() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float asFloat() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double asDouble() {
+      return value;
     }
   }
 }
