@@ -170,6 +170,11 @@ a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCl
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
 owners refuse it. These are the same rules as the existing Native Image ownership API.
 
+Generated array convenience methods pin with a plain `try`/`finally`, not try-with-resources:
+javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation
+blocklist (`-H:+TruffleCheckBlockListMethods`) rejects on partially evaluated paths. Hand-written
+code that runs around a cell on a compiled path should do the same.
+
 ## Transitions
 
 The hard constraints come from the compiler, not from Myna:

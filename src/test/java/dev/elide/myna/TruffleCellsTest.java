@@ -671,6 +671,17 @@ class TruffleCellsTest {
   }
 
   @Test
+  void nativeImageSourcesAvoidTryWithResourcesOnCompiledPaths() throws Exception {
+    // try-with-resources compiles to Throwable.addSuppressed, which the runtime-compilation
+    // blocklist rejects (#87); generated Native Image Java must pin and release by hand.
+    for (var output : generate(example()).entrySet()) {
+      if (!output.getKey().endsWith(".java") || output.getKey().endsWith("FFM.java")) continue;
+      assertFalse(output.getValue().contains("try (org.graalvm"), output.getKey());
+      assertFalse(output.getValue().contains("addSuppressed"), output.getKey());
+    }
+  }
+
+  @Test
   void goldenOutputs() throws Exception {
     var actual = generate(example());
     for (var output : actual.entrySet())
