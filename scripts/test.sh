@@ -12,6 +12,8 @@ mise run test:cpp
 mise run test:rust-coverage
 mise run test:asan
 mise run test:tsan
+mise run test:miri
+mise run test:rust-fuzz
 scripts/test-jvm.sh
 scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py

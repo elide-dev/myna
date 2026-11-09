@@ -176,8 +176,13 @@ The sanitizer wrappers and Linux amd64 instrumented-library add-ons come from
 `elide-dev/toolchain` 2026.11.5. ASan and TSan each must detect a deliberate bug in
 a separate process before a clean workload can pass. The ASan lane also requires
 undefined-behavior and leak canaries and enforces fail-fast UBSan and LSan without
-leak suppressions. A separate RSS canary verifies the runner's process-memory
-watchdog. Fuzzer seed is 1729; seed
+leak suppressions. UBSan includes `-fsanitize=integer,implicit-conversion`, with
+truncation and unsigned-overflow canaries; `tests/fuzz/ubsan.ignorelist` exempts
+only unsigned overflow in `myna_value_hash`, whose FNV-1a multiplication wraps by
+definition. A separate RSS canary verifies the runner's process-memory
+watchdog. The value fuzzer feeds input bytes into strings, number tokens and
+borrowed regions; the C++ producer treats UTF-8 and number lexing as caller
+contracts, so it must publish such bytes exactly. Fuzzer seed is 1729; seed
 corpora are checked in under `tests/fuzz/corpus`. CI fuzzes for ten minutes with
 `--duration 600`, then exits normally so leak checks and coverage reports run.
 Local `mise run test:asan` retains its 20,000-input development workload.
@@ -198,6 +203,19 @@ Longer campaigns run separately from CI; for example, an eight-hour run is
 `MYNA_PYTHON_TIMEOUT=9h mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 28800`.
 Duration and input-count limits are mutually exclusive, and the watchdog must
 exceed a requested duration so a successful campaign can finish its leak checks.
+
+The Rust reader (`myna_tape_text_v1`) and UTF-8 bridge take untrusted node,
+region and byte tables. `crates/myna-values/tests/support/tape_model.rs` decodes
+arbitrary bytes into such tables and checks every result against a safe reference
+model; `cargo test` runs it as proptests. `mise run test:rust-fuzz` runs the same
+harness under cargo-fuzz with libFuzzer and ASan (`scripts/rust-fuzz.sh [seconds]`,
+60 per target by default, five minutes in CI) after an expected-failure ASan canary,
+and `mise run test:miri` runs the value tests under Miri. Both use the nightly
+pinned as `MYNA_RUST_NIGHTLY` in `mise.toml`, installed beside the pinned stable;
+its binaries never enter Myna's LLVM bitcode. Miri cannot interpret simdutf's C++,
+so tests that must reach it are ignored under `cfg(miri)`. Replay a Rust crash with
+`build/tools/cargo-fuzz/bin/cargo-fuzz fuzz run --fuzz-dir crates/myna-values/fuzz TARGET FILE`
+under `RUSTUP_TOOLCHAIN=$MYNA_RUST_NIGHTLY`.
 The RSS watcher polls
 the process; it is a test termination limit, not an exact allocator budget.
 The value workload separately enforces actual live PMR allocation budgets and
