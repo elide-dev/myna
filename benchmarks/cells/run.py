@@ -106,7 +106,9 @@ def build():
             '-H:+UnlockExperimentalVMOptions', '-H:-DeleteLocalSymbols',
             f'-H:NativeLinkerOption={WORK / "kernel.o"}', f'-H:NativeLinkerOption={WORK / "cells.o"}',
             '-H:-UnlockExperimentalVMOptions', 'bench.CellBench', '-o', str(WORK / 'svm')]
-    result = native_image(*args)
+    # One -O3 truffle-svm image with every benchmark cell: slower than the test images, and
+    # over five minutes on the shared ARM runners.
+    result = native_image(*args, timeout=1200)
     (WORK / 'build.log').write_text(result.stdout + result.stderr)
     commands.append([str(home / 'bin/native-image'), '-J--enable-native-access=ALL-UNNAMED',
                      '-H:+UnlockExperimentalVMOptions', '-H:-CheckToolchain', f'-H:CCompilerPath={cc}',
