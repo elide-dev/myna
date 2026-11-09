@@ -1139,6 +1139,32 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void blockGrowthStopsAtTheLimitAndIsNotReallocatedThere() throws Exception {
+    onFreshThread(() -> {
+      int copy = (int) Borrow.Scratch.LARGEST - 16; // a terminated copy reserves LARGEST bytes
+      long limit = Borrow.Scratch.LIMIT;
+      // Nest one more copy each round: every overflow raises the mark by one copy, and the next
+      // empty-stack acquisition grows the block to it, up to the limit (four copies).
+      long base = 0;
+      for (int depth = 1; depth <= 5; depth++) {
+        List<Borrow> held = new ArrayList<>();
+        for (int i = 0; i < depth; i++) held.add(Borrow.ofArray(new byte[copy], false, true));
+        base = held.get(0).address();
+        for (int i = held.size() - 1; i >= 0; i--) held.get(i).release();
+      }
+      // The fifth copy wanted more than the limit, but the block stays at the limit: four fit.
+      List<Borrow> fit = new ArrayList<>();
+      for (int i = 0; i < 4; i++) {
+        Borrow next = Borrow.ofArray(new byte[copy], false, true);
+        assertEquals(base + i * Borrow.Scratch.LARGEST, next.address());
+        fit.add(next);
+      }
+      assertEquals(limit, 4 * Borrow.Scratch.LARGEST);
+      for (int i = fit.size() - 1; i >= 0; i--) fit.get(i).release();
+    });
+  }
+
+  @Test
   void oversizeCopiesTakeTheArenaPathAndTheBlockGrows() throws Exception {
     onFreshThread(() -> {
       int largest = (int) Borrow.Scratch.LARGEST;
