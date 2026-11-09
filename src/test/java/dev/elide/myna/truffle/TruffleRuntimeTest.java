@@ -1060,10 +1060,10 @@ class TruffleRuntimeTest {
       assertArrayEquals(new byte[] {5, 6, 4}, data);
       assertEquals("outer", cString(outer.address()));
       outer.release();
-      // A write-back that fails still pops the copy.
+      // A write-back that fails is a guest error, and still pops the copy.
       var refusing = new BytesCoercion("f", "bytes", false, true, true);
       Borrow refused = refusing.execute(new LateRefusingBuffer());
-      assertThrows(AssertionError.class, refused::release);
+      assertThrows(NativeCellException.class, refused::release);
       assertEquals(base, Borrow.ofString("after", true).address());
     });
   }
