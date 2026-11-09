@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import re
 import subprocess
-import tomllib
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,15 +41,24 @@ def formatter():
 
 def rust_toolchain():
     """Keep rustc on elide-dev/toolchain's recommended pin so Rust bitcode stays readable by its LLVM."""
-    pinned = tomllib.loads((ROOT / "mise.toml").read_text())["tools"]["rust"]
-    recommended = (Path(os.environ["ELIDE_TOOLCHAIN_HOME"]) / "rustversion").read_text().strip()
-    if pinned != recommended:
-        raise SystemExit(f"mise.toml pins Rust {pinned}; elide-dev/toolchain recommends {recommended}")
+    def env(name):
+        value = os.environ.get(name)
+        if not value:
+            raise SystemExit(f"{name} is not set; run this check through mise so the toolchain environment loads")
+        return value
+    pin = re.search(r'^rust\s*=\s*"([^"]+)"', (ROOT / "mise.toml").read_text(), re.M)
+    if not pin:
+        raise SystemExit("mise.toml has no [tools] rust pin")
+    recommended = (Path(env("ELIDE_TOOLCHAIN_HOME")) / "rustversion").read_text().strip()
+    if pin.group(1) != recommended:
+        raise SystemExit(f"mise.toml pins Rust {pin.group(1)}; elide-dev/toolchain recommends {recommended}")
     rustc = subprocess.check_output(["rustc", "-vV"], cwd=ROOT, text=True)
-    rust_llvm = int(re.search(r"^LLVM version: (\d+)", rustc, re.M).group(1))
-    bundle_llvm = int(subprocess.check_output([os.environ["LLVM_CONFIG"], "--version"], text=True).split(".")[0])
-    if rust_llvm > bundle_llvm:
-        raise SystemExit(f"rustc uses LLVM {rust_llvm}, newer than the toolchain's LLVM {bundle_llvm}")
+    rust_llvm = re.search(r"^LLVM version: (\d+)", rustc, re.M)
+    if not rust_llvm:
+        raise SystemExit(f"rustc -vV reports no LLVM version:\n{rustc}")
+    bundle_llvm = int(subprocess.check_output([env("LLVM_CONFIG"), "--version"], text=True).split(".")[0])
+    if int(rust_llvm.group(1)) > bundle_llvm:
+        raise SystemExit(f"rustc uses LLVM {rust_llvm.group(1)}, newer than the toolchain's LLVM {bundle_llvm}")
 
 
 def style(fix=False):
