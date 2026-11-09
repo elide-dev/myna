@@ -15,23 +15,34 @@ public final class Seam {
    * The target properties a seam's layouts and platform-neutral outputs depend on. Struct sizes,
    * alignments and offsets, scalar widths and Java carriers follow from these alone; the triple
    * itself only selects target-specific LLVM contracts (sub-word argument extension, by-value
-   * lowering), which are not part of the fingerprint.
+   * lowering), which are not part of the fingerprint. {@code charUnsigned} is part of the ABI class
+   * because the C {@code char} signedness is target-dependent (signed on x86-64 and Apple arm64,
+   * unsigned on AAPCS64 Linux) and the Truffle cells' {@code char} coercion and result conversion
+   * must observe it; the property is serialized into the canonical descriptor so equal classes
+   * produce equal fingerprints and byte-identical platform-neutral outputs.
    */
-  public record TargetAbi(String dataModel, String byteOrder) {
+  public record TargetAbi(String dataModel, String byteOrder, boolean charUnsigned) {
+    public TargetAbi(String dataModel, String byteOrder) {
+      this(dataModel, byteOrder, false);
+    }
+
     @Override
     public String toString() {
-      return dataModel + ", " + byteOrder + "-endian";
+      return dataModel + ", " + byteOrder + "-endian" + (charUnsigned ? ", unsigned char" : "");
     }
   }
 
   private static final TargetAbi LP64_LITTLE = new TargetAbi("LP64", "little");
+
+  /** AAPCS64 Linux: LP64, little-endian, {@code char} is unsigned. */
+  private static final TargetAbi LP64_LITTLE_AAPCS64 = new TargetAbi("LP64", "little", true);
 
   /** Supported triples and their resolved ABI class. Equal classes share fingerprints. */
   public static final Map<String, TargetAbi> TARGETS =
       Map.of(
           "aarch64-apple-darwin", LP64_LITTLE,
           "x86_64-apple-darwin", LP64_LITTLE,
-          "aarch64-unknown-linux-gnu", LP64_LITTLE,
+          "aarch64-unknown-linux-gnu", LP64_LITTLE_AAPCS64,
           "x86_64-unknown-linux-gnu", LP64_LITTLE);
 
   public static TargetAbi targetAbi(String triple) {

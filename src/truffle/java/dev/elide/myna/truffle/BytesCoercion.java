@@ -53,7 +53,8 @@ public final class BytesCoercion extends Coercion {
     try {
       if (strings && interop.isString(value))
         return Borrow.ofString(interop.asString(value), !buffer);
-      if (interop.hasBufferElements(value)) return Borrow.ofBuffer(interop, value, writable);
+      if (interop.hasBufferElements(value))
+        return Borrow.ofBuffer(interop, value, writable, !buffer);
       if (interop.isPointer(value)) return pointer(interop.asPointer(value), value);
       if (interop.isNull(value)) return pointer(0, value);
     } catch (UnsupportedMessageException e) {

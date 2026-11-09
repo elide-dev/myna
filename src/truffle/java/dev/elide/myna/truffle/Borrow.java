@@ -104,9 +104,15 @@ public final class Borrow {
     return copyOf(text.getBytes(StandardCharsets.UTF_8), null, false, nulTerminated);
   }
 
-  /** Copies any interop buffer; writable borrows are written back through the same library. */
+  /**
+   * Copies any interop buffer, optionally NUL-terminated; writable borrows are written back through
+   * the same library. The terminator reserves one extra byte and writes a {@code 0} past the
+   * content; {@link #length()} still excludes it, and {@link #release()} only writes back {@code
+   * length} bytes, so the terminator never reaches the source buffer.
+   */
   @TruffleBoundary
-  public static Borrow ofBuffer(InteropLibrary interop, Object buffer, boolean writable)
+  public static Borrow ofBuffer(
+      InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
       throws UnsupportedMessageException {
     long size = interop.getBufferSize(buffer);
     if (size > Integer.MAX_VALUE - 8)
@@ -119,7 +125,7 @@ public final class Borrow {
     } catch (InvalidBufferOffsetException e) {
       throw new IllegalArgumentException("buffer shrank while being borrowed", e);
     }
-    return copyOf(bytes, buffer, writable, false);
+    return copyOf(bytes, buffer, writable, nulTerminated);
   }
 
   @TruffleBoundary

@@ -643,43 +643,72 @@ class GeneratorTest {
         rust.contains("pub type PARSEXFn ="), "PARSEX emits PARSEXFn, distinct from ParseXFn");
   }
 
-  /** Issue #61: one platform-neutral binding must accept every same-layout target's library. */
+  /**
+   * Issue #61: one platform-neutral binding must accept every ABI-class-mate target's library.
+   * Target ABI classes split on {@code char} signedness: AAPCS64 Linux (aarch64-unknown-linux-gnu)
+   * is its own class because {@code char} is unsigned there, while x86-64 and Apple arm64 share one
+   * signed-char LP64 little-endian class. Within a class every target produces the same fingerprint
+   * and byte-identical platform-neutral outputs; only {@code seam.ll} names the triple.
+   */
   @Test
-  void sameLayoutTargetsShareFingerprintsAndPlatformNeutralOutputs() throws Exception {
+  void sameAbiClassTargetsShareFingerprintsAndPlatformNeutralOutputs() throws Exception {
+    Map<TargetAbi, List<String>> byClass = new LinkedHashMap<>();
+    for (String t : Validator.TARGETS)
+      byClass.computeIfAbsent(Seam.targetAbi(t), k -> new ArrayList<>()).add(t);
+    assertEquals(2, byClass.size(), "signed-char and unsigned-char LP64-little ABI classes");
     for (String example :
         List.of("examples/buffer.seam", "examples/ownership.seam", "examples/truffle.seam")) {
       var base = Dsl.parse(Files.readString(Path.of(example)));
-      var reference = Generator.generate(base.withTarget("x86_64-unknown-linux-gnu"), true);
-      var referenceJni = StaticJni.generate(base.withTarget("x86_64-unknown-linux-gnu"));
-      for (String target : Validator.TARGETS) {
-        var module = base.withTarget(target);
-        var outputs = Generator.generate(module, true);
-        assertEquals(reference.keySet(), outputs.keySet(), target);
-        for (var output : outputs.entrySet()) {
-          if (output.getKey().equals("seam.ll")) {
-            assertTrue(output.getValue().contains("target triple = \"" + target + "\""), target);
-            assertTrue(output.getValue().contains(reference.get("seam.abi").strip()), target);
-          } else
-            assertEquals(
-                reference.get(output.getKey()), output.getValue(), example + " " + output.getKey());
+      var signedFingerprint = SeamJson.fingerprint(base.withTarget("x86_64-unknown-linux-gnu"));
+      var aarch64LinuxFingerprint =
+          SeamJson.fingerprint(base.withTarget("aarch64-unknown-linux-gnu"));
+      assertNotEquals(
+          signedFingerprint,
+          aarch64LinuxFingerprint,
+          example + ": AAPCS64 Linux has a different ABI fingerprint (char is unsigned)");
+      for (var entry : byClass.entrySet()) {
+        var abi = entry.getKey();
+        var targets = entry.getValue();
+        var referenceTarget = targets.getFirst();
+        var reference = Generator.generate(base.withTarget(referenceTarget), true);
+        var referenceJni = StaticJni.generate(base.withTarget(referenceTarget));
+        var abiJson =
+            "\"targetAbi\": {\"dataModel\":\"LP64\",\"byteOrder\":\"little\""
+                + (abi.charUnsigned() ? ",\"charUnsigned\":true" : "")
+                + "}";
+        assertTrue(reference.get("seam.json").contains(abiJson), example + " reference abi json");
+        for (String target : targets) {
+          var module = base.withTarget(target);
+          var outputs = Generator.generate(module, true);
+          assertEquals(reference.keySet(), outputs.keySet(), target);
+          for (var output : outputs.entrySet()) {
+            if (output.getKey().equals("seam.ll")) {
+              assertTrue(output.getValue().contains("target triple = \"" + target + "\""), target);
+              assertTrue(output.getValue().contains(reference.get("seam.abi").strip()), target);
+            } else
+              assertEquals(
+                  reference.get(output.getKey()),
+                  output.getValue(),
+                  example + " " + target + " " + output.getKey());
+          }
+          assertFalse(outputs.get("seam.json").contains(target), target);
+          assertTrue(outputs.get("seam.json").contains(abiJson), target);
+          assertEquals(
+              SeamJson.fingerprint(module) + "\n",
+              reference.get("seam.abi"),
+              "fingerprint is the descriptor hash for " + target);
+          for (var output : StaticJni.generate(module).entrySet())
+            if (!output.getKey().endsWith(".ll"))
+              assertEquals(referenceJni.get(output.getKey()), output.getValue(), output.getKey());
         }
-        assertFalse(outputs.get("seam.json").contains(target), target);
-        assertTrue(
-            outputs
-                .get("seam.json")
-                .contains("\"targetAbi\": {\"dataModel\":\"LP64\",\"byteOrder\":\"little\"}"));
-        assertEquals(
-            SeamJson.fingerprint(module) + "\n",
-            reference.get("seam.abi"),
-            "fingerprint is the descriptor hash for " + target);
-        for (var output : StaticJni.generate(module).entrySet())
-          if (!output.getKey().endsWith(".ll"))
-            assertEquals(referenceJni.get(output.getKey()), output.getValue(), output.getKey());
       }
     }
     assertThrows(IllegalArgumentException.class, () -> Seam.targetAbi("riscv64-unknown-linux-gnu"));
     assertThrows(IllegalArgumentException.class, () -> Seam.targetAbi(null));
     assertEquals("LP64, little-endian", Seam.targetAbi("aarch64-apple-darwin").toString());
+    assertEquals(
+        "LP64, little-endian, unsigned char",
+        Seam.targetAbi("aarch64-unknown-linux-gnu").toString());
   }
 
   @Test
