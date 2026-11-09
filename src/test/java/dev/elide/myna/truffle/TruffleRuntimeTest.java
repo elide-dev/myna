@@ -191,7 +191,9 @@ class TruffleRuntimeTest {
     }
   }
 
-  /** A clean pointer that answers isPointer but refuses asPointer, for the coercion's catch path. */
+  /**
+   * A clean pointer that answers isPointer but refuses asPointer, for the coercion's catch path.
+   */
   @ExportLibrary(InteropLibrary.class)
   static final class LyingPointer implements TruffleObject {
     @ExportMessage
