@@ -438,6 +438,15 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void pointerCoercionFailsSafelyOnMisbehavingInterop() {
+    // A non-NativeResource that answers isPointer but throws in asPointer takes the catch's other
+    // path (fall through to shouldNotReachHere), so the coercion still fails safely.
+    var cell = new PointerCell(true, true);
+    cell.function();
+    assertThrows(Throwable.class, () -> cell.coerce(new Liar()));
+  }
+
+  @Test
   void nativePointersAndVoidAreInteropValues() throws Exception {
     NativePointer p = NativePointer.of(0x10);
     assertTrue(INTEROP.isPointer(p));
