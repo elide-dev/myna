@@ -59,3 +59,7 @@ import sleepyAdd symbol=cells_sleepy_add return=i64 error=no_failure native_leaf
   param left type=i64
   param right type=i64
 end
+import pair symbol=cells_pair return=i64 error=no_failure
+  param left type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
+  param right type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
+end

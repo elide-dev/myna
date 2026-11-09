@@ -125,7 +125,14 @@ contract states, and every borrow is released in a `finally`, in reverse acquisi
 - native memory (`NativeBytes`, interop pointers) is lent in place;
 - heap arrays are pinned for the call in a Native Image when they reach `Borrow.pinThreshold()`
   bytes, and copied into temporary native memory otherwise; HotSpot always copies;
-- copies of writable borrows are written back on release.
+- copies of writable borrows are written back on release;
+- copies (heap arrays, strings, other interop buffers) of up to 16 KiB go on a per-thread scratch
+  stack: one native block per thread, bumped on acquisition and popped on release, so a small copy
+  costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
+  arena of their own. Because cells release in reverse order, nested borrows and calls back into
+  guest code are last-in, first-out; releasing out of order or on another thread throws
+  `IllegalStateException` and leaves the stack unchanged. A thread's block (4 KiB, growing to at
+  most 64 KiB) is freed by the collector once the thread has ended.
 
 A pinned array does not move, so its address stays valid across any safepoint between the pin and
 the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
@@ -231,8 +238,12 @@ Findings from the first measurement that are tracked, not blocking:
 - FFM cells and borrowing cells allocate 48 bytes per call in compiled code: the boxed result,
   the argument array and the `Borrow` are not scalar-replaced across the downcall's exception
   handler and the borrow's `finally`. Native leaf and transition cells allocate nothing.
-- A Java string lent to a C string parameter costs about 27 ns per call, mostly the confined arena
-  opened for the UTF-8 copy; a pooled scratch buffer would cut it.
+- A Java string lent to a C string parameter cost about 27 ns per call in this baseline, mostly the
+  confined arena opened for the UTF-8 copy. Copies now use a per-thread scratch stack (see
+  [Borrows](#borrows)). On a shared Apple M5 Max, same build settings before and after, five
+  processes per case, `glue-text` went from 32.5 ns and 208 B to about 21 ns and 72 B, and
+  `glue-sum-copy-16` from 26.0 ns and 184 B to about 15 ns and 48 B (advisory: the host was not
+  quiet). The baseline above predates the change and has not been re-measured.
 - The generator has no FFM critical cell variant; the direct FFM leaf (5.5 ns) already beats the
   measured critical downcall figures on this fork, so none is planned until a consumer asks.
 - Truffle NFI is an internal language: host code cannot `eval("nfi", ...)`, so the benchmark

@@ -24,6 +24,11 @@ public final class CellChecks {
     try { access.run(); } catch (com.oracle.truffle.api.interop.InvalidBufferOffsetException expected) { return; }
     throw new AssertionError(what + " was accepted");
   }
+  /** What cells_pair computes from two C strings: their UTF-8 lengths and first bytes. */
+  public static long pair(String left, String right) {
+    byte[] l = left.getBytes(StandardCharsets.UTF_8), r = right.getBytes(StandardCharsets.UTF_8);
+    return ((long) l.length << 32) | ((long) r.length << 16) | ((l.length == 0 ? 0 : l[0] & 0xff) << 8) | (r.length == 0 ? 0 : r[0] & 0xff);
+  }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
     // Host Java null bypasses guest interop values; exercise the public host call API.
     for (Object[] sample : new Object[][] {
@@ -97,6 +102,11 @@ public final class CellChecks {
       check(INTEROP.readBufferLong(view, java.nio.ByteOrder.LITTLE_ENDIAN, 0) == before, "rejected writes left memory intact");
       rejects(cells, "fill", NativeBytes.of(buffer.asReadOnly(), true), 1);
     }
+    // Two copied C strings in one call: both terminated, neither overwriting the other.
+    check(call(cells, "pair", "héllo", "wörld!").equals(pair("héllo", "wörld!")), "pair of strings");
+    check(call(cells, "pair", new HeapBytes("ab".getBytes(StandardCharsets.UTF_8), false), "xyz").equals(pair("ab", "xyz")), "pair heap and string");
+    rejects(cells, "pair", "kept", 1);
+    check(call(cells, "pair", "", "z").equals(pair("", "z")), "pair after a failed second borrow");
     check(call(cells, "checksum", new HeapBytes(new byte[] {1, 2, 3}, false)).equals(6L), "checksum heap");
     check(call(cells, "checksum", "abc").equals(294L), "checksum string");
     byte[] large = new byte[Borrow.pinThreshold() * 4];

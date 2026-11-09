@@ -57,6 +57,16 @@ public final class CellsMain {
         HeapBytes pinned = new HeapBytes(large, false);
         compiled("checksum", new Probe(new CellApiTruffle.checksum_Cell()).function(), i -> new Object[] {pinned}, i -> (long) large.length);
         compiled("strlen", new Probe(new CellApiTruffle.strlen_Cell()).function(), i -> new Object[] {"héllo"}, i -> 6L);
+        // Two scratch copies per call from compiled code, released in reverse order: the thread's
+        // stack is empty again afterwards, so the next copy lands where the first one did.
+        Borrow before = Borrow.ofString("probe", true);
+        long base = before.address();
+        before.release();
+        compiled("pair", new Probe(new CellApiTruffle.pair_Cell()).function(),
+            i -> new Object[] {"left" + i, "right" + (i % 7)}, i -> CellChecks.pair("left" + i, "right" + (i % 7)));
+        Borrow after = Borrow.ofString("probe", true);
+        if (after.address() != base) throw new AssertionError("scratch stack unbalanced after compiled pair calls");
+        after.release();
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();
