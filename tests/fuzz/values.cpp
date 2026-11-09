@@ -6,6 +6,8 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 // Bound actual retained PMR storage, not only logical node/text counts. Inject
 // failures after successful allocations so cleanup exercises partial documents.
@@ -27,8 +29,37 @@ struct bounded_resource final : std::pmr::memory_resource {
   bool do_is_equal(const std::pmr::memory_resource &other) const noexcept override { return this == &other; }
 };
 
+// Text bytes as published, read through the ABI rather than builder internals.
+static std::string_view text(const myna_value_view &view, const myna_value_node &n, char (&scratch)[16]) {
+  if (myna_value_inline(&n)) {
+    assert(n.length <= MYNA_VALUE_INLINE_BYTES);
+    for (uint32_t i = 0; i < MYNA_VALUE_INLINE_BYTES; ++i) {
+      auto b = static_cast<char>(myna_value_inline_byte(&n, i));
+      if (i < n.length) scratch[i] = b;
+      else assert(b == 0); // Unused inline bytes are zero.
+    }
+    return {scratch, n.length};
+  }
+  assert(n.tag & MYNA_VALUE_REGION_TEXT);
+  auto region = myna_value_region_id(&n);
+  auto offset = myna_value_offset(&n);
+  assert(region == n.payload >> 32 && offset == (n.payload & UINT32_MAX));
+  assert(region <= view.region_count);
+  auto extent = region ? view.regions[region - 1].length : view.byte_count;
+  assert(offset <= extent && n.length <= extent - offset);
+  if (!n.length) return {};
+  auto base = region ? view.regions[region - 1].data : view.bytes;
+  return {reinterpret_cast<const char *>(base) + offset, n.length};
+}
+
 // Check published shape independently of the producer's mutation algorithm.
-static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned depth = 0) {
+// `texts` is the caller's record of every accepted STRING/DECIMAL write, in
+// append order; text nodes are visited in that same pre-order.
+struct expected_text {
+  const std::vector<std::string_view> *texts = nullptr;
+  size_t cursor = 0;
+};
+static uint64_t visit(const myna_value_view &view, uint64_t index, expected_text &expected, unsigned depth = 0) {
   assert(index < view.node_count && depth <= 8);
   const auto &n = view.nodes[index];
   auto kind = myna_value_kind(&n);
@@ -39,7 +70,7 @@ static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned dept
       assert(cursor < view.node_count);
       if (kind == MYNA_VALUE_OBJECT && i % 2 == 0)
         assert((view.nodes[cursor].tag & MYNA_VALUE_KIND_MASK) == MYNA_VALUE_STRING);
-      cursor = visit(view, cursor, depth + 1);
+      cursor = visit(view, cursor, expected, depth + 1);
     }
     assert(cursor == n.next);
     return cursor;
@@ -48,20 +79,19 @@ static uint64_t visit(const myna_value_view &view, uint64_t index, unsigned dept
     assert(view.version == 4 && n.payload < index);
     assert(myna_value_next(&view.nodes[n.payload], n.payload) <= index);
   }
-  if (n.tag & MYNA_VALUE_REGION_TEXT) {
-    auto region = myna_value_region_id(&n);
-    auto offset = myna_value_offset(&n);
-    assert(region == n.payload >> 32 && offset == (n.payload & UINT32_MAX));
-    assert(region <= view.region_count);
-    assert(offset + n.length <= (region ? view.regions[region - 1].length : view.byte_count));
-  }
-  if (myna_value_inline(&n)) {
-    for (uint32_t i = 0; i < n.length; ++i)
-      assert(myna_value_inline_byte(&n, i) == (kind == MYNA_VALUE_DECIMAL ? "123"[i] : 'a'));
+  if (kind == MYNA_VALUE_STRING || kind == MYNA_VALUE_DECIMAL) {
+    // The producer is byte-transparent: arbitrary (including invalid UTF-8 and
+    // malformed number) bytes must be published exactly as written.
+    char scratch[16];
+    auto published = text(view, n, scratch);
+    if (expected.texts) {
+      assert(expected.cursor < expected.texts->size());
+      assert(published == (*expected.texts)[expected.cursor]);
+      ++expected.cursor;
+    }
   }
   return myna_value_next(&n, index);
 }
-
 extern "C" int LLVMFuzzerInitialize(int *, char ***) {
   bool unknown_rejected = false;
   try { myna::value_builder invalid(std::pmr::get_default_resource(), {}, 2); }
@@ -121,7 +151,26 @@ extern "C" int LLVMFuzzerInitialize(int *, char ***) {
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-  std::string backing(64, 'a');
+  // Text and region contents come from the input that follows each operation
+  // byte, so arbitrary bytes (invalid UTF-8, malformed or oversized number
+  // tokens, NULs) reach string(), validated_number() and borrowed regions. The
+  // C++ producer documents both as caller-validated contracts and performs no
+  // Unicode or lexical scan: it must store such bytes exactly, and reject only
+  // extent, limit, allocation and protocol violations (poisoning until clear).
+  // UTF-8 and number rejection live in the Rust producer and in consumers
+  // (myna_tape_text_v1, the SVM reader); see crates/myna-values/fuzz.
+  auto payload = [&](size_t i, size_t length) {
+    size_t start = std::min(size, i + 1);
+    return std::string_view(reinterpret_cast<const char *>(data) + start, std::min(length, size - start));
+  };
+  // Every accepted text write and region, in append order. The fuzz input
+  // outlives the builder, so regions may borrow it directly.
+  std::vector<std::string_view> texts, regions;
+  auto accept = [&](std::string_view value) { texts.push_back(value); };
+  auto borrowed = [&](uint32_t region, uint32_t offset, uint32_t length) {
+    assert(region >= 1 && region <= regions.size());
+    return regions[region - 1].substr(offset, length);
+  };
   bounded_resource resource(256 + (size ? data[0] : 255) * 64,
       size > 1 && (data[1] & 1) ? data[1] / 2 : SIZE_MAX);
   {
@@ -141,7 +190,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       for (uint64_t j = start; j < start + node.length; ++j) {
         const auto &entry = extended.directory[j];
         assert(entry.key_offset > 0 && entry.key_offset < node.next - i);
-        assert(myna_value_kind(&extended.base.nodes[i + entry.key_offset]) == MYNA_VALUE_STRING);
+        const auto &key = extended.base.nodes[i + entry.key_offset];
+        assert(myna_value_kind(&key) == MYNA_VALUE_STRING);
+        char scratch[16];
+        auto bytes = text(extended.base, key, scratch);
+        assert(entry.hash == myna_value_hash(reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()));
         if (j > start) {
           const auto &prior = extended.directory[j-1];
           assert(prior.hash < entry.hash || (prior.hash == entry.hash && prior.key_offset < entry.key_offset));
@@ -159,18 +212,33 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         case 2: builder.end(); break;
         case 3: builder.null(); break;
         case 4: builder.integer(data[i]); break;
-        case 5: builder.string(std::string_view(backing).substr(0, data[i] % 64)); break;
-        case 6: builder.region(backing); break;
-        case 7: builder.string_ref(data[i] % 3, data[i] % 65, data[i] % 32); break;
-        case 8: builder.clear(); break;
-        case 9: { auto v = view(); assert(visit(v, 0) == v.node_count); break; }
-        case 10: builder.validated_number("-1234567890123456789.000e-123"); break;
+        case 5: { auto value = payload(i, data[i] % 64); builder.string(value); accept(value); break; }
+        case 6: { auto value = payload(i, data[i] % 65); builder.region(value); regions.push_back(value); break; }
+        case 7: {
+          uint32_t region = data[i] % 3, offset = data[i] % 65, length = data[i] % 32;
+          builder.string_ref(region, offset, length);
+          accept(borrowed(region, offset, length));
+          break;
+        }
+        case 8: builder.clear(); texts.clear(); regions.clear(); break;
+        case 9: {
+          auto v = view();
+          expected_text expected{&texts};
+          assert(visit(v, 0, expected) == v.node_count && expected.cursor == texts.size());
+          break;
+        }
+        case 10: { auto value = payload(i, data[i] % 40); builder.validated_number(value); accept(value); break; }
         case 11: builder.boolean(data[i] & 1); break;
         case 12: builder.floating(data[i] / 2.0); break;
         case 13: builder.unsigned_integer(UINT64_MAX); break;
         case 14: builder.floating(std::numeric_limits<double>::infinity()); break;
         case 15: { myna::value_builder invalid(nullptr); std::abort(); }
-        case 16: builder.validated_number("123"); break;
+        case 16: {
+          uint32_t region = data[i] % 3, offset = data[i] % 17, length = data[i] % 24;
+          builder.validated_number_ref(region, offset, length);
+          accept(borrowed(region, offset, length));
+          break;
+        }
         case 17: builder.reserve(data[i] % 70, data[i], data[i] % 8, data[i] % 10); break;
         case 18: builder.ref(data[i] % 64); break;
         case 19: builder.metadata(data[i] % 64, data[i]); break;
@@ -193,7 +261,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   // Retained capacity stays bounded; allow one final node allocation if needed.
   resource.budget += sizeof(myna_value_node) + sizeof(uint32_t);
   resource.fail_after = SIZE_MAX;
-  builder.clear(); builder.null();
+  builder.clear(); texts.clear(); regions.clear();
+  builder.null();
   assert(view().node_count == 1);
   assert(resource.peak <= resource.budget);
   }
