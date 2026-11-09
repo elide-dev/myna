@@ -34,7 +34,7 @@ struct bounded_resource final : std::pmr::memory_resource {
 // reduced mod 2^32 never wraps, so it needs no sanitizer exemption.
 static uint32_t reference_fnv1a(std::string_view bytes) {
   uint64_t hash = UINT64_C(2166136261);
-  for (unsigned char b : bytes) hash = ((hash ^ b) * UINT64_C(16777619)) & UINT32_MAX;
+  for (char c : bytes) hash = ((hash ^ static_cast<unsigned char>(c)) * UINT64_C(16777619)) & UINT32_MAX;
   return static_cast<uint32_t>(hash);
 }
 
