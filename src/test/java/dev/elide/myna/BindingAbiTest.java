@@ -74,6 +74,74 @@ class BindingAbiTest {
   }
 
   @Test
+  void callbackExportRegistersLiteralsAtBuildTimeWithLeaves() {
+    String source =
+        MODULE
+            + "callback Visitor return=i32\n  param isolate type=isolate_thread\n"
+            + "  param value type=i64\nend\n"
+            + "import read symbol=native_read return=i64 error=no_failure\n"
+            + "  param value type=i64\nend\n"
+            + "export visit symbol=native_visit return=i32 java=fixture.Ops.visit isolate=thread"
+            + " error=abort callback=Visitor\n  param value type=i64\nend\n";
+    var output = Generator.generate(Dsl.parse(source), true);
+    assertTrue(output.get("MynaNative.java").contains("class Literals"));
+    String config =
+        output.entrySet().stream()
+            .filter(e -> e.getKey().endsWith(".properties"))
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+    assertTrue(
+        config.contains(
+            "--initialize-at-build-time=dev.elide.myna.generated.MynaNative,dev.elide.myna.generated.MynaNative$MynaSymbols,dev.elide.myna.generated.MynaNative$Literals"),
+        config);
+    assertTrue(
+        config.contains(
+            "--initialize-at-run-time=dev.elide.myna.generated.MynaNative$read_Binding"),
+        config);
+    assertTrue(config.contains("JavaArgs = --add-exports="));
+    String noCallback =
+        MODULE
+            + "import read symbol=native_read return=i64 error=no_failure\n"
+            + "  param value type=i64\nend\n";
+    String noLiterals =
+        Generator.generate(Dsl.parse(noCallback), true).entrySet().stream()
+            .filter(e -> e.getKey().endsWith(".properties"))
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+    assertFalse(noLiterals.contains("$Literals"), noLiterals);
+  }
+
+  @Test
+  void callbackExportWithoutLeavesInitializesOnlyLiteralsAtBuildTime() {
+    String source =
+        MODULE
+            + "callback Visitor return=i32\n  param isolate type=isolate_thread\n"
+            + "  param value type=i64\nend\n"
+            + "export visit symbol=native_visit return=i32 java=fixture.Ops.visit isolate=thread"
+            + " error=abort callback=Visitor\n  param value type=i64\nend\n"
+            + "import slow return=i64 error=no_failure native_leaf=false@explicit_contract"
+            + "\nend\n";
+    var output = Generator.generate(Dsl.parse(source), true);
+    String ni = output.get("MynaNative.java");
+    assertTrue(ni.contains("class Literals"), ni);
+    assertFalse(ni.contains("MynaSymbols"), ni);
+    String config =
+        output.entrySet().stream()
+            .filter(e -> e.getKey().endsWith(".properties"))
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+    assertTrue(
+        config.contains("--initialize-at-build-time=dev.elide.myna.generated.MynaNative$Literals"),
+        config);
+    assertFalse(config.contains("$MynaSymbols"), config);
+    assertFalse(config.contains("_Binding"), config);
+    assertFalse(config.contains("JavaArgs"), config);
+  }
+
+  @Test
   void rejectsLeafNameCollisionsAndNonreturningDefault() {
     for (String extra :
         List.of(

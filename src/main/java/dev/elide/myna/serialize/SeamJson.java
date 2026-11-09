@@ -29,6 +29,7 @@ public final class SeamJson {
         + quote(abi.dataModel())
         + ",\"byteOrder\":"
         + quote(abi.byteOrder())
+        + (abi.charUnsigned() ? ",\"charUnsigned\":true" : "")
         + "}"
         + java(m)
         + nativeConfig(m)

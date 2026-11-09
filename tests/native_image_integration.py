@@ -115,7 +115,6 @@ class NativeImageIntegrationTests(unittest.TestCase):
             linker += ["-H:NativeLinkerOption=-lc++"]
         app = work / "values-app"
         native_image("-O2", "-cp", classes,
-            "--initialize-at-build-time=fixture.values.ValueApi$Literals",
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.ValuesMain", "-o", app)
         self.assertIn("Serde Rust -> SVM value mapping passed", run(app).stdout)
@@ -137,7 +136,6 @@ class NativeImageIntegrationTests(unittest.TestCase):
         native_image("-O2", "--add-exports=org.graalvm.truffle.runtime/com.oracle.truffle.runtime=ALL-UNNAMED",
             "--initialize-at-build-time=fixture.values.TruffleValuesMain$Read,dev.elide.myna.values",
             "-cp", os.pathsep.join(map(str, [classes, *deps])),
-            "--initialize-at-build-time=fixture.values.ValueApi$Literals",
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.TruffleValuesMain", "-o", truffle_app)
         self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
@@ -264,7 +262,6 @@ class NativeImageIntegrationTests(unittest.TestCase):
         source.write_text((ROOT / "examples/buffer.seam").read_text().replace("aarch64-apple-darwin", TARGET))
         feature_output = work / "feature-output"
         native_image( "--shared", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
-            "--initialize-at-build-time=dev.elide.myna.generated.MynaNative$Literals",
             "--features=dev.elide.myna.nativeimage.MynaFeature", f"-Dmyna.input={source}", f"-Dmyna.output={feature_output}",
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={inspector}", "-H:-UnlockExperimentalVMOptions",
             "-o", work / "libseamfixture")

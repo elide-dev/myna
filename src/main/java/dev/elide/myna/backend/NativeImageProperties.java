@@ -19,9 +19,18 @@ public final class NativeImageProperties implements Backend {
   public String generate(Module module) {
     String type = module.javaPackageName() + "." + module.nativeClass();
     var leaves = module.functions().stream().filter(Seam::nativeLeaf).toList();
+    boolean hasLiterals = module.functions().stream().anyMatch(f -> f.callback() != null);
     String result =
         "# Myna binding ABI 2: preserve symbolic metadata / runtime-address separation.\n";
-    if (leaves.isEmpty()) return result + truffle(module, "Args = ");
+    if (leaves.isEmpty()) {
+      if (!hasLiterals) return result + truffle(module, "Args = ");
+      return result
+          + "Args = --initialize-at-build-time="
+          + type
+          + "$Literals"
+          + truffle(module, " ")
+          + "\n";
+    }
     return result
         + "JavaArgs ="
         + " --add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.c=ALL-UNNAMED\n"
@@ -30,6 +39,7 @@ public final class NativeImageProperties implements Backend {
         + ","
         + type
         + "$MynaSymbols"
+        + (hasLiterals ? "," + type + "$Literals" : "")
         + " --initialize-at-run-time="
         + leaves.stream()
             .map(f -> type + "$" + f.name() + "_Binding")

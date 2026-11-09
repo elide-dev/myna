@@ -82,7 +82,7 @@ through it, and partial evaluation reduces a monomorphic site to a type check or
 
 | Carrier | Accepts | Result to guest |
 | --- | --- | --- |
-| `i8`…`i64`, `u8`…`u64`, `usize`, `isize`, `char` | interop numbers that fit (integral doubles included); `u64` also takes big integers up to 2^64 | signed as is; `u8`/`u16`/`u32` as their numeric value; `u64` as raw bits (interop has no unsigned 64-bit primitive) |
+| `i8`…`i64`, `u8`…`u64`, `usize`, `isize`, `char` | interop numbers that fit (integral doubles included); `u64` also takes big integers up to 2^64 | signed as is; `u8`/`u16`/`u32` as their numeric value; `u64` as raw bits (interop has no unsigned 64-bit primitive); `char` follows the target ABI — signed on x86-64 and Apple arm64 (sign-extended like `i8`), unsigned on AAPCS64 Linux (`aarch64-unknown-linux-gnu`, masked as `u8`) |
 | `bool` | interop booleans only; numbers are not truthy | boolean |
 | `f32`, `f64` | any interop number; rounding into `f32` is the call's C semantics | double |
 | `ptr<T>` (non-byte pointee), `ptr<void>`, `fn<…>` return | `NativePointer`, open `NativeResource`, `NativeBytes`, any interop pointer; `null` only when nullable | `NativePointer` |
