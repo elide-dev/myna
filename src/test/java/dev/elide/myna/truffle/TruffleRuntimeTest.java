@@ -947,6 +947,16 @@ class TruffleRuntimeTest {
         borrow.release();
       }
     }
+    // A C string parameter terminates what it copies, whether a heap buffer or an interop string.
+    BytesCoercion text = new BytesCoercion("f", "text", false, false, false);
+    for (Object value :
+        new Object[] {new HeapBytes(new byte[] {7, 8}, false), new ForeignString()}) {
+      Borrow borrow = text.execute(value);
+      MemorySegment view =
+          MemorySegment.ofAddress(borrow.address()).reinterpret(borrow.length() + 1);
+      assertEquals(0, view.get(ValueLayout.JAVA_BYTE, borrow.length()));
+      borrow.release();
+    }
   }
 
   interface ThreadBody {

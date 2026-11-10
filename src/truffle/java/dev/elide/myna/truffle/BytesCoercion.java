@@ -61,7 +61,7 @@ public final class BytesCoercion extends Coercion {
     } else if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
       if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
       borrow.lendArray(bytes.array(), writable, !buffer, pinThreshold());
-    } else if ((seen & TEXT) != 0 && strings && value instanceof String text) {
+    } else if ((seen & TEXT) != 0 && value instanceof String text) {
       borrow.lendString(text, !buffer);
     } else if ((seen & OTHER) != 0 && kind(value) == OTHER) {
       slow(value, borrow);

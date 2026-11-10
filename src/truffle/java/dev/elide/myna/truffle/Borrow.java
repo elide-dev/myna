@@ -148,19 +148,22 @@ public final class Borrow {
     this.length = length;
   }
 
+  /** Lends bytes that {@code owner} must undo on release. */
+  private void own(int kind, Object owner, long address, long length) {
+    this.kind = kind;
+    this.owner = owner;
+    this.address = address;
+    this.length = length;
+  }
+
   /**
    * @param threshold {@link #pinThreshold()}, passed in so that compiled code reads it once per
    *     call site and not on every call
    */
   void lendArray(byte[] array, boolean writable, boolean nulTerminated, int threshold) {
-    if (!nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode()) {
-      this.owner = Pins.pin(array);
-      this.address = Pins.address(this.owner);
-      this.length = array.length;
-      this.kind = PINNED;
-    } else {
-      lendCopy(array, null, writable, nulTerminated);
-    }
+    if (!nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode())
+      Pins.pin(this, array);
+    else lendCopy(array, null, writable, nulTerminated);
   }
 
   void lendString(String text, boolean nulTerminated) {
@@ -205,18 +208,13 @@ public final class Borrow {
     Scratch scratch = size <= Scratch.LARGEST ? Scratch.push(bytes, nulTerminated) : null;
     if (scratch != null) {
       int start = (int) (scratch.top - Scratch.reservation(size));
-      this.owner = scratch;
-      this.address = scratch.base + start;
+      own(SCRATCH, scratch, scratch.base + start, bytes.length);
       this.offset = start;
       this.terminated = nulTerminated;
-      this.kind = SCRATCH;
     } else {
       Copy copy = Copy.of(bytes, nulTerminated);
-      this.owner = copy;
-      this.address = copy.address;
-      this.kind = COPIED;
+      own(COPIED, copy, copy.address, bytes.length);
     }
-    this.length = bytes.length;
     if (writable) {
       this.array = bytes;
       this.interopSource = source;
@@ -313,12 +311,9 @@ public final class Borrow {
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
   private static final class Pins {
-    static Object pin(byte[] array) {
-      return PinnedObject.create(array);
-    }
-
-    static long address(Object pin) {
-      return ((PinnedObject) pin).addressOfArrayElement(0).rawValue();
+    static void pin(Borrow borrow, byte[] array) {
+      PinnedObject pin = PinnedObject.create(array);
+      borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
     }
 
     static void unpin(Object pin) {
