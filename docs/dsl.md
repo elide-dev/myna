@@ -115,7 +115,7 @@ Imports default to the binding ABI 2 leaf contract: short, bounded, nonblocking 
 
 ## Resource lifecycles and call borrows
 
-`resource NAME representation=native threading=confined|shared create=FUNCTION destroy=FUNCTION` declares a unique native resource lifecycle. `NAME` must already be an opaque type. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.
+`resource NAME representation=native threading=confined|shared create=FUNCTION destroy=FUNCTION` declares a unique native resource lifecycle. `NAME` must already be an opaque type. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract. A function may carry several `borrow` lines, each naming a buffer and a length of its own; its other parameters may be scalars or pointers, and its result a scalar or void. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.
 
 ## Native Image C context, library linkage, and handwritten callbacks
 
@@ -150,4 +150,4 @@ Callbacks may additionally declare `ffm_java=qualified.Class.method ffm_sentinel
 
 Callbacks without a static FFM target still provide scoped factories accepting a Java callback and an explicit failure sentinel. Stub lifetime and thread access follow the supplied arena. Imports that call back must opt out of native leaves. See the [adapter guide](jvm-roadmap.md) for callback ownership and library lifetimes.
 
-The CLI's optional `--jni` flag projects imports into static SVM JNI methods. It does not change the canonical C signature or introduce JNI handles into seam types. Declared `borrow` relationships additionally generate direct `ByteBuffer` overloads; raw pointers remain explicit unsafe `long` addresses. The adapter emits its own concrete JNI signatures and library lifecycle metadata.
+The CLI's optional `--jni` flag projects imports into static SVM JNI methods. It does not change the canonical C signature or introduce JNI handles into seam types. Declared `borrow` relationships additionally generate a direct `ByteBuffer` overload per function, taking one buffer for each borrow; raw pointers remain explicit unsafe `long` addresses. The adapter emits its own concrete JNI signatures and library lifecycle metadata.

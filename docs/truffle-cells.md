@@ -41,10 +41,12 @@ Two per-import facts refine the module choice:
 One per-parameter fact refines an import's byte pointers:
 
 - `truffle_buffer=true@explicit_contract` on a `ptr<u8>`, `ptr<i8>` or `ptr<char>` parameter with a
-  declared access says it is a byte buffer, not a C string. A `borrow` already says that, but a
-  `borrow` allows no other pointer parameter; a decode entry that takes its input beside a result
-  or session pointer cannot declare one, and without this fact its input is treated as a C string:
-  a heap buffer is copied whole with a terminating NUL on every call and never pinned. With the
+  declared access says it is a byte buffer, not a C string. A `borrow` says that too and derives
+  the length as well, beside any other pointer parameters, so prefer it for a non-null buffer with
+  a length parameter of its own. This fact is for the buffers a `borrow` cannot describe (nullable
+  or write-only ones, or an extent that is not one length parameter) and for counts the guest
+  should keep passing. Without either, such an input is treated as a C string: a heap buffer is
+  copied whole with a terminating NUL on every call and never pinned. With the
   fact, the cell lends the bytes as they are: native memory in place, a heap array pinned when it
   reaches the pin threshold and copied without a terminator otherwise, and a string as its UTF-8
   bytes. The length stays an ordinary guest argument, so the guest, not the cell, vouches that it
@@ -161,9 +163,33 @@ copy through the library and, when the parameter is writable, written back eleme
 ## Borrows
 
 A `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declaration drops the length from the
-guest-visible signature: the guest passes one buffer and the cell derives the byte count, checking
-32-bit length ranges before the call. The borrow lasts exactly the dynamic extent of the call, as the
-contract states, and every borrow is released in a `finally`, in reverse acquisition order:
+guest-visible signature: the guest passes the buffer and the cell derives the byte count, checking
+32-bit length ranges before the call. A function may declare several, each with a length of its
+own, beside other pointer parameters:
+
+```text
+borrow transfer input length=count lifetime=call
+borrow transfer output length=capacity lifetime=call
+import transfer symbol=cells_transfer return=u64 error=no_failure nounwind=true@explicit_contract
+  param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param capacity type=u32
+  param copied type=ptr<i64> nullable=true ownership=borrowed access=write
+end
+```
+
+The guest calls `transfer(input, output, copied)`: both lengths are derived, and the cell's arity
+is three. The other pointer keeps the coercion it would have without any borrow (an address here; a
+C string or `truffle_buffer` bytes for a byte pointer with a declared access) and stays a guest
+argument under its own contract. `invoke` keeps all five binding parameters. The cell does not
+check that two buffers of a call are disjoint: lent native memory aliases and copies do not, and a
+read buffer that overlaps a writable one breaks the guest's side of the contract either way.
+
+Scalars and addresses coerce first. Every borrow of the call (declared buffers, C strings and
+`truffle_buffer` bytes alike) is then acquired in parameter order, and a later one that fails
+releases the earlier ones. Each borrow lasts exactly the dynamic extent of the call, as the contract
+states, and is released in a `finally` of its own, in reverse acquisition order:
 
 - native memory (`NativeBytes`, interop pointers) is lent in place;
 - heap arrays are pinned for the call in a Native Image when they reach `Borrow.pinThreshold()`
@@ -181,7 +207,9 @@ scalar-replaced whichever kinds of value the call site has seen, lent native mem
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
 hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
 buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
-those paths.
+those paths. Several borrows on one call cost what each costs alone:
+`tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native
+buffers and between copied heap arrays, and the two pins (48 bytes) between two pinned arrays.
 
 ASCII text is written straight onto the scratch stack, so a string argument allocates nothing
 either; text with other characters is encoded into a UTF-8 array first.
@@ -377,9 +405,12 @@ Findings that are tracked, not blocking:
   256-byte and a 16-byte heap buffer costs 21.9 ns and 0 B as two terminated copies and 24.4 ns
   and 24 B with the larger one pinned. The fact is for buffers large enough that copying them on
   every call is the cost, and for callees that must not see a terminator.
-- A `borrow` beside another pointer parameter, more than one buffer per function, and resource
-  creates that return a status and write the handle through an out-parameter are not expressible;
-  they change the contracts of every ownership backend, not only cells.
+- Resource creates that return a status and write the handle through an out-parameter are not
+  expressible; they change the contracts of every ownership backend, not only cells. A `borrow`
+  now sits beside other pointer parameters and a function may declare several (see
+  [Borrows](#borrows)). Still rejected: a pointer result beside a borrow, one length shared by two
+  buffers, and nullable or length-less buffers, for which `truffle_buffer` is the cells-side
+  answer.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
