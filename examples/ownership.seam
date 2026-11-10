@@ -20,14 +20,15 @@ import increment symbol=buffer_increment return=void error=no_failure nounwind=t
   param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
   param count type=u64
 end
-# Several buffers per call: each borrow names a buffer and a length of its own. Any other pointer
-# passes through the wrappers under its own declared contract, so the Rust wrapper is unsafe.
+# Several buffers per call: each borrow names a buffer and a length of its own. A write buffer is
+# lent exactly like a read_write one. Any other pointer passes through the wrappers under its own
+# declared contract, so the Rust wrapper is unsafe.
 borrow transfer input length=count lifetime=call
 borrow transfer output length=capacity lifetime=call
 import transfer symbol=buffer_transfer return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param count type=u64
-  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=u32
   param copied type=ptr<u64> nullable=true ownership=borrowed access=write
 end
