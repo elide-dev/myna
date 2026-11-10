@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.15.0",
+  "generatorVersion": "0.16.0",
   "name": "buffer",
   "abiVersion": 1,
   "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
