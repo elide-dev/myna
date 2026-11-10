@@ -215,6 +215,11 @@ public final class CellChecks {
       check(call(cells, "stepperCreate", parent, NativeBytes.of(step, false)) == NativeVoid.INSTANCE, "failed stepper is null");
       rejects(cells, "stepperCreate", NativeVoid.INSTANCE, NativeBytes.of(step, false));
       rejects(cells, "stepperDestroy", parent);
+      // An owner is taken only where its own resource is expected: a stepper's address read as
+      // a counter, or the reverse, would be type confusion in native code.
+      rejects(cells, "counterNext", stepper);
+      rejects(cells, "stepperNext", parent);
+      rejects(cells, "stepperCreate", stepper, NativeBytes.of(step, false));
       // The stepper keeps its counter open: closing the counter under it would leave the stepper
       // pointing at freed memory, so that is refused until the stepper is gone.
       rejects(cells, "counterDestroy", parent);

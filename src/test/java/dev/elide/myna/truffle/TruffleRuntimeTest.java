@@ -927,6 +927,42 @@ class TruffleRuntimeTest {
   }
 
   /**
+   * A pointer to a declared resource takes an owner of that resource only: another resource's
+   * address is a different native object, which the callee would read as this one.
+   */
+  @Test
+  void resourcePointersRejectOwnersOfAnotherResource() {
+    NativeResource session = new NativeResource("Session", 0x10, a -> {}, null);
+    NativeResource stream = new NativeResource("Stream", 0x20, a -> {}, null);
+    var typed = new PointerCoercion("next", "stream", false, false, "Stream");
+    var nullable = new PointerCoercion("next", "stream", true, false, "Stream");
+    var untyped = new PointerCoercion("peek", "cell", false, false);
+    for (int round = 0; round < 2; round++) {
+      assertEquals(0x20, typed.execute(stream));
+      assertEquals(
+          "next: parameter stream expects a Stream resource, got a Session",
+          assertThrows(NativeCellException.class, () -> typed.execute(session)).getMessage());
+      assertEquals(
+          "next: parameter stream expects a Stream resource, got a Session",
+          assertThrows(NativeCellException.class, () -> nullable.execute(session)).getMessage());
+      // A raw pointer carries no type to check, and an untyped parameter takes any owner.
+      assertEquals(0x30, typed.execute(NativePointer.of(0x30)));
+      assertEquals(0x10, untyped.execute(session));
+      assertEquals(0, nullable.execute(NativePointer.NULL));
+    }
+    // The wrong type is reported before a close is; the right type reports its close.
+    session.close();
+    assertTrue(
+        assertThrows(NativeCellException.class, () -> typed.execute(session))
+            .getMessage()
+            .contains("expects a Stream resource, got a Session"));
+    stream.close();
+    assertEquals(
+        "next: parameter stream received a closed Stream",
+        assertThrows(NativeCellException.class, () -> typed.execute(stream)).getMessage());
+  }
+
+  /**
    * A resource created from another keeps it open: the native side may still use the parent through
    * the child, so closing the parent first is a guest error, not a use-after-free.
    */

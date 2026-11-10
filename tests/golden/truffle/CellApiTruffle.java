@@ -194,7 +194,7 @@ public final class CellApiTruffle {
         }
         public counterNext_Cell() {
             super("counterNext", 1);
-            this.coerce_counter = new PointerCoercion("counterNext", "counter", false, false);
+            this.coerce_counter = new PointerCoercion("counterNext", "counter", false, false, "Counter");
         }
         @Override
         public Object execute(Object[] arguments) {
