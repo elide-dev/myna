@@ -163,30 +163,30 @@
 00000000000403a0 <Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG>:
    403a0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    403a5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   403a9: 0f 86 b1 98 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   403a9: 0f 86 31 9c 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    403af: 48 8b e3                     	movq	%rbx, %rsp
    403b2: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    403b6: 83 fe 01                     	cmpl	$0x1, %esi
    403b9: 7c 29                        	jl	0x403e4 <Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x44>
-   403bb: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   403bb: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    403c2: 48 8b f2                     	movq	%rdx, %rsi
    403c5: e8 76 1e 00 00               	callq	0x42240 <Floor_javaBatch256_sBLMR8Ztqr8TxvWCU9C5E1>
    403ca: 81 7c 24 14 01 01 00 00      	cmpl	$0x101, 0x14(%rsp)      # imm = 0x101
    403d2: 7d 23                        	jge	0x403f7 <Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x57>
    403d4: 48 83 c4 18                  	addq	$0x18, %rsp
    403d8: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   403dd: 0f 8e 9d b5 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   403dd: 0f 8e bd b0 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    403e3: c3                           	retq
    403e4: 48 8b c2                     	movq	%rdx, %rax
    403e7: 48 83 c4 18                  	addq	$0x18, %rsp
    403eb: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   403f0: 0f 8e 8a b5 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   403f0: 0f 8e aa b0 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    403f6: c3                           	retq
    403f7: 48 8b f0                     	movq	%rax, %rsi
    403fa: c7 44 24 10 00 01 00 00      	movl	$0x100, 0x10(%rsp)      # imm = 0x100
    40402: 66 66 0f 1f 84 00 00 00 00 00	nopw	(%rax,%rax)
    4040c: 66 66 66 90                  	nop
-   40410: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   40410: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    40417: e8 24 1e 00 00               	callq	0x42240 <Floor_javaBatch256_sBLMR8Ztqr8TxvWCU9C5E1>
    4041c: 8b 4c 24 10                  	movl	0x10(%rsp), %ecx
    40420: 8d 91 00 01 00 00            	leal	0x100(%rcx), %edx
@@ -199,7 +199,7 @@
    40439: 48 8b f0                     	movq	%rax, %rsi
    4043c: eb d2                        	jmp	0x40410 <Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x70>
    4043e: 66 90                        	nop
-   40440: e8 3b b5 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40440: e8 5b b0 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40445: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    40449: 48 8b f0                     	movq	%rax, %rsi
    4044c: eb c2                        	jmp	0x40410 <Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG+0x70>
@@ -226,12 +226,12 @@
 0000000000040460 <Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6>:
    40460: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40465: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40469: 0f 86 f1 97 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40469: 0f 86 71 9b 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    4046f: 48 8b e3                     	movq	%rbx, %rsp
    40472: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40476: 83 fe 01                     	cmpl	$0x1, %esi
    40479: 7c 31                        	jl	0x404ac <Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x4c>
-   4047b: 48 8b 0d 46 05 89 00         	movq	0x890546(%rip), %rcx    # 0x8d09c8 <__svm_vm_is_static_binary+0x590>
+   4047b: 48 8b 0d a6 06 88 00         	movq	0x8806a6(%rip), %rcx    # 0x8c0b28 <__svm_vm_is_static_binary+0x8b0>
    40482: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    40487: 48 8b fa                     	movq	%rdx, %rdi
    4048a: b8 00 00 00 00               	movl	$0x0, %eax
@@ -241,12 +241,12 @@
    4049a: 7d 23                        	jge	0x404bf <Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x5f>
    4049c: 48 83 c4 18                  	addq	$0x18, %rsp
    404a0: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   404a5: 0f 8e d5 b4 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   404a5: 0f 8e f5 af 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    404ab: c3                           	retq
    404ac: 48 8b c2                     	movq	%rdx, %rax
    404af: 48 83 c4 18                  	addq	$0x18, %rsp
    404b3: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   404b8: 0f 8e c2 b4 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   404b8: 0f 8e e2 af 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    404be: c3                           	retq
    404bf: c7 44 24 10 10 00 00 00      	movl	$0x10, 0x10(%rsp)
    404c7: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -266,7 +266,7 @@
    404f8: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    404fd: eb d1                        	jmp	0x404d0 <Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x70>
    404ff: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
-   40504: e8 77 b4 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40504: e8 97 af 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40509: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    4050d: 48 8b cb                     	movq	%rbx, %rcx
    40510: eb be                        	jmp	0x404d0 <Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6+0x70>
@@ -289,29 +289,29 @@
 0000000000040520 <Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF>:
    40520: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40525: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40529: 0f 86 31 97 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40529: 0f 86 b1 9a 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    4052f: 48 8b e3                     	movq	%rbx, %rsp
    40532: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40536: 83 fe 01                     	cmpl	$0x1, %esi
    40539: 7c 26                        	jl	0x40561 <Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x41>
-   4053b: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   4053b: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    40542: 48 8b f2                     	movq	%rdx, %rsi
    40545: e8 96 1e 00 00               	callq	0x423e0 <Floor_javaBatch4_wasvmklIr2I1bT69W7y2vI>
    4054a: 83 7c 24 14 05               	cmpl	$0x5, 0x14(%rsp)
    4054f: 7d 23                        	jge	0x40574 <Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x54>
    40551: 48 83 c4 18                  	addq	$0x18, %rsp
    40555: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4055a: 0f 8e 20 b4 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4055a: 0f 8e 40 af 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40560: c3                           	retq
    40561: 48 8b c2                     	movq	%rdx, %rax
    40564: 48 83 c4 18                  	addq	$0x18, %rsp
    40568: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4056d: 0f 8e 0d b4 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4056d: 0f 8e 2d af 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40573: c3                           	retq
    40574: 48 8b f0                     	movq	%rax, %rsi
    40577: c7 44 24 10 04 00 00 00      	movl	$0x4, 0x10(%rsp)
    4057f: 90                           	nop
-   40580: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   40580: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    40587: e8 54 1e 00 00               	callq	0x423e0 <Floor_javaBatch4_wasvmklIr2I1bT69W7y2vI>
    4058c: 8b 4c 24 10                  	movl	0x10(%rsp), %ecx
    40590: 8d 51 04                     	leal	0x4(%rcx), %edx
@@ -323,7 +323,7 @@
    405a2: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    405a6: 48 8b f0                     	movq	%rax, %rsi
    405a9: eb d5                        	jmp	0x40580 <Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x60>
-   405ab: e8 d0 b3 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   405ab: e8 f0 ae 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    405b0: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    405b4: 48 8b f0                     	movq	%rax, %rsi
    405b7: eb c7                        	jmp	0x40580 <Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF+0x60>
@@ -339,7 +339,7 @@
 00000000000405c0 <Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE>:
    405c0: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    405c5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   405c9: 0f 86 91 96 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   405c9: 0f 86 11 9a 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    405cf: 48 8b e3                     	movq	%rbx, %rsp
    405d2: 89 74 24 2c                  	movl	%esi, 0x2c(%rsp)
    405d6: 83 fe 01                     	cmpl	$0x1, %esi
@@ -416,7 +416,7 @@
    406e1: 8b 54 24 1c                  	movl	0x1c(%rsp), %edx
    406e5: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    406e9: e9 32 ff ff ff               	jmp	0x40620 <Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x60>
-   406ee: e8 8d b2 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   406ee: e8 ad ad 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    406f3: 8b df                        	movl	%edi, %ebx
    406f5: 8b 54 24 1c                  	movl	0x1c(%rsp), %edx
    406f9: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
@@ -437,12 +437,12 @@
    40738: 7f e6                        	jg	0x40720 <Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x160>
    4073a: eb 12                        	jmp	0x4074e <Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x18e>
    4073c: 0f 1f 40 00                  	nopl	(%rax)
-   40740: e8 3b b2 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40740: e8 5b ad 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40745: 8b 5c 24 24                  	movl	0x24(%rsp), %ebx
    40749: e9 d2 fe ff ff               	jmp	0x40620 <Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE+0x60>
    4074e: 48 83 c4 38                  	addq	$0x38, %rsp
    40752: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40757: 0f 8e 23 b2 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40757: 0f 8e 43 ad 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    4075d: c3                           	retq
    4075e: bf 00 00 00 00               	movl	$0x0, %edi
    40763: 48 8b c2                     	movq	%rdx, %rax
@@ -473,12 +473,12 @@
 0000000000040780 <Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669>:
    40780: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40785: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40789: 0f 86 d1 94 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40789: 0f 86 51 98 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    4078f: 48 8b e3                     	movq	%rbx, %rsp
    40792: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40796: 83 fe 01                     	cmpl	$0x1, %esi
    40799: 0f 8c 62 00 00 00            	jl	0x40801 <Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0x81>
-   4079f: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   4079f: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    407a6: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    407ab: 48 8b fa                     	movq	%rdx, %rdi
    407ae: b8 00 00 00 00               	movl	$0x0, %eax
@@ -500,13 +500,13 @@
    407ee: 7d 24                        	jge	0x40814 <Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0x94>
    407f0: 48 83 c4 18                  	addq	$0x18, %rsp
    407f4: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   407f9: 0f 8e 81 b1 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   407f9: 0f 8e a1 ac 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    407ff: 90                           	nop
    40800: c3                           	retq
    40801: 48 8b c2                     	movq	%rdx, %rax
    40804: 48 83 c4 18                  	addq	$0x18, %rsp
    40808: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4080d: 0f 8e 6d b1 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4080d: 0f 8e 8d ac 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40813: c3                           	retq
    40814: c7 44 24 10 04 00 00 00      	movl	$0x4, 0x10(%rsp)
    4081c: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -541,7 +541,7 @@
    40898: eb 96                        	jmp	0x40830 <Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0xb0>
    4089a: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
    4089f: 90                           	nop
-   408a0: e8 db b0 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   408a0: e8 fb ab 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    408a5: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    408a9: 48 8b cb                     	movq	%rbx, %rcx
    408ac: eb 82                        	jmp	0x40830 <Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669+0xb0>
@@ -568,10 +568,10 @@
 00000000000408c0 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4>:
    408c0: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    408c5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   408c9: 0f 86 91 93 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   408c9: 0f 86 11 97 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    408cf: 48 8b e3                     	movq	%rbx, %rsp
    408d2: 89 74 24 28                  	movl	%esi, 0x28(%rsp)
-   408d6: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   408d6: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    408dd: 48 89 4c 24 10               	movq	%rcx, 0x10(%rsp)
    408e2: 83 fe 01                     	cmpl	$0x1, %esi
    408e5: bf 01 00 00 00               	movl	$0x1, %edi
@@ -659,7 +659,7 @@
    40a24: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    40a28: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
    40a2d: e9 fe fe ff ff               	jmp	0x40930 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x70>
-   40a32: e8 49 af 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40a32: e8 69 aa 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40a37: 8b d1                        	movl	%ecx, %edx
    40a39: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    40a3d: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
@@ -668,7 +668,7 @@
    40a4c: 7e 09                        	jle	0x40a57 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x197>
    40a4e: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    40a52: e9 d9 fe ff ff               	jmp	0x40930 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x70>
-   40a57: e8 24 af 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40a57: e8 44 aa 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40a5c: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    40a60: e9 cb fe ff ff               	jmp	0x40930 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x70>
    40a65: 48 8b cb                     	movq	%rbx, %rcx
@@ -689,7 +689,7 @@
    40aa3: 7f db                        	jg	0x40a80 <Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4+0x1c0>
    40aa5: 48 83 c4 38                  	addq	$0x38, %rsp
    40aa9: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40aae: 0f 8e cc ae 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40aae: 0f 8e ec a9 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40ab4: c3                           	retq
    40ab5: bf 00 00 00 00               	movl	$0x0, %edi
    40aba: 48 8b c2                     	movq	%rdx, %rax
@@ -727,12 +727,12 @@
 0000000000040ae0 <Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5>:
    40ae0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40ae5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40ae9: 0f 86 71 91 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40ae9: 0f 86 f1 94 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    40aef: 48 8b e3                     	movq	%rbx, %rsp
    40af2: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40af6: 83 fe 01                     	cmpl	$0x1, %esi
    40af9: 0f 8c 62 00 00 00            	jl	0x40b61 <Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0x81>
-   40aff: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   40aff: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    40b06: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    40b0b: 48 8b fa                     	movq	%rdx, %rdi
    40b0e: b8 00 00 00 00               	movl	$0x0, %eax
@@ -754,13 +754,13 @@
    40b4e: 7d 24                        	jge	0x40b74 <Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0x94>
    40b50: 48 83 c4 18                  	addq	$0x18, %rsp
    40b54: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40b59: 0f 8e 21 ae 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40b59: 0f 8e 41 a9 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40b5f: 90                           	nop
    40b60: c3                           	retq
    40b61: 48 8b c2                     	movq	%rdx, %rax
    40b64: 48 83 c4 18                  	addq	$0x18, %rsp
    40b68: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40b6d: 0f 8e 0d ae 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40b6d: 0f 8e 2d a9 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40b73: c3                           	retq
    40b74: c7 44 24 10 04 00 00 00      	movl	$0x4, 0x10(%rsp)
    40b7c: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -795,7 +795,7 @@
    40bf8: eb 96                        	jmp	0x40b90 <Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0xb0>
    40bfa: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
    40bff: 90                           	nop
-   40c00: e8 7b ad 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40c00: e8 9b a8 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40c05: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    40c09: 48 8b cb                     	movq	%rbx, %rcx
    40c0c: eb 82                        	jmp	0x40b90 <Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5+0xb0>
@@ -822,12 +822,12 @@
 0000000000040c20 <Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB>:
    40c20: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40c25: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40c29: 0f 86 31 90 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40c29: 0f 86 b1 93 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    40c2f: 48 8b e3                     	movq	%rbx, %rsp
    40c32: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40c36: 83 fe 01                     	cmpl	$0x1, %esi
    40c39: 7c 34                        	jl	0x40c6f <Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x4f>
-   40c3b: 48 8b 0d fe fb 88 00         	movq	0x88fbfe(%rip), %rcx    # 0x8d0840 <__svm_vm_is_static_binary+0x408>
+   40c3b: 48 8b 0d 3e fc 87 00         	movq	0x87fc3e(%rip), %rcx    # 0x8c0880 <__svm_vm_is_static_binary+0x608>
    40c42: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    40c47: 48 8b fa                     	movq	%rdx, %rdi
    40c4a: b8 00 00 00 00               	movl	$0x0, %eax
@@ -837,12 +837,12 @@
    40c5d: 7d 23                        	jge	0x40c82 <Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x62>
    40c5f: 48 83 c4 18                  	addq	$0x18, %rsp
    40c63: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40c68: 0f 8e 12 ad 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40c68: 0f 8e 32 a8 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40c6e: c3                           	retq
    40c6f: 48 8b c2                     	movq	%rdx, %rax
    40c72: 48 83 c4 18                  	addq	$0x18, %rsp
    40c76: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40c7b: 0f 8e ff ac 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40c7b: 0f 8e 1f a8 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40c81: c3                           	retq
    40c82: c7 44 24 10 00 01 00 00      	movl	$0x100, 0x10(%rsp)      # imm = 0x100
    40c8a: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -862,7 +862,7 @@
    40cbb: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    40cc0: eb ce                        	jmp	0x40c90 <Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x70>
    40cc2: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
-   40cc7: e8 b4 ac 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40cc7: e8 d4 a7 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40ccc: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    40cd0: 48 8b cb                     	movq	%rbx, %rcx
    40cd3: eb bb                        	jmp	0x40c90 <Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB+0x70>
@@ -882,7 +882,7 @@
 0000000000040ce0 <Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G>:
    40ce0: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    40ce5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40ce9: 0f 86 71 8f 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40ce9: 0f 86 f1 92 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    40cef: 48 8b e3                     	movq	%rbx, %rsp
    40cf2: 89 74 24 2c                  	movl	%esi, 0x2c(%rsp)
    40cf6: 83 fe 01                     	cmpl	$0x1, %esi
@@ -959,7 +959,7 @@
    40e01: 8b 54 24 1c                  	movl	0x1c(%rsp), %edx
    40e05: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    40e09: e9 32 ff ff ff               	jmp	0x40d40 <Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x60>
-   40e0e: e8 6d ab 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40e0e: e8 8d a6 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40e13: 8b df                        	movl	%edi, %ebx
    40e15: 8b 54 24 1c                  	movl	0x1c(%rsp), %edx
    40e19: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
@@ -980,12 +980,12 @@
    40e58: 7f e6                        	jg	0x40e40 <Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x160>
    40e5a: eb 12                        	jmp	0x40e6e <Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x18e>
    40e5c: 0f 1f 40 00                  	nopl	(%rax)
-   40e60: e8 1b ab 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40e60: e8 3b a6 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40e65: 8b 5c 24 24                  	movl	0x24(%rsp), %ebx
    40e69: e9 d2 fe ff ff               	jmp	0x40d40 <Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G+0x60>
    40e6e: 48 83 c4 38                  	addq	$0x38, %rsp
    40e72: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40e77: 0f 8e 03 ab 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40e77: 0f 8e 23 a6 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40e7d: c3                           	retq
    40e7e: bf 00 00 00 00               	movl	$0x0, %edi
    40e83: 48 8b c2                     	movq	%rdx, %rax
@@ -1016,29 +1016,29 @@
 0000000000040ea0 <Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7>:
    40ea0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    40ea5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40ea9: 0f 86 b1 8d 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40ea9: 0f 86 31 91 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    40eaf: 48 8b e3                     	movq	%rbx, %rsp
    40eb2: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    40eb6: 83 fe 01                     	cmpl	$0x1, %esi
    40eb9: 7c 26                        	jl	0x40ee1 <Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x41>
-   40ebb: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   40ebb: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    40ec2: 48 8b f2                     	movq	%rdx, %rsi
    40ec5: e8 76 15 00 00               	callq	0x42440 <Floor_javaBatch64_K1Yw1tcLJ64AWpNsVkdWbK>
    40eca: 83 7c 24 14 41               	cmpl	$0x41, 0x14(%rsp)
    40ecf: 7d 23                        	jge	0x40ef4 <Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x54>
    40ed1: 48 83 c4 18                  	addq	$0x18, %rsp
    40ed5: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40eda: 0f 8e a0 aa 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40eda: 0f 8e c0 a5 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40ee0: c3                           	retq
    40ee1: 48 8b c2                     	movq	%rdx, %rax
    40ee4: 48 83 c4 18                  	addq	$0x18, %rsp
    40ee8: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   40eed: 0f 8e 8d aa 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40eed: 0f 8e ad a5 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40ef3: c3                           	retq
    40ef4: 48 8b f0                     	movq	%rax, %rsi
    40ef7: c7 44 24 10 40 00 00 00      	movl	$0x40, 0x10(%rsp)
    40eff: 90                           	nop
-   40f00: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   40f00: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    40f07: e8 34 15 00 00               	callq	0x42440 <Floor_javaBatch64_K1Yw1tcLJ64AWpNsVkdWbK>
    40f0c: 8b 4c 24 10                  	movl	0x10(%rsp), %ecx
    40f10: 8d 51 40                     	leal	0x40(%rcx), %edx
@@ -1050,7 +1050,7 @@
    40f22: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    40f26: 48 8b f0                     	movq	%rax, %rsi
    40f29: eb d5                        	jmp	0x40f00 <Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x60>
-   40f2b: e8 50 aa 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40f2b: e8 70 a5 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40f30: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    40f34: 48 8b f0                     	movq	%rax, %rsi
    40f37: eb c7                        	jmp	0x40f00 <Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7+0x60>
@@ -1066,7 +1066,7 @@
 0000000000040f40 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI>:
    40f40: 48 8d 5c 24 b8               	leaq	-0x48(%rsp), %rbx
    40f45: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   40f49: 0f 86 11 8d 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   40f49: 0f 86 91 90 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    40f4f: 48 8b e3                     	movq	%rbx, %rsp
    40f52: 8b 4f 08                     	movl	0x8(%rdi), %ecx
    40f55: 89 4c 24 3c                  	movl	%ecx, 0x3c(%rsp)
@@ -1091,15 +1091,15 @@
    40f9c: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
    40fa1: 7f dd                        	jg	0x40f80 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x40>
    40fa3: 49 8d 04 fe                  	leaq	(%r14,%rdi,8), %rax
-   40fa7: e8 d4 a9 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   40fa7: e8 f4 a4 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    40fac: eb d2                        	jmp	0x40f80 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x40>
-   40fae: 49 8d 9e e8 f3 3f 00         	leaq	0x3ff3e8(%r14), %rbx
+   40fae: 49 8d 9e 38 fc 3f 00         	leaq	0x3ffc38(%r14), %rbx
    40fb5: 48 89 5c 24 10               	movq	%rbx, 0x10(%rsp)
-   40fba: 49 8d ae 30 f4 3f 00         	leaq	0x3ff430(%r14), %rbp
+   40fba: 49 8d ae 80 fc 3f 00         	leaq	0x3ffc80(%r14), %rbp
    40fc1: 48 89 6c 24 18               	movq	%rbp, 0x18(%rsp)
    40fc6: 4d 8d 86 08 f7 0e 00         	leaq	0xef708(%r14), %r8
    40fcd: 4c 89 44 24 28               	movq	%r8, 0x28(%rsp)
-   40fd2: 4d 8d 8e 40 f0 3f 00         	leaq	0x3ff040(%r14), %r9
+   40fd2: 4d 8d 8e 90 f8 3f 00         	leaq	0x3ff890(%r14), %r9
    40fd9: 4c 89 4c 24 20               	movq	%r9, 0x20(%rsp)
    40fde: 41 ba 00 00 00 00            	movl	$0x0, %r10d
    40fe4: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
@@ -1119,7 +1119,7 @@
    4102f: f3 48 aa                     	rep		stosb	%al, %es:(%rdi)
    41032: 49 2b f6                     	subq	%r14, %rsi
    41035: 48 c1 ee 03                  	shrq	$0x3, %rsi
-   41039: 41 89 b6 d8 f0 3f 00         	movl	%esi, 0x3ff0d8(%r14)
+   41039: 41 89 b6 2c f9 3f 00         	movl	%esi, 0x3ff92c(%r14)
    41040: f0                           	lock
    41041: 83 04 24 00                  	addl	$0x0, (%rsp)
    41045: 41 8b 39                     	movl	(%r9), %edi
@@ -1132,8 +1132,8 @@
    41064: 74 05                        	je	0x4106b <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x12b>
    41066: 44 8b d0                     	movl	%eax, %r10d
    41069: eb 85                        	jmp	0x40ff0 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0xb0>
-   4106b: 41 8b be 60 f4 3f 00         	movl	0x3ff460(%r14), %edi
-   41072: 81 ff 7b fe 07 00            	cmpl	$0x7fe7b, %edi          # imm = 0x7FE7B
+   4106b: 41 8b be b0 fc 3f 00         	movl	0x3ffcb0(%r14), %edi
+   41072: 81 ff 85 ff 07 00            	cmpl	$0x7ff85, %edi          # imm = 0x7FF85
    41078: 74 33                        	je	0x410ad <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x16d>
    4107a: 66 0f 1f 44 00 00            	nopw	(%rax,%rax)
    41080: 85 ff                        	testl	%edi, %edi
@@ -1149,7 +1149,7 @@
    410a8: e9 43 ff ff ff               	jmp	0x40ff0 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0xb0>
    410ad: 49 8b f8                     	movq	%r8, %rdi
    410b0: eb ed                        	jmp	0x4109f <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x15f>
-   410b2: 41 8b be 14 f4 3f 00         	movl	0x3ff414(%r14), %edi
+   410b2: 41 8b be 64 fc 3f 00         	movl	0x3ffc64(%r14), %edi
    410b9: 0f 1f 80 00 00 00 00         	nopl	(%rax)
    410c0: 85 ff                        	testl	%edi, %edi
    410c2: 74 13                        	je	0x410d7 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x197>
@@ -1162,10 +1162,10 @@
    410e0: 48 8b fb                     	movq	%rbx, %rdi
    410e3: 48 8b f5                     	movq	%rbp, %rsi
    410e6: ba 01 00 00 00               	movl	$0x1, %edx
-   410eb: e8 30 2e 08 00               	callq	0xc3f20 <GCImpl_collectWithoutAllocating_3JkbhdqsFF0bYizLQcyXX9>
+   410eb: e8 70 34 08 00               	callq	0xc4560 <GCImpl_collectWithoutAllocating_3JkbhdqsFF0bYizLQcyXX9>
    410f0: 85 c0                        	testl	%eax, %eax
    410f2: 0f 84 b6 00 00 00            	je	0x411ae <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x26e>
-   410f8: 41 8b be 14 f4 3f 00         	movl	0x3ff414(%r14), %edi
+   410f8: 41 8b be 64 fc 3f 00         	movl	0x3ffc64(%r14), %edi
    410ff: 90                           	nop
    41100: 85 ff                        	testl	%edi, %edi
    41102: 0f 84 67 02 00 00            	je	0x4136f <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x42f>
@@ -1179,7 +1179,7 @@
    41124: 0f 83 4f 02 00 00            	jae	0x41379 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x439>
    4112a: c1 e8 05                     	shrl	$0x5, %eax
    4112d: 49 8b 84 c6 a0 00 00 00      	movq	0xa0(%r14,%rax,8), %rax
-   41135: 48 8d 0d 24 9f 07 00         	leaq	0x79f24(%rip), %rcx     # 0xbb060 <CollectionPolicy_onMaximumHeapSizeExceeded_rghEcVm2KwLAMqoiYhXY02>
+   41135: 48 8d 0d 64 a5 07 00         	leaq	0x7a564(%rip), %rcx     # 0xbb6a0 <CollectionPolicy_onMaximumHeapSizeExceeded_rghEcVm2KwLAMqoiYhXY02>
    4113c: 49 2b cd                     	subq	%r13, %rcx
    4113f: 90                           	nop
    41140: 48 3b c8                     	cmpq	%rax, %rcx
@@ -1216,7 +1216,7 @@
    411cc: 48 8b fe                     	movq	%rsi, %rdi
    411cf: 48 2b 7e f8                  	subq	-0x8(%rsi), %rdi
    411d3: 49 8b f1                     	movq	%r9, %rsi
-   411d6: 49 8d 96 d8 f0 3f 00         	leaq	0x3ff0d8(%r14), %rdx
+   411d6: 49 8d 96 2c f9 3f 00         	leaq	0x3ff92c(%r14), %rdx
    411dd: 48 2b d6                     	subq	%rsi, %rdx
    411e0: 48 c1 ea 09                  	shrq	$0x9, %rdx
    411e4: 80 7c 17 30 00               	cmpb	$0x0, 0x30(%rdi,%rdx)
@@ -1226,7 +1226,7 @@
    411f9: 44 89 54 24 40               	movl	%r10d, 0x40(%rsp)
    411fe: bf 00 23 20 00               	movl	$0x202300, %edi         # imm = 0x202300
    41203: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-   41208: e8 73 91 0a 00               	callq	0xea380 <GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F>
+   41208: e8 f3 94 0a 00               	callq	0xea700 <GenScavengeAllocationSupport_slowNewArray_RH1677CN3I59XJMcBPW18F>
    4120d: 48 8b f0                     	movq	%rax, %rsi
    41210: 44 8b 54 24 40               	movl	0x40(%rsp), %r10d
    41215: 4c 8b 4c 24 20               	movq	0x20(%rsp), %r9
@@ -1235,7 +1235,7 @@
    41224: 48 8b 5c 24 10               	movq	0x10(%rsp), %rbx
    41229: e9 04 fe ff ff               	jmp	0x41032 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0xf2>
    4122e: 44 89 54 24 40               	movl	%r10d, 0x40(%rsp)
-   41233: e8 08 e6 19 00               	callq	0x1df840 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+   41233: e8 28 e1 19 00               	callq	0x1df360 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
    41238: 8b 4c 24 3c                  	movl	0x3c(%rsp), %ecx
    4123c: 0f 1f 40 00                  	nopl	(%rax)
    41240: 85 c9                        	testl	%ecx, %ecx
@@ -1250,7 +1250,7 @@
    41264: 75 2d                        	jne	0x41293 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x353>
    41266: 48 83 c4 48                  	addq	$0x48, %rsp
    4126a: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4126f: 0f 8e 0b a7 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4126f: 0f 8e 2b a2 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41275: c3                           	retq
    41276: 83 fb 01                     	cmpl	$0x1, %ebx
    41279: 0f 85 2f fd ff ff            	jne	0x40fae <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x6e>
@@ -1258,7 +1258,7 @@
    41284: 85 c0                        	testl	%eax, %eax
    41286: 0f 84 22 fd ff ff            	je	0x40fae <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x6e>
    4128c: eb 30                        	jmp	0x412be <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x37e>
-   4128e: e8 6d ee 0c 00               	callq	0x110100 <OutOfMemoryUtil_heapSizeExceeded_tgNQlvtYRwAN6ucK4Y7ahE>
+   4128e: e8 ed f1 0c 00               	callq	0x110480 <OutOfMemoryUtil_heapSizeExceeded_tgNQlvtYRwAN6ucK4Y7ahE>
    41293: 48 8b 54 24 30               	movq	0x30(%rsp), %rdx
    41298: 48 8b c2                     	movq	%rdx, %rax
    4129b: 48 81 e0 00 00 f8 ff         	andq	$-0x80000, %rax         # imm = 0xFFF80000
@@ -1285,37 +1285,37 @@
    412f5: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
    412fa: 7f e4                        	jg	0x412e0 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3a0>
    412fc: 49 8d 04 fe                  	leaq	(%r14,%rdi,8), %rax
-   41300: e8 7b a6 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41300: e8 9b a1 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41305: eb d9                        	jmp	0x412e0 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x3a0>
    41307: 41 8b 7c fe 0c               	movl	0xc(%r14,%rdi,8), %edi
    4130c: 85 ff                        	testl	%edi, %edi
    4130e: 0f 84 9a fc ff ff            	je	0x40fae <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x6e>
    41314: 49 8d 3c fe                  	leaq	(%r14,%rdi,8), %rdi
-   41318: e8 e3 89 1b 00               	callq	0x1f9d00 <PlatformThreads_unpark_FJj4Yhv2Ja3jndtYAdmYl0>
+   41318: e8 03 85 1b 00               	callq	0x1f9820 <PlatformThreads_unpark_FJj4Yhv2Ja3jndtYAdmYl0>
    4131d: 66 66 90                     	nop
    41320: e9 89 fc ff ff               	jmp	0x40fae <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x6e>
    41325: 48 83 c4 48                  	addq	$0x48, %rsp
    41329: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4132e: 0f 8e 4c a6 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4132e: 0f 8e 6c a1 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41334: c3                           	retq
    41335: e9 fe fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    4133a: e9 f9 fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    4133f: 90                           	nop
    41340: e9 f3 fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    41345: 44 89 54 24 40               	movl	%r10d, 0x40(%rsp)
-   4134a: e8 71 db 19 00               	callq	0x1deec0 <ImplicitExceptions_createOptClassCastException_Ewnh8dGuUvIm5VBYxiDX2K>
+   4134a: e8 91 d6 19 00               	callq	0x1de9e0 <ImplicitExceptions_createOptClassCastException_Ewnh8dGuUvIm5VBYxiDX2K>
    4134f: e9 e4 fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
-   41354: e8 e7 e4 19 00               	callq	0x1df840 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+   41354: e8 07 e0 19 00               	callq	0x1df360 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
    41359: e9 da fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    4135e: 66 90                        	nop
-   41360: e8 db e4 19 00               	callq	0x1df840 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+   41360: e8 fb df 19 00               	callq	0x1df360 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
    41365: e9 ce fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
-   4136a: e8 f1 69 1a 00               	callq	0x1e7d60 <ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8>
-   4136f: e8 cc e4 19 00               	callq	0x1df840 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
+   4136a: e8 11 65 1a 00               	callq	0x1e7880 <ImplicitExceptions_throwOptNullPointerException_L5YebwHOF167z7SdrY01p8>
+   4136f: e8 ec df 19 00               	callq	0x1df360 <ImplicitExceptions_createOptNullPointerException_PShVv49ViuFEXSnudhxuAE>
    41374: e9 bf fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    41379: 44 8b 54 24 40               	movl	0x40(%rsp), %r10d
    4137e: 66 90                        	nop
-   41380: e8 fb df 19 00               	callq	0x1df380 <ImplicitExceptions_createOptIncompatibleClassChangeError_ExDFiMUY3I5T00lGxxhlnL>
+   41380: e8 1b db 19 00               	callq	0x1deea0 <ImplicitExceptions_createOptIncompatibleClassChangeError_ExDFiMUY3I5T00lGxxhlnL>
    41385: e9 ae fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    4138a: e9 a9 fe ff ff               	jmp	0x41238 <Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI+0x2f8>
    4138f: cc                           	int3
@@ -1340,10 +1340,10 @@
 00000000000413a0 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI>:
    413a0: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    413a5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   413a9: 0f 86 b1 88 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   413a9: 0f 86 31 8c 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    413af: 48 8b e3                     	movq	%rbx, %rsp
    413b2: 89 74 24 28                  	movl	%esi, 0x28(%rsp)
-   413b6: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   413b6: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    413bd: 48 89 4c 24 10               	movq	%rcx, 0x10(%rsp)
    413c2: 83 fe 01                     	cmpl	$0x1, %esi
    413c5: bf 01 00 00 00               	movl	$0x1, %edi
@@ -1431,7 +1431,7 @@
    41504: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    41508: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
    4150d: e9 fe fe ff ff               	jmp	0x41410 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x70>
-   41512: e8 69 a4 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41512: e8 89 9f 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41517: 8b d1                        	movl	%ecx, %edx
    41519: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    4151d: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
@@ -1440,7 +1440,7 @@
    4152c: 7e 09                        	jle	0x41537 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x197>
    4152e: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41532: e9 d9 fe ff ff               	jmp	0x41410 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x70>
-   41537: e8 44 a4 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41537: e8 64 9f 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    4153c: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41540: e9 cb fe ff ff               	jmp	0x41410 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x70>
    41545: 48 8b cb                     	movq	%rbx, %rcx
@@ -1461,7 +1461,7 @@
    41583: 7f db                        	jg	0x41560 <Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI+0x1c0>
    41585: 48 83 c4 38                  	addq	$0x38, %rsp
    41589: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   4158e: 0f 8e ec a3 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   4158e: 0f 8e 0c 9f 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41594: c3                           	retq
    41595: bf 00 00 00 00               	movl	$0x0, %edi
    4159a: 48 8b c2                     	movq	%rdx, %rax
@@ -1499,10 +1499,10 @@
 00000000000415c0 <Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15>:
    415c0: 48 8d 5c 24 b8               	leaq	-0x48(%rsp), %rbx
    415c5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   415c9: 0f 86 91 86 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   415c9: 0f 86 11 8a 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    415cf: 48 8b e3                     	movq	%rbx, %rsp
    415d2: 89 74 24 18                  	movl	%esi, 0x18(%rsp)
-   415d6: 48 8b 0d 0b f2 88 00         	movq	0x88f20b(%rip), %rcx    # 0x8d07e8 <__svm_vm_is_static_binary+0x3b0>
+   415d6: 48 8b 0d bb f4 87 00         	movq	0x87f4bb(%rip), %rcx    # 0x8c0a98 <__svm_vm_is_static_binary+0x820>
    415dd: 48 89 4c 24 10               	movq	%rcx, 0x10(%rsp)
    415e2: 48 8b c2                     	movq	%rdx, %rax
    415e5: ba 00 00 00 00               	movl	$0x0, %edx
@@ -1546,12 +1546,12 @@
    4168a: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    4168f: bf 01 00 00 00               	movl	$0x1, %edi
    41694: be 01 00 00 00               	movl	$0x1, %esi
-   41699: e8 22 af 1b 00               	callq	0x1fc5c0 <SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84>
+   41699: e8 42 aa 1b 00               	callq	0x1fc0e0 <SafepointSlowpath_enterSlowPathTransitionFromNativeToNewStatus_U31AxKqnQ8Jq14OFjiBN84>
    4169e: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    416a3: eb c6                        	jmp	0x4166b <Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15+0xab>
    416a5: 48 83 c4 48                  	addq	$0x48, %rsp
    416a9: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   416ae: 0f 8e cc a2 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   416ae: 0f 8e ec 9d 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    416b4: c3                           	retq
    416b5: cc                           	int3
    416b6: cc                           	int3
@@ -1569,10 +1569,10 @@
 00000000000416c0 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH>:
    416c0: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    416c5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   416c9: 0f 86 91 85 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   416c9: 0f 86 11 89 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    416cf: 48 8b e3                     	movq	%rbx, %rsp
    416d2: 89 74 24 28                  	movl	%esi, 0x28(%rsp)
-   416d6: 48 8b 0d 03 f0 88 00         	movq	0x88f003(%rip), %rcx    # 0x8d06e0 <__svm_vm_is_static_binary+0x2a8>
+   416d6: 48 8b 0d ab f0 87 00         	movq	0x87f0ab(%rip), %rcx    # 0x8c0788 <__svm_vm_is_static_binary+0x510>
    416dd: 48 89 4c 24 10               	movq	%rcx, 0x10(%rsp)
    416e2: 83 fe 01                     	cmpl	$0x1, %esi
    416e5: bf 01 00 00 00               	movl	$0x1, %edi
@@ -1660,7 +1660,7 @@
    41824: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    41828: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
    4182d: e9 fe fe ff ff               	jmp	0x41730 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x70>
-   41832: e8 49 a1 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41832: e8 69 9c 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41837: 8b d1                        	movl	%ecx, %edx
    41839: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    4183d: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
@@ -1669,7 +1669,7 @@
    4184c: 7e 09                        	jle	0x41857 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x197>
    4184e: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41852: e9 d9 fe ff ff               	jmp	0x41730 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x70>
-   41857: e8 24 a1 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41857: e8 44 9c 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    4185c: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41860: e9 cb fe ff ff               	jmp	0x41730 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x70>
    41865: 48 8b cb                     	movq	%rbx, %rcx
@@ -1690,7 +1690,7 @@
    418a3: 7f db                        	jg	0x41880 <Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH+0x1c0>
    418a5: 48 83 c4 38                  	addq	$0x38, %rsp
    418a9: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   418ae: 0f 8e cc a0 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   418ae: 0f 8e ec 9b 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    418b4: c3                           	retq
    418b5: bf 00 00 00 00               	movl	$0x0, %edi
    418ba: 48 8b c2                     	movq	%rdx, %rax
@@ -1728,12 +1728,12 @@
 00000000000418e0 <Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB>:
    418e0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    418e5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   418e9: 0f 86 71 83 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   418e9: 0f 86 f1 86 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    418ef: 48 8b e3                     	movq	%rbx, %rsp
    418f2: 83 fe 01                     	cmpl	$0x1, %esi
    418f5: 0f 8c 70 01 00 00            	jl	0x41a6b <Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x18b>
    418fb: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
-   418ff: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   418ff: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    41906: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    4190b: c7 44 24 10 00 00 00 00      	movl	$0x0, 0x10(%rsp)
    41913: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
@@ -1813,14 +1813,14 @@
    41a38: 48 8b d0                     	movq	%rax, %rdx
    41a3b: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    41a40: e9 db fe ff ff               	jmp	0x41920 <Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x40>
-   41a45: e8 36 9f 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41a45: e8 56 9a 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41a4a: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    41a4e: 48 8b d0                     	movq	%rax, %rdx
    41a51: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    41a56: e9 c5 fe ff ff               	jmp	0x41920 <Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x40>
    41a5b: 48 83 c4 18                  	addq	$0x18, %rsp
    41a5f: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41a64: 0f 8e 16 9f 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41a64: 0f 8e 36 9a 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41a6a: c3                           	retq
    41a6b: 48 8b c2                     	movq	%rdx, %rax
    41a6e: eb eb                        	jmp	0x41a5b <Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB+0x17b>
@@ -1845,12 +1845,12 @@
 0000000000041a80 <Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK>:
    41a80: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    41a85: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   41a89: 0f 86 d1 81 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   41a89: 0f 86 51 85 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    41a8f: 48 8b e3                     	movq	%rbx, %rsp
    41a92: 83 fe 01                     	cmpl	$0x1, %esi
    41a95: 0f 8c 70 01 00 00            	jl	0x41c0b <Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x18b>
    41a9b: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
-   41a9f: 49 8b 8e 70 f1 3f 00         	movq	0x3ff170(%r14), %rcx
+   41a9f: 49 8b 8e b8 f9 3f 00         	movq	0x3ff9b8(%r14), %rcx
    41aa6: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    41aab: c7 44 24 10 00 00 00 00      	movl	$0x0, 0x10(%rsp)
    41ab3: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
@@ -1930,14 +1930,14 @@
    41bd8: 48 8b d0                     	movq	%rax, %rdx
    41bdb: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    41be0: e9 db fe ff ff               	jmp	0x41ac0 <Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x40>
-   41be5: e8 96 9d 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41be5: e8 b6 98 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41bea: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    41bee: 48 8b d0                     	movq	%rax, %rdx
    41bf1: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    41bf6: e9 c5 fe ff ff               	jmp	0x41ac0 <Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x40>
    41bfb: 48 83 c4 18                  	addq	$0x18, %rsp
    41bff: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41c04: 0f 8e 76 9d 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41c04: 0f 8e 96 98 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41c0a: c3                           	retq
    41c0b: 48 8b c2                     	movq	%rdx, %rax
    41c0e: eb eb                        	jmp	0x41bfb <Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK+0x17b>
@@ -1962,10 +1962,10 @@
 0000000000041c20 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6>:
    41c20: 48 8d 5c 24 c8               	leaq	-0x38(%rsp), %rbx
    41c25: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   41c29: 0f 86 31 80 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   41c29: 0f 86 b1 83 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    41c2f: 48 8b e3                     	movq	%rbx, %rsp
    41c32: 89 74 24 28                  	movl	%esi, 0x28(%rsp)
-   41c36: 48 8b 0d 23 e7 88 00         	movq	0x88e723(%rip), %rcx    # 0x8d0360 <.data+0x360>
+   41c36: 48 8b 0d e3 e6 87 00         	movq	0x87e6e3(%rip), %rcx    # 0x8c0320 <__svm_vm_is_static_binary+0xa8>
    41c3d: 48 89 4c 24 10               	movq	%rcx, 0x10(%rsp)
    41c42: 83 fe 01                     	cmpl	$0x1, %esi
    41c45: bf 01 00 00 00               	movl	$0x1, %edi
@@ -2053,7 +2053,7 @@
    41d84: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    41d88: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
    41d8d: e9 fe fe ff ff               	jmp	0x41c90 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x70>
-   41d92: e8 e9 9b 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41d92: e8 09 97 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41d97: 8b d1                        	movl	%ecx, %edx
    41d99: 8b 4c 24 20                  	movl	0x20(%rsp), %ecx
    41d9d: 44 8b 54 24 18               	movl	0x18(%rsp), %r10d
@@ -2062,7 +2062,7 @@
    41dac: 7e 09                        	jle	0x41db7 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x197>
    41dae: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41db2: e9 d9 fe ff ff               	jmp	0x41c90 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x70>
-   41db7: e8 c4 9b 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41db7: e8 e4 96 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41dbc: 8b 54 24 24                  	movl	0x24(%rsp), %edx
    41dc0: e9 cb fe ff ff               	jmp	0x41c90 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x70>
    41dc5: 48 8b cb                     	movq	%rbx, %rcx
@@ -2083,7 +2083,7 @@
    41e03: 7f db                        	jg	0x41de0 <Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6+0x1c0>
    41e05: 48 83 c4 38                  	addq	$0x38, %rsp
    41e09: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41e0e: 0f 8e 6c 9b 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41e0e: 0f 8e 8c 96 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41e14: c3                           	retq
    41e15: bf 00 00 00 00               	movl	$0x0, %edi
    41e1a: 48 8b c2                     	movq	%rdx, %rax
@@ -2121,29 +2121,29 @@
 0000000000041e40 <Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2>:
    41e40: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    41e45: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   41e49: 0f 86 11 7e 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   41e49: 0f 86 91 81 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    41e4f: 48 8b e3                     	movq	%rbx, %rsp
    41e52: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    41e56: 83 fe 01                     	cmpl	$0x1, %esi
    41e59: 7c 26                        	jl	0x41e81 <Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x41>
-   41e5b: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   41e5b: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    41e62: 48 8b f2                     	movq	%rdx, %rsi
    41e65: e8 b6 02 00 00               	callq	0x42120 <Floor_javaBatch16_8LIcqghlXl80Dft9xk6yUA>
    41e6a: 83 7c 24 14 11               	cmpl	$0x11, 0x14(%rsp)
    41e6f: 7d 23                        	jge	0x41e94 <Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x54>
    41e71: 48 83 c4 18                  	addq	$0x18, %rsp
    41e75: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41e7a: 0f 8e 00 9b 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41e7a: 0f 8e 20 96 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41e80: c3                           	retq
    41e81: 48 8b c2                     	movq	%rdx, %rax
    41e84: 48 83 c4 18                  	addq	$0x18, %rsp
    41e88: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41e8d: 0f 8e ed 9a 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41e8d: 0f 8e 0d 96 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41e93: c3                           	retq
    41e94: 48 8b f0                     	movq	%rax, %rsi
    41e97: c7 44 24 10 10 00 00 00      	movl	$0x10, 0x10(%rsp)
    41e9f: 90                           	nop
-   41ea0: 49 8b be 68 f1 3f 00         	movq	0x3ff168(%r14), %rdi
+   41ea0: 49 8b be b0 f9 3f 00         	movq	0x3ff9b0(%r14), %rdi
    41ea7: e8 74 02 00 00               	callq	0x42120 <Floor_javaBatch16_8LIcqghlXl80Dft9xk6yUA>
    41eac: 8b 4c 24 10                  	movl	0x10(%rsp), %ecx
    41eb0: 8d 51 10                     	leal	0x10(%rcx), %edx
@@ -2155,7 +2155,7 @@
    41ec2: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    41ec6: 48 8b f0                     	movq	%rax, %rsi
    41ec9: eb d5                        	jmp	0x41ea0 <Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x60>
-   41ecb: e8 b0 9a 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41ecb: e8 d0 95 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41ed0: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    41ed4: 48 8b f0                     	movq	%rax, %rsi
    41ed7: eb c7                        	jmp	0x41ea0 <Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2+0x60>
@@ -2171,12 +2171,12 @@
 0000000000041ee0 <Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10>:
    41ee0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    41ee5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   41ee9: 0f 86 71 7d 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   41ee9: 0f 86 f1 80 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    41eef: 48 8b e3                     	movq	%rbx, %rsp
    41ef2: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    41ef6: 83 fe 01                     	cmpl	$0x1, %esi
    41ef9: 7c 31                        	jl	0x41f2c <Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x4c>
-   41efb: 48 8b 0d 86 e1 88 00         	movq	0x88e186(%rip), %rcx    # 0x8d0088 <.data+0x88>
+   41efb: 48 8b 0d 06 e6 87 00         	movq	0x87e606(%rip), %rcx    # 0x8c0508 <__svm_vm_is_static_binary+0x290>
    41f02: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    41f07: 48 8b fa                     	movq	%rdx, %rdi
    41f0a: b8 00 00 00 00               	movl	$0x0, %eax
@@ -2186,12 +2186,12 @@
    41f1a: 7d 23                        	jge	0x41f3f <Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x5f>
    41f1c: 48 83 c4 18                  	addq	$0x18, %rsp
    41f20: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41f25: 0f 8e 55 9a 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41f25: 0f 8e 75 95 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41f2b: c3                           	retq
    41f2c: 48 8b c2                     	movq	%rdx, %rax
    41f2f: 48 83 c4 18                  	addq	$0x18, %rsp
    41f33: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41f38: 0f 8e 42 9a 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41f38: 0f 8e 62 95 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41f3e: c3                           	retq
    41f3f: c7 44 24 10 40 00 00 00      	movl	$0x40, 0x10(%rsp)
    41f47: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -2211,7 +2211,7 @@
    41f78: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    41f7d: eb d1                        	jmp	0x41f50 <Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x70>
    41f7f: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
-   41f84: e8 f7 99 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41f84: e8 17 95 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41f89: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    41f8d: 48 8b cb                     	movq	%rbx, %rcx
    41f90: eb be                        	jmp	0x41f50 <Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10+0x70>
@@ -2234,12 +2234,12 @@
 0000000000041fa0 <Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL>:
    41fa0: 48 8d 5c 24 e8               	leaq	-0x18(%rsp), %rbx
    41fa5: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   41fa9: 0f 86 b1 7c 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   41fa9: 0f 86 31 80 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    41faf: 48 8b e3                     	movq	%rbx, %rsp
    41fb2: 89 74 24 14                  	movl	%esi, 0x14(%rsp)
    41fb6: 83 fe 01                     	cmpl	$0x1, %esi
    41fb9: 7c 31                        	jl	0x41fec <Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x4c>
-   41fbb: 48 8b 0d de e2 88 00         	movq	0x88e2de(%rip), %rcx    # 0x8d02a0 <.data+0x2a0>
+   41fbb: 48 8b 0d 36 e2 87 00         	movq	0x87e236(%rip), %rcx    # 0x8c01f8 <.data+0x1f8>
    41fc2: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
    41fc7: 48 8b fa                     	movq	%rdx, %rdi
    41fca: b8 00 00 00 00               	movl	$0x0, %eax
@@ -2249,12 +2249,12 @@
    41fda: 7d 23                        	jge	0x41fff <Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x5f>
    41fdc: 48 83 c4 18                  	addq	$0x18, %rsp
    41fe0: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41fe5: 0f 8e 95 99 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41fe5: 0f 8e b5 94 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41feb: c3                           	retq
    41fec: 48 8b c2                     	movq	%rdx, %rax
    41fef: 48 83 c4 18                  	addq	$0x18, %rsp
    41ff3: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   41ff8: 0f 8e 82 99 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   41ff8: 0f 8e a2 94 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    41ffe: c3                           	retq
    41fff: c7 44 24 10 04 00 00 00      	movl	$0x4, 0x10(%rsp)
    42007: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
@@ -2274,7 +2274,7 @@
    42038: 48 8b 4c 24 08               	movq	0x8(%rsp), %rcx
    4203d: eb d1                        	jmp	0x42010 <Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x70>
    4203f: 48 8b 5c 24 08               	movq	0x8(%rsp), %rbx
-   42044: e8 37 99 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   42044: e8 57 94 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    42049: 89 54 24 10                  	movl	%edx, 0x10(%rsp)
    4204d: 48 8b cb                     	movq	%rbx, %rcx
    42050: eb be                        	jmp	0x42010 <Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL+0x70>
@@ -2297,7 +2297,7 @@
 0000000000042060 <Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D>:
    42060: 48 8d 5c 24 f8               	leaq	-0x8(%rsp), %rbx
    42065: 49 3b 5f 08                  	cmpq	0x8(%r15), %rbx
-   42069: 0f 86 f1 7b 0b 00            	jbe	0xf9c60 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
+   42069: 0f 86 71 7f 0b 00            	jbe	0xf9fe0 <StackOverflowCheckImpl_throwNewStackOverflowError_CiGyUiZvwzBgNjjkTo2w7K>
    4206f: 48 8b e3                     	movq	%rbx, %rsp
    42072: b9 00 00 00 00               	movl	$0x0, %ecx
    42077: 48 8b c2                     	movq	%rdx, %rax
@@ -2326,11 +2326,11 @@
    420c6: 03 ca                        	addl	%edx, %ecx
    420c8: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
    420cd: 7f b1                        	jg	0x42080 <Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0x20>
-   420cf: e8 ac 98 1b 00               	callq	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   420cf: e8 cc 93 1b 00               	callq	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    420d4: eb aa                        	jmp	0x42080 <Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D+0x20>
    420d6: 48 83 c4 08                  	addq	$0x8, %rsp
    420da: 41 83 7f 10 00               	cmpl	$0x0, 0x10(%r15)
-   420df: 0f 8e 9b 98 1b 00            	jle	0x1fb980 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
+   420df: 0f 8e bb 93 1b 00            	jle	0x1fb4a0 <SafepointSlowpath_enterSlowPathSafepointCheckCalleeSavedCCONV_NJQ7tMr7bSJNP3XSqfMbAB>
    420e5: c3                           	retq
    420e6: cc                           	int3
    420e7: cc                           	int3
@@ -2362,7 +2362,7 @@
 # svm: Floor_identity_RGfigO1fJmId7IgDqMOKbC
 0000000000042100 <Floor_identity_RGfigO1fJmId7IgDqMOKbC>:
    42100: 48 83 ec 08                  	subq	$0x8, %rsp
-   42104: 4c 8b 15 7d e0 88 00         	movq	0x88e07d(%rip), %r10    # 0x8d0188 <.data+0x188>
+   42104: 4c 8b 15 9d e8 87 00         	movq	0x87e89d(%rip), %r10    # 0x8c09a8 <__svm_vm_is_static_binary+0x730>
    4210b: b8 00 00 00 00               	movl	$0x0, %eax
    42110: 41 ff d2                     	callq	*%r10
    42113: 48 83 c4 08                  	addq	$0x8, %rsp
@@ -2967,7 +2967,7 @@
 # svm: Floor_leaf_xl8tBddbMc9N8Nhe5l1Y8G
 0000000000042cc0 <Floor_leaf_xl8tBddbMc9N8Nhe5l1Y8G>:
    42cc0: 48 83 ec 08                  	subq	$0x8, %rsp
-   42cc4: 4c 8b 15 05 da 88 00         	movq	0x88da05(%rip), %r10    # 0x8d06d0 <__svm_vm_is_static_binary+0x298>
+   42cc4: 4c 8b 15 5d d5 87 00         	movq	0x87d55d(%rip), %r10    # 0x8c0228 <.data+0x228>
    42ccb: b8 00 00 00 00               	movl	$0x0, %eax
    42cd0: 41 ff d2                     	callq	*%r10
    42cd3: 48 83 c4 08                  	addq	$0x8, %rsp

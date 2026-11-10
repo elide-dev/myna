@@ -284,7 +284,7 @@ run-time-initialized classes and dispatched on the lookup segment's scope. The g
 initializes the descriptor-only outer class at build time and passes the `loaderLookup` address as
 `MemorySegment.ofAddress`, whose global scope is known when compiling. The static entry now beats
 the handwritten unbound handle (4.82 against 5.56 ns/call on Linux x86-64). Static entries for
-native leaves are critical downcalls (0.993 against 1.391 ns/call for a handwritten critical
+native leaves are critical downcalls (0.964 against 1.392 ns/call for a handwritten critical
 handle), and FFM Truffle cells over leaf imports, which call them, dropped from 5.83 to 1.60
 ns/call, level with native cells.
 

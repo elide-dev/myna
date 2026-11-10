@@ -1,9 +1,9 @@
 {
-  "benchmarks/comparison/baselines/default-leaf-2026-11-10-linux-x86_64.json": "43d9c34d7347155fdc95f723d66bb01864c8c1ad2766834ce93af0d9b23ac43b",
+  "benchmarks/comparison/baselines/default-leaf-2026-11-10-linux-x86_64.json": "d0e8fa31ab8ece03df343900e6ee256b38445615e6232ec564d4bdb60aea012f",
   "benchmarks/comparison/abi2-chart.py": "dd90b9821411d3c568791c73f10a67303d73ef9e1c3446d5b50d1293a0f4d830",
   "benchmarks/comparison/brand.py": "209ad7b1382c36ec39ea90f9030f2fb664016e04a06e455660fb20b44e1024ab",
   "benchmarks/comparison/fonts.json": "44170183b8757c680f94ebd6487f7700b9bae4fe0b70370072860dc9deea1751",
   "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
-  "docs/charts/default-leaf.svg": "04dca03d2c9e0f7bb1e5ff49f79656819f29beaa142e85000509daee77484983",
-  "docs/charts/default-leaf.png": "a8a663031b1b8c071b84a24849ceebcadb28545d99d40a00e6c6a04b2448bccc"
+  "docs/charts/default-leaf.svg": "e8eca0ad0c8b6c0cddf6dac2560df351307fc6ce669d074dbce4943fde3ef251",
+  "docs/charts/default-leaf.png": "9f30a14cd3355a83c3c50c63b4cb7b304490cb95fc47dc337c4df9d2db4d6564"
 }

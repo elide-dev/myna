@@ -1,6 +1,6 @@
 # README benchmark rerun · November 10, 2026
 
-All three README charts come from one host, **unclemax**: Linux x86-64, AMD Ryzen Threadripper PRO 9965WX, `performance` CPU governor ([environment](unclemax-environment.json)). The runs used an isolated clone at `/tmp/myna-pr-rerun.JxEa56/source`, checked out at revision `4f88a77`; no existing checkout on the host was modified, and `git status --porcelain` was empty after the last run. The host's mise (2026.8.14) is older than the project's minimum, so the runs used a separately downloaded mise 2026.11.5 binary, verified against its published SHA-256 checksum, with the user's global mise configuration replaced by an empty file. `mise install --locked` and `mise run setup` installed Elide 1.6.2, toolchain 2026.11.6 (clang 23.1.4) and checksum-verified GraalVM 25.5.5-elide.28.
+All three README charts come from one host, **unclemax**: Linux x86-64, AMD Ryzen Threadripper PRO 9965WX, `performance` CPU governor ([environment](unclemax-environment.json)). The runs used an isolated clone at `/tmp/myna-pr-rebased.nnaqk7/source`, checked out at revision `0e81866`; no existing checkout on the host was modified, and `git status --porcelain` was empty after the last run. The host's mise (2026.8.14) is older than the project's minimum, so the runs used a separately downloaded mise 2026.11.5 binary, verified against its published SHA-256 checksum, with the user's global mise configuration replaced by an empty file. `mise install --locked` and `mise run setup` installed Elide 1.6.2, toolchain 2026.11.6 (clang 23.1.4) and checksum-verified GraalVM 25.5.5-elide.28.
 
 The three workloads ran sequentially, with no other significant load observed on the host:
 
@@ -20,7 +20,7 @@ Every [paired performance gate](../../../../docs/benchmarking.md#paired-performa
 - **Scalar boundary comparison** (`docs/charts/svm-boundaries.svg`): [raw samples](../../baselines/scalar-2026-11-10-linux-x86_64.json) · [report](../../baselines/scalar-2026-11-10-linux-x86_64.md). Workload `scalar-recurrence-v3`, five processes per case, 1,000,000 calls per sample. The four direct SVM normal/leaf cases enforced zero measured Java heap bytes.
 - **Truffle native cells** (`docs/charts/truffle-cells.svg`): [raw samples](../../../cells/baselines/unclemax-linux-x86_64-2026-11-10.json) · [report](../../../cells/baselines/unclemax-linux-x86_64-2026-11-10.md). Every measured sample ran in runtime-compiled code.
 
-All three build records verify against `4f88a77`'s sources, and each records an empty dirty state. One hashed file changed after the run: `benchmarks/cells/chart.py` gained the FFM cell row. It takes no part in building or measuring.
+All three build records verify against `0e81866`'s sources, and each records an empty dirty state. The first floor measurement ran while another workload loaded the host (process ranges several times wider than usual), so `mise run bench:floor` was repeated on the same build once the one-minute load average fell below 1; the checked-in floor samples are that repeat.
 
 ## Machine code
 
