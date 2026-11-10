@@ -197,6 +197,15 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot be sent between threads safely", rejected.stderr)
+        # A wrapper that passes a pointer through cannot vouch for it, so only that call is unsafe.
+        os.environ["SEAM_GENERATED"] = str(generated)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let mut output = [0u8; 1]; let _ = seam::ownership::checksum(&output); '
+            'let _ = seam::ownership::transfer(&[], &mut output, core::ptr::null_mut()); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(rejected.stderr.count("error[E0133]"), 1, rejected.stderr)
+        self.assertIn("call to unsafe function `transfer` is unsafe", rejected.stderr)
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():

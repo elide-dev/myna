@@ -6,7 +6,7 @@ import java.lang.foreign.Arena;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class JniMain {
-  private static native boolean nativeErrors(ByteBuffer heap);
+  private static native boolean nativeErrors(ByteBuffer heap, ByteBuffer direct);
   public static void main(String[] args) throws InterruptedException {
     if (NativeApiJNI.liveCount() != 0) throw new AssertionError("initial allocations");
     long ticket = NativeApiJNI.ticketCreate();
@@ -27,13 +27,52 @@ public final class JniMain {
       NativeApiJNI.increment(bytes.asReadOnlyBuffer());
       throw new AssertionError("accepted read-only buffer");
     } catch (IllegalArgumentException expected) { }
-    if (!nativeErrors(ByteBuffer.allocate(1))) throw new AssertionError("JNI pending exceptions");
+    if (!nativeErrors(ByteBuffer.allocate(1), ByteBuffer.allocateDirect(1))) throw new AssertionError("JNI pending exceptions");
     try {
       NativeApiJNI.checksum(ByteBuffer.allocate(1));
       throw new AssertionError("accepted heap buffer");
     } catch (IllegalArgumentException expected) { }
     verifyArenaBuffers();
+    verifySeveralBuffers();
     System.out.println("Static JNI scalar, ownership and direct buffer calls passed");
+  }
+
+  /** Two direct buffers with lengths of their own beside a raw address that passes through. */
+  private static void verifySeveralBuffers() {
+    try (var arena = Arena.ofConfined()) {
+      var copied = arena.allocate(java.lang.foreign.ValueLayout.JAVA_LONG);
+      var source = ByteBuffer.allocateDirect(6);
+      source.put(new byte[] {99, 1, 2, 3, 4, 99}).position(1).limit(5);
+      var target = ByteBuffer.allocateDirect(4);
+      target.position(1);
+      // Only the remaining ranges are lent, and neither position moves.
+      if (NativeApiJNI.transfer(source.asReadOnlyBuffer(), target, copied.address()) != 6
+          || copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 3)
+        throw new AssertionError("transfer");
+      if (target.get(0) != 0 || target.get(1) != 1 || target.get(3) != 3) throw new AssertionError("transferred bytes");
+      if (source.position() != 1 || target.position() != 1) throw new AssertionError("positions");
+      if (NativeApiJNI.transfer(source, target, 0) != 6) throw new AssertionError("null pass-through");
+      // Either buffer may be empty.
+      copied.set(java.lang.foreign.ValueLayout.JAVA_LONG, 0, -1);
+      target.position(4);
+      if (NativeApiJNI.transfer(source, target, copied.address()) != 0
+          || copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 0)
+        throw new AssertionError("empty output");
+      target.position(1);
+      source.position(5);
+      if (NativeApiJNI.transfer(source, target, copied.address()) != 0) throw new AssertionError("empty input");
+      source.position(1);
+      // Every buffer is checked before the native method is entered.
+      rejects(IllegalArgumentException.class, () -> NativeApiJNI.transfer(source, target.asReadOnlyBuffer(), copied.address()));
+      rejects(IllegalArgumentException.class, () -> NativeApiJNI.transfer(ByteBuffer.allocate(1), target, copied.address()));
+      rejects(IllegalArgumentException.class, () -> NativeApiJNI.transfer(source, ByteBuffer.allocate(1), copied.address()));
+      ByteBuffer closed;
+      try (var inner = Arena.ofConfined()) { closed = inner.allocate(1).asByteBuffer(); }
+      rejects(IllegalStateException.class, () -> NativeApiJNI.transfer(closed, target, copied.address()));
+      rejects(IllegalStateException.class, () -> NativeApiJNI.transfer(source, closed, copied.address()));
+      if (copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 0 || target.get(1) != 1)
+        throw new AssertionError("a rejected transfer reached native code");
+    }
   }
 
   private static void rejects(Class<? extends Throwable> expected, Runnable action) {

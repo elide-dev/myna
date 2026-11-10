@@ -124,6 +124,17 @@ public final class CellsMain {
         Borrow after = Borrow.ofString("probe", true);
         if (after.address() != base) throw new AssertionError("scratch stack unbalanced after compiled pair calls");
         after.release();
+        // Two declared borrows on one import, both copied onto the scratch stack and the writable
+        // one copied back, from compiled code: the stack is balanced afterwards as well.
+        byte[] source = new byte[64];
+        java.util.Arrays.fill(source, (byte) 2);
+        byte[] sink = new byte[48];
+        compiled("transfer", new Probe(new CellApiTruffle.transfer_Cell()).function(),
+            i -> new Object[] {new HeapBytes(source, false), new HeapBytes(sink, true), NativePointer.NULL}, i -> 96L);
+        if (sink[0] != 2 || sink[47] != 2) throw new AssertionError("compiled transfer did not write its copy back");
+        Borrow balanced = Borrow.ofString("probe", true);
+        if (balanced.address() != base) throw new AssertionError("scratch stack unbalanced after compiled transfer calls");
+        balanced.release();
         // What a compiled call allocates: nothing for scalars, lent native memory and scratch
         // copies, and only the pin itself for a pinned heap array (never the borrow).
         var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
@@ -149,10 +160,27 @@ public final class CellsMain {
         allocates("sumBytes of a pinned heap array", new CellApiTruffle.sumBytes_Cell(), 32, large.length, pinned, (long) large.length, NativePointer.NULL);
         if (pinsPerCall < 16) throw new AssertionError("sumBytes did not pin its large heap array: " + pinsPerCall + " bytes per call");
         allocates("sumBytes of a copied heap array", new CellApiTruffle.sumBytes_Cell(), 0, 64 * 2, new HeapBytes(small, false), 64L, NativePointer.NULL);
+        // Two declared borrows beside a pointer: lending native memory both ways and copying both
+        // heap arrays allocate nothing, and two pinned arrays allocate their two pins.
+        java.lang.foreign.MemorySegment written = java.lang.foreign.Arena.global().allocate(64);
+        java.lang.foreign.MemorySegment copied = java.lang.foreign.Arena.global().allocate(8);
+        allocates("transfer between native buffers", new CellApiTruffle.transfer_Cell(), 0, 64 * 3,
+            NativeBytes.of(lent, false), NativeBytes.of(written, true), NativePointer.of(copied.address()));
+        if (written.get(java.lang.foreign.ValueLayout.JAVA_BYTE, 63) != 3 || copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 64)
+          throw new AssertionError("transfer between native buffers did not write in place");
+        allocates("transfer between copied heap arrays", new CellApiTruffle.transfer_Cell(), 0, 64 * 2,
+            new HeapBytes(small, false), new HeapBytes(new byte[64], true), NativePointer.NULL);
+        allocates("transfer between pinned heap arrays", new CellApiTruffle.transfer_Cell(), 64, large.length,
+            pinned, new HeapBytes(new byte[large.length], true), NativePointer.NULL);
+        if (pinsPerCall < 32) throw new AssertionError("transfer did not pin both large heap arrays: " + pinsPerCall + " bytes per call");
         // The static invoke entries take native carriers and raw addresses: from host code, which
         // is compiled ahead of time and scalar-replaces nothing, a call allocates nothing.
         if (CellApiTruffle.add_Cell.invoke(2, 3) != 5) throw new AssertionError("invoke add");
         if (CellApiTruffle.lowByte_Cell.invoke(0x1ffL) != 0xff) throw new AssertionError("invoke lowByte");
+        // Every borrowed length is an explicit argument of invoke, in the binding's own order.
+        copied.set(java.lang.foreign.ValueLayout.JAVA_LONG, 0, -1);
+        if (CellApiTruffle.transfer_Cell.invoke(lent.address(), 64, written.address(), 16, copied.address()) != 16 * 3
+            || copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 16) throw new AssertionError("invoke transfer");
         long hostThread = Thread.currentThread().threadId();
         long hostBefore = bean.getThreadAllocatedBytes(hostThread);
         long hostSum = 0;

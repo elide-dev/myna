@@ -22,7 +22,16 @@ uint64_t cells_checksum(const uint8_t *bytes, uint64_t count) {
   return sum;
 }
 void cells_fill(uint8_t *bytes, uint32_t count, uint8_t value) { memset(bytes, value, count); }
-// A byte buffer with an explicit count beside a second pointer, which a borrow cannot declare.
+// Two borrowed buffers with lengths of their own beside a pointer that is not a buffer: copies what
+// fits, stores how many bytes that was through copied when it is non-null, and returns their sum.
+uint64_t cells_transfer(const uint8_t *input, uint64_t count, uint8_t *output, uint32_t capacity, int64_t *copied) {
+  uint64_t fits = count < capacity ? count : capacity;
+  uint64_t sum = 0;
+  for (uint64_t i = 0; i < fits; i++) { output[i] = input[i]; sum += input[i]; }
+  if (copied) *copied = (int64_t)fits;
+  return sum;
+}
+// A byte buffer whose count stays an explicit argument, beside a second pointer.
 uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bias) {
   uint64_t sum = bias ? (uint64_t)*bias : 0;
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];

@@ -34,10 +34,36 @@ public final class FfmBindingMain {
         var closed = closedArena.allocate(1);
         closedArena.close();
         rejects(IllegalStateException.class, () -> binding.checksum(closed));
+        // Two segments with lengths of their own beside a pointer that passes through unchanged.
+        var target = memory.allocate(2);
+        var copied = memory.allocate(ValueLayout.JAVA_LONG);
+        copied.set(ValueLayout.JAVA_LONG, 0, -1);
+        if (binding.transfer(bytes.asReadOnly(), target, copied) != 5 || copied.get(ValueLayout.JAVA_LONG, 0) != 2
+            || target.get(ValueLayout.JAVA_BYTE, 0) != 2 || target.get(ValueLayout.JAVA_BYTE, 1) != 3)
+          throw new AssertionError("transfer");
+        if (binding.transfer(bytes, target, MemorySegment.NULL) != 5) throw new AssertionError("null pass-through");
+        // Either buffer may be empty, at a null address or not; the other is still borrowed.
+        if (binding.transfer(MemorySegment.NULL, target, copied) != 0 || copied.get(ValueLayout.JAVA_LONG, 0) != 0)
+          throw new AssertionError("empty input");
+        copied.set(ValueLayout.JAVA_LONG, 0, -1);
+        if (binding.transfer(bytes, target.asSlice(2, 0), copied) != 0 || copied.get(ValueLayout.JAVA_LONG, 0) != 0)
+          throw new AssertionError("empty output");
+        if (binding.transfer(MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL) != 0)
+          throw new AssertionError("both empty");
+        // Every buffer is validated, whichever position it has.
+        rejects(IllegalArgumentException.class, () -> binding.transfer(bytes, target.asReadOnly(), copied));
+        rejects(IllegalArgumentException.class, () -> binding.transfer(MemorySegment.ofArray(new byte[1]), target, copied));
+        rejects(IllegalArgumentException.class, () -> binding.transfer(bytes, MemorySegment.ofArray(new byte[1]), copied));
+        rejects(IllegalArgumentException.class, () -> binding.transfer(bytes, MemorySegment.NULL.reinterpret(1), copied));
+        rejects(IllegalStateException.class, () -> binding.transfer(closed, target, copied));
+        rejects(IllegalStateException.class, () -> binding.transfer(bytes, closed, copied));
+        if (copied.get(ValueLayout.JAVA_LONG, 0) != 0 || target.get(ValueLayout.JAVA_BYTE, 0) != 2)
+          throw new AssertionError("a rejected transfer reached native code");
         var failure = new AtomicReference<Throwable>();
         var thread = new Thread(() -> {
           try {
             rejects(WrongThreadException.class, () -> binding.checksum(bytes));
+            rejects(WrongThreadException.class, () -> binding.transfer(bytes, target, copied));
             rejects(WrongThreadException.class, () -> binding.liveCount());
           } catch (Throwable error) { failure.set(error); }
         });

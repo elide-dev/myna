@@ -39,6 +39,19 @@ import {name} symbol={symbol} return=u64 error=no_failure nounwind=true@explicit
   param count type=u64
 end
 """)
+            # Two buffers per call: each has locals of its own, named after its position.
+            for symbol in ("length0", "pointer0", "empty0", "length2", "pointer2", "empty2", "arg2", "arg4"):
+                name = "pair" + symbol.capitalize()
+                definitions.append(f"""borrow {name} bytes length=count lifetime=call
+borrow {name} other length=size lifetime=call
+import {name} symbol={symbol} return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param other type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param size type=u32
+  param extra type=ptr<void>
+end
+""")
             definitions.append("""struct Record size=8 align=8
   field value type=i64 offset=0
 end

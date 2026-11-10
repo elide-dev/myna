@@ -6,7 +6,7 @@ public final class FfmCellsMain {
   public static void main(String[] args) throws Exception {
     System.load(args[0]);
     CellChecks.run(CellApiTruffle::function);
-    if (CellApiTruffle.CELLS.length != 17) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
+    if (CellApiTruffle.CELLS.length != 18) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
     System.out.println("Truffle FFM cells passed");
   }
 }
