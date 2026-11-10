@@ -16,7 +16,7 @@ import org.graalvm.word.PointerBase;
 
 public final class CellApi {
     private CellApi() {}
-    public static final String ABI_FINGERPRINT = "2b4389ad6fde449a13ee85cb34ad63eb53c858805ec69f093563bc58520bbf8f";
+    public static final String ABI_FINGERPRINT = "a1fa0ef720a82cb24c5674166c7abde50bf9f209acb1437b0064038350e307a3";
     public static final int BINDING_ABI_VERSION = 2;
     public interface add_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
