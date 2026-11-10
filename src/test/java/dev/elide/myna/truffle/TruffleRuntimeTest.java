@@ -1010,7 +1010,11 @@ class TruffleRuntimeTest {
       String huge = "a".repeat((int) Borrow.Scratch.LARGEST);
       Borrow outside = Borrow.ofString(huge, true);
       assertEquals(huge.length(), outside.length());
-      assertTrue(outside.address() < base || outside.address() >= base + Borrow.Scratch.LIMIT);
+      // Where an arena lands is the allocator's business; what matters is that the stack did
+      // not move: the next push starts where it would have without the oversize text.
+      Borrow beside = Borrow.ofString("p", true);
+      assertEquals(base + 16, beside.address());
+      beside.release();
       outside.release();
       ascii.release();
       // A stack with no room left: the text still lends, from an arena.
