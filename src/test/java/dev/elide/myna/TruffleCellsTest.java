@@ -297,14 +297,26 @@ class TruffleCellsTest {
                         "truffle_cells=true truffle_backend=ffm truffle_coercion=wrap"))
             .get("CellApiTruffle.java");
     assertTrue(truffle.contains("every cell calls CellApiFFM."));
-    assertTrue(truffle.contains("return CellApiFFM.add(value_left, value_right);"));
-    assertTrue(truffle.contains("} catch (Throwable failure) {"));
-    assertTrue(truffle.contains("throw failed(failure);"));
+    // The downcall sits behind a boundary: the FFM bindings initialize at run time, so a cell that
+    // called them from its own body could not be compiled at run time at all.
+    assertTrue(
+        truffle.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static int call(int a0, int a1) {\n"
+                + "            try {\n"
+                + "                return CellApiFFM.add(a0, a1);\n"
+                + "            } catch (Throwable failure) {\n"
+                + "                throw failed(failure);\n"
+                + "            }\n"
+                + "        }\n"));
+    assertTrue(truffle.contains("return call(value_left, value_right);"));
+    assertFalse(truffle.contains("return CellApiFFM.add(value_left, value_right);"));
     assertTrue(truffle.contains("CoercionPolicy.WRAP"));
     assertFalse(truffle.contains("CoercionPolicy.STRICT"));
-    assertTrue(
-        truffle.contains("CellApiFFM.poke(MemorySegment.ofAddress(address_cell), value_value);"));
-    assertTrue(truffle.contains("long created = CellApiFFM.counterCreate(value_start).address();"));
+    assertTrue(truffle.contains("CellApiFFM.poke(MemorySegment.ofAddress(a0), a1);"));
+    assertTrue(truffle.contains("call(address_cell, value_value);"));
+    assertTrue(truffle.contains("return CellApiFFM.counterCreate(a0).address();"));
+    assertTrue(truffle.contains("long created = call(value_start);"));
     assertTrue(
         truffle.contains(
             "DESTRUCTOR = address -> { try {"
@@ -315,8 +327,8 @@ class TruffleCellsTest {
         truffle.contains(
             "return NativeCellException.of(null, \"native call failed: \", failure);"));
     assertFalse(truffle.contains("WordFactory"));
-    assertFalse(
-        truffle.contains("TruffleBoundary"), "boundaries apply to Native Image transitions only");
+    // Every FFM call is behind a boundary, leaf or not, whatever the transition mode.
+    assertFalse(truffle.contains("return CellApiFFM.sleepyAdd(value_"));
     String empty =
         generate(
                 MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
@@ -363,8 +375,12 @@ class TruffleCellsTest {
                     .toString()
                     .replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
             .get("MynaTruffle.java");
-    assertTrue(ffm.contains("return Carriers.pointer(MynaFFM.r_ptr().address());"));
-    assertTrue(ffm.contains("MynaFFM.r_void();\n                return Carriers.none();"));
+    assertTrue(ffm.contains("return MynaFFM.r_ptr().address();"));
+    assertTrue(ffm.contains("return Carriers.pointer(call());"));
+    assertTrue(
+        ffm.contains(
+            "                MynaFFM.r_void();\n            } catch (Throwable failure) {"));
+    assertTrue(ffm.contains("call();\n            return Carriers.none();"));
   }
 
   /**
@@ -444,7 +460,8 @@ class TruffleCellsTest {
             "new IntegerCoercion(\"p_char\", \"c\", 8, true, CoercionPolicy.STRICT)"),
         "FFM cells on AAPCS64 Linux: char coerces as u8");
     assertTrue(
-        unsignedFfm.contains("return Carriers.u8(MynaFFM.r_char());"),
+        unsignedFfm.contains("return MynaFFM.r_char();")
+            && unsignedFfm.contains("return Carriers.u8(call());"),
         "FFM cells on AAPCS64 Linux: char return masks to 0..255");
   }
 
@@ -665,9 +682,12 @@ class TruffleCellsTest {
     assertTrue(
         fill.contains(
             "int length_bytes = Carriers.length32(borrow_bytes.length(), true, this);\n"
-                + "                try {\n"
-                + "                   "
-                + " MynaFFM.fill(MemorySegment.ofAddress(borrow_bytes.address()), length_bytes);"));
+                + "                call(borrow_bytes.address(), length_bytes);"));
+    assertTrue(
+        fill.contains(
+            "            try {\n"
+                + "                MynaFFM.fill(MemorySegment.ofAddress(a0), a1);\n"
+                + "            } catch (Throwable failure) {"));
   }
 
   @Test

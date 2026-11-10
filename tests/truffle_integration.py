@@ -85,13 +85,38 @@ class TruffleIntegrationTests(unittest.TestCase):
                                        "nativeimage", "word", "jniutils", "nativebridge"))
         # Direct stub calls (elide-dev/graal#196) and isolate-compiled code installation (#197) both
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
-        native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
-                     # The generated properties cover the cells; the probe is the consumer's own node class.
-                     "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd",
-                     "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
-                     f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
+        build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
+                             # The generated properties cover the cells; the probes are the consumer's own node classes.
+                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat",
+                             "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
+                             "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
+                             f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
+        self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)
         self.assertIn("Truffle cells compiled and passed", result.stdout)
+
+    def assert_cells_are_runtime_compilable(self, log):
+        """Every method on a cell's compiled path must be available to partial evaluation.
+
+        Native Image leaves a method out of runtime compilation, and compiled code then calls it as
+        an opaque function, when it needs a class-initialization check: a static call or field read
+        of a class that initializes at run time. One such access in a coercion keeps its result (a
+        borrow) from being scalar-replaced; one in a cell body keeps the whole cell, argument array
+        and boxed carriers included, out of the compiled caller.
+        """
+        compilable = {line.split("%%")[0] for line in log.splitlines() if "%%R(" in line}
+        self.assertGreater(len(compilable), 100, "no runtime-compiled method listing in the build output")
+        # The listing discriminates: this method reads a run-time-initialized holder.
+        self.assertNotIn("dev.elide.myna.truffle.Borrow.pinThreshold", compilable)
+        cells = [line.split()[1] for line in (FIXTURE / "cells.seam").read_text().splitlines() if line.startswith("import ")]
+        self.assertGreater(len(cells), 10)
+        expected = [f"fixture.cells.CellApiTruffle${name}_Cell.execute" for name in cells]
+        expected += [f"dev.elide.myna.truffle.{method}" for method in (
+            "BytesCoercion.execute", "BytesCoercion.slow", "IntegerCoercion.execute", "PointerCoercion.execute",
+            "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
+            "Borrow.lendString", "Borrow.lendBuffer", "Borrow.release", "NativeCellRootNode.execute")]
+        missing = [method for method in expected if method not in compilable]
+        self.assertEqual([], missing, "excluded from runtime compilation")
 
 
 if __name__ == "__main__":

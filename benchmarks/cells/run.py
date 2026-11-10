@@ -41,7 +41,7 @@ SLAB_DELTA = 256 + 7 + 7 + 3 - 1 + 7 + 11 + 2
 # Pinning one heap array by hand (behind a boundary, and visible to partial evaluation) against the
 # cell, for a leaf and across a transition.
 PIN_SIZE = 256
-PINS = [f'{kind}-{PIN_SIZE}' for kind in ('hand-sum-pin', 'inline-sum-pin', 'direct-sum-step', 'glue-sum-step-native',
+PINS = [f'{kind}-{PIN_SIZE}' for kind in ('glue-sum-mixed', 'hand-sum-pin', 'inline-sum-pin', 'direct-sum-step', 'glue-sum-step-native',
                                           'glue-sum-step-pin', 'hand-sum-step-pin', 'inline-sum-step-pin')]
 BORROWS = [f'{kind}-{size}' for size in SIZES for kind in ('direct-sum', 'glue-sum-native', 'glue-sum-pin', 'glue-sum-copy')]
 CASES = SCALAR + SLAB + BORROWS + PINS
@@ -163,7 +163,7 @@ def measure(args):
             path = (logs / f'{fork}-{name}.jsonl').resolve(); path.unlink(missing_ok=True)
             count = iterations_for(name, args.iterations)
             options = [f'-Dmyna.bench.results={path}', f'-Dmyna.bench.library={ROOT / library}']
-            if '-pin-' in name: options.append('-Dmyna.truffle.pinThreshold=1')
+            if '-pin-' in name or '-mixed-' in name: options.append('-Dmyna.truffle.pinThreshold=1')
             if '-copy-' in name: options.append('-Dmyna.truffle.pinThreshold=2147483647')
             command = [WORK / 'svm', *options, name, count]
             print(f'{fork + 1}/{args.forks}: {name}', flush=True)

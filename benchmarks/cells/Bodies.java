@@ -80,6 +80,7 @@ public abstract class Bodies extends NativeCell {
         case "direct-sum" -> new DirectSum(name, size);
         case "glue-sum-native" -> new GlueSum(name, NativeBytes.of(nativePattern(size), false));
         case "glue-sum-pin", "glue-sum-copy" -> new GlueSum(name, new HeapBytes(pattern(size), false));
+        case "glue-sum-mixed" -> new MixedSum(name, size);
         case "hand-sum-pin" -> new HandSum(name, size, false);
         case "hand-sum-step-pin" -> new HandSum(name, size, true);
         case "inline-sum-pin" -> new InlineSum(name, size, false);
@@ -304,7 +305,9 @@ public abstract class Bodies extends NativeCell {
 
   static final class GlueSum extends Bodies {
     @Node.Child private NativeCell cell;
-    private final Object buffer;
+
+    // Deliberately not final: a guest value, which partial evaluation must not fold to a constant.
+    private Object buffer;
 
     GlueSum(String name, Object buffer) {
       this(name, new CellsTruffle.sum_Cell(), buffer);
@@ -319,6 +322,25 @@ public abstract class Bodies extends NativeCell {
     @Override
     long run(int count, long x, Object extra) {
       for (int i = 0; i < count; i++) x = (Long) cell.execute(new Object[] {buffer, x});
+      return x;
+    }
+  }
+
+  /** One call site that lends native memory and a pinned heap array alternately. */
+  static final class MixedSum extends Bodies {
+    @Node.Child private NativeCell cell = new CellsTruffle.sum_Cell();
+    private Object nativeBuffer;
+    private Object heapBuffer;
+
+    MixedSum(String name, int size) {
+      super(name);
+      this.nativeBuffer = NativeBytes.of(nativePattern(size), false);
+      this.heapBuffer = new HeapBytes(pattern(size), false);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = (Long) cell.execute(new Object[] {(i & 1) == 0 ? nativeBuffer : heapBuffer, x});
       return x;
     }
   }
@@ -421,7 +443,7 @@ public abstract class Bodies extends NativeCell {
 
   /** Hand-written pin, call and unpin behind one Truffle boundary, compiled ahead of time. */
   static final class HandSum extends Bodies {
-    private final byte[] array;
+    private byte[] array; // not final, like the cells' guest values
     private final boolean step;
 
     HandSum(String name, int size, boolean step) {
@@ -460,7 +482,7 @@ public abstract class Bodies extends NativeCell {
 
   /** The same pin, call and unpin visible to partial evaluation. */
   static final class InlineSum extends Bodies {
-    private final byte[] array;
+    private byte[] array; // not final, like the cells' guest values
     private final boolean step;
 
     InlineSum(String name, int size, boolean step) {
@@ -538,10 +560,12 @@ public abstract class Bodies extends NativeCell {
   /** Slab cells through consumer glue: ten guest values per call, native or heap byte buffers. */
   static final class GlueSlab extends Bodies {
     @Node.Child private NativeCell cell;
-    private final Object data;
-    private final Object aux;
-    private final Object context;
-    private final Object output;
+
+    // Not final: guest values, which partial evaluation must not fold to constants.
+    private Object data;
+    private Object aux;
+    private Object context;
+    private Object output;
 
     GlueSlab(String name, NativeCell cell, boolean heap) {
       super(name);
@@ -564,10 +588,12 @@ public abstract class Bodies extends NativeCell {
   static final class InteropSlab extends Bodies {
     @Node.Child private InteropLibrary interop = InteropLibrary.getFactory().createDispatched(1);
     private final NativeFunction function;
-    private final Object data = NativeBytes.of(nativePattern(SLAB_SIZE), false);
-    private final Object aux = NativeBytes.of(nativePattern(16), false);
-    private final Object context = NativePointer.of(nativePattern(16).address());
-    private final Object output = NativePointer.of(nativePattern(16).address());
+
+    // Not final: guest values, which partial evaluation must not fold to constants.
+    private Object data = NativeBytes.of(nativePattern(SLAB_SIZE), false);
+    private Object aux = NativeBytes.of(nativePattern(16), false);
+    private Object context = NativePointer.of(nativePattern(16).address());
+    private Object output = NativePointer.of(nativePattern(16).address());
 
     InteropSlab(String name, NativeFunction function) {
       super(name);

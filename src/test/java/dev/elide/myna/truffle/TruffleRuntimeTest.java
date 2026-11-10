@@ -844,7 +844,9 @@ class TruffleRuntimeTest {
     // Nulls and mismatches.
     assertEquals(0, nullable.execute(new ForeignNull()).address());
     assertEquals(0, nullable.execute(NativePointer.NULL).address());
-    assertSame(Borrow.none(), nullable.execute(new ForeignNull()));
+    Borrow lentNull = nullable.execute(new ForeignNull());
+    assertEquals(0, lentNull.address());
+    assertEquals(0, lentNull.length());
     assertEquals(
         "f: parameter text expects string, buffer or pointer, got Integer 1",
         assertThrows(NativeCellException.class, () -> cString.execute(1)).getMessage());
