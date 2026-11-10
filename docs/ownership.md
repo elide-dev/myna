@@ -63,9 +63,11 @@ import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true
 end
 ```
 
-`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid.
+`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid.
 
-Each buffer is a non-null borrowed `ptr<u8>` with `read` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. Additional `align`, `dereferenceable`, or `noalias` requirements on a buffer are rejected.
+Each buffer is a non-null borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. Additional `align`, `dereferenceable`, or `noalias` requirements on a buffer are rejected.
+
+A `write` buffer is a writable buffer, handled exactly like a `read_write` one by every wrapper: a mutable slice in Rust, a writable acquisition or segment in Java, a copy that is filled from the caller's bytes and written back in a Truffle cell. No wrapper relies on the callee not reading it, so the callee always sees the caller's initialized bytes, and the declaration needs no `writeonly` fact (an approved one remains an LLVM contract of its own).
 
 A function may declare several borrows, and its other parameters may be pointers:
 
@@ -75,7 +77,7 @@ borrow transfer output length=capacity lifetime=call
 import transfer symbol=buffer_transfer return=u64 error=no_failure nounwind=true@explicit_contract
   param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param count type=u64
-  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=u32
   param copied type=ptr<u64> nullable=true ownership=borrowed access=write
 end

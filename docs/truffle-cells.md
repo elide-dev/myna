@@ -43,10 +43,10 @@ One per-parameter fact refines an import's byte pointers:
 - `truffle_buffer=true@explicit_contract` on a `ptr<u8>`, `ptr<i8>` or `ptr<char>` parameter with a
   declared access says it is a byte buffer, not a C string. A `borrow` says that too and derives
   the length as well, beside any other pointer parameters, so prefer it for a non-null buffer with
-  a length parameter of its own. This fact is for the buffers a `borrow` cannot describe (nullable
-  or write-only ones, or an extent that is not one length parameter) and for counts the guest
-  should keep passing. Without either, such an input is treated as a C string: a heap buffer is
-  copied whole with a terminating NUL on every call and never pinned. With the
+  a length parameter of its own, whatever its access. This fact is for the buffers a `borrow`
+  cannot describe (nullable ones, or an extent that is not one length parameter) and for counts
+  the guest should keep passing. Without either, such an input is treated as a C string: a heap
+  buffer is copied whole with a terminating NUL on every call and never pinned. With the
   fact, the cell lends the bytes as they are: native memory in place, a heap array pinned when it
   reaches the pin threshold and copied without a terminator otherwise, and a string as its UTF-8
   bytes. The length stays an ordinary guest argument, so the guest, not the cell, vouches that it
@@ -173,14 +173,15 @@ borrow transfer output length=capacity lifetime=call
 import transfer symbol=cells_transfer return=u64 error=no_failure nounwind=true@explicit_contract
   param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param count type=u64
-  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=u32
   param copied type=ptr<i64> nullable=true ownership=borrowed access=write
 end
 ```
 
 The guest calls `transfer(input, output, copied)`: both lengths are derived, and the cell's arity
-is three. The other pointer keeps the coercion it would have without any borrow (an address here; a
+is three. A `write` buffer is a writable borrow like a `read_write` one: read-only buffers and
+strings are rejected, and a copy starts from the guest's bytes and is written back on release. The other pointer keeps the coercion it would have without any borrow (an address here; a
 C string or `truffle_buffer` bytes for a byte pointer with a declared access) and stays a guest
 argument under its own contract. `invoke` keeps all five binding parameters. The cell does not
 check that two buffers of a call are disjoint: lent native memory aliases and copies do not, and a
