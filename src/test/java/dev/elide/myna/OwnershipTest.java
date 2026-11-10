@@ -4,9 +4,11 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.serialize.SeamJson;
 import java.nio.file.*;
+import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -348,6 +350,85 @@ class OwnershipTest {
   }
 
   @Test
+  void writeOnlyBuffersAreWritableInEveryWrapper() throws Exception {
+    String writeOnly = TRANSFER.replace("access=read_write nocapture", "access=write nocapture");
+    assertNotEquals(TRANSFER, writeOnly);
+    var expected = Generator.generate(Dsl.parse(TRANSFER), true);
+    var actual = Generator.generate(Dsl.parse(writeOnly), true);
+    // The declared access is part of the descriptor, and so of the fingerprint.
+    assertTrue(actual.get("seam.json").contains("\"access\":\"WRITE\""));
+    String was = expected.get("seam.abi").strip();
+    String now = actual.get("seam.abi").strip();
+    assertNotEquals(was, now);
+    // Every wrapper treats the buffer exactly as it treats a read/write one: nothing relies on
+    // the callee not reading it. Only the fingerprint constant differs.
+    for (String file : List.of("ApiOwnership.java", "ApiFFM.java", "Api.java"))
+      assertEquals(expected.get(file), actual.get(file).replace(now, was), file);
+    String rust = actual.get("seam.rs");
+    assertEquals(
+        expected.get("seam.rs").substring(expected.get("seam.rs").indexOf("pub mod ownership")),
+        rust.substring(rust.indexOf("pub mod ownership")));
+    assertTrue(rust.contains("output: &mut [u8]"), rust);
+    assertTrue(rust.contains("output.as_mut_ptr()"), rust);
+    String java = actual.get("ApiOwnership.java");
+    assertTrue(java.contains("arg4.acquire(true);"), java);
+    assertTrue(java.contains("arg4.release(true);"), java);
+    assertTrue(
+        actual
+            .get("ApiFFM.java")
+            .contains(
+                "if (arg4.isReadOnly()) throw new IllegalArgumentException(\"writable segment"
+                    + " required\");"));
+    var jniExpected = StaticJni.generate(Dsl.parse(TRANSFER));
+    var jni = StaticJni.generate(Dsl.parse(writeOnly));
+    for (String file : List.of("ApiJNI.java", "seam-jni.c", "seam-jni.h", "seam-jni.rs"))
+      assertEquals(jniExpected.get(file), jni.get(file).replace(now, was), file);
+    assertTrue(
+        jni.get("ApiJNI.java")
+            .contains(
+                "if (arg4.isReadOnly()) throw new IllegalArgumentException(\"writable buffer"
+                    + " required\");"));
+    // Cells: a writable borrow, written back when it was copied.
+    String module = " java_class=Api";
+    var cellsExpected =
+        Generator.generate(
+            Dsl.parse(TRANSFER.replace(module, module + " truffle_cells=true")), true);
+    var cells =
+        Generator.generate(
+            Dsl.parse(writeOnly.replace(module, module + " truffle_cells=true")), true);
+    assertEquals(
+        cellsExpected.get("ApiTruffle.java"),
+        cells
+            .get("ApiTruffle.java")
+            .replace(cells.get("seam.abi").strip(), cellsExpected.get("seam.abi").strip()));
+    assertTrue(
+        cells
+            .get("ApiTruffle.java")
+            .contains("new BytesCoercion(\"transfer\", \"output\", false, true, true);"));
+    // An approved writeonly fact is an optimizer contract of its own; the wrappers ignore it.
+    var declared =
+        Generator.generate(
+            Dsl.parse(
+                writeOnly.replace(
+                    "access=write nocapture=true@explicit_contract",
+                    "access=write nocapture=true@explicit_contract"
+                        + " writeonly=true@explicit_contract")),
+            true);
+    assertEquals(
+        java, declared.get("ApiOwnership.java"), "the writeonly fact does not change a wrapper");
+    assertTrue(declared.get("seam.ll").contains("writeonly"), declared.get("seam.ll"));
+    assertFalse(actual.get("seam.ll").contains("writeonly"), actual.get("seam.ll"));
+    // One write-only buffer on its own, beside scalars: a safe Rust fn over a mutable slice.
+    String single =
+        Generator.generate(
+                Dsl.parse(
+                    source().replace("access=read_write nocapture", "access=write nocapture")),
+                true)
+            .get("seam.rs");
+    assertTrue(single.contains("    pub fn increment(bytes: &mut [u8]) {\n"), single);
+  }
+
+  @Test
   void borrowDeclarationOrderDoesNotChangeTheDescriptor() {
     var declared = Dsl.parse(TRANSFER);
     var swapped =
@@ -422,8 +503,16 @@ class OwnershipTest {
             "call buffer requires borrowed ptr<u8>"),
         Arguments.of(
             output,
-            output.replace("access=read_write", "access=write"),
-            "call buffer requires read or read_write access"),
+            output.replace("access=read_write", "access=none"),
+            "call buffer requires read, write or read_write access"),
+        Arguments.of(
+            output,
+            output.replace(" access=read_write", ""),
+            "call buffer requires read, write or read_write access"),
+        Arguments.of(
+            output,
+            output.replace("access=read_write", "access=write readonly=true@explicit_contract"),
+            "readonly contradicts access"),
         Arguments.of(
             output,
             output.replace(" nocapture=true@explicit_contract", ""),

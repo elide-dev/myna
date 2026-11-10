@@ -53,8 +53,12 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
         .orElseThrow();
   }
 
+  /**
+   * Whether the callee may write the buffer. Write-only access counts exactly like read/write: a
+   * wrapper never assumes the callee does not read the bytes it is given.
+   */
   boolean writable(BufferBorrow b) {
-    return parameter(b.parameter()).access() == Access.READ_WRITE;
+    return parameter(b.parameter()).access() != Access.READ;
   }
 
   /** Whether the length travels in a 32-bit carrier, so the byte count needs a range check. */

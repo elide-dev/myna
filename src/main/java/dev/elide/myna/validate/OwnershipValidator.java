@@ -123,9 +123,12 @@ final class OwnershipValidator {
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
           "call buffer requires borrowed ptr<u8>");
       require(!p.nullable(), "call buffer requires non-null ptr<u8>");
+      // A write buffer is a writable one: no wrapper relies on the callee not reading it.
       require(
-          p.access() == Access.READ || p.access() == Access.READ_WRITE,
-          "call buffer requires read or read_write access");
+          p.access() == Access.READ
+              || p.access() == Access.WRITE
+              || p.access() == Access.READ_WRITE,
+          "call buffer requires read, write or read_write access");
       require(
           Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(length.type()),
           "buffer length must be a 32/64-bit integer (bytes)");

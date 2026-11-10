@@ -186,7 +186,7 @@ public final class StaticJni {
           .append("        if (!")
           .append(name)
           .append(".isDirect()) throw new IllegalArgumentException(\"direct buffer required\");\n");
-      if (p.access() == Access.READ_WRITE)
+      if (p.access() != Access.READ)
         checks
             .append("        if (")
             .append(name)
