@@ -156,10 +156,10 @@ public final class NativeResource implements TruffleObject {
   }
 
   /**
-   * A resource that lives in memory a guest value provides: a struct initialized in place.
+   * A resource that lives in memory the runtime owns: a struct initialized in place.
    *
-   * @param kept the guest value whose memory the resource lives in; it stays reachable until the
-   *     resource is released. Whether that memory stays valid is still up to whoever owns it.
+   * @param kept what must stay reachable until the resource is released: the {@link NativeStruct}
+   *     the resource lives in
    */
   public NativeResource(
       String type,

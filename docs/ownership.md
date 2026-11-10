@@ -152,7 +152,8 @@ create's: on a listed status it has written a live resource and transferred sole
 on any other it has left nothing to release.
 
 Only Truffle cells generate an owner for these forms, so the module must set `truffle_cells=true`
-and the create must have a cell. The Native Image, FFM and Rust ownership APIs do not wrap them;
+and the create must have a cell. A cell does not let the create write into guest memory: it
+passes a struct the runtime owns and copies the result to the buffer the guest supplied. The Native Image, FFM and Rust ownership APIs do not wrap them;
 their raw bindings, and any call-buffer wrappers the create declares, are generated as for any
 other import. See [Truffle native cells](truffle-cells.md#ownership) for what the cell does.
 

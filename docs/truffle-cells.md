@@ -254,16 +254,27 @@ a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCl
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
 owners refuse it. These are the same rules as the existing Native Image ownership API.
 
-A create declared with a `handle` keeps its C shape for the guest: the guest passes the struct
-the create writes through, and can read that struct's other fields afterwards. The cell compares
-the result with the statuses the resource lists as `success`, reads the resource pointer from the
-handle field (or takes the struct's own address, for a result initialized in place) and returns
-its owner. Any other result raises `NativeStatusException`, a `NativeCellException` that carries
-the result: `status()` for host code, a readable `status` member for guest code, on an ordinary
-runtime error. Success with a null handle is a plain `NativeCellException`. A struct initialized
-in place stays reachable for as long as its owner is open, and a struct that already has an owner
-cannot be initialized again. The cell's static `invoke` is unchanged by any of this: it returns
-the status and takes the struct's address, exactly as the C function does.
+A create declared with a `handle` keeps its C shape for the guest: the guest passes a buffer for
+the struct the create writes through, and reads that struct's fields from it afterwards. The
+native side never sees that buffer. The cell allocates the struct in memory the runtime owns
+(zeroed, of the declared size), passes that, and copies it to the guest's buffer after the call,
+on failure too, since the struct may say why. It compares the result with the statuses the
+resource lists as `success`, reads the resource pointer from the handle field of its own struct
+(or takes that struct's address, for a result initialized in place) and returns the owner.
+
+Keeping the struct out of the guest's reach is what keeps ownership sound. The handle cannot be
+replaced between the create writing it and the cell adopting it. A buffer too small for the
+struct, a read-only one, a bare pointer, or another resource's owner is refused before the create
+is called. A resource initialized in place lives in the runtime's struct until its destroy, so
+guest code cannot initialize one struct twice, overwrite a live resource, or free the memory
+under it; passing the same buffer again simply makes a second resource. What the guest's buffer
+holds is a copy as the create left it.
+
+Any result not listed raises `NativeStatusException`, a `NativeCellException` that carries the
+result: `status()` for host code, a readable `status` member for guest code, on an ordinary
+runtime error. Success with a null handle is a plain `NativeCellException`. The cell's static
+`invoke` is unchanged by any of this: it returns the status and takes the struct's address,
+exactly as the C function does, and the caller owns that memory.
 
 A create may take pointers as well as scalars, coerced like any other cell's: a pointer to plain
 memory, a byte buffer, or another resource's owner passed where its handle is expected. The native

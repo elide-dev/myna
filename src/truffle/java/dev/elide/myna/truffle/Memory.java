@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteOrder;
@@ -63,17 +62,6 @@ final class Memory {
   static void putLong(long address, MemorySegment s, long offset, long value) {
     if (IMAGE) ImageMemory.putLong(address, offset, value);
     else s.set(LONG_LE, offset, value);
-  }
-
-  /** The pointer-sized word at {@code address}, which the caller vouches for. */
-  static long getAddress(long address) {
-    return IMAGE ? ImageMemory.getLong(address, 0) : hostAddress(address);
-  }
-
-  /** HotSpot reads through a segment, which runtime compilation must not reach. */
-  @TruffleBoundary
-  private static long hostAddress(long address) {
-    return MemorySegment.ofAddress(address).reinterpret(8).get(LONG_LE, 0);
   }
 
   static short getShort(MemorySegment s, ByteOrder order, long offset) {

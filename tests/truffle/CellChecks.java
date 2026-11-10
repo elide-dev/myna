@@ -232,7 +232,8 @@ public final class CellChecks {
       check(call(cells, "counterLive").equals(0L), "both destroyed");
     }
     // Creates that report a status and write the resource through a parameter. The guest passes
-    // the struct, as in C, and still reads its other fields.
+    // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
+    // native side writes into memory the runtime owns and the buffer receives a copy.
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment result = arena.allocate(24);
       Object out = NativeBytes.of(result, true);
@@ -252,6 +253,7 @@ public final class CellChecks {
         throw new AssertionError("a failed create returned");
       } catch (NativeStatusException failed) {
         check(failed.status() == 7, "status carried");
+        check(result.get(ValueLayout.JAVA_LONG, 0) == 0, "the struct is copied on failure too");
         check(INTEROP.isException(failed), "an ordinary guest error");
         check(INTEROP.readMember(failed, "status").equals(7L), "status member");
         check(failed.getMessage().equals("layoutCompile created no resource: status 7"), failed.getMessage());
@@ -275,11 +277,30 @@ public final class CellChecks {
       Object owned = call(cells, "viewInit", new HeapBytes(new byte[] {1, 2, 3}, false), memory);
       check(owned instanceof NativeResource r && r.type().equals("View"), "view owner");
       check(call(cells, "viewSum", owned).equals(6L), "view usable through its owner");
-      check(view.get(ValueLayout.JAVA_LONG, 0) == 6, "the guest's struct is the resource");
-      check(view.get(ValueLayout.JAVA_LONG, 8) != 0, "native state inside it");
+      check(view.get(ValueLayout.JAVA_LONG, 0) == 6, "the guest reads the struct's fields");
+      check(view.get(ValueLayout.JAVA_LONG, 8) != 0, "native state copied with them");
       check(call(cells, "counterLive").equals(1L), "one live view");
-      // A struct that has an owner cannot be initialized again.
+      // The resource does not live in the guest's buffer, so nothing the guest does with that
+      // buffer reaches it: overwriting the copy changes nothing, and passing the same buffer
+      // again makes a second, independent resource instead of a second owner of the first.
+      view.fill((byte) 0x5a);
+      check(call(cells, "viewSum", owned).equals(6L), "the resource is out of the guest's reach");
+      Object again = call(cells, "viewInit", new HeapBytes(new byte[] {7}, false), memory);
+      check(call(cells, "viewSum", again).equals(7L) && call(cells, "viewSum", owned).equals(6L), "independent resources");
+      check(call(cells, "counterLive").equals(2L), "two live views");
+      check(call(cells, "viewRelease", again) == NativeVoid.INSTANCE, "second view released");
+      // An owner is not memory for a new resource, and neither is a pointer without a size, a
+      // read-only buffer, or one too small for the struct: the create is not called for those.
       rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), owned);
+      rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), NativePointer.of(view.address()));
+      rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), NativeBytes.of(view, false));
+      rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), NativeBytes.of(view.asSlice(0, 15), true));
+      check(call(cells, "counterLive").equals(1L), "refused creates create nothing");
+      // A heap buffer takes the copy as well as native memory does.
+      byte[] heapView = new byte[16];
+      Object onHeap = call(cells, "viewInit", new HeapBytes(new byte[] {4, 4}, false), new HeapBytes(heapView, true));
+      check(heapView[0] == 8, "struct copied into a heap buffer");
+      check(call(cells, "viewRelease", onHeap) == NativeVoid.INSTANCE, "heap-buffered view released");
       try {
         call(cells, "viewInit", new HeapBytes(new byte[0], false), NativeBytes.of(arena.allocate(16), true));
         throw new AssertionError("a failed init returned");
@@ -287,7 +308,6 @@ public final class CellChecks {
         check(failed.status() == -1, "negative status carried");
       }
       check(call(cells, "viewRelease", owned) == NativeVoid.INSTANCE, "view released");
-      check(view.get(ValueLayout.JAVA_LONG, 8) == 0, "released through the struct's address");
       rejects(cells, "viewSum", owned);
       check(call(cells, "counterLive").equals(0L), "nothing left");
     }

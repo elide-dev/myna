@@ -33,11 +33,6 @@ public final class Carriers {
     return NativeVoid.INSTANCE;
   }
 
-  /** The pointer a native call wrote at {@code address}: a resource create's out handle. */
-  public static long readPointer(long address) {
-    return Memory.getAddress(address);
-  }
-
   /** A borrowed length for a 32-bit length parameter; the declared range is checked first. */
   public static int length32(long length, boolean unsigned, Node node) {
     if (length > (unsigned ? 4294967295L : 2147483647L)) {

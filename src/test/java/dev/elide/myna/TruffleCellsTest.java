@@ -789,12 +789,13 @@ class TruffleCellsTest {
   }
 
   /**
-   * A create with a handle keeps its C shape for the guest: the guest passes the struct, the cell
-   * compares the result with the listed statuses, reads the resource from where the handle says,
-   * and returns its owner. Anything else is a NativeStatusException.
+   * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
+   * create writes into a struct the runtime owns; the cell compares the result with the listed
+   * statuses, reads the resource from that struct and returns its owner, and the guest's buffer
+   * receives a copy. Anything else is a NativeStatusException.
    */
   @Test
-  void handleCreatesReadTheResourceTheCreateWrote() {
+  void handleCreatesWriteIntoMemoryTheRuntimeOwns() {
     String truffle = generate(OwnershipTest.HANDLES).get("ApiTruffle.java");
     // invoke keeps the raw shape: the status comes back and the caller supplies the struct.
     assertTrue(
@@ -805,76 +806,68 @@ class TruffleCellsTest {
                     }
             """),
         truffle);
-    // Through a field: every listed status is success, and the handle is read at its offset.
+    // Through a field: the guest's buffer is checked before the call and never written by it,
+    // every listed status is success, and the handle is read from the runtime's struct.
     assertTrue(
         truffle.contains(
             """
-                            Object hold = NativeResource.hold(arguments[1]);
-                            boolean adopted = false;
-                            try {
-                                int status = invoke(borrow_schema.address(), borrow_schema.length(), address_result);
-                                if (!(status == 0L || status == 2L)) throw NativeCellException.status("layoutCompile", status, this);
-                                long created = Carriers.readPointer(address_result + 8L);
-                                if (created == 0) throw NativeCellException.noResource("layoutCompile", this);
-                                NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), hold);
-                                adopted = true;
-                                return resource;
-                            } finally {
-                                if (!adopted) NativeResource.release(hold);
+                            NativeStruct out = NativeStruct.allocate(24L, arguments[1], "layoutCompile", "result", this);
+                            int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
+                            if (!(status == 0L || status == 2L)) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.status("layoutCompile", status, this);
                             }
+                            long created = out.pointerAt(8L);
+                            if (created == 0) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.noResource("layoutCompile", this);
+                            }
+                            NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
+                            out.copyTo(arguments[1], resource);
+                            return resource;
             """),
         truffle);
-    // In place, with no status: the struct is the resource, it must not already have an owner,
-    // and it stays reachable with the owner it gets.
+    // The handle parameter has no coercion of its own: it is not passed to the native side.
+    assertFalse(truffle.contains("coerce_result"), truffle);
+    assertFalse(truffle.contains("coerce_view"), truffle);
+    // In place, with no status: the resource is the runtime's struct, kept until its destroy.
     assertTrue(
         truffle.contains(
             """
-                        if (arguments[1] instanceof NativeResource) throw NativeCellException.of(this, "viewInit: parameter view expects memory for a new View, got an existing owner");
+                        NativeStruct out = NativeStruct.allocate(16L, arguments[1], "viewInit", "view", this);
+                        invoke(value_seed, out.address());
+                        long created = out.address();
+                        NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, null, out);
+                        out.copyTo(arguments[1], resource);
+                        return resource;
+            """),
+        truffle);
+    // A create that also takes another resource's handle holds it, around the same steps.
+    String held =
+        generate(
+                OwnershipTest.HANDLES.replace(
+                    "  param seed type=i64\n",
+                    "  param seed type=i64\n  param parent type=ptr<Layout> nullable=false"
+                        + " ownership=borrowed access=read\n"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        held.contains(
+            """
+                        NativeStruct out = NativeStruct.allocate(16L, arguments[2], "viewInit", "view", this);
                         Object hold = NativeResource.hold(arguments[1]);
                         boolean adopted = false;
                         try {
-                            invoke(value_seed, address_view);
-                            long created = address_view;
-                            NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, arguments[1]);
+                            invoke(value_seed, address_parent, out.address());
+                            long created = out.address();
+                            NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, out);
                             adopted = true;
+                            out.copyTo(arguments[2], resource);
                             return resource;
                         } finally {
                             if (!adopted) NativeResource.release(hold);
                         }
             """),
-        truffle);
-    // A field at offset zero needs no arithmetic, and a parameter the callee does not keep is
-    // not held: the create then builds its owner directly.
-    String first =
-        generate(
-                OwnershipTest.HANDLES
-                    .replace(
-                        "  field count type=u64 offset=0\n  field data type=ptr<Layout> offset=8\n",
-                        "  field data type=ptr<Layout> offset=0\n  field count type=u64 offset=8\n")
-                    .replace(
-                        "ptr<LayoutResult> nullable=false ownership=borrowed access=write",
-                        "ptr<LayoutResult> nullable=false ownership=borrowed access=write"
-                            + " nocapture=true@explicit_contract")
-                    .replace(
-                        "ptr<View> nullable=false ownership=borrowed access=read_write\n"
-                            + "end\n"
-                            + "import viewRelease",
-                        "ptr<View> nullable=false ownership=borrowed access=read_write"
-                            + " nocapture=true@explicit_contract\nend\nimport viewRelease"))
-            .get("ApiTruffle.java");
-    assertTrue(
-        first.contains(
-            """
-                            long created = Carriers.readPointer(address_result);
-                            if (created == 0) throw NativeCellException.noResource("layoutCompile", this);
-                            return new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
-            """),
-        first);
-    assertTrue(
-        first.contains(
-            "            return new NativeResource(\"View\", created, DESTRUCTOR, null, null,"
-                + " arguments[1]);\n"),
-        first);
+        held);
     // FFM cells: the same shape over the FFM binding.
     String ffm =
         generate(
@@ -886,7 +879,7 @@ class TruffleCellsTest {
             "                return ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"
                 + " MemorySegment.ofAddress(result));\n"),
         ffm);
-    assertTrue(ffm.contains("long created = Carriers.readPointer(address_result + 8L);"), ffm);
+    assertTrue(ffm.contains("long created = out.pointerAt(8L);"), ffm);
   }
 
   @Test
