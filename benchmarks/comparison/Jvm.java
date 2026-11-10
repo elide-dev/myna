@@ -15,6 +15,14 @@ public final class Jvm {
   static final MemorySegment libraryAddress;
   static final GeneratedFFM.LibraryBinding library;
   static final GeneratedFFM.CriticalLibraryBinding criticalLibrary;
+  // Handwritten counterparts of the generated library bindings: an object that owns a library's
+  // symbol segments in final fields, reached through a static, exactly as the bindings are.
+  static final class Library {
+    final MemorySegment address;
+    Library(MemorySegment address) { this.address = address; }
+  }
+  static final Library manualCriticalLibrary;
+  static final Library manualLibrary;
   static final class Unbound {
     static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(
         FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG));
@@ -40,6 +48,8 @@ public final class Jvm {
     SymbolLookup explicit = SymbolLookup.libraryLookup(Path.of(path), libraryArena);
     libraryAddress = explicit.find("myna_bench_step").orElseThrow();
     library = new GeneratedFFM.LibraryBinding(explicit);
+    manualCriticalLibrary = new Library(leafAddress);
+    manualLibrary = new Library(libraryAddress);
   }
   static long generatedFfm(int n, long x) throws Throwable {
     for (int i=0; i<n; ++i) x=GeneratedFFM.step(x); return x;
@@ -67,6 +77,12 @@ public final class Jvm {
   }
   static long generatedTypedCriticalFfm(int n, long x) throws Throwable {
     for (int i=0; i<n; ++i) x=criticalLibrary.leaf(x); return x;
+  }
+  static long manualInstanceCriticalFfm(int n, long x) throws Throwable {
+    for (int i=0; i<n; ++i) x=(long)CriticalUnbound.HANDLE.invokeExact(manualCriticalLibrary.address, x); return x;
+  }
+  static long manualInstanceLibraryFfm(int n, long x) throws Throwable {
+    for (int i=0; i<n; ++i) x=(long)Unbound.HANDLE.invokeExact(manualLibrary.address, x); return x;
   }
   // The default static entry: a binding ABI 2 leaf is a critical downcall.
   static long generatedStaticCriticalFfm(int n, long x) throws Throwable {
@@ -105,6 +121,12 @@ public final class Jvm {
   static final class GeneratedStaticCriticalFfm implements Measure.Loop {
     public long run(int n, long x) throws Throwable { return generatedStaticCriticalFfm(n, x); }
   }
+  static final class ManualInstanceCriticalFfm implements Measure.Loop {
+    public long run(int n, long x) throws Throwable { return manualInstanceCriticalFfm(n, x); }
+  }
+  static final class ManualInstanceLibraryFfm implements Measure.Loop {
+    public long run(int n, long x) throws Throwable { return manualInstanceLibraryFfm(n, x); }
+  }
   static final class Jni implements Measure.Loop {
     public long run(int n, long x) { return jni(n, x); }
   }
@@ -122,6 +144,8 @@ public final class Jvm {
       case "manual-unbound-critical-ffm" -> new ManualUnboundCriticalFfm();
       case "generated-typed-critical-ffm" -> new GeneratedTypedCriticalFfm();
       case "generated-static-critical-ffm" -> new GeneratedStaticCriticalFfm();
+      case "manual-instance-critical-ffm" -> new ManualInstanceCriticalFfm();
+      case "manual-instance-library-ffm" -> new ManualInstanceLibraryFfm();
       case "jni" -> new Jni();
       default -> throw new IllegalArgumentException(name);
     };

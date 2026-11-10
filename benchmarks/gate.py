@@ -31,9 +31,12 @@ PAIRS = {
         ('native', 'generated-leaf', 'manual-leaf', None, ''),
         ('native', 'generated-static-jni', 'manual-static-jni', None, ''),
         ('ffm-aot', 'generated-ffm', 'manual-ffm', None, ''),
-        ('ffm-aot', 'generated-library-ffm', 'manual-library-ffm', None, ''),
+        # A library binding is an object that owns its library's segments, so its matched
+        # handwritten form holds them in instance fields too. Myna's answer to a static handwritten
+        # handle is the static entry, gated below against the static handle.
+        ('ffm-aot', 'generated-library-ffm', 'manual-instance-library-ffm', None, ''),
         ('ffm-aot', 'generated-critical-ffm', 'manual-bound-critical-ffm', None, ''),
-        ('ffm-aot', 'generated-typed-critical-ffm', 'manual-unbound-critical-ffm', None, ''),
+        ('ffm-aot', 'generated-typed-critical-ffm', 'manual-instance-critical-ffm', None, ''),
         ('ffm-aot', 'generated-static-critical-ffm', 'manual-unbound-critical-ffm', None, ''),
     ],
     'floor': [

@@ -267,6 +267,14 @@ slower. A single outlier process can neither fail the gate nor hide a gap. On a 
 that the process ranges overlap, the gate passes, so it does not replace a controlled-runner
 measurement.
 
+Each reference has the same structure as the generated code it gates. A generated library
+binding is an object that owns its library's symbol segments, so its reference is a handwritten
+object holding the segment in a final field (`manual-instance-library-ffm`,
+`manual-instance-critical-ffm`). Reaching an instance costs one dependent load more than a static
+handle: 1.5% on Linux x86-64 and about 22% on the hosted ARM runner for a 2.5 ns critical call.
+The generated static entries are gated against static handwritten handles. The static critical
+entry, the default for leaf imports, measured 1.18 against 2.54 ns/call on the hosted ARM runner.
+
 A pair with a known, explained gap carries its own allowance and reason in `gate.py`. The
 allowance keeps that gap from growing; lower it when the gap is fixed. No pair currently needs
 one.

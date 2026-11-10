@@ -103,6 +103,8 @@ selectors = {
         "manual-bound-ffm": "_Jvm$ManualBoundFfm_run_",
         "generated-typed-critical-ffm": "_Jvm$GeneratedTypedCriticalFfm_run_",
         "generated-static-critical-ffm": "_Jvm$GeneratedStaticCriticalFfm_run_",
+        "manual-instance-critical-ffm": "_Jvm$ManualInstanceCriticalFfm_run_",
+        "manual-instance-library-ffm": "_Jvm$ManualInstanceLibraryFfm_run_",
         "manual-unbound-critical-ffm": "_Jvm$ManualUnboundCriticalFfm_run_",
     },
 }
