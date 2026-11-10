@@ -25,7 +25,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work = ROOT / "build/static-jni-test"
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
-        run(BINARY, "generate", ROOT / "examples/ownership.seam", "--jni", "--out", generated, "--target", TARGET)
+        run(BINARY, "generate", ROOT / "tests/ownership/ownership.seam", "--jni", "--out", generated, "--target", TARGET)
         run("rustc", "--edition=2024", "--crate-type=lib", generated / "seam-jni.rs", "-o", work / "libjni_bindings.rlib")
         obj = work / "ownership.o"
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort",
@@ -168,7 +168,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work = ROOT / "build/ownership-test"
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
-        run(BINARY, "generate", ROOT / "examples/ownership.seam", "--out", generated, "--target", TARGET)
+        run(BINARY, "generate", ROOT / "tests/ownership/ownership.seam", "--out", generated, "--target", TARGET)
         fixture = work / "ownership.o"
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic",
             ROOT / "tests/ownership/native.rs", "-o", fixture)
@@ -186,7 +186,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("cannot move out of `owner` because it is borrowed", rejected.stderr)
         # Confined resources must not accidentally implement Send.
         confined = work / "confined.seam"
-        confined.write_text((ROOT / "examples/ownership.seam").read_text()
+        confined.write_text((ROOT / "tests/ownership/ownership.seam").read_text()
             .replace("threading=shared", "threading=confined")
             .replace("java_class=NativeApi", "java_class=ConfinedApi"))
         run(BINARY, "generate", confined, "--out", work / "confined", "--target", TARGET)

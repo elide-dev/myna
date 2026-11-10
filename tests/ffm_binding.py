@@ -10,9 +10,9 @@ def build_binding_fixture():
     work = ROOT / "build/ffm-binding-test"
     work.mkdir(parents=True, exist_ok=True)
     generated = work / "generated"
-    run(BINARY, "generate", ROOT / "examples/ownership.seam", "--out", generated, "--target", TARGET)
+    run(BINARY, "generate", ROOT / "tests/ownership/ownership.seam", "--out", generated, "--target", TARGET)
     confined_source = work / "confined.seam"
-    confined_source.write_text((ROOT / "examples/ownership.seam").read_text()
+    confined_source.write_text((ROOT / "tests/ownership/ownership.seam").read_text()
         .replace("threading=shared", "threading=confined")
         .replace("java_class=NativeApi", "java_class=ConfinedApi"))
     confined = work / "confined"
