@@ -261,11 +261,19 @@ each comparison, floor and cells workflow run. Locally:
 `python3 benchmarks/gate.py comparison build/comparison/results.json` (or `floor`, `cells`). Each
 pair calls the same native function under the same transition contract, in fresh processes
 interleaved on one host, so host speed and drift cancel out. A pair fails only when the generated
-case's median of process medians exceeds its reference's by more than 2%, and the cases also separate:
+case's median of process medians exceeds its reference's by more than the tolerance, and the cases also separate:
 with each side's fastest and slowest process set aside, every remaining generated process is
 slower. A single outlier process can neither fail the gate nor hide a gap. On a host noisy enough
 that the process ranges overlap, the gate passes, so it does not replace a controlled-runner
 measurement.
+
+The tolerance is 2% on a controlled host and 5% in CI. On the shared ARM runners, code layout
+alone moves a call by several percent: between two builds that differed only by added benchmark
+cases, the unchanged handwritten library handle went from 35.37 to 36.65 ns/call (3.6%). Within
+a single binary, two calls with the same hot instructions but different register allocation
+separated by 3.0%. Both tolerances catch the gap this gate was written for: release 0.16.0's typed
+critical calls were 15% slower than a static handwritten handle on Linux x86-64, about 13% beyond
+the 1.5% that reaching an instance costs there.
 
 Each reference has the same structure as the generated code it gates. A generated library
 binding is an object that owns its library's symbol segments, so its reference is a handwritten

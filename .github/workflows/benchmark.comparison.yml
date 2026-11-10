@@ -57,7 +57,8 @@ jobs:
       - name: Measure five fresh processes per case
         run: mise exec -- python3 benchmarks/comparison/run.py run
       - name: Gate generated bindings against matched handwritten calls
-        run: python3 benchmarks/gate.py comparison build/comparison/results.json
+        # Shared runners: code layout alone moves identical handwritten calls by up to 3.6%.
+        run: python3 benchmarks/gate.py comparison build/comparison/results.json --tolerance 0.05
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
