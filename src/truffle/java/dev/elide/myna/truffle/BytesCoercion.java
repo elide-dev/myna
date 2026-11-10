@@ -18,7 +18,8 @@ public final class BytesCoercion extends Coercion {
 
   private static final int HEAP = 2;
   private static final int TEXT = 4;
-  private static final int OTHER = 8;
+  private static final int POINTER = 8;
+  private static final int OTHER = 16;
 
   private final boolean nullable;
   private final boolean writable;
@@ -50,33 +51,50 @@ public final class BytesCoercion extends Coercion {
    * Lends {@code value} for one call. The borrow is created here and filled in place, and nothing
    * on this path hands it to code that partial evaluation does not inline, so a compiled cell that
    * releases it keeps it out of the heap.
+   *
+   * <p>A kind this call site has not seen yet is recorded and the dispatch repeated with the same
+   * borrow. In runtime-compiled code that branch is a deoptimization. A host JIT (cells called from
+   * Java on HotSpot) compiles it, because this method is shared by every call site and each new
+   * site takes it once; were it to produce a second borrow, or pass this one on, the JIT could no
+   * longer scalar-replace the borrow on any path.
    */
   public Borrow execute(Object value) {
-    int seen = this.seen;
     Borrow borrow = new Borrow();
-    if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
-      if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
-      long size = bytes.size();
-      borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
-    } else if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
-      if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
-      borrow.lendArray(bytes.array(), writable, !buffer, pinThreshold());
-    } else if ((seen & TEXT) != 0 && value instanceof String text) {
-      borrow.lendString(text, !buffer);
-    } else if ((seen & OTHER) != 0 && kind(value) == OTHER) {
-      slow(value, borrow);
-    } else {
+    int seen = this.seen;
+    while (true) {
+      if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
+        if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+        long size = bytes.size();
+        borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
+        return borrow;
+      }
+      if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
+        if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+        borrow.lendArray(bytes.array(), writable, !buffer, pinThreshold());
+        return borrow;
+      }
+      if ((seen & TEXT) != 0 && value instanceof String text) {
+        borrow.lendString(text, !buffer);
+        return borrow;
+      }
+      if ((seen & POINTER) != 0 && value instanceof NativePointer pointer) {
+        pointer(pointer.address(), value, borrow);
+        return borrow;
+      }
+      if ((seen & OTHER) != 0 && kind(value) == OTHER) {
+        slow(value, borrow);
+        return borrow;
+      }
       CompilerDirectives.transferToInterpreterAndInvalidate();
-      this.seen = seen | kind(value);
-      return execute(value);
+      this.seen = seen |= kind(value);
     }
-    return borrow;
   }
 
   private int kind(Object value) {
     if (value instanceof NativeBytes) return NATIVE;
     if (value instanceof HeapBytes) return HEAP;
     if (strings && value instanceof String) return TEXT;
+    if (value instanceof NativePointer) return POINTER;
     return OTHER;
   }
 
@@ -92,10 +110,6 @@ public final class BytesCoercion extends Coercion {
   private void slow(Object value, Borrow borrow) {
     if (value == null) {
       pointer(0, value, borrow);
-      return;
-    }
-    if (value instanceof NativePointer pointer) {
-      pointer(pointer.address(), value, borrow);
       return;
     }
     InteropLibrary interop = interop();

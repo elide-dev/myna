@@ -167,7 +167,15 @@ A borrow that a compiled cell acquires and releases costs no Java heap: the `Bor
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
 hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
-buffer, heap buffer, Java string, anything else through interop) and compiles only those paths.
+buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
+those paths.
+
+That guarantee is for runtime-compiled code. A cell's `execute` called from host Java on HotSpot is
+compiled by the host JIT, where scalar replacement depends on its inlining decisions and on type
+profiles shared by every call site in the process: with the Graal JIT the borrow is scalar-replaced
+as long as no call site lends through the generic interop path; C2 allocates it (56 bytes per byte
+parameter) once the coercion has been compiled on its own. Host code that must not allocate calls
+`invoke`.
 
 The scratch stack's lifetimes have three caveats:
 
