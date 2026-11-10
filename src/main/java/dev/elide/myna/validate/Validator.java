@@ -16,7 +16,14 @@ public final class Validator {
   public static final Set<String> TARGETS = Seam.TARGETS.keySet();
   private static final Set<String> PARAM_FACTS =
       Set.of(
-          "nonnull", "nocapture", "readonly", "writeonly", "noalias", "align", "dereferenceable");
+          "nonnull",
+          "nocapture",
+          "readonly",
+          "writeonly",
+          "noalias",
+          "align",
+          "dereferenceable",
+          "truffle_buffer");
   private static final Set<String> FUNCTION_FACTS =
       Set.of(
           "nounwind",
@@ -401,6 +408,24 @@ public final class Validator {
     require(
         !function.facts().containsKey("truffle_cell") || function.direction() == Direction.IMPORT,
         "truffle_cell applies to imports only");
+    for (Parameter parameter : function.parameters()) {
+      Fact buffer = parameter.facts().get("truffle_buffer");
+      if (buffer == null) continue;
+      require(configured, "truffle_buffer requires module truffle_cells=true");
+      require(
+          function.direction() == Direction.IMPORT
+              && Seam.lendsBytes(parameter)
+              && module.borrows().stream()
+                  .noneMatch(b ->
+                      b.function().equals(function.name())
+                          && b.parameter().equals(parameter.name())),
+          "truffle_buffer applies to an import's byte pointer with read or write access that is"
+              + " not already a borrow: "
+              + parameter.name());
+      require(
+          !buffer.enabled() || buffer.approved(),
+          "truffle_buffer requires explicit_contract or compiler_proven");
+    }
     if (!Seam.truffleCell(module, function)) return;
     String advice = "; opt out with truffle_cell=false@explicit_contract on " + function.name();
     require(

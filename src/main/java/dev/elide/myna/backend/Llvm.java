@@ -68,7 +68,8 @@ public final class Llvm implements Backend {
       // These facts configure binding providers; they are not LLVM IR attributes.
       if (name.equals("native_leaf")
           || name.equals("truffle_cell")
-          || name.equals("truffle_raw_pointers")) return;
+          || name.equals("truffle_raw_pointers")
+          || name.equals("truffle_buffer")) return;
       attrs.add(
           switch (name) {
             case "nocapture" -> "captures(none)";

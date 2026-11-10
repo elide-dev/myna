@@ -142,7 +142,7 @@ Both linkage configuration and handwritten type mappings are serialized and fing
 
 ## Truffle cells
 
-`truffle_cells=true` on the module generates `<NativeClass>Truffle.java`: one Truffle cell per import, calling the module's existing bindings with language-neutral coercions from `myna-truffle`. `truffle_backend=native|ffm`, `truffle_coercion=strict|wrap` and `truffle_transitions=direct|boundary` refine it and require the option. Per import, `truffle_cell=false@explicit_contract` opts out (required for by-value records and callback parameters) and `truffle_raw_pointers=true@explicit_contract` accepts guest numbers as pointers. The configuration is serialized under `"truffle"` and fingerprinted; descriptors without it keep their fingerprints. See [Truffle native cells](truffle-cells.md).
+`truffle_cells=true` on the module generates `<NativeClass>Truffle.java`: one Truffle cell per import, calling the module's existing bindings with language-neutral coercions from `myna-truffle`. `truffle_backend=native|ffm`, `truffle_coercion=strict|wrap` and `truffle_transitions=direct|boundary` refine it and require the option. Per import, `truffle_cell=false@explicit_contract` opts out (required for by-value records and callback parameters) and `truffle_raw_pointers=true@explicit_contract` accepts guest numbers as pointers. Per byte-pointer parameter, `truffle_buffer=true@explicit_contract` lends raw bytes (no terminator, heap arrays pinned when large) where the parameter would otherwise be treated as a C string; it is a provider fact, not an LLVM attribute. The configuration is serialized under `"truffle"` and fingerprinted; descriptors without it keep their fingerprints. See [Truffle native cells](truffle-cells.md).
 
 ## FFM callback targets and static JNI
 

@@ -551,6 +551,69 @@ class TruffleCellsTest {
         "the buffer is the only guest argument");
   }
 
+  /**
+   * A byte pointer beside other pointers cannot be a borrow, so by default it is a C string
+   * parameter. {@code truffle_buffer} declares it raw bytes: no terminator, pinned when large.
+   */
+  @Test
+  void truffleBufferLendsRawBytesBesideOtherPointers() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "  param out type=ptr<i32> nullable=false ownership=borrowed access=write\n"
+            + "  param text type=ptr<char> nullable=false ownership=borrowed access=read\n"
+            + "end\n";
+    var outputs = generate(MODULE + decode);
+    String truffle = outputs.get("MynaTruffle.java");
+    // Raw bytes: not a borrow (the count stays a guest argument) and not terminated.
+    assertTrue(
+        truffle.contains("new BytesCoercion(\"decode\", \"data\", false, false, false, false);"));
+    // The C string beside it keeps its terminator.
+    assertTrue(truffle.contains("new BytesCoercion(\"decode\", \"text\", false, false, false);"));
+    assertTrue(truffle.contains("super(\"decode\", 4);"));
+    // The fact configures the cell; it is not an LLVM attribute, and it is fingerprinted.
+    assertFalse(outputs.get("seam.ll").contains("truffle_buffer"));
+    assertTrue(outputs.get("seam.json").contains("truffle_buffer"));
+    assertNotEquals(
+        outputs.get("seam.abi"),
+        generate(MODULE + decode.replace(" truffle_buffer=true@explicit_contract", ""))
+            .get("seam.abi"));
+    // A disabled fact leaves the parameter a C string.
+    assertTrue(
+        generate(MODULE + decode.replace("truffle_buffer=true", "truffle_buffer=false"))
+            .get("MynaTruffle.java")
+            .contains("new BytesCoercion(\"decode\", \"data\", false, false, false);"));
+    for (String[] invalid :
+        new String[][] {
+          // Only with cells, on an import's byte pointer that is lent, with an approved contract.
+          {(MODULE + decode).replace(" truffle_cells=true", ""), "requires module truffle_cells"},
+          {MODULE + decode.replace("type=ptr<u8>", "type=ptr<i64>"), "byte pointer"},
+          {MODULE + decode.replace("access=read truffle_buffer", "truffle_buffer"), "byte pointer"},
+          {
+            MODULE
+                + decode.replace(
+                    "truffle_buffer=true@explicit_contract", "truffle_buffer=true@heuristic"),
+            "explicit_contract"
+          },
+          {
+            MODULE
+                + "borrow sum bytes length=count lifetime=call\n"
+                + "import sum return=i64 error=no_failure nounwind=true@explicit_contract\n"
+                + "  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read"
+                + " nocapture=true@explicit_contract readonly=true@explicit_contract"
+                + " truffle_buffer=true@explicit_contract\n"
+                + "  param count type=u64\n"
+                + "end\n",
+            "not already a borrow"
+          }
+        }) {
+      var error = assertThrows(IllegalArgumentException.class, () -> generate(invalid[0]));
+      assertTrue(error.getMessage().contains(invalid[1]), error.getMessage());
+    }
+  }
+
   @Test
   void validationRejectsShapesCellsCannotCarry() {
     String records =

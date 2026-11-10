@@ -118,6 +118,7 @@ public abstract class Bodies extends NativeCell {
       case "invoke-slab-step" -> new InvokeSlab(name, true);
       case "glue-slab-native" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), false);
       case "glue-slab-heap" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), true);
+      case "glue-slab-bytes-heap" -> new GlueSlab(name, new CellsTruffle.slabBytes_Cell(), true);
       case "glue-slab-step-native" -> new GlueSlab(name, new CellsTruffle.slabStep_Cell(), false);
       case "glue-boundary-slab-step-native" -> new GlueSlab(name, new BoundaryCellsTruffle.slabStep_Cell(), false);
       case "interop-slab-native" -> new InteropSlab(name, CellsTruffle.slab());

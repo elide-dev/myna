@@ -166,8 +166,22 @@ public final class Borrow {
     else lendCopy(array, null, writable, nulTerminated);
   }
 
+  /**
+   * ASCII text is written straight onto the scratch stack, with no intermediate array; it is always
+   * followed by a NUL there, which a buffer parameter simply does not read. Other text is encoded
+   * into an array first.
+   */
   void lendString(String text, boolean nulTerminated) {
-    lendCopy(utf8(text), null, false, nulTerminated);
+    Scratch scratch = Scratch.pushText(text);
+    if (scratch != null) {
+      int length = scratch.pushed;
+      int start = (int) (scratch.top - Scratch.reservation(length + 1L));
+      own(SCRATCH, scratch, scratch.base + start, length);
+      this.offset = start;
+      this.terminated = true;
+    } else {
+      lendCopy(utf8(text), null, false, nulTerminated);
+    }
   }
 
   void lendBuffer(InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
@@ -355,6 +369,9 @@ public final class Borrow {
     /** The largest copy, terminator included, that the stack takes. */
     static final long LARGEST = 16 * 1024;
 
+    /** Text up to this length is written byte by byte; a bulk copy only pays off beyond it. */
+    static final int SHORT_TEXT = 64;
+
     /** Copies start on 16-byte boundaries, as {@code malloc} results do. */
     static final long ALIGNMENT = 16;
 
@@ -364,6 +381,12 @@ public final class Borrow {
 
     /** The address of {@link #block}, read by compiled code after a push. */
     long base;
+
+    /** The byte length of the text most recently pushed by {@link #pushText}. */
+    int pushed;
+
+    /** Where {@link #pushText} copies short text out of its string before packing it. */
+    private final char[] chars = new char[SHORT_TEXT];
 
     /** The end of the innermost copy: zero when the stack is empty. */
     long top;
@@ -405,6 +428,54 @@ public final class Borrow {
       MemorySegment.copy(bytes, 0, block, ValueLayout.JAVA_BYTE, start, bytes.length);
       if (nulTerminated) block.set(ValueLayout.JAVA_BYTE, start + bytes.length, (byte) 0);
       scratch.top = start + reservation(size);
+      return scratch;
+    }
+
+    /**
+     * Writes ASCII {@code text} and a NUL onto the current thread's stack and returns that stack,
+     * with {@link #pushed} set to the text's length, or returns {@code null} when the text has a
+     * character outside ASCII, is too long, or does not fit. Nothing is pushed in that case.
+     */
+    @TruffleBoundary
+    static Scratch pushText(String text) {
+      int length = text.length();
+      if (length >= LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      MemorySegment block = scratch.reserve(length + 1L);
+      if (block == null) return null;
+      int start = (int) scratch.top;
+      if (length <= SHORT_TEXT) {
+        // Short text: copy the characters out in bulk, then pack eight to a word and write the
+        // word. Whether every character was ASCII is checked once at the end; nothing is pushed
+        // until the top moves, so abandoning then leaves the stack as it was.
+        char[] chars = scratch.chars;
+        text.getChars(0, length, chars, 0);
+        long base = scratch.base;
+        int bits = 0;
+        int i = 0;
+        for (; i + 8 <= length; i += 8) {
+          long word = 0;
+          for (int k = 0; k < 8; k++) {
+            char c = chars[i + k];
+            bits |= c;
+            word |= (long) (c & 0xff) << (k << 3);
+          }
+          Memory.putLong(base, block, start + i, word);
+        }
+        for (; i < length; i++) {
+          char c = chars[i];
+          bits |= c;
+          Memory.putByte(base, block, start + i, (byte) c);
+        }
+        if (bits >= 0x80) return null;
+        Memory.putByte(base, block, start + length, (byte) 0);
+      } else {
+        // Longer text: one byte per character for ASCII, then the terminator, copied in bulk.
+        for (int i = 0; i < length; i++) if (text.charAt(i) >= 0x80) return null;
+        block.setString(start, text);
+      }
+      scratch.pushed = length;
+      scratch.top = start + reservation(length + 1L);
       return scratch;
     }
 

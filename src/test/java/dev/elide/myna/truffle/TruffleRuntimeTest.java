@@ -926,6 +926,110 @@ class TruffleRuntimeTest {
     buffer.release();
   }
 
+  /** A raw byte parameter lends what a C string parameter would, without the terminator. */
+  @Test
+  void rawByteParametersAreNotTerminatedAndAcceptBarePointers() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new BytesCoercion("f", "p", false, false, true, true));
+    onFreshThread(() -> {
+      BytesCoercion raw = new BytesCoercion("f", "data", false, false, false, false);
+      BytesCoercion text = new BytesCoercion("f", "text", false, false, false);
+      // Sixteen bytes fill one scratch slot exactly; the terminator of a C string needs a
+      // second, so the copy after a raw one starts one slot later than after a terminated one.
+      byte[] sixteen = new byte[16];
+      Borrow first = raw.execute(new HeapBytes(sixteen, false));
+      Borrow second = raw.execute(new HeapBytes(sixteen, false));
+      assertEquals(16, first.length());
+      assertEquals(first.address() + 16, second.address());
+      second.release();
+      first.release();
+      Borrow terminated = text.execute(new HeapBytes(sixteen, false));
+      Borrow after = text.execute(new HeapBytes(sixteen, false));
+      assertEquals(terminated.address() + 32, after.address());
+      after.release();
+      terminated.release();
+      // A bare pointer has no size, which only a borrow needs.
+      try (Arena arena = Arena.ofConfined()) {
+        MemorySegment memory = arena.allocate(8);
+        assertEquals(memory.address(), raw.execute(NativePointer.of(memory.address())).address());
+      }
+    });
+  }
+
+  /**
+   * ASCII text goes straight onto the scratch stack. Text with other characters, text too long for
+   * the stack, and text that does not fit beside outstanding copies is encoded into an array first,
+   * and all of them read back the same bytes.
+   */
+  @Test
+  void textIsPushedDirectlyWhenAsciiAndEncodedOtherwise() throws Exception {
+    onFreshThread(() -> {
+      Borrow ascii = Borrow.ofString("plain", true);
+      MemorySegment view = MemorySegment.ofAddress(ascii.address()).reinterpret(6);
+      assertEquals("plain", view.getString(0));
+      assertEquals(5, ascii.length());
+      long base = ascii.address();
+      // A buffer parameter gets the same bytes; the terminator after them is simply unread.
+      Borrow unterminated = Borrow.ofString("sixteen bytes ok", false);
+      assertEquals(16, unterminated.length());
+      assertEquals(base + 16, unterminated.address());
+      Borrow next = Borrow.ofString("x", true);
+      assertEquals(base + 16 + 32, next.address());
+      next.release();
+      unterminated.release();
+      Borrow accented = Borrow.ofString("héllo", true);
+      assertEquals(6, accented.length());
+      assertEquals(base + 16, accented.address());
+      assertEquals(
+          "héllo", MemorySegment.ofAddress(accented.address()).reinterpret(7).getString(0));
+      accented.release();
+      Borrow empty = Borrow.ofString("", true);
+      assertEquals(0, empty.length());
+      assertEquals(
+          0, MemorySegment.ofAddress(empty.address()).reinterpret(1).get(ValueLayout.JAVA_BYTE, 0));
+      empty.release();
+      // Longer text takes the bulk copy; a late non-ASCII character still falls back cleanly.
+      String longer = "c".repeat(200);
+      Borrow bulk = Borrow.ofString(longer, true);
+      assertEquals(200, bulk.length());
+      assertEquals(longer, MemorySegment.ofAddress(bulk.address()).reinterpret(201).getString(0));
+      bulk.release();
+      // Words and a tail: nineteen characters are two words and three bytes.
+      String words = "0123456789abcdefghi";
+      Borrow worded = Borrow.ofString(words, true);
+      assertEquals(words, MemorySegment.ofAddress(worded.address()).reinterpret(20).getString(0));
+      worded.release();
+      for (String late : new String[] {"abcé", "0123456789abcdeŁ", "Łukasz", longer + "é"}) {
+        Borrow fallback = Borrow.ofString(late, true);
+        assertEquals(late.getBytes(StandardCharsets.UTF_8).length, fallback.length());
+        assertEquals(base + 16, fallback.address());
+        fallback.release();
+      }
+      // Too long for the stack: an arena of its own, outside the block.
+      String huge = "a".repeat((int) Borrow.Scratch.LARGEST);
+      Borrow outside = Borrow.ofString(huge, true);
+      assertEquals(huge.length(), outside.length());
+      assertTrue(outside.address() < base || outside.address() >= base + Borrow.Scratch.LIMIT);
+      outside.release();
+      ascii.release();
+      // A stack with no room left: the text still lends, from an arena.
+      String large = "b".repeat((int) Borrow.Scratch.LARGEST - 16);
+      List<Borrow> held = new ArrayList<>();
+      for (int i = 0; i < 6; i++) held.add(Borrow.ofString(large, true));
+      for (Borrow borrow : held) {
+        assertEquals(large.length(), borrow.length());
+        assertEquals(
+            'b',
+            MemorySegment.ofAddress(borrow.address()).reinterpret(1).get(ValueLayout.JAVA_BYTE, 0));
+      }
+      for (int i = held.size() - 1; i >= 0; i--) held.get(i).release();
+      Borrow again = Borrow.ofString("again", true);
+      assertEquals(5, again.length());
+      again.release();
+    });
+  }
+
   /** One call site lends every kind of value in turn and keeps lending each correctly. */
   @Test
   void bytesCoercionProfilesTheKindsItHasSeen() {

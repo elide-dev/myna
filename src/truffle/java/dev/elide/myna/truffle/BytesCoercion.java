@@ -25,6 +25,7 @@ public final class BytesCoercion extends Coercion {
   private final boolean writable;
   private final boolean strings;
   private final boolean buffer;
+  private final boolean terminated;
   @CompilationFinal private int seen;
 
   /** {@link Borrow#pinThreshold()}, read on the first heap array; negative until then. */
@@ -40,11 +41,28 @@ public final class BytesCoercion extends Coercion {
    */
   public BytesCoercion(
       String function, String parameter, boolean nullable, boolean writable, boolean buffer) {
+    this(function, parameter, nullable, writable, buffer, !buffer);
+  }
+
+  /**
+   * @param terminated whether copies get a terminating NUL, as a C string parameter needs. A
+   *     parameter declared {@code truffle_buffer} is neither a borrow nor terminated: it accepts
+   *     bare pointers, and heap arrays are pinned when large instead of copied with a terminator.
+   */
+  public BytesCoercion(
+      String function,
+      String parameter,
+      boolean nullable,
+      boolean writable,
+      boolean buffer,
+      boolean terminated) {
     super(function, parameter);
+    if (buffer && terminated) throw new IllegalArgumentException("a borrow is not terminated");
     this.nullable = nullable;
     this.writable = writable;
     this.strings = !writable;
     this.buffer = buffer;
+    this.terminated = terminated;
   }
 
   /**
@@ -70,11 +88,11 @@ public final class BytesCoercion extends Coercion {
       }
       if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
-        borrow.lendArray(bytes.array(), writable, !buffer, pinThreshold());
+        borrow.lendArray(bytes.array(), writable, terminated, pinThreshold());
         return borrow;
       }
       if ((seen & TEXT) != 0 && value instanceof String text) {
-        borrow.lendString(text, !buffer);
+        borrow.lendString(text, terminated);
         return borrow;
       }
       if ((seen & POINTER) != 0 && value instanceof NativePointer pointer) {
@@ -115,11 +133,11 @@ public final class BytesCoercion extends Coercion {
     InteropLibrary interop = interop();
     try {
       if (strings && interop.isString(value)) {
-        borrow.lendString(interop.asString(value), !buffer);
+        borrow.lendString(interop.asString(value), terminated);
         return;
       }
       if (interop.hasBufferElements(value)) {
-        borrow.lendBuffer(interop, value, writable, !buffer);
+        borrow.lendBuffer(interop, value, writable, terminated);
         return;
       }
       if (interop.isPointer(value)) {
