@@ -291,6 +291,18 @@ public final class Seam {
   public record TruffleConfig(
       TruffleBackend backend, TruffleCoercion coercion, TruffleTransitions transitions) {}
 
+  /**
+   * Whether a Truffle cell lends bytes to this parameter (buffers, strings) rather than passing an
+   * address: a byte pointer with a declared access.
+   */
+  public static boolean lendsBytes(Parameter parameter) {
+    return parameter.type() instanceof Pointer p
+        && (p.pointee() == Scalar.U8 || p.pointee() == Scalar.I8 || p.pointee() == Scalar.CHAR)
+        && (parameter.access() == Access.READ
+            || parameter.access() == Access.READ_WRITE
+            || parameter.access() == Access.WRITE);
+  }
+
   /** Whether a module import gets a Truffle cell: every import does unless it opts out. */
   public static boolean truffleCell(Module module, Function function) {
     if (module.truffleConfig() == null || function.direction() != Direction.IMPORT) return false;

@@ -112,6 +112,19 @@ public final class CellChecks {
     byte[] large = new byte[Borrow.pinThreshold() * 4];
     java.util.Arrays.fill(large, (byte) 1);
     check(call(cells, "checksum", new HeapBytes(large, false)).equals((long) large.length), "checksum pins or copies");
+    // A truffle_buffer parameter is raw bytes beside other pointers: the guest passes the count,
+    // nothing is terminated, and a large heap array is pinned in an image rather than copied.
+    check(call(cells, "sumBytes", new HeapBytes(large, false), (long) large.length, NativePointer.NULL).equals((long) large.length), "sumBytes large heap");
+    check(call(cells, "sumBytes", new HeapBytes(new byte[] {1, 2, 3}, false), 3L, NativePointer.NULL).equals(6L), "sumBytes small heap");
+    check(call(cells, "sumBytes", "abc", 3L, NativePointer.NULL).equals(294L), "sumBytes string");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment raw = arena.allocate(4);
+      raw.fill((byte) 5);
+      MemorySegment bias = arena.allocate(8);
+      bias.set(java.lang.foreign.ValueLayout.JAVA_LONG, 0, 100L);
+      check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
+      check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
+    }
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);

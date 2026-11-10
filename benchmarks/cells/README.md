@@ -42,7 +42,9 @@ exported as a leaf (`slab`) and as a transition (`slab-step`): `direct-*` passes
 `invoke-*` calls the cell's static `invoke` with the same raw addresses,
 `hand-slab-step` does so behind a hand-written boundary, `glue-*-native` passes `NativeBytes` and
 `NativePointer` values through the cell, `glue-slab-heap` passes `HeapBytes` (both copied, since a
-byte pointer without a `borrow` declaration is NUL-terminated), `glue-boundary-*` uses the
+byte pointer without a `borrow` declaration is NUL-terminated), `glue-slab-bytes-heap` passes the same `HeapBytes` to an import whose byte buffers are declared
+`truffle_buffer` (the 256-byte one is pinned, the 16-byte one copied, neither terminated),
+`glue-boundary-*` uses the
 `boundary` cell and `interop-*` the executable wrapper.
 
 Guest values (buffers, pointers, arrays) live in non-final fields of the measuring node, so partial
@@ -65,7 +67,7 @@ array at one call site.
 `--cases REGEX` runs a subset; a partial run is marked as a smoke run.
 
 String cases call `myna_bench_text(text, salt)` with an 11-byte string: `direct-text` passes a
-native C string, `glue-text` lends a Java string (UTF-8, NUL-terminated copy per call), `nfi-text`
+native C string, `glue-text` lends a Java string (ASCII, written straight onto the scratch stack with its terminator), `nfi-text`
 passes the string through NFI's `STRING` conversion.
 
 Runtime-compiled code is not part of the image, so the image disassembly cannot show it; the

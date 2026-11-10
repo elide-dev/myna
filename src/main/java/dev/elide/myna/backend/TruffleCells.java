@@ -42,6 +42,12 @@ public final class TruffleCells implements Backend {
         || (charUnsigned && type == Scalar.CHAR);
   }
 
+  /** Whether the parameter opted out of C string treatment with {@code truffle_buffer}. */
+  private static boolean rawBytes(Parameter p) {
+    Fact fact = p.facts().get("truffle_buffer");
+    return fact != null && fact.enabled();
+  }
+
   /** The guest-facing shape of one cell. */
   private record Cell(Function function, BufferBorrow borrow, Resource creates, Resource destroys) {
     boolean isLength(Parameter p) {
@@ -160,12 +166,7 @@ public final class TruffleCells implements Backend {
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
         if (t instanceof Pointer || t instanceof FunctionPointer) {
-          boolean bytes =
-              bytePointer(t)
-                  && (cell.isBuffer(p)
-                      || p.access() == Access.READ
-                      || p.access() == Access.READ_WRITE
-                      || p.access() == Access.WRITE);
+          boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
             boolean writable = p.access() != Access.READ;
             imports.add(RUNTIME + "BytesCoercion");
@@ -183,6 +184,8 @@ public final class TruffleCells implements Backend {
                 .append(writable)
                 .append(", ")
                 .append(cell.isBuffer(p))
+                // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either.
+                .append(rawBytes(p) ? ", false" : "")
                 .append(");\n");
             String local = "borrow_" + p.name();
             borrows.add(local + " = " + field + ".execute(" + argument + ")");

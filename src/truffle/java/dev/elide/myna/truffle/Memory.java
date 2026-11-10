@@ -20,6 +20,8 @@ final class Memory {
       ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
   private static final ValueLayout.OfInt INT_BE =
       ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
+  private static final ValueLayout.OfLong LONG_LE =
+      ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
   private static final ValueLayout.OfLong LONG_BE =
       ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
 
@@ -48,6 +50,18 @@ final class Memory {
   static void putByte(MemorySegment s, long offset, byte value) {
     if (IMAGE) ImageMemory.putByte(s.address(), offset, value);
     else s.set(ValueLayout.JAVA_BYTE, offset, value);
+  }
+
+  /** {@link #putByte(MemorySegment, long, byte)} for a caller that already holds the address. */
+  static void putByte(long address, MemorySegment s, long offset, byte value) {
+    if (IMAGE) ImageMemory.putByte(address, offset, value);
+    else s.set(ValueLayout.JAVA_BYTE, offset, value);
+  }
+
+  /** A little-endian {@code long} for a caller that already holds the address. */
+  static void putLong(long address, MemorySegment s, long offset, long value) {
+    if (IMAGE) ImageMemory.putLong(address, offset, value);
+    else s.set(LONG_LE, offset, value);
   }
 
   static short getShort(MemorySegment s, ByteOrder order, long offset) {

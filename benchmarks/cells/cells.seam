@@ -46,3 +46,15 @@ import slabStep symbol=myna_bench_slab_step return=i64 error=no_failure nounwind
   param d type=i64
   param salt type=i64
 end
+import slabBytes symbol=myna_bench_slab_bytes return=i64 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract truffle_buffer=true@explicit_contract
+  param count type=u64
+  param aux type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract truffle_buffer=true@explicit_contract
+  param context type=ptr<void>
+  param output type=ptr<void>
+  param a type=i32
+  param b type=i32
+  param c type=u32
+  param d type=i64
+  param salt type=i64
+end

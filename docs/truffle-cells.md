@@ -38,6 +38,18 @@ Two per-import facts refine the module choice:
   of that import (`bun:ffi` compatibility). By default a pointer argument must be an interop pointer
   or, where the parameter is nullable, interop `null`.
 
+One per-parameter fact refines an import's byte pointers:
+
+- `truffle_buffer=true@explicit_contract` on a `ptr<u8>`, `ptr<i8>` or `ptr<char>` parameter with a
+  declared access says it is a byte buffer, not a C string. A `borrow` already says that, but a
+  `borrow` allows no other pointer parameter; a decode entry that takes its input beside a result
+  or session pointer cannot declare one, and without this fact its input is treated as a C string:
+  a heap buffer is copied whole with a terminating NUL on every call and never pinned. With the
+  fact, the cell lends the bytes as they are: native memory in place, a heap array pinned when it
+  reaches the pin threshold and copied without a terminator otherwise, and a string as its UTF-8
+  bytes. The length stays an ordinary guest argument, so the guest, not the cell, vouches that it
+  does not exceed the buffer. The fact is fingerprinted and is not an LLVM attribute.
+
 Exports are never cells. The option, backend, coercion policy and transition mode are serialized in
 `seam.json` under `"truffle"` and change the fingerprint; a descriptor without the option keeps its
 existing fingerprint.
@@ -118,6 +130,7 @@ through it, and partial evaluation reduces a monomorphic site to a type check or
 | `ptr<T>` (non-byte pointee), `ptr<void>`, `fn<…>` return | `NativePointer`, open `NativeResource`, `NativeBytes`, any interop pointer; `null` only when nullable | `NativePointer` |
 | `ptr<u8>`, `ptr<i8>`, `ptr<char>` with `access=read` | strings (UTF-8, NUL-terminated), buffers, pointers | — |
 | `ptr<u8>`, `ptr<i8>`, `ptr<char>` with `access=write` or `read_write` | buffers and pointers; strings are rejected | — |
+| byte pointers declared `truffle_buffer` | strings (UTF-8, read access only), buffers, pointers; nothing is NUL-terminated and the count is a guest argument | — |
 | byte pointers with unspecified access | pointers only, like any other pointer | — |
 | `borrow` buffers (the count is derived) | strings for read access, `NativeBytes`, `HeapBytes`, any interop buffer; a bare pointer has no size and is rejected | — |
 | `void` | — | `NativeVoid.INSTANCE` (interop `null`) |
@@ -167,7 +180,20 @@ A borrow that a compiled cell acquires and releases costs no Java heap: the `Bor
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
 hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
-buffer, heap buffer, Java string, anything else through interop) and compiles only those paths.
+buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
+those paths.
+
+ASCII text is written straight onto the scratch stack, so a string argument allocates nothing
+either; text with other characters is encoded into a UTF-8 array first.
+
+The same holds for a cell's `execute` called from host code in a Native Image, which is compiled
+ahead of time without partial evaluation: `tests/truffle_integration.py` measures 0 bytes per call
+there for native memory, raw pointers, scratch copies and ASCII strings, and the pin alone for a
+pinned array. On HotSpot the host JIT decides: scalar replacement depends on its inlining and on
+type profiles shared by every call site in the process. With the Graal JIT the borrow is
+scalar-replaced as long as no call site lends through the generic interop path; C2 allocates it
+(56 bytes per byte parameter) once the coercion has been compiled on its own. Host code that must
+not allocate on any runtime calls `invoke`.
 
 The scratch stack's lifetimes have three caveats:
 
@@ -341,12 +367,19 @@ ten guest values.
 
 Findings that are tracked, not blocking:
 
-- A Java string lent to a C string parameter still allocates its UTF-8 `byte[]` (24 bytes for the
-  11-byte benchmark string) and costs about 16 ns over a native C string. Encoding straight into
-  the scratch stack, and taking `TruffleString` contents without a Java `String`, would remove
-  both; neither is implemented.
-- A byte-pointer parameter without a `borrow` declaration is a C string parameter: a heap buffer
-  passed to it is copied with a NUL terminator, whatever its size, and never pinned.
+- An ASCII Java string lent to a C string parameter is written straight onto the scratch stack:
+  `glue-text` went from 17.6 ns and 24 B to 15.4 ns and 0 B (same host and method as the table
+  above). Text with other characters still allocates its UTF-8 array, and a guest `TruffleString`
+  still becomes a Java `String` through interop first; taking its bytes through the TruffleString
+  API is not implemented.
+- A byte-pointer parameter without a `borrow` declaration is a C string parameter unless it is
+  declared `truffle_buffer`. Pinning is not a win at small sizes: the ten-argument entry with a
+  256-byte and a 16-byte heap buffer costs 21.9 ns and 0 B as two terminated copies and 24.4 ns
+  and 24 B with the larger one pinned. The fact is for buffers large enough that copying them on
+  every call is the cost, and for callees that must not see a terminator.
+- A `borrow` beside another pointer parameter, more than one buffer per function, and resource
+  creates that return a status and write the handle through an out-parameter are not expressible;
+  they change the contracts of every ownership backend, not only cells.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.

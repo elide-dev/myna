@@ -30,6 +30,11 @@ __attribute__((noinline,visibility("default"))) int64_t myna_bench_slab_step(con
                                                                              int32_t a, int32_t b, uint32_t c, int64_t d, int64_t salt) {
   return slab(data, count, aux, context, output, a, b, c, d, salt);
 }
+// The same entry for a seam that declares its byte buffers truffle_buffer (raw bytes).
+__attribute__((noinline,visibility("default"))) int64_t myna_bench_slab_bytes(const uint8_t *data, uint64_t count, const uint8_t *aux, void *context, void *output,
+                                                                              int32_t a, int32_t b, uint32_t c, int64_t d, int64_t salt) {
+  return slab(data, count, aux, context, output, a, b, c, d, salt);
+}
 #ifdef __linux__
 // The pinned toolchain's sysroot predates glibc 2.27, but the Native Image libffi used by Truffle
 // NFI calls memfd_create. Weak, so a newer libc's definition takes precedence at link time.

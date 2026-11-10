@@ -9,6 +9,8 @@ import org.graalvm.polyglot.Context;
 /** Native Image: cells through the interop wrapper, then from runtime-compiled Truffle code. */
 public final class CellsMain {
   static volatile Object allocationCanary;
+  static volatile long hostSink;
+  static long pinsPerCall;
   /** Wraps a cell and records whether its most recent execution ran in compiled code. */
   static final class Probe extends NativeCell {
     static volatile boolean lastExecutionCompiled;
@@ -59,6 +61,20 @@ public final class CellsMain {
     long limit = perCall * Repeat.CALLS + 1024;
     if (allocated > limit) throw new AssertionError(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls, limit " + limit);
     System.out.println(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " compiled calls");
+    pinsPerCall = allocated / Repeat.CALLS;
+  }
+  /** What a cell's typed execute allocates per call from host code, which is compiled ahead of time. */
+  static void hostExecute(com.sun.management.ThreadMXBean bean, String what, long perCall, NativeCell cell, Object argument) throws Exception {
+    Object[] arguments = {argument};
+    long thread = Thread.currentThread().threadId();
+    long sum = 0;
+    for (int i = 0; i < 64; i++) sum += cell.executeLong(arguments);
+    long before = bean.getThreadAllocatedBytes(thread);
+    for (int i = 0; i < Repeat.CALLS; i++) sum += cell.executeLong(arguments);
+    long allocated = bean.getThreadAllocatedBytes(thread) - before;
+    hostSink = sum;
+    if (allocated > perCall * Repeat.CALLS + 1024) throw new AssertionError(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls");
+    System.out.println(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls");
   }
   /** Mirrors the fork's CFunctionRuntimeCompilationTest: compile immediately, then verify results in compiled code. */
   static void compiled(String what, NativeFunction probe, java.util.function.LongFunction<Object[]> args, java.util.function.LongFunction<Object> expected) {
@@ -126,6 +142,13 @@ public final class CellsMain {
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
+        // ASCII text goes straight onto the scratch stack: no UTF-8 array.
+        allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 0, 11, "hello world");
+        // A truffle_buffer parameter pins a large heap array (the pin is the only allocation) and
+        // copies a small one without a terminator.
+        allocates("sumBytes of a pinned heap array", new CellApiTruffle.sumBytes_Cell(), 32, large.length, pinned, (long) large.length, NativePointer.NULL);
+        if (pinsPerCall < 16) throw new AssertionError("sumBytes did not pin its large heap array: " + pinsPerCall + " bytes per call");
+        allocates("sumBytes of a copied heap array", new CellApiTruffle.sumBytes_Cell(), 0, 64 * 2, new HeapBytes(small, false), 64L, NativePointer.NULL);
         // The static invoke entries take native carriers and raw addresses: from host code, which
         // is compiled ahead of time and scalar-replaces nothing, a call allocates nothing.
         if (CellApiTruffle.add_Cell.invoke(2, 3) != 5) throw new AssertionError("invoke add");
@@ -138,6 +161,15 @@ public final class CellsMain {
         if (hostSum != Repeat.CALLS * (64L * 3) + (long) Repeat.CALLS * (Repeat.CALLS + 1) / 2) throw new AssertionError("invoke sum " + hostSum);
         if (hostAllocated > 1024) throw new AssertionError("invoke from host code allocated " + hostAllocated + " bytes");
         System.out.println("invoke from host code allocated " + hostAllocated + " bytes over " + Repeat.CALLS + " calls");
+        // A cell's typed execute from host code, which is compiled ahead of time and has no
+        // partial evaluation: the borrow must still stay out of the heap.
+        hostExecute(bean, "host execute: checksum of native bytes", 0, new CellApiTruffle.checksum_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: checksum of a copied heap array", 0, new CellApiTruffle.checksum_Cell(), new HeapBytes(small, false));
+        hostExecute(bean, "host execute: checksum of a pinned heap array", 32, new CellApiTruffle.checksum_Cell(), pinned);
+        hostExecute(bean, "host execute: strlen of a string", 0, new CellApiTruffle.strlen_Cell(), "hello world");
+        java.lang.foreign.MemorySegment cText = java.lang.foreign.Arena.global().allocateFrom("hello world");
+        hostExecute(bean, "host execute: strlen of native bytes", 0, new CellApiTruffle.strlen_Cell(), NativeBytes.of(cText, false));
+        hostExecute(bean, "host execute: strlen of a raw pointer", 0, new CellApiTruffle.strlen_Cell(), NativePointer.of(cText.address()));
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();

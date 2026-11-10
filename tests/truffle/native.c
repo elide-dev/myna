@@ -22,6 +22,12 @@ uint64_t cells_checksum(const uint8_t *bytes, uint64_t count) {
   return sum;
 }
 void cells_fill(uint8_t *bytes, uint32_t count, uint8_t value) { memset(bytes, value, count); }
+// A byte buffer with an explicit count beside a second pointer, which a borrow cannot declare.
+uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bias) {
+  uint64_t sum = bias ? (uint64_t)*bias : 0;
+  for (uint64_t i = 0; i < count; i++) sum += bytes[i];
+  return sum;
+}
 
 typedef struct Counter { int64_t next; } Counter;
 static int64_t live = 0;
