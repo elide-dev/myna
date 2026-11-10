@@ -5,6 +5,7 @@ name: Native call floor
   pull_request:
     paths:
       - 'benchmarks/floor/**'
+      - 'benchmarks/gate.py'
       - 'src/main/java/**'
       - 'benchmarks/comparison/boundary.seam'
       - 'tools/graalvm.json'
@@ -37,6 +38,8 @@ jobs:
       - run: mise exec -- python3 benchmarks/floor/run.py build
       - run: python3 benchmarks/comparison/inspect-floor.py build/floor build/floor/callsite-evidence
       - run: mise exec -- python3 benchmarks/floor/run.py run
+      - name: Gate generated leaves against matched handwritten calls
+        run: python3 benchmarks/gate.py floor build/floor/results.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

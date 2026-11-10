@@ -1,0 +1,30 @@
+{
+  "InstrumentSans-Regular.ttf": {
+    "url": "https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/ttf/InstrumentSans-Regular.ttf",
+    "sha256": "69fd3f7c467c70c1f73b232812407f688f3d87dd7a801ea7281aa97d29cf53d5"
+  },
+  "InstrumentSans-Medium.ttf": {
+    "url": "https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/ttf/InstrumentSans-Medium.ttf",
+    "sha256": "56ba599d12b7cf2fff4eebf46d29253231b6f49bc5b6ce7733dfbf3d7940bfae"
+  },
+  "InstrumentSans-SemiBold.ttf": {
+    "url": "https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/ttf/InstrumentSans-SemiBold.ttf",
+    "sha256": "7151cf505f897e17b4e9b956293b5a60046ec39da3923a8feba29ce86fd14e12"
+  },
+  "InstrumentSans-Bold.ttf": {
+    "url": "https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/ttf/InstrumentSans-Bold.ttf",
+    "sha256": "735badeb8b2046cee6f5e1226412ab6c29db04accbca413af03d70e991dce10d"
+  },
+  "JetBrainsMono-Regular.ttf": {
+    "url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf/JetBrainsMono-Regular.ttf",
+    "sha256": "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1"
+  },
+  "JetBrainsMono-Medium.ttf": {
+    "url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf/JetBrainsMono-Medium.ttf",
+    "sha256": "d16e6dc99672734698d629705f617c79f6eb6040f5113efe3a145204dc988109"
+  },
+  "JetBrainsMono-SemiBold.ttf": {
+    "url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf/JetBrainsMono-SemiBold.ttf",
+    "sha256": "12d4b18fe6e1af528e4bea69cb0997aeff22f9e52fccffcf66342dd88aa32ab8"
+  }
+}

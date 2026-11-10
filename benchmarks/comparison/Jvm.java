@@ -68,6 +68,10 @@ public final class Jvm {
   static long generatedTypedCriticalFfm(int n, long x) throws Throwable {
     for (int i=0; i<n; ++i) x=criticalLibrary.leaf(x); return x;
   }
+  // The default static entry: a binding ABI 2 leaf is a critical downcall.
+  static long generatedStaticCriticalFfm(int n, long x) throws Throwable {
+    for (int i=0; i<n; ++i) x=GeneratedFFM.leaf(x); return x;
+  }
   static long jni(int n, long x) {
     for (int i=0; i<n; ++i) x=step(x); return x;
   }
@@ -98,6 +102,9 @@ public final class Jvm {
   static final class GeneratedTypedCriticalFfm implements Measure.Loop {
     public long run(int n, long x) throws Throwable { return generatedTypedCriticalFfm(n, x); }
   }
+  static final class GeneratedStaticCriticalFfm implements Measure.Loop {
+    public long run(int n, long x) throws Throwable { return generatedStaticCriticalFfm(n, x); }
+  }
   static final class Jni implements Measure.Loop {
     public long run(int n, long x) { return jni(n, x); }
   }
@@ -114,6 +121,7 @@ public final class Jvm {
       case "manual-bound-critical-ffm" -> new ManualBoundCriticalFfm();
       case "manual-unbound-critical-ffm" -> new ManualUnboundCriticalFfm();
       case "generated-typed-critical-ffm" -> new GeneratedTypedCriticalFfm();
+      case "generated-static-critical-ffm" -> new GeneratedStaticCriticalFfm();
       case "jni" -> new Jni();
       default -> throw new IllegalArgumentException(name);
     };

@@ -99,26 +99,39 @@ Calls that cannot meet the bounded, nonblocking, non-reentrant leaf contract mus
 
 ## Native-call microbenchmark
 
-In the November 7, 2026 binding ABI 2 runs, generated SVM identity loops take **0.787 ns/call on Linux x86-64 (Threadripper PRO 9965WX)** and **0.516 ns/call on Apple M5 Max**. Handwritten Native Image `@CFunction(transition = NO_TRANSITION)` bindings to the same native function take **1.482 ns/call** and **0.997 ns/call**, respectively. These are elapsed loop time divided by call count, summarized as the median of five process medians.
+In the November 10, 2026 rerun on Linux x86-64 (Threadripper PRO 9965WX), generated SVM identity loops take **0.787 ns/call**. Handwritten Native Image `@CFunction(transition = NO_TRANSITION)` bindings to the same native function take **1.481 ns/call**. These are elapsed loop time divided by call count, summarized as the median of five process medians.
 
-![Time per call in an identity loop: generated and handwritten SVM leaves, with an unrolled native C pointer reference; dots show medians and whiskers span five process medians](docs/charts/default-leaf.svg)
+![Time per call in an identity loop on a Threadripper PRO 9965WX: Myna generated binding 0.787 ns, handwritten @CFunction leaf 1.481 ns, native C function pointer 0.740 ns; bars show medians and whiskers span five process medians](docs/charts/default-leaf.svg)
 
-Each case uses five fresh processes, each with ten warmup and ten retained samples. Generated and handwritten SVM paths use the same image build; all three series call the same native kernel object within each host. Timings include the callee and loop, with no control subtraction. The C function-pointer series is a reference floor with explicit four-call unrolling, so loop structure also differs. Whiskers show the min–max of the five process medians, not confidence intervals. Myna and native-pointer ranges overlap on both hosts; these runs do not establish a win over native C. Compare implementations **within each host**.
+Each case uses five fresh processes, each with ten warmup and ten retained samples. Generated and handwritten SVM paths use the same image build; all three series call the same native kernel object. Timings include the callee and loop, with no control subtraction. The C function-pointer series is a reference floor with explicit four-call unrolling, so loop structure also differs. Whiskers show the min–max of the five process medians, not confidence intervals. Myna's median is 0.047 ns above the native pointer floor; these runs do not establish a win over native C. The November 7 Apple M5 Max run (0.516 vs. 0.997 ns/call) is retained in the [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md). Compare implementations **within each host**.
 
-The inspected generated SVM paths call the linked symbol without a standalone generated leaf stub. Separate pointer and bounded-batch workloads pass the benchmark's concurrent-GC stress check on both hosts. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
+The inspected generated SVM paths call the linked symbol without a standalone generated leaf stub. Separate pointer and bounded-batch workloads pass the benchmark's concurrent-GC stress check. See [the performance design](docs/performance.md) and [ABI 2 contracts](docs/binding-abi-2.md).
 
-[Linux measurements](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.json) · [Linux analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-linux-x86_64.md) · [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-07/README.md)
+[Measurements](benchmarks/comparison/baselines/default-leaf-2026-11-10-linux-x86_64.json) · [Analysis](benchmarks/comparison/baselines/default-leaf-2026-11-10-linux-x86_64.md) · [Rerun](benchmarks/floor/README.md) · [Machine code and rerun provenance](benchmarks/comparison/evidence/readme-2026-11-10/README.md)
 
 <details>
-<summary>Normal transitions and AOT FFM comparisons</summary>
+<summary>Normal transitions, JNI and AOT FFM comparisons</summary>
 
-The retained v0.7.2 scalar benchmark compares generated and handwritten calls under matched contracts. Normal transitions take about **13.3 ns/call**; native leaves take about **1.5 ns/call**. The inspected direct-call paths produce matching instruction sequences.
+The same host's scalar comparison pairs each generated binding with a handwritten equivalent under the same transition contract. Normal transitions (**4.81 ns/call**) and static JNI (**17.4 ns/call**) are at parity. Generated native leaves take **0.844 ns/call** against **1.545 ns/call** handwritten. At this revision, two AOT FFM paths trail their handwritten pairs: static FFM calls (5.74 against 5.55 ns/call) and typed critical FFM downcalls (**1.60** against **1.39 ns/call**). Both causes are fixed in the generator. Library bindings no longer hold symbol addresses in an `Optional`, and static entries pass a global-scope segment from a build-time-initialized class. On the same host, the fixed generator measures 4.87 against 5.58 ns/call for static FFM, now faster than handwritten, and 1.41 against 1.39 for typed critical calls. [Paired performance gates](docs/benchmarking.md#paired-performance-gates) now fail CI when a generated binding falls behind its handwritten pair.
 
-![Portable Myna versus handwritten Native Image scalar call latency](docs/charts/svm-boundaries.svg)
+![Myna generated versus handwritten Native Image scalar call latency across normal transitions, native leaves, static JNI, AOT FFM and critical AOT FFM](docs/charts/svm-boundaries.svg)
 
-Latencies include the callee and loop; the control is not subtracted. Transition contracts differ across pairs. These shared-host measurements are not universal latency guarantees.
+Latencies include the callee and loop; the control is not subtracted. Transition contracts differ across pairs. These measurements are not universal latency guarantees.
 
-[Measurements and statistics](benchmarks/comparison/baselines/hosted-arm64-0.7.2.md) · [Raw samples](benchmarks/comparison/baselines/hosted-arm64-0.7.2.json) · [Benchmark commands](docs/benchmarking.md)
+[Measurements and statistics](benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.md) · [Raw samples](benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.json) · [Benchmark commands](docs/benchmarking.md)
+
+</details>
+
+<details>
+<summary>Truffle native cell costs</summary>
+
+From runtime-compiled Truffle code on the same host, a generated cell over a leaf import takes **1.575 ns/call**, matching a plain Java call to the binding (1.574 ns/call). Truffle NFI calls the same symbol in **21.8 ns/call**. Over a transitioning import, the cell, the direct call and a handwritten `@TruffleBoundary` each take about **5.0 ns/call**.
+
+![Truffle native cell call latency: Myna cells at the direct binding call's cost for leaf and transitioning imports, against Truffle NFI and a handwritten boundary](docs/charts/truffle-cells.svg)
+
+Every measured sample ran in compiled code. Buffer, text and borrow cases are in the full report.
+
+[Measurements and statistics](benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.md) · [Raw samples](benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.json) · [Harness](benchmarks/cells/README.md)
 
 </details>
 
@@ -209,7 +222,7 @@ mise run bench:floor-build
 mise run bench:floor
 ```
 
-It retains raw samples, build metadata, source and binary hashes, and disassembly. See [the harness contract](benchmarks/floor/README.md) and [the chart's measurement record](benchmarks/comparison/evidence/readme-2026-11-07/README.md).
+It retains raw samples, build metadata, source and binary hashes, and disassembly. See [the harness contract](benchmarks/floor/README.md) and [the chart's measurement record](benchmarks/comparison/evidence/readme-2026-11-10/README.md).
 
 The broader interop comparison has separate build and run tasks:
 

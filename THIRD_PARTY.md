@@ -10,3 +10,4 @@ Myna's own code is available under `Apache-2.0 OR MIT`. Dependencies retain thei
 Preserve upstream notices when redistributing a bundled dependency or toolchain. Review the SBOM and the original package's license text for the exact distribution being shipped.
 
 - The Truffle Native Image regression fixture uses checksum-pinned GraalVM 25.5.5-elide.28 Java dependencies listed in `tests/values/truffle-deps.json`. They are test-only and are not bundled in the portable value SDK.
+- README charts under `docs/charts/` embed glyph outlines from Instrument Sans and JetBrains Mono, both under the SIL Open Font License 1.1. The chart scripts download the fonts from pinned upstream commits and verify the hashes in `benchmarks/comparison/fonts.json`. The fonts are not bundled in any Myna artifact.

@@ -26,6 +26,7 @@ FFM_METHODS = {
     "manual-bound-critical-ffm": "manualBoundCriticalFfm",
     "manual-unbound-critical-ffm": "manualUnboundCriticalFfm",
     "generated-typed-critical-ffm": "generatedTypedCriticalFfm",
+    "generated-static-critical-ffm": "generatedStaticCriticalFfm",
 }
 CASES = {
     "native": ["control", "generated-normal", "manual-normal", "generated-leaf", "manual-leaf",

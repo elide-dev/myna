@@ -42,7 +42,14 @@ public final class NativeImageForeign implements Backend {
                     + "public final class "
                     + module.foreignFeatureClass()
                     + " implements Feature {\n"
-                    + "    @Override public void duringSetup(DuringSetupAccess access) {\n");
+                    + "    @Override public void duringSetup(DuringSetupAccess access) {\n")
+            // The outer class holds only descriptors, layouts and the fingerprint. Initializing it
+            // at build time removes a class-initialization check from every static entry call.
+            .append("        RuntimeClassInitialization.initializeAtBuildTime(\"")
+            .append(pkg)
+            .append('.')
+            .append(ffm)
+            .append("\");\n");
     for (Function function : module.functions()) {
       out.append(downcall).append(function.name()).append("_DESCRIPTOR);\n");
       if (Seam.nativeLeaf(function)) {

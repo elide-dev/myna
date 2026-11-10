@@ -1,0 +1,9 @@
+{
+  "benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.json": "3900c1acf3c2bee68ef2dd6ae60d5792a44ec8a02f72acbde31bb2f3b23d6ec1",
+  "benchmarks/cells/chart.py": "62a007636c87285e9c0419745d9b50310968382e031f8b069323cd6f6f880bfe",
+  "benchmarks/comparison/brand.py": "209ad7b1382c36ec39ea90f9030f2fb664016e04a06e455660fb20b44e1024ab",
+  "benchmarks/comparison/fonts.json": "44170183b8757c680f94ebd6487f7700b9bae4fe0b70370072860dc9deea1751",
+  "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
+  "docs/charts/truffle-cells.svg": "eae34037ab9708663867282c948641745b5f062ad383b98036cdd68d23f5875f",
+  "docs/charts/truffle-cells.png": "302ee26c0266fb5b88375dd3289043905143b43988477b1a1cba12c03f175b39"
+}

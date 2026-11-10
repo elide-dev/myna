@@ -297,8 +297,8 @@ type checks on its guest values. The lever for a short call is the import's leaf
 `native_leaf` import (the binding ABI 2 default) has no transition and inlines, where
 `native_leaf=false` pays the transition on every route.
 
-FFM-backend cells call the module's `MynaFFM` static bindings (`_Downcall.HANDLE` over the
-`loaderLookup` address) from a static method behind a `@TruffleBoundary`, since those bindings
+FFM-backend cells call the module's `MynaFFM` static bindings (`_CriticalDowncall.HANDLE` for a
+native leaf, `_Downcall.HANDLE` otherwise, over the `loaderLookup` address) from a static method behind a `@TruffleBoundary`, since those bindings
 initialize at run time and invoke a method handle, and report linkage failures as guest errors,
 while guest exceptions and fatal VM errors pass through. They need the generated foreign Feature on a Native Image, exactly
 like any other FFM consumer; see [Measurement](#measurement) for their cost.
@@ -430,8 +430,9 @@ Findings that are tracked, not blocking:
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
 - FFM cells pass `MemorySegment.ofAddress(address)` to the downcall, so the liveness and
   confinement checks of the caller's own segment do not apply during the call.
-- The generator has no FFM critical cell variant; the direct FFM leaf (5.5 ns) already beats the
-  measured critical downcall figures on this fork, so none is planned until a consumer asks.
+- FFM cells over leaf imports are critical: they call the module's static FFM entry, which for a
+  native leaf is a critical downcall over the build-time typed adapter. See
+  [Measurement](#measurement) for their cost against the direct and handwritten calls.
 - Truffle NFI is an internal language: host code cannot `eval("nfi", ...)`, so the benchmark
   carries a two-method language that binds symbols through NFI signature objects
   (`signature.invokeMember("bind", symbol)`). Consumers embedding NFI need the same.

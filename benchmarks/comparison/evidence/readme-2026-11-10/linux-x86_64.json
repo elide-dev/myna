@@ -1,0 +1,431 @@
+{
+  "native": {
+    "full_disassembly_sha256": "25347ad5b9ae515da73d118d35c7723e28ba44694e0d8fc03a604366517abab0",
+    "functions": [
+      {
+        "symbol": "direct",
+        "instructions": 13
+      },
+      {
+        "symbol": "indirect",
+        "instructions": 18
+      },
+      {
+        "symbol": "identity_direct",
+        "instructions": 13
+      },
+      {
+        "symbol": "identity_indirect",
+        "instructions": 18
+      },
+      {
+        "symbol": "identity_direct_unrolled4",
+        "instructions": 25
+      },
+      {
+        "symbol": "identity_indirect_unrolled4",
+        "instructions": 37
+      },
+      {
+        "symbol": "myna_bench_identity",
+        "instructions": 3
+      },
+      {
+        "symbol": "myna_bench_identity_address",
+        "instructions": 10
+      }
+    ]
+  },
+  "svm": {
+    "full_disassembly_sha256": "61233e013e393eb224a0ad229a48ffd1af97fe14b50542bdbb7712b0dd3a76ee",
+    "functions": [
+      {
+        "symbol": "Floor$$L3d161c30_run_JuYeGUi3Q24PRu8DGinmYG",
+        "instructions": 60
+      },
+      {
+        "symbol": "Floor$$L9094b578_run_UeshAlJdIEAWAzqbFRdcN6",
+        "instructions": 60
+      },
+      {
+        "symbol": "Floor$$L1ee5b013_run_3XvS1gSGMi0OBIPJzNz6zF",
+        "instructions": 47
+      },
+      {
+        "symbol": "Floor$$L906294e4_run_OZY2eX9pYLKkEkYqessxAE",
+        "instructions": 131
+      },
+      {
+        "symbol": "Floor$$L26994aad_run_sthG1RPPFq68efVXTl2669",
+        "instructions": 92
+      },
+      {
+        "symbol": "Floor$$L6c62a309_run_KJOWDiJCQM6rWw9kkXmoh4",
+        "instructions": 156
+      },
+      {
+        "symbol": "Floor$$L7b482530_run_E8Og6fELcv4WERRdzys2T5",
+        "instructions": 92
+      },
+      {
+        "symbol": "Floor$$L92960097_run_58NQHUuvj9IokcCa5edcXB",
+        "instructions": 57
+      },
+      {
+        "symbol": "Floor$$L9ced8ac4_run_vg8UCCRIOx68CbcymLt63G",
+        "instructions": 131
+      },
+      {
+        "symbol": "Floor$$Lb2d4d33d_run_o92IpIAwItHCdLzUnZzHE7",
+        "instructions": 47
+      },
+      {
+        "symbol": "Floor$$L78a8a022_run_bbe0oFsVNi6cAfruS8V5lI",
+        "instructions": 271
+      },
+      {
+        "symbol": "Floor$$L19f09f3c_run_Pnqjd0dOoyG9EFli4yq2gI",
+        "instructions": 156
+      },
+      {
+        "symbol": "Floor$$Lf3aa6616_run_LwuK0mClf1JT64CYSZhR15",
+        "instructions": 67
+      },
+      {
+        "symbol": "Floor$$L32d8fcd4_run_tFtMC63tse0rFNl45HhnrH",
+        "instructions": 156
+      },
+      {
+        "symbol": "Floor$$L02f0279f_run_1BowCVAkR87smhvJR0albB",
+        "instructions": 114
+      },
+      {
+        "symbol": "Floor$$Lf4e8b095_run_paqoqlY3rVDS05dotmOwtK",
+        "instructions": 114
+      },
+      {
+        "symbol": "Floor$$L38a94f92_run_AdD6BRDGzy7EOMAFyxUli6",
+        "instructions": 156
+      },
+      {
+        "symbol": "Floor$$L7842a2eb_run_20AKGFyYt4EYcppUqZq0a2",
+        "instructions": 47
+      },
+      {
+        "symbol": "Floor$$Lb79431a0_run_FaQJriQJPQ9ZWaH1xGlV10",
+        "instructions": 60
+      },
+      {
+        "symbol": "Floor$$Lbf255646_run_HnWLhWlZva2JScv3WxJYnL",
+        "instructions": 60
+      },
+      {
+        "symbol": "Floor$$Lc02859e8_run_gxC7QWhRSSFYthoffC7e0D",
+        "instructions": 63
+      },
+      {
+        "symbol": "Floor_identity_RGfigO1fJmId7IgDqMOKbC",
+        "instructions": 14
+      },
+      {
+        "symbol": "Floor_javaBatch16_8LIcqghlXl80Dft9xk6yUA",
+        "instructions": 98
+      },
+      {
+        "symbol": "Floor_javaBatch256_sBLMR8Ztqr8TxvWCU9C5E1",
+        "instructions": 122
+      },
+      {
+        "symbol": "Floor_javaBatch4_wasvmklIr2I1bT69W7y2vI",
+        "instructions": 42
+      },
+      {
+        "symbol": "Floor_javaBatch64_K1Yw1tcLJ64AWpNsVkdWbK",
+        "instructions": 314
+      },
+      {
+        "symbol": "Floor_leaf_xl8tBddbMc9N8Nhe5l1Y8G",
+        "instructions": 14
+      }
+    ]
+  },
+  "build": {
+    "workload": "leaf-floor-v2",
+    "binding_abi": 2,
+    "revision": "c8802c553835cb48b4d3f764b90dadfb7aebfee5",
+    "dirty": "",
+    "target": "x86_64-unknown-linux-gnu",
+    "commands": [
+      [
+        "javac",
+        "-d",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generator-classes",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/Generator.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/Backend.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/ByValue.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/CHeader.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/FfmCallbacks.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/JavaFfm.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/JniAbi.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/Llvm.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/NativeImage.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/NativeImageForeign.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/NativeImageProperties.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/NativeOwnership.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/RustFfi.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/RustOwnership.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/StaticJni.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/TruffleCells.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/backend/Types.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/cli/Main.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/frontend/Dsl.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/model/Seam.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/serialize/SeamJson.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/validate/OwnershipValidator.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/src/main/java/dev/elide/myna/validate/Validator.java"
+      ],
+      [
+        "java",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/comparison/boundary.seam",
+        "--out",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/boundary",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      [
+        "java",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/batch.seam",
+        "--out",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/batch",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      [
+        "java",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/identity.seam",
+        "--out",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/identity",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      [
+        "java",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generator-classes",
+        "dev.elide.myna.cli.Main",
+        "generate",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/examples/leaf-pointer/leaf-pointer.seam",
+        "--out",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/leaf-pointer",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include/linux",
+        "-c",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/comparison/kernel.c",
+        "-o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/kernel.o"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include/linux",
+        "-c",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/batch.c",
+        "-o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/batch.o"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "-O3",
+        "-fPIC",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include",
+        "-I",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/include/linux",
+        "-c",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/native.c",
+        "-o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/caller.o"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/caller.o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/kernel.o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/batch.o",
+        "-o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/native"
+      ],
+      [
+        "javac",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/lib/svm/svm-shared.jar:/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/lib/svm/svm-guest-staging.jar:/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/lib/svm/svm-guest.jar",
+        "-d",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/classes",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/Floor.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/floor/FloorMeasure.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/benchmarks/comparison/Measure.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/boundary/Generated.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/batch/Batch.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/identity/Identity.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/generated/leaf-pointer/LeafBindings.java",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/examples/leaf-pointer/LongLeaf.java"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/bin/native-image",
+        "-J--enable-native-access=ALL-UNNAMED",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-CheckToolchain",
+        "-H:CCompilerPath=/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "-H:-UnlockExperimentalVMOptions",
+        "-O3",
+        "-march=compatibility",
+        "--initialize-at-build-time=bench.Generated",
+        "-cp",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/classes",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:-DeleteLocalSymbols",
+        "-H:NativeLinkerOption=/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/kernel.o",
+        "-H:NativeLinkerOption=/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/batch.o",
+        "-H:-UnlockExperimentalVMOptions",
+        "bench.Floor",
+        "-o",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/svm"
+      ],
+      [
+        "llvm-objdump",
+        "--disassemble",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/native"
+      ],
+      [
+        "llvm-objdump",
+        "--disassemble",
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/svm"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/build/floor/svm",
+        "stress"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/scripts/native-cc",
+        "--version"
+      ],
+      [
+        "/tmp/myna-readme-2026-11-10.aHcRCQ/source/.dev/toolchains/graalvm/bin/native-image",
+        "--version"
+      ],
+      [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    ],
+    "versions": {
+      "clang": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.6/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.6/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg\n",
+      "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n"
+    },
+    "sources": {
+      "benchmarks/floor/run.py": "d600e54a00e202510b99b2c34c2b87953306d6562fd70533a04c74098fb30835",
+      "benchmarks/floor/native.c": "0d485e7ef6984401507f009bc4a42cc058270751780bcddfbba02d10ab97bd97",
+      "benchmarks/floor/identity.seam": "ec51618a060bc68893c3cc1721acb54b8449d8fae1a9cfa239743db2dbfed511",
+      "benchmarks/floor/batch.seam": "db3bdec9723f1c6da1a0f7f3ed266fb7ee0b1720b4cbf3a74e1c8f446a9d83c3",
+      "benchmarks/floor/batch.c": "c6c5795b8c10218597ed6f7f71e8cad926b19bced2c6d7a18152caa47eb2ea7f",
+      "benchmarks/floor/README.md": "fd1ddb286f7f0029a3064e25990eae2516ee96e527cea3ce4239000ae2d8bf4a",
+      "benchmarks/floor/FloorMeasure.java": "e1573349a9911b4fb563e4186b52fe8bcaba4c82f6d561007371f461ee32d896",
+      "benchmarks/floor/Floor.java": "1fed8080842ca612fb1cca645d1eef336ab0853cb91bfafdc8f02133943c24cc",
+      "examples/leaf-pointer/LongLeaf.java": "c219a78e08b76d427dfd7178dc4f815c0421baf82ec90e7864b239ef4c9c6120",
+      "examples/leaf-pointer/README.md": "1c9ff38838407a6d99a25a462128f2c2759508c6194fe9d78015ced286977545",
+      "examples/leaf-pointer/leaf-pointer.seam": "51ae272ae866fccc1962765cb88a60f120fe319e4656baa2df14cb91a79d6ed4",
+      "benchmarks/comparison/kernel.c": "7211fd916e723f529d78146942f3058fc8bd74713ead986a88e74fff8b2a2133",
+      "benchmarks/comparison/Measure.java": "45dc2e17cc2d6860aba48ce6dee3df7eebea7cbe303549e2a8edc3f96eb3fdd0",
+      "benchmarks/comparison/boundary.seam": "a32fef2761b47af7efd232f80a1471a6f35339693932fe1e0fccd6ca2fdcf0fe",
+      "benchmarks/comparison/run.py": "ff95c3a1c606a64ee3f1ed75eee04cd2e1a1d6a969bdc787c8843149506be68d",
+      "tests/support.py": "a2f30b30a75b3bb5e4b423d6fb1295448ba48463abbd48d7744cfe53531f18dd",
+      "mise.lock": "20aedf40cc78d038cf10fe10fde175b6933bb97ab02a8cbb1d7fd884fc0c512d",
+      "tools/graalvm.json": "3bcca9b637680e0a8259c4cf97cf1579b09e562bb86a96e8c3622c14a1dc2e4c",
+      "src/main/java/dev/elide/myna/Generator.java": "c21b434084a056930a0a48e932fd6055038d198dcf9ec12519f3bed849f168bd",
+      "src/main/java/dev/elide/myna/backend/Backend.java": "1006a74bb8f981c52bd0776307f0acf7498ee371e557caecb61306317a9be519",
+      "src/main/java/dev/elide/myna/backend/ByValue.java": "51e7e16b30dbcc0235ee8e5b1437a5ac9a5ddb8147b57952b51e9697d7211650",
+      "src/main/java/dev/elide/myna/backend/CHeader.java": "ccf568f3a91d9dadb393b1dc9d27dac22b9203e2cedcd5f52581b51fc2162501",
+      "src/main/java/dev/elide/myna/backend/FfmCallbacks.java": "e5915e26da1c4a14b018a44a39b8490f047e69a788e444652df2e5ab5ab85f33",
+      "src/main/java/dev/elide/myna/backend/JavaFfm.java": "698c473343e779bbc4aa40eeabf74407d2b6e371d80a68826a92a57a6af804e8",
+      "src/main/java/dev/elide/myna/backend/JniAbi.java": "4423788dbb22c84b8a5ed3297545e05b9a80ff1f00fb4324e5182fc43cd94bff",
+      "src/main/java/dev/elide/myna/backend/Llvm.java": "82263ceb98292309908827cf40067e36eaa6108588386414019bd46e8bd5123b",
+      "src/main/java/dev/elide/myna/backend/NativeImage.java": "80ddf0ddd192949fc63f5ca98d711373236da51f87abb07125b671ac5458c75e",
+      "src/main/java/dev/elide/myna/backend/NativeImageForeign.java": "786881d050334ffd688417930efddd74cdc8e3755bf0e9faafed5fbb2162f660",
+      "src/main/java/dev/elide/myna/backend/NativeImageProperties.java": "3ac3a58e212bdb2f616e91fb8eb091c898b2f47a230a520893646345a68dc723",
+      "src/main/java/dev/elide/myna/backend/NativeOwnership.java": "6d3a61611409fe53a964a36b7bdf6fa019b3fea9244f9c0fbbff899fac45e0a4",
+      "src/main/java/dev/elide/myna/backend/RustFfi.java": "37f0027deb5e0088eaf16a39b59b600007185a9a6b8d73c89ddaf00ee8a553fb",
+      "src/main/java/dev/elide/myna/backend/RustOwnership.java": "ce01c77ec8421b4044459ad4ac388e21efae9a445dda5a48825a04090f146dcb",
+      "src/main/java/dev/elide/myna/backend/StaticJni.java": "5d5488cdbdfb038cd2ddc85bced466520cef962dbeacd7562d3b8b6d6d8bddc2",
+      "src/main/java/dev/elide/myna/backend/TruffleCells.java": "bdd833c1fac7b7815d71d2b9e6a8233c3f60dcd10dedab190639eff314f3109e",
+      "src/main/java/dev/elide/myna/backend/Types.java": "ed588540120bb45b39e3edfea8feb4583a15eb257a86e146cd2c60ae280dfc6b",
+      "src/main/java/dev/elide/myna/cli/Main.java": "3f3e433e38a8aec76554038583f47e0f0eaf9aa42733fe92ff8deabe5abe51e1",
+      "src/main/java/dev/elide/myna/frontend/Dsl.java": "546fc30b0df035089eb8712463743374d4815f46d8767ee06520d2d9fc131480",
+      "src/main/java/dev/elide/myna/model/Seam.java": "01638b41168e2de589b7d01732c74c960374d906db12f27bfaa7f903aa2b31e8",
+      "src/main/java/dev/elide/myna/serialize/SeamJson.java": "bac02f7dc77ed85ae7a67df2e489863ff5962e1e9043f10e7f040d1e02adc45a",
+      "src/main/java/dev/elide/myna/validate/OwnershipValidator.java": "b8d3bbe75d3b6fc06705f292027a880be61387424c73315270307eaa37cfe9b4",
+      "src/main/java/dev/elide/myna/validate/Validator.java": "cb6a96b213df327f03f9e9655cf18b504cf73bc4b9e35e391cfc192dbb2c11b3"
+    },
+    "binaries": {
+      "build/floor/native": "fbacdbff4f712c3781e80620bb7e68a40e38306cad32bd3a68c89ce56bae69c2",
+      "build/floor/svm": "b5eb36450139475cac4209180d668f1fb94249e998b8c1ef1fe3838282b1a876",
+      "build/floor/kernel.o": "c368eb3ae998d6899e67f038dab045983987e5df5380e6b7ff4b4aca44eb8a8e",
+      "build/floor/batch.o": "fe3c0682c46614ac7e4f8324ee39341ad3e7d4682dac9f3a1791a9a9e49f1b6f",
+      "build/floor/caller.o": "087b85bede6c86488dc5430ab133f8eca5b4cd606bbd273e1df55799b99d8ef7"
+    },
+    "annotation_jar_sha256": "29e969e30c0e7fc9024d1a985826a2b694c6767e019bc7ac0c643b4319bfb419",
+    "graalvm": {
+      "version": "25.5.5-elide.28",
+      "edition": "ce",
+      "platforms": {
+        "Darwin-arm64": {
+          "archive": "macos-aarch64",
+          "sha256": "8a244c653dc7875c72efbb8e1a42b5dd8e11fe73e616beb6b84e598ab170b207"
+        },
+        "Linux-x86_64": {
+          "archive": "linux-amd64",
+          "sha256": "398d8587d0ac7ab2610a979cdc43f0ad03a484b4be0e09a1bcc64f2ec703f148"
+        },
+        "Linux-aarch64": {
+          "archive": "linux-aarch64",
+          "sha256": "c4d0426c5a06a6e36f8d946d2b1ba5915f54373d35ebd53397501c2c6b189b7a"
+        }
+      }
+    },
+    "execution_profile": {
+      "native_image_cpu": "compatibility",
+      "c_cpu_flags": [],
+      "lto": false
+    }
+  },
+  "retained_disassembly_sha256": "08f7d7d67d24a66a84d10bf10e35d86707897683a305d21ec9c12acf6a36f49f"
+}

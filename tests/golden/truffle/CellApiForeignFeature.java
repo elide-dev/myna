@@ -7,6 +7,7 @@ import org.graalvm.nativeimage.hosted.RuntimeForeignAccess;
 
 public final class CellApiForeignFeature implements Feature {
     @Override public void duringSetup(DuringSetupAccess access) {
+        RuntimeClassInitialization.initializeAtBuildTime("fixture.cells.CellApiFFM");
         RuntimeForeignAccess.registerForDowncall(CellApiFFM.add_DESCRIPTOR);
         RuntimeForeignAccess.registerForDowncall(CellApiFFM.add_DESCRIPTOR, java.lang.foreign.Linker.Option.critical(false));
         RuntimeClassInitialization.initializeAtBuildTime("fixture.cells.CellApiFFM$add_CriticalDowncall");

@@ -158,10 +158,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.add_DESCRIPTOR);
     }
     private static final class add_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_add").orElseThrow(() -> new UnsatisfiedLinkError("cells_add"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_add").orElseThrow(() -> new UnsatisfiedLinkError("cells_add")).address();
     }
     public static int add(int left, int right) throws Throwable {
-        return (int) CellApiFFM.add_Downcall.HANDLE.invokeExact(CellApiFFM.add_Binding.ADDRESS, left, right);
+        return (int) CellApiFFM.add_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.add_Binding.ADDRESS), left, right);
     }
     private static final class checksum_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.checksum_DESCRIPTOR, Linker.Option.critical(false));
@@ -171,30 +171,30 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.checksum_DESCRIPTOR);
     }
     private static final class checksum_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_checksum").orElseThrow(() -> new UnsatisfiedLinkError("cells_checksum"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_checksum").orElseThrow(() -> new UnsatisfiedLinkError("cells_checksum")).address();
     }
     public static long checksum(MemorySegment bytes, long count) throws Throwable {
-        return (long) CellApiFFM.checksum_Downcall.HANDLE.invokeExact(CellApiFFM.checksum_Binding.ADDRESS, bytes, count);
+        return (long) CellApiFFM.checksum_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.checksum_Binding.ADDRESS), bytes, count);
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class counterCreate_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.counterCreate_DESCRIPTOR);
     }
     private static final class counterCreate_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_create").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_create"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_create").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_create")).address();
     }
     public static MemorySegment counterCreate(long start) throws Throwable {
-        return (MemorySegment) CellApiFFM.counterCreate_Downcall.HANDLE.invokeExact(CellApiFFM.counterCreate_Binding.ADDRESS, start);
+        return (MemorySegment) CellApiFFM.counterCreate_Downcall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.counterCreate_Binding.ADDRESS), start);
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class counterDestroy_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.counterDestroy_DESCRIPTOR);
     }
     private static final class counterDestroy_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_destroy").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_destroy"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_destroy").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_destroy")).address();
     }
     public static void counterDestroy(MemorySegment counter) throws Throwable {
-        CellApiFFM.counterDestroy_Downcall.HANDLE.invokeExact(CellApiFFM.counterDestroy_Binding.ADDRESS, counter);
+        CellApiFFM.counterDestroy_Downcall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.counterDestroy_Binding.ADDRESS), counter);
     }
     private static final class counterNext_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.counterNext_DESCRIPTOR, Linker.Option.critical(false));
@@ -204,10 +204,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.counterNext_DESCRIPTOR);
     }
     private static final class counterNext_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_next").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_next"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_counter_next").orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_next")).address();
     }
     public static long counterNext(MemorySegment counter) throws Throwable {
-        return (long) CellApiFFM.counterNext_Downcall.HANDLE.invokeExact(CellApiFFM.counterNext_Binding.ADDRESS, counter);
+        return (long) CellApiFFM.counterNext_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.counterNext_Binding.ADDRESS), counter);
     }
     private static final class fill_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.fill_DESCRIPTOR, Linker.Option.critical(false));
@@ -217,10 +217,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.fill_DESCRIPTOR);
     }
     private static final class fill_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_fill").orElseThrow(() -> new UnsatisfiedLinkError("cells_fill"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_fill").orElseThrow(() -> new UnsatisfiedLinkError("cells_fill")).address();
     }
     public static void fill(MemorySegment bytes, int count, byte value) throws Throwable {
-        CellApiFFM.fill_Downcall.HANDLE.invokeExact(CellApiFFM.fill_Binding.ADDRESS, bytes, count, value & 0xff);
+        CellApiFFM.fill_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.fill_Binding.ADDRESS), bytes, count, value & 0xff);
     }
     private static final class lowByte_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.lowByte_DESCRIPTOR, Linker.Option.critical(false));
@@ -230,10 +230,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.lowByte_DESCRIPTOR);
     }
     private static final class lowByte_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_low_byte").orElseThrow(() -> new UnsatisfiedLinkError("cells_low_byte"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_low_byte").orElseThrow(() -> new UnsatisfiedLinkError("cells_low_byte")).address();
     }
     public static byte lowByte(long value) throws Throwable {
-        return (byte) CellApiFFM.lowByte_Downcall.HANDLE.invokeExact(CellApiFFM.lowByte_Binding.ADDRESS, value);
+        return (byte) CellApiFFM.lowByte_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.lowByte_Binding.ADDRESS), value);
     }
     private static final class peek_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.peek_DESCRIPTOR, Linker.Option.critical(false));
@@ -243,10 +243,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.peek_DESCRIPTOR);
     }
     private static final class peek_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_peek").orElseThrow(() -> new UnsatisfiedLinkError("cells_peek"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_peek").orElseThrow(() -> new UnsatisfiedLinkError("cells_peek")).address();
     }
     public static long peek(MemorySegment cell) throws Throwable {
-        return (long) CellApiFFM.peek_Downcall.HANDLE.invokeExact(CellApiFFM.peek_Binding.ADDRESS, cell);
+        return (long) CellApiFFM.peek_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.peek_Binding.ADDRESS), cell);
     }
     private static final class poke_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.poke_DESCRIPTOR, Linker.Option.critical(false));
@@ -256,10 +256,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.poke_DESCRIPTOR);
     }
     private static final class poke_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_poke").orElseThrow(() -> new UnsatisfiedLinkError("cells_poke"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_poke").orElseThrow(() -> new UnsatisfiedLinkError("cells_poke")).address();
     }
     public static void poke(MemorySegment cell, long value) throws Throwable {
-        CellApiFFM.poke_Downcall.HANDLE.invokeExact(CellApiFFM.poke_Binding.ADDRESS, cell, value);
+        CellApiFFM.poke_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.poke_Binding.ADDRESS), cell, value);
     }
     private static final class rawLength_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.rawLength_DESCRIPTOR, Linker.Option.critical(false));
@@ -269,10 +269,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.rawLength_DESCRIPTOR);
     }
     private static final class rawLength_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_raw_length").orElseThrow(() -> new UnsatisfiedLinkError("cells_raw_length"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_raw_length").orElseThrow(() -> new UnsatisfiedLinkError("cells_raw_length")).address();
     }
     public static long rawLength(MemorySegment text) throws Throwable {
-        return (long) CellApiFFM.rawLength_Downcall.HANDLE.invokeExact(CellApiFFM.rawLength_Binding.ADDRESS, text);
+        return (long) CellApiFFM.rawLength_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.rawLength_Binding.ADDRESS), text);
     }
     private static final class scale_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.scale_DESCRIPTOR, Linker.Option.critical(false));
@@ -282,20 +282,20 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.scale_DESCRIPTOR);
     }
     private static final class scale_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_scale").orElseThrow(() -> new UnsatisfiedLinkError("cells_scale"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_scale").orElseThrow(() -> new UnsatisfiedLinkError("cells_scale")).address();
     }
     public static double scale(float value, double factor) throws Throwable {
-        return (double) CellApiFFM.scale_Downcall.HANDLE.invokeExact(CellApiFFM.scale_Binding.ADDRESS, value, factor);
+        return (double) CellApiFFM.scale_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.scale_Binding.ADDRESS), value, factor);
     }
     // ABI adapters may be compiled into an image; addresses remain runtime-bound.
     private static final class sleepyAdd_Downcall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.sleepyAdd_DESCRIPTOR);
     }
     private static final class sleepyAdd_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_sleepy_add").orElseThrow(() -> new UnsatisfiedLinkError("cells_sleepy_add"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_sleepy_add").orElseThrow(() -> new UnsatisfiedLinkError("cells_sleepy_add")).address();
     }
     public static long sleepyAdd(long left, long right) throws Throwable {
-        return (long) CellApiFFM.sleepyAdd_Downcall.HANDLE.invokeExact(CellApiFFM.sleepyAdd_Binding.ADDRESS, left, right);
+        return (long) CellApiFFM.sleepyAdd_Downcall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.sleepyAdd_Binding.ADDRESS), left, right);
     }
     private static final class strlen_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.strlen_DESCRIPTOR, Linker.Option.critical(false));
@@ -305,10 +305,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.strlen_DESCRIPTOR);
     }
     private static final class strlen_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_strlen").orElseThrow(() -> new UnsatisfiedLinkError("cells_strlen"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_strlen").orElseThrow(() -> new UnsatisfiedLinkError("cells_strlen")).address();
     }
     public static long strlen(MemorySegment text) throws Throwable {
-        return (long) CellApiFFM.strlen_Downcall.HANDLE.invokeExact(CellApiFFM.strlen_Binding.ADDRESS, text);
+        return (long) CellApiFFM.strlen_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.strlen_Binding.ADDRESS), text);
     }
     private static final class swap_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.swap_DESCRIPTOR, Linker.Option.critical(false));
@@ -318,10 +318,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.swap_DESCRIPTOR);
     }
     private static final class swap_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_swap").orElseThrow(() -> new UnsatisfiedLinkError("cells_swap"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_swap").orElseThrow(() -> new UnsatisfiedLinkError("cells_swap")).address();
     }
     public static MemorySegment swap(SegmentAllocator allocator, MemorySegment value) throws Throwable {
-        return (MemorySegment) CellApiFFM.swap_Downcall.HANDLE.invokeExact(CellApiFFM.swap_Binding.ADDRESS, allocator, value);
+        return (MemorySegment) CellApiFFM.swap_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.swap_Binding.ADDRESS), allocator, value);
     }
     private static final class widen_CriticalDowncall {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.widen_DESCRIPTOR, Linker.Option.critical(false));
@@ -331,10 +331,10 @@ public final class CellApiFFM {
         static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(CellApiFFM.widen_DESCRIPTOR);
     }
     private static final class widen_Binding {
-        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find("cells_widen").orElseThrow(() -> new UnsatisfiedLinkError("cells_widen"));
+        static final long ADDRESS = SymbolLookup.loaderLookup().find("cells_widen").orElseThrow(() -> new UnsatisfiedLinkError("cells_widen")).address();
     }
     public static long widen(byte small, short medium, int wide, boolean flag) throws Throwable {
-        return (long) CellApiFFM.widen_Downcall.HANDLE.invokeExact(CellApiFFM.widen_Binding.ADDRESS, small & 0xff, medium & 0xffff, wide, flag);
+        return (long) CellApiFFM.widen_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress(CellApiFFM.widen_Binding.ADDRESS), small & 0xff, medium & 0xffff, wide, flag);
     }
         /**
          * Explicit library binding. The caller owns the lookup/library arena and must keep it
@@ -343,86 +343,101 @@ public final class CellApiFFM {
          * Missing symbols fail only when invoked, allowing import-only libraries.
          */
         public static final class LibraryBinding {
-        private final java.util.Optional<MemorySegment> add_address;
-        private final java.util.Optional<MemorySegment> checksum_address;
-        private final java.util.Optional<MemorySegment> counterCreate_address;
-        private final java.util.Optional<MemorySegment> counterDestroy_address;
-        private final java.util.Optional<MemorySegment> counterNext_address;
-        private final java.util.Optional<MemorySegment> fill_address;
-        private final java.util.Optional<MemorySegment> lowByte_address;
-        private final java.util.Optional<MemorySegment> peek_address;
-        private final java.util.Optional<MemorySegment> poke_address;
-        private final java.util.Optional<MemorySegment> rawLength_address;
-        private final java.util.Optional<MemorySegment> scale_address;
-        private final java.util.Optional<MemorySegment> sleepyAdd_address;
-        private final java.util.Optional<MemorySegment> strlen_address;
-        private final java.util.Optional<MemorySegment> swap_address;
-        private final java.util.Optional<MemorySegment> widen_address;
+        private final MemorySegment add_address;
+        private final MemorySegment checksum_address;
+        private final MemorySegment counterCreate_address;
+        private final MemorySegment counterDestroy_address;
+        private final MemorySegment counterNext_address;
+        private final MemorySegment fill_address;
+        private final MemorySegment lowByte_address;
+        private final MemorySegment peek_address;
+        private final MemorySegment poke_address;
+        private final MemorySegment rawLength_address;
+        private final MemorySegment scale_address;
+        private final MemorySegment sleepyAdd_address;
+        private final MemorySegment strlen_address;
+        private final MemorySegment swap_address;
+        private final MemorySegment widen_address;
         public LibraryBinding(java.nio.file.Path path, Arena arena) {
             this(SymbolLookup.libraryLookup(path, arena));
         }
         public LibraryBinding(SymbolLookup lookup) {
             java.util.Objects.requireNonNull(lookup);
-            this.add_address = lookup.find("cells_add");
-            this.checksum_address = lookup.find("cells_checksum");
-            this.counterCreate_address = lookup.find("cells_counter_create");
-            this.counterDestroy_address = lookup.find("cells_counter_destroy");
-            this.counterNext_address = lookup.find("cells_counter_next");
-            this.fill_address = lookup.find("cells_fill");
-            this.lowByte_address = lookup.find("cells_low_byte");
-            this.peek_address = lookup.find("cells_peek");
-            this.poke_address = lookup.find("cells_poke");
-            this.rawLength_address = lookup.find("cells_raw_length");
-            this.scale_address = lookup.find("cells_scale");
-            this.sleepyAdd_address = lookup.find("cells_sleepy_add");
-            this.strlen_address = lookup.find("cells_strlen");
-            this.swap_address = lookup.find("cells_swap");
-            this.widen_address = lookup.find("cells_widen");
+            this.add_address = lookup.find("cells_add").orElse(null);
+            this.checksum_address = lookup.find("cells_checksum").orElse(null);
+            this.counterCreate_address = lookup.find("cells_counter_create").orElse(null);
+            this.counterDestroy_address = lookup.find("cells_counter_destroy").orElse(null);
+            this.counterNext_address = lookup.find("cells_counter_next").orElse(null);
+            this.fill_address = lookup.find("cells_fill").orElse(null);
+            this.lowByte_address = lookup.find("cells_low_byte").orElse(null);
+            this.peek_address = lookup.find("cells_peek").orElse(null);
+            this.poke_address = lookup.find("cells_poke").orElse(null);
+            this.rawLength_address = lookup.find("cells_raw_length").orElse(null);
+            this.scale_address = lookup.find("cells_scale").orElse(null);
+            this.sleepyAdd_address = lookup.find("cells_sleepy_add").orElse(null);
+            this.strlen_address = lookup.find("cells_strlen").orElse(null);
+            this.swap_address = lookup.find("cells_swap").orElse(null);
+            this.widen_address = lookup.find("cells_widen").orElse(null);
         }
         public int add(int left, int right) throws Throwable {
-            return (int) CellApiFFM.add_Downcall.HANDLE.invokeExact(this.add_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_add")), left, right);
+            if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");
+            return (int) CellApiFFM.add_Downcall.HANDLE.invokeExact(this.add_address, left, right);
         }
         public long checksum(MemorySegment bytes, long count) throws Throwable {
-            return (long) CellApiFFM.checksum_Downcall.HANDLE.invokeExact(this.checksum_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_checksum")), bytes, count);
+            if (this.checksum_address == null) throw new UnsatisfiedLinkError("cells_checksum");
+            return (long) CellApiFFM.checksum_Downcall.HANDLE.invokeExact(this.checksum_address, bytes, count);
         }
         public MemorySegment counterCreate(long start) throws Throwable {
-            return (MemorySegment) CellApiFFM.counterCreate_Downcall.HANDLE.invokeExact(this.counterCreate_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_create")), start);
+            if (this.counterCreate_address == null) throw new UnsatisfiedLinkError("cells_counter_create");
+            return (MemorySegment) CellApiFFM.counterCreate_Downcall.HANDLE.invokeExact(this.counterCreate_address, start);
         }
         public void counterDestroy(MemorySegment counter) throws Throwable {
-            CellApiFFM.counterDestroy_Downcall.HANDLE.invokeExact(this.counterDestroy_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_destroy")), counter);
+            if (this.counterDestroy_address == null) throw new UnsatisfiedLinkError("cells_counter_destroy");
+            CellApiFFM.counterDestroy_Downcall.HANDLE.invokeExact(this.counterDestroy_address, counter);
         }
         public long counterNext(MemorySegment counter) throws Throwable {
-            return (long) CellApiFFM.counterNext_Downcall.HANDLE.invokeExact(this.counterNext_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_next")), counter);
+            if (this.counterNext_address == null) throw new UnsatisfiedLinkError("cells_counter_next");
+            return (long) CellApiFFM.counterNext_Downcall.HANDLE.invokeExact(this.counterNext_address, counter);
         }
         public void fill(MemorySegment bytes, int count, byte value) throws Throwable {
-            CellApiFFM.fill_Downcall.HANDLE.invokeExact(this.fill_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_fill")), bytes, count, value & 0xff);
+            if (this.fill_address == null) throw new UnsatisfiedLinkError("cells_fill");
+            CellApiFFM.fill_Downcall.HANDLE.invokeExact(this.fill_address, bytes, count, value & 0xff);
         }
         public byte lowByte(long value) throws Throwable {
-            return (byte) CellApiFFM.lowByte_Downcall.HANDLE.invokeExact(this.lowByte_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_low_byte")), value);
+            if (this.lowByte_address == null) throw new UnsatisfiedLinkError("cells_low_byte");
+            return (byte) CellApiFFM.lowByte_Downcall.HANDLE.invokeExact(this.lowByte_address, value);
         }
         public long peek(MemorySegment cell) throws Throwable {
-            return (long) CellApiFFM.peek_Downcall.HANDLE.invokeExact(this.peek_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_peek")), cell);
+            if (this.peek_address == null) throw new UnsatisfiedLinkError("cells_peek");
+            return (long) CellApiFFM.peek_Downcall.HANDLE.invokeExact(this.peek_address, cell);
         }
         public void poke(MemorySegment cell, long value) throws Throwable {
-            CellApiFFM.poke_Downcall.HANDLE.invokeExact(this.poke_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_poke")), cell, value);
+            if (this.poke_address == null) throw new UnsatisfiedLinkError("cells_poke");
+            CellApiFFM.poke_Downcall.HANDLE.invokeExact(this.poke_address, cell, value);
         }
         public long rawLength(MemorySegment text) throws Throwable {
-            return (long) CellApiFFM.rawLength_Downcall.HANDLE.invokeExact(this.rawLength_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_raw_length")), text);
+            if (this.rawLength_address == null) throw new UnsatisfiedLinkError("cells_raw_length");
+            return (long) CellApiFFM.rawLength_Downcall.HANDLE.invokeExact(this.rawLength_address, text);
         }
         public double scale(float value, double factor) throws Throwable {
-            return (double) CellApiFFM.scale_Downcall.HANDLE.invokeExact(this.scale_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_scale")), value, factor);
+            if (this.scale_address == null) throw new UnsatisfiedLinkError("cells_scale");
+            return (double) CellApiFFM.scale_Downcall.HANDLE.invokeExact(this.scale_address, value, factor);
         }
         public long sleepyAdd(long left, long right) throws Throwable {
-            return (long) CellApiFFM.sleepyAdd_Downcall.HANDLE.invokeExact(this.sleepyAdd_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_sleepy_add")), left, right);
+            if (this.sleepyAdd_address == null) throw new UnsatisfiedLinkError("cells_sleepy_add");
+            return (long) CellApiFFM.sleepyAdd_Downcall.HANDLE.invokeExact(this.sleepyAdd_address, left, right);
         }
         public long strlen(MemorySegment text) throws Throwable {
-            return (long) CellApiFFM.strlen_Downcall.HANDLE.invokeExact(this.strlen_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_strlen")), text);
+            if (this.strlen_address == null) throw new UnsatisfiedLinkError("cells_strlen");
+            return (long) CellApiFFM.strlen_Downcall.HANDLE.invokeExact(this.strlen_address, text);
         }
         public MemorySegment swap(SegmentAllocator allocator, MemorySegment value) throws Throwable {
-            return (MemorySegment) CellApiFFM.swap_Downcall.HANDLE.invokeExact(this.swap_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_swap")), allocator, value);
+            if (this.swap_address == null) throw new UnsatisfiedLinkError("cells_swap");
+            return (MemorySegment) CellApiFFM.swap_Downcall.HANDLE.invokeExact(this.swap_address, allocator, value);
         }
         public long widen(byte small, short medium, int wide, boolean flag) throws Throwable {
-            return (long) CellApiFFM.widen_Downcall.HANDLE.invokeExact(this.widen_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_widen")), small & 0xff, medium & 0xffff, wide, flag);
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("cells_widen");
+            return (long) CellApiFFM.widen_Downcall.HANDLE.invokeExact(this.widen_address, small & 0xff, medium & 0xffff, wide, flag);
         }
         /** Borrows the entire native segment for this call; length is in bytes. */
         public long checksum(MemorySegment arg0) throws Throwable {
@@ -468,71 +483,83 @@ public final class CellApiFFM {
          */
         // Only bounded, nonblocking, non-reentrant native leaves are exposed.
         public static final class CriticalLibraryBinding {
-        private final java.util.Optional<MemorySegment> add_address;
-        private final java.util.Optional<MemorySegment> checksum_address;
-        private final java.util.Optional<MemorySegment> counterNext_address;
-        private final java.util.Optional<MemorySegment> fill_address;
-        private final java.util.Optional<MemorySegment> lowByte_address;
-        private final java.util.Optional<MemorySegment> peek_address;
-        private final java.util.Optional<MemorySegment> poke_address;
-        private final java.util.Optional<MemorySegment> rawLength_address;
-        private final java.util.Optional<MemorySegment> scale_address;
-        private final java.util.Optional<MemorySegment> strlen_address;
-        private final java.util.Optional<MemorySegment> swap_address;
-        private final java.util.Optional<MemorySegment> widen_address;
+        private final MemorySegment add_address;
+        private final MemorySegment checksum_address;
+        private final MemorySegment counterNext_address;
+        private final MemorySegment fill_address;
+        private final MemorySegment lowByte_address;
+        private final MemorySegment peek_address;
+        private final MemorySegment poke_address;
+        private final MemorySegment rawLength_address;
+        private final MemorySegment scale_address;
+        private final MemorySegment strlen_address;
+        private final MemorySegment swap_address;
+        private final MemorySegment widen_address;
         public CriticalLibraryBinding(java.nio.file.Path path, Arena arena) {
             this(SymbolLookup.libraryLookup(path, arena));
         }
         public CriticalLibraryBinding(SymbolLookup lookup) {
             java.util.Objects.requireNonNull(lookup);
-            this.add_address = lookup.find("cells_add");
-            this.checksum_address = lookup.find("cells_checksum");
-            this.counterNext_address = lookup.find("cells_counter_next");
-            this.fill_address = lookup.find("cells_fill");
-            this.lowByte_address = lookup.find("cells_low_byte");
-            this.peek_address = lookup.find("cells_peek");
-            this.poke_address = lookup.find("cells_poke");
-            this.rawLength_address = lookup.find("cells_raw_length");
-            this.scale_address = lookup.find("cells_scale");
-            this.strlen_address = lookup.find("cells_strlen");
-            this.swap_address = lookup.find("cells_swap");
-            this.widen_address = lookup.find("cells_widen");
+            this.add_address = lookup.find("cells_add").orElse(null);
+            this.checksum_address = lookup.find("cells_checksum").orElse(null);
+            this.counterNext_address = lookup.find("cells_counter_next").orElse(null);
+            this.fill_address = lookup.find("cells_fill").orElse(null);
+            this.lowByte_address = lookup.find("cells_low_byte").orElse(null);
+            this.peek_address = lookup.find("cells_peek").orElse(null);
+            this.poke_address = lookup.find("cells_poke").orElse(null);
+            this.rawLength_address = lookup.find("cells_raw_length").orElse(null);
+            this.scale_address = lookup.find("cells_scale").orElse(null);
+            this.strlen_address = lookup.find("cells_strlen").orElse(null);
+            this.swap_address = lookup.find("cells_swap").orElse(null);
+            this.widen_address = lookup.find("cells_widen").orElse(null);
         }
         public int add(int left, int right) throws Throwable {
-            return (int) CellApiFFM.add_CriticalDowncall.HANDLE.invokeExact(this.add_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_add")), left, right);
+            if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");
+            return (int) CellApiFFM.add_CriticalDowncall.HANDLE.invokeExact(this.add_address, left, right);
         }
         public long checksum(MemorySegment bytes, long count) throws Throwable {
-            return (long) CellApiFFM.checksum_CriticalDowncall.HANDLE.invokeExact(this.checksum_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_checksum")), bytes, count);
+            if (this.checksum_address == null) throw new UnsatisfiedLinkError("cells_checksum");
+            return (long) CellApiFFM.checksum_CriticalDowncall.HANDLE.invokeExact(this.checksum_address, bytes, count);
         }
         public long counterNext(MemorySegment counter) throws Throwable {
-            return (long) CellApiFFM.counterNext_CriticalDowncall.HANDLE.invokeExact(this.counterNext_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_counter_next")), counter);
+            if (this.counterNext_address == null) throw new UnsatisfiedLinkError("cells_counter_next");
+            return (long) CellApiFFM.counterNext_CriticalDowncall.HANDLE.invokeExact(this.counterNext_address, counter);
         }
         public void fill(MemorySegment bytes, int count, byte value) throws Throwable {
-            CellApiFFM.fill_CriticalDowncall.HANDLE.invokeExact(this.fill_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_fill")), bytes, count, value & 0xff);
+            if (this.fill_address == null) throw new UnsatisfiedLinkError("cells_fill");
+            CellApiFFM.fill_CriticalDowncall.HANDLE.invokeExact(this.fill_address, bytes, count, value & 0xff);
         }
         public byte lowByte(long value) throws Throwable {
-            return (byte) CellApiFFM.lowByte_CriticalDowncall.HANDLE.invokeExact(this.lowByte_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_low_byte")), value);
+            if (this.lowByte_address == null) throw new UnsatisfiedLinkError("cells_low_byte");
+            return (byte) CellApiFFM.lowByte_CriticalDowncall.HANDLE.invokeExact(this.lowByte_address, value);
         }
         public long peek(MemorySegment cell) throws Throwable {
-            return (long) CellApiFFM.peek_CriticalDowncall.HANDLE.invokeExact(this.peek_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_peek")), cell);
+            if (this.peek_address == null) throw new UnsatisfiedLinkError("cells_peek");
+            return (long) CellApiFFM.peek_CriticalDowncall.HANDLE.invokeExact(this.peek_address, cell);
         }
         public void poke(MemorySegment cell, long value) throws Throwable {
-            CellApiFFM.poke_CriticalDowncall.HANDLE.invokeExact(this.poke_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_poke")), cell, value);
+            if (this.poke_address == null) throw new UnsatisfiedLinkError("cells_poke");
+            CellApiFFM.poke_CriticalDowncall.HANDLE.invokeExact(this.poke_address, cell, value);
         }
         public long rawLength(MemorySegment text) throws Throwable {
-            return (long) CellApiFFM.rawLength_CriticalDowncall.HANDLE.invokeExact(this.rawLength_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_raw_length")), text);
+            if (this.rawLength_address == null) throw new UnsatisfiedLinkError("cells_raw_length");
+            return (long) CellApiFFM.rawLength_CriticalDowncall.HANDLE.invokeExact(this.rawLength_address, text);
         }
         public double scale(float value, double factor) throws Throwable {
-            return (double) CellApiFFM.scale_CriticalDowncall.HANDLE.invokeExact(this.scale_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_scale")), value, factor);
+            if (this.scale_address == null) throw new UnsatisfiedLinkError("cells_scale");
+            return (double) CellApiFFM.scale_CriticalDowncall.HANDLE.invokeExact(this.scale_address, value, factor);
         }
         public long strlen(MemorySegment text) throws Throwable {
-            return (long) CellApiFFM.strlen_CriticalDowncall.HANDLE.invokeExact(this.strlen_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_strlen")), text);
+            if (this.strlen_address == null) throw new UnsatisfiedLinkError("cells_strlen");
+            return (long) CellApiFFM.strlen_CriticalDowncall.HANDLE.invokeExact(this.strlen_address, text);
         }
         public MemorySegment swap(SegmentAllocator allocator, MemorySegment value) throws Throwable {
-            return (MemorySegment) CellApiFFM.swap_CriticalDowncall.HANDLE.invokeExact(this.swap_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_swap")), allocator, value);
+            if (this.swap_address == null) throw new UnsatisfiedLinkError("cells_swap");
+            return (MemorySegment) CellApiFFM.swap_CriticalDowncall.HANDLE.invokeExact(this.swap_address, allocator, value);
         }
         public long widen(byte small, short medium, int wide, boolean flag) throws Throwable {
-            return (long) CellApiFFM.widen_CriticalDowncall.HANDLE.invokeExact(this.widen_address.orElseThrow(() -> new UnsatisfiedLinkError("cells_widen")), small & 0xff, medium & 0xffff, wide, flag);
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("cells_widen");
+            return (long) CellApiFFM.widen_CriticalDowncall.HANDLE.invokeExact(this.widen_address, small & 0xff, medium & 0xffff, wide, flag);
         }
         /** Borrows the entire native segment for this call; length is in bytes. */
         public long checksum(MemorySegment arg0) throws Throwable {
