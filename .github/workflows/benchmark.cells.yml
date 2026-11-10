@@ -5,7 +5,6 @@ name: Truffle cell costs
   pull_request:
     paths:
       - 'benchmarks/cells/**'
-      - 'benchmarks/gate.py'
       - 'src/main/java/**'
       - 'src/truffle/**'
       - 'benchmarks/comparison/kernel.c'
@@ -37,9 +36,6 @@ jobs:
       - run: mise run build:jvm
       - run: mise exec -- python3 benchmarks/cells/run.py build
       - run: mise exec -- python3 benchmarks/cells/run.py run
-      - name: Gate cells against direct binding calls
-        # Shared runners: code layout alone moves identical handwritten calls by up to 3.6%.
-        run: python3 benchmarks/gate.py cells build/cells/results.json --tolerance 0.05
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

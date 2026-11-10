@@ -256,32 +256,21 @@ belong on controlled runners, not shared CI hosts.
 ### Paired performance gates
 
 Comparisons between runs stay advisory, but within one run, every generated binding must keep
-pace with its matched handwritten or direct call. `benchmarks/gate.py` checks those pairs after
-each comparison, floor and cells workflow run. Locally:
+pace with its matched handwritten or direct call. Run `benchmarks/gate.py` on the controlled x86-64
+benchmark host after each floor, comparison and cells run, before results are checked in:
 `python3 benchmarks/gate.py comparison build/comparison/results.json` (or `floor`, `cells`). Each
 pair calls the same native function under the same transition contract, in fresh processes
-interleaved on one host, so host speed and drift cancel out. A pair fails only when the generated
-case's median of process medians exceeds its reference's by more than the tolerance, and the cases also separate:
-with each side's fastest and slowest process set aside, every remaining generated process is
-slower. A single outlier process can neither fail the gate nor hide a gap. On a host noisy enough
-that the process ranges overlap, the gate passes, so it does not replace a controlled-runner
-measurement.
-
-The tolerance is 2% on a controlled host and 5% in CI. On the shared ARM runners, code layout
-alone moves a call by several percent: between two builds that differed only by added benchmark
-cases, the unchanged handwritten library handle went from 35.37 to 36.65 ns/call (3.6%). Within
-a single binary, two calls with the same hot instructions but different register allocation
-separated by 3.0%. Both tolerances catch the gap this gate was written for: release 0.16.0's typed
-critical calls were 15% slower than a static handwritten handle on Linux x86-64, about 13% beyond
-the 1.5% that reaching an instance costs there.
+interleaved on one host, so host speed and drift cancel out. A pair fails when the generated case's
+median of process medians exceeds its reference's by more than 2% (`--tolerance`), and the cases
+also separate: with each side's fastest and slowest process set aside, every remaining generated
+process is slower. A single outlier process can neither fail the gate nor hide a gap. The hosted
+CI benchmark workflows stay advisory and do not run the gate.
 
 Each reference has the same structure as the generated code it gates. A generated library
 binding is an object that owns its library's symbol segments, so its reference is a handwritten
 object holding the segment in a final field (`manual-instance-library-ffm`,
-`manual-instance-critical-ffm`). Reaching an instance costs one dependent load more than a static
-handle: 1.5% on Linux x86-64 and about 22% on the hosted ARM runner for a 2.5 ns critical call.
-The generated static entries are gated against static handwritten handles. The static critical
-entry, the default for leaf imports, measured 1.18 against 2.54 ns/call on the hosted ARM runner.
+`manual-instance-critical-ffm`); reaching an instance costs one dependent load more than a static
+handle. The generated static entries are gated against static handwritten handles.
 
 A pair with a known, explained gap carries its own allowance and reason in `gate.py`. The
 allowance keeps that gap from growing; lower it when the gap is fixed. No pair currently needs
