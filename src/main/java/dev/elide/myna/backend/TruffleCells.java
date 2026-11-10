@@ -156,6 +156,9 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The guest argument each parameter is coerced from, by parameter name. A borrowed length
+    // has none, so guest positions are not parameter positions.
+    var guest = new HashMap<String, String>();
     var prelude = new StringBuilder();
     if (cell.destroys() == null) {
       int index = 0;
@@ -166,6 +169,7 @@ public final class TruffleCells implements Backend {
         }
         String field = "coerce_" + p.name();
         String argument = "arguments[" + index++ + "]";
+        guest.put(p.name(), argument);
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
         if (t instanceof Pointer || t instanceof FunctionPointer) {
@@ -449,12 +453,12 @@ public final class TruffleCells implements Backend {
       // another resource for one, the new resource holds it open: closing a session under its
       // stream would otherwise be a use-after-free that guest code could trigger.
       var retained = new ArrayList<String>();
-      for (int i = 0; i < f.parameters().size(); i++) {
-        Parameter p = f.parameters().get(i);
+      for (Parameter p : f.parameters()) {
         Fact dropped = p.facts().get("nocapture");
+        // The very expression the parameter was coerced from, never a recomputed position.
         if (p.type() instanceof Pointer
             && !(dropped != null && dropped.enabled() && dropped.approved()))
-          retained.add("arguments[" + i + "]");
+          retained.add(guest.get(p.name()));
       }
       if (retained.isEmpty())
         result

@@ -874,6 +874,17 @@ class TruffleCellsTest {
                 + " Thread.currentThread());\n"),
         dropped);
     assertFalse(dropped.contains("NativeResource.hold(arguments[0]);"), dropped);
+    // The hold names the guest argument the handle was coerced from, wherever it sits.
+    String session =
+        "  param session type=ptr<Session> nullable=false ownership=borrowed access=read_write\n";
+    String size = "  param max_bytes type=u64\n";
+    assertTrue(source.contains(session + size), "fixture order");
+    String reordered =
+        generate(source.replace(session + size, size + session)).get("ApiTruffle.java");
+    assertTrue(
+        reordered.contains("long address_session = coerce_session.execute(arguments[1]);"),
+        reordered);
+    assertTrue(reordered.contains("Object hold = NativeResource.hold(arguments[1]);"), reordered);
     // FFM cells: the same shape over the FFM binding.
     String ffm =
         generate(source.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
