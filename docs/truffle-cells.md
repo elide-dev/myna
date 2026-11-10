@@ -410,12 +410,14 @@ Findings that are tracked, not blocking:
   256-byte and a 16-byte heap buffer costs 21.9 ns and 0 B as two terminated copies and 24.4 ns
   and 24 B with the larger one pinned. The fact is for buffers large enough that copying them on
   every call is the cost, and for callees that must not see a terminator.
-- Resource creates that return a status and write the handle through an out-parameter are not
-  expressible; they change the contracts of every ownership backend, not only cells. A `borrow`
-  now sits beside other pointer parameters and a function may declare several (see
-  [Borrows](#borrows)). Still rejected: a pointer result beside a borrow, one length shared by two
-  buffers, and nullable or length-less buffers, for which `truffle_buffer` is the cells-side
-  answer.
+- A `borrow` now sits beside other pointer parameters, a function may declare several, and a
+  buffer may be write-only (see [Borrows](#borrows)); a resource create may take pointers. Still
+  rejected: a pointer result beside a borrow, one length shared by two buffers, and nullable or
+  length-less buffers, for which `truffle_buffer` is the cells-side answer.
+- Not expressible, and needing design rather than a wider validator: creates that return a status
+  and write the handle into a field of a caller-allocated struct, results initialized in place
+  whose owner is the struct itself, which statuses of a function are failures, borrows that
+  outlive the call, and a child resource's dependence on its parent.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
