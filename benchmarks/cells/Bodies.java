@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package bench.nodes;
 
+import bench.BoundaryCellsTruffle;
 import bench.Cells;
 import bench.CellsTruffle;
 import bench.FfmCellsFFM;
@@ -17,6 +18,8 @@ import dev.elide.myna.truffle.NativeFunction;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import dev.elide.myna.truffle.NativePointer;
+import org.graalvm.nativeimage.PinnedObject;
 import org.graalvm.word.WordFactory;
 
 /**
@@ -29,6 +32,11 @@ public abstract class Bodies extends NativeCell {
   public static volatile boolean lastCompiled;
 
   public static final String TEXT = "hello world";
+
+  /** The slab entry's data size and what one call adds to its salt; the Python oracle agrees. */
+  public static final int SLAB_SIZE = 256;
+
+  public static final long SLAB_DELTA = SLAB_SIZE + 7 + 7 + 3 - 1 + 7 + 11 + 2;
 
   Bodies(String name) {
     super(name, 3);
@@ -72,6 +80,13 @@ public abstract class Bodies extends NativeCell {
         case "direct-sum" -> new DirectSum(name, size);
         case "glue-sum-native" -> new GlueSum(name, NativeBytes.of(nativePattern(size), false));
         case "glue-sum-pin", "glue-sum-copy" -> new GlueSum(name, new HeapBytes(pattern(size), false));
+        case "hand-sum-pin" -> new HandSum(name, size, false);
+        case "hand-sum-step-pin" -> new HandSum(name, size, true);
+        case "inline-sum-pin" -> new InlineSum(name, size, false);
+        case "inline-sum-step-pin" -> new InlineSum(name, size, true);
+        case "direct-sum-step" -> new DirectSumStep(name, size);
+        case "glue-sum-step-native" -> new GlueSum(name, new CellsTruffle.sumStep_Cell(), NativeBytes.of(nativePattern(size), false));
+        case "glue-sum-step-pin" -> new GlueSum(name, new CellsTruffle.sumStep_Cell(), new HeapBytes(pattern(size), false));
         default -> throw new IllegalArgumentException(name);
       };
     }
@@ -93,6 +108,17 @@ public abstract class Bodies extends NativeCell {
       case "glue-text" -> new GlueText(name, new CellsTruffle.text_Cell());
       case "interop-leaf" -> new Interop(name, CellsTruffle.leaf());
       case "interop-step" -> new Interop(name, CellsTruffle.step());
+      case "hand-step" -> new HandStep(name);
+      case "glue-boundary-step" -> new Glue(name, new BoundaryCellsTruffle.step_Cell());
+      case "direct-slab" -> new DirectSlab(name, false);
+      case "direct-slab-step" -> new DirectSlab(name, true);
+      case "hand-slab-step" -> new HandSlab(name);
+      case "glue-slab-native" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), false);
+      case "glue-slab-heap" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), true);
+      case "glue-slab-step-native" -> new GlueSlab(name, new CellsTruffle.slabStep_Cell(), false);
+      case "glue-boundary-slab-step-native" -> new GlueSlab(name, new BoundaryCellsTruffle.slabStep_Cell(), false);
+      case "interop-slab-native" -> new InteropSlab(name, CellsTruffle.slab());
+      case "interop-slab-step-native" -> new InteropSlab(name, CellsTruffle.slabStep());
       case "nfi-leaf" -> new Nfi(name, false);
       case "nfi-text" -> new Nfi(name, true);
       default -> throw new IllegalArgumentException(name);
@@ -281,8 +307,12 @@ public abstract class Bodies extends NativeCell {
     private final Object buffer;
 
     GlueSum(String name, Object buffer) {
+      this(name, new CellsTruffle.sum_Cell(), buffer);
+    }
+
+    GlueSum(String name, NativeCell cell, Object buffer) {
       super(name);
-      this.cell = new CellsTruffle.sum_Cell();
+      this.cell = cell;
       this.buffer = buffer;
     }
 
@@ -347,6 +377,208 @@ public abstract class Bodies extends NativeCell {
         } else {
           for (int i = 0; i < count; i++) x = (Long) interop.execute(bound, x);
         }
+      } catch (InteropException e) {
+        throw failure(e);
+      }
+      return x;
+    }
+  }
+
+  /** The hand-written shape cells are compared with: a binding call behind one Truffle boundary. */
+  static final class HandStep extends Bodies {
+    HandStep(String name) {
+      super(name);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static long call(long x) {
+      return Cells.step(x);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = call(x);
+      return x;
+    }
+  }
+
+  static final class DirectSumStep extends Bodies {
+    private final long address;
+    private final long size;
+
+    DirectSumStep(String name, int size) {
+      super(name);
+      this.address = nativePattern(size).address();
+      this.size = size;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = Cells.sumStep(WordFactory.pointer(address), size, x);
+      return x;
+    }
+  }
+
+  /** Hand-written pin, call and unpin behind one Truffle boundary, compiled ahead of time. */
+  static final class HandSum extends Bodies {
+    private final byte[] array;
+    private final boolean step;
+
+    HandSum(String name, int size, boolean step) {
+      super(name);
+      this.array = pattern(size);
+      this.step = step;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static long leaf(byte[] array, long x) {
+      PinnedObject pin = PinnedObject.create(array);
+      try {
+        return Cells.sum(pin.addressOfArrayElement(0), array.length, x);
+      } finally {
+        pin.close();
+      }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static long step(byte[] array, long x) {
+      PinnedObject pin = PinnedObject.create(array);
+      try {
+        return Cells.sumStep(pin.addressOfArrayElement(0), array.length, x);
+      } finally {
+        pin.close();
+      }
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      if (step) for (int i = 0; i < count; i++) x = step(array, x);
+      else for (int i = 0; i < count; i++) x = leaf(array, x);
+      return x;
+    }
+  }
+
+  /** The same pin, call and unpin visible to partial evaluation. */
+  static final class InlineSum extends Bodies {
+    private final byte[] array;
+    private final boolean step;
+
+    InlineSum(String name, int size, boolean step) {
+      super(name);
+      this.array = pattern(size);
+      this.step = step;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) {
+        PinnedObject pin = PinnedObject.create(array);
+        try {
+          x =
+              step
+                  ? Cells.sumStep(pin.addressOfArrayElement(0), array.length, x)
+                  : Cells.sum(pin.addressOfArrayElement(0), array.length, x);
+        } finally {
+          pin.close();
+        }
+      }
+      return x;
+    }
+  }
+
+  /** Raw calls to the ten-argument slab entry: the floor for the slab cells. */
+  static final class DirectSlab extends Bodies {
+    private final long data = nativePattern(SLAB_SIZE).address();
+    private final long aux = nativePattern(16).address();
+    private final boolean step;
+
+    DirectSlab(String name, boolean step) {
+      super(name);
+      this.step = step;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++)
+        x =
+            step
+                ? Cells.slabStep(
+                    WordFactory.pointer(data), SLAB_SIZE, WordFactory.pointer(aux), WordFactory.pointer(aux),
+                    WordFactory.pointer(data), 3, -1, 7, 11, x)
+                : Cells.slab(
+                    WordFactory.pointer(data), SLAB_SIZE, WordFactory.pointer(aux), WordFactory.pointer(aux),
+                    WordFactory.pointer(data), 3, -1, 7, 11, x);
+      return x;
+    }
+  }
+
+  /** The transitioning slab entry behind one hand-written Truffle boundary. */
+  static final class HandSlab extends Bodies {
+    private final long data = nativePattern(SLAB_SIZE).address();
+    private final long aux = nativePattern(16).address();
+
+    HandSlab(String name) {
+      super(name);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static long call(long data, long aux, long x) {
+      return Cells.slabStep(
+          WordFactory.pointer(data), SLAB_SIZE, WordFactory.pointer(aux), WordFactory.pointer(aux),
+          WordFactory.pointer(data), 3, -1, 7, 11, x);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = call(data, aux, x);
+      return x;
+    }
+  }
+
+  /** Slab cells through consumer glue: ten guest values per call, native or heap byte buffers. */
+  static final class GlueSlab extends Bodies {
+    @Node.Child private NativeCell cell;
+    private final Object data;
+    private final Object aux;
+    private final Object context;
+    private final Object output;
+
+    GlueSlab(String name, NativeCell cell, boolean heap) {
+      super(name);
+      this.cell = cell;
+      this.data = heap ? new HeapBytes(pattern(SLAB_SIZE), false) : NativeBytes.of(nativePattern(SLAB_SIZE), false);
+      this.aux = heap ? new HeapBytes(pattern(16), false) : NativeBytes.of(nativePattern(16), false);
+      this.context = NativePointer.of(nativePattern(16).address());
+      this.output = NativePointer.of(nativePattern(16).address());
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++)
+        x = (Long) cell.execute(new Object[] {data, (long) SLAB_SIZE, aux, context, output, 3, -1, 7L, 11L, x});
+      return x;
+    }
+  }
+
+  /** Slab cells through the generic interop wrapper. */
+  static final class InteropSlab extends Bodies {
+    @Node.Child private InteropLibrary interop = InteropLibrary.getFactory().createDispatched(1);
+    private final NativeFunction function;
+    private final Object data = NativeBytes.of(nativePattern(SLAB_SIZE), false);
+    private final Object aux = NativeBytes.of(nativePattern(16), false);
+    private final Object context = NativePointer.of(nativePattern(16).address());
+    private final Object output = NativePointer.of(nativePattern(16).address());
+
+    InteropSlab(String name, NativeFunction function) {
+      super(name);
+      this.function = function;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      try {
+        for (int i = 0; i < count; i++)
+          x = (Long) interop.execute(function, data, (long) SLAB_SIZE, aux, context, output, 3, -1, 7L, 11L, x);
       } catch (InteropException e) {
         throw failure(e);
       }

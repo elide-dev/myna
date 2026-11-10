@@ -23,6 +23,7 @@ public final class CellBench {
       for (byte b : Bodies.pattern(size)) sum += b & 0xff;
       return seed + count * sum;
     }
+    if (name.contains("-slab")) return seed + count * Bodies.SLAB_DELTA;
     if (name.endsWith("-text")) return seed + (long) count * Bodies.TEXT.length();
     long x = seed;
     for (int i = 0; i < count; i++) x = x * 1664525L + 1013904223L;

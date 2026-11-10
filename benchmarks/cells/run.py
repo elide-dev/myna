@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import re
 import shutil
 import statistics
 import sys
@@ -31,9 +32,19 @@ from truffle_integration import truffle_jars
 WORKLOAD = 'truffle-cells-v1'
 SIZES = (16, 256, 1024, 4096, 65536)
 SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ffm-step', 'glue-leaf', 'glue-step',
-          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text']
+          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
+          'hand-step', 'glue-boundary-step']
+# A ten-argument entry (two byte buffers, two opaque pointers, integers), as a leaf and a transition.
+SLAB = ['direct-slab', 'glue-slab-native', 'glue-slab-heap', 'interop-slab-native', 'direct-slab-step', 'hand-slab-step',
+        'glue-slab-step-native', 'glue-boundary-slab-step-native', 'interop-slab-step-native']
+SLAB_DELTA = 256 + 7 + 7 + 3 - 1 + 7 + 11 + 2
+# Pinning one heap array by hand (behind a boundary, and visible to partial evaluation) against the
+# cell, for a leaf and across a transition.
+PIN_SIZE = 256
+PINS = [f'{kind}-{PIN_SIZE}' for kind in ('hand-sum-pin', 'inline-sum-pin', 'direct-sum-step', 'glue-sum-step-native',
+                                          'glue-sum-step-pin', 'hand-sum-step-pin', 'inline-sum-step-pin')]
 BORROWS = [f'{kind}-{size}' for size in SIZES for kind in ('direct-sum', 'glue-sum-native', 'glue-sum-pin', 'glue-sum-copy')]
-CASES = SCALAR + BORROWS
+CASES = SCALAR + SLAB + BORROWS + PINS
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',
            'jniutils', 'nativebridge', 'truffle-nfi', 'truffle-nfi-libffi')
 
@@ -51,6 +62,8 @@ def expected(name, count, seed):
     if '-sum-' in name:
         size = int(name.rsplit('-', 1)[1])
         return (seed + count * sum((i * 31 + 7) & 0xff for i in range(size))) % (1 << 64)
+    if '-slab' in name:
+        return (seed + count * SLAB_DELTA) % (1 << 64)
     if name.endswith('-text'):
         return (seed + count * len('hello world')) % (1 << 64)
     mul, add, a, b, n = 1, 0, 1664525, 1013904223, count
@@ -74,12 +87,16 @@ def build():
         shutil.rmtree(p, ignore_errors=True); p.mkdir()
     generator_sources = sorted((ROOT / 'src/main/java').rglob('*.java'))
     execute('javac', '-d', genclasses, *generator_sources)
-    # The same seam twice: Native Image cells (Cells) and FFM cells (FfmCells) share one image.
+    # The same seam three times in one image: Native Image cells (Cells), FFM cells (FfmCells) and
+    # Native Image cells with transitions behind a boundary (BoundaryCells).
     native_seam = SOURCE / 'cells.seam'
     ffm_seam = WORK / 'cells-ffm.seam'
     ffm_seam.write_text(native_seam.read_text().replace('java_class=Cells truffle_cells=true',
                                                         'java_class=FfmCells truffle_cells=true truffle_backend=ffm'))
-    for seam, name in ((native_seam, 'native'), (ffm_seam, 'ffm')):
+    boundary_seam = WORK / 'cells-boundary.seam'
+    boundary_seam.write_text(native_seam.read_text().replace('java_class=Cells truffle_cells=true',
+                                                             'java_class=BoundaryCells truffle_cells=true truffle_transitions=boundary'))
+    for seam, name in ((native_seam, 'native'), (ffm_seam, 'ffm'), (boundary_seam, 'boundary')):
         execute('java', '-cp', genclasses, 'dev.elide.myna.cli.Main', 'generate', seam, '--out', generated / name, '--target', TARGET)
     cpu_flags = ['-march=armv8-a'] if sys.platform == 'linux' and platform.machine() == 'aarch64' else []
     flags = ['-O3', *cpu_flags, '-fPIC', '-I', home / 'include', '-I', home / 'include' / ('darwin' if sys.platform == 'darwin' else 'linux')]
@@ -90,12 +107,13 @@ def build():
     execute(cc, '-dynamiclib' if sys.platform == 'darwin' else '-shared', WORK / 'kernel.o', WORK / 'cells.o', '-o', library)
     java_sources = [SOURCE / 'CellBench.java', SOURCE / 'Bodies.java', SOURCE / 'BenchLanguage.java',
                     *(generated / 'native' / n for n in ('Cells.java', 'CellsTruffle.java')),
+                    *(generated / 'boundary' / n for n in ('BoundaryCells.java', 'BoundaryCellsTruffle.java')),
                     *(generated / 'ffm' / n for n in ('FfmCells.java', 'FfmCellsFFM.java', 'FfmCellsTruffle.java', 'FfmCellsForeignFeature.java'))]
     sdk = [home / 'lib/svm' / name for name in ('svm-shared.jar', 'svm-guest-staging.jar', 'svm-guest.jar')]
     # The benchmark language (NFI loader) is the one DSL-processed source; generated cells stay DSL-free.
     execute('javac', '-processorpath', jars['truffle-dsl-processor'],
             '-cp', os.pathsep.join(map(str, [*sdk, TRUFFLE_JAR, *jars.values()])), '-d', classes, *java_sources)
-    for name in ('native', 'ffm'):
+    for name in ('native', 'ffm', 'boundary'):
         shutil.copytree(generated / name / 'META-INF', classes / 'META-INF', dirs_exist_ok=True)
     module_path = os.pathsep.join(str(jars[name]) for name in MODULES)
     args = ['-O3', '-march=compatibility', '--macro:truffle-svm', '--enable-native-access=ALL-UNNAMED',
@@ -135,7 +153,8 @@ def measure(args):
         for name, saved in metadata[group].items():
             if digest(ROOT / name) != saved: raise RuntimeError('Changed since build: ' + name)
     library = next(name for name in metadata['binaries'] if 'libcellsbench' in name)
-    schedule = list(CASES)
+    schedule = [name for name in CASES if re.search(args.cases, name)]
+    if not schedule: raise RuntimeError('No case matches ' + args.cases)
     random.Random(args.seed).shuffle(schedule)
     results = []
     logs = args.output.parent / (args.output.stem + '-logs'); logs.mkdir(parents=True, exist_ok=True)
@@ -164,7 +183,8 @@ def measure(args):
             results.append({'case': name, 'fork': fork, 'iterations': count, 'command': list(map(str, command)), 'samples': samples})
     data = {'build': metadata, 'host': {'platform': platform.platform(), 'machine': platform.machine(), 'cpu': cpu},
             'forks': args.forks, 'iterations': args.iterations, 'seed': args.seed,
-            'smoke': args.forks < 5 or args.iterations < 1_000_000, 'results': results}
+            'cases': args.cases,
+            'smoke': args.forks < 5 or args.iterations < 1_000_000 or len(schedule) < len(CASES), 'results': results}
     args.output.write_text(json.dumps(data, indent=2) + '\n'); report(args.output)
 
 def report(path):
@@ -193,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--forks', type=int, default=5)
     parser.add_argument('--iterations', type=int, default=16777216)
     parser.add_argument('--seed', type=int, default=1729)
+    parser.add_argument('--cases', default='', help='regular expression selecting cases; a partial run is a smoke run')
     args = parser.parse_args()
     if args.forks < 1 or args.iterations < 256:
         parser.error('forks must be positive and iterations at least 256')
