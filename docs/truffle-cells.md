@@ -254,6 +254,10 @@ a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCl
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
 owners refuse it. These are the same rules as the existing Native Image ownership API.
 
+A create may take pointers as well as scalars, coerced like any other cell's: a pointer to plain
+memory, a byte buffer, or another resource's owner passed where its handle is expected. A resource
+created from another one must be closed before its parent; the cell does not track that.
+
 Generated array convenience methods pin with a plain `try`/`finally`, not try-with-resources:
 javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation
 blocklist (`-H:+TruffleCheckBlockListMethods`) rejects on partially evaluated paths. Hand-written

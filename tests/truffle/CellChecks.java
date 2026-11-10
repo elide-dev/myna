@@ -199,6 +199,28 @@ public final class CellChecks {
     check(call(cells, "counterCreate", -1) == NativeVoid.INSTANCE, "failed creation is null");
     rejects(cells, "counterDestroy", NativeVoid.INSTANCE);
     rejects(cells, "counterDestroy", NativePointer.of(16));
+    // A create that takes pointers: another resource's handle and a pointer to plain memory.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment step = arena.allocate(8);
+      step.set(ValueLayout.JAVA_LONG, 0, 5L);
+      Object parent = call(cells, "counterCreate", 10);
+      Object stepper = call(cells, "stepperCreate", parent, NativeBytes.of(step, false));
+      check(stepper instanceof NativeResource r && r.type().equals("Stepper"), "stepper owner");
+      check(call(cells, "counterLive").equals(2L), "counter and stepper live");
+      check(call(cells, "stepperNext", stepper).equals(10L), "stepper reads its counter");
+      check(call(cells, "counterNext", parent).equals(15L), "stepper advanced its counter");
+      // The handle argument is typed by its pointer, not by resource: a closed parent, a null
+      // and a failed creation are all reported, and nothing leaks.
+      step.set(ValueLayout.JAVA_LONG, 0, 0L);
+      check(call(cells, "stepperCreate", parent, NativeBytes.of(step, false)) == NativeVoid.INSTANCE, "failed stepper is null");
+      rejects(cells, "stepperCreate", NativeVoid.INSTANCE, NativeBytes.of(step, false));
+      rejects(cells, "stepperDestroy", parent);
+      check(call(cells, "stepperDestroy", stepper) == NativeVoid.INSTANCE, "stepper destroyed");
+      rejects(cells, "stepperNext", stepper);
+      check(call(cells, "counterDestroy", parent) == NativeVoid.INSTANCE, "parent destroyed after its stepper");
+      rejects(cells, "stepperCreate", parent, NativeBytes.of(step, false));
+      check(call(cells, "counterLive").equals(0L), "both destroyed");
+    }
     Object other = call(cells, "counterCreate", 1);
     INTEROP.invokeMember(other, "close");
     check(call(cells, "counterLive").equals(0L), "closed through the member");

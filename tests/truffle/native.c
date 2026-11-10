@@ -50,6 +50,24 @@ Counter *cells_counter_create(int64_t start) {
 }
 void cells_counter_destroy(Counter *counter) { free(counter); live--; }
 int64_t cells_counter_next(Counter *counter) { return counter->next++; }
+// A second resource created from another resource's handle and a pointer to its step: the
+// stepper advances its counter, so it must not outlive it, which is the consumer's to ensure.
+typedef struct Stepper { Counter *counter; int64_t step; } Stepper;
+Stepper *cells_stepper_create(Counter *counter, const int64_t *step) {
+  if (!counter || !step || *step == 0) return NULL;
+  Stepper *stepper = malloc(sizeof *stepper);
+  if (!stepper) return NULL;
+  stepper->counter = counter;
+  stepper->step = *step;
+  live++;
+  return stepper;
+}
+void cells_stepper_destroy(Stepper *stepper) { free(stepper); live--; }
+int64_t cells_stepper_next(Stepper *stepper) {
+  int64_t value = stepper->counter->next;
+  stepper->counter->next += stepper->step;
+  return value;
+}
 int64_t cells_counter_live(void) { return live; }
 int64_t cells_sleepy_add(int64_t left, int64_t right) { return left + right; }
 /* Two C strings borrowed by one call: each length up to its terminator, plus each first byte
