@@ -50,7 +50,10 @@ public final class CellApiTruffle {
     public static final String[] CELLS = {"add", ...};
     public static NativeFunction function(String name);   // a fresh executable for any cell
     public static NativeFunction add();                   // one factory per cell
-    public static final class add_Cell extends NativeCell { ... }
+    public static final class add_Cell extends NativeCell {
+        public static int invoke(int left, int right);    // native carriers, raw addresses
+        ...
+    }
 }
 ```
 
@@ -70,6 +73,15 @@ Language glue holding the concrete `*_Cell` type calls the typed method with no 
 handler; through `NativeCell`, the typed methods default to unboxing `execute` and throw
 `UnexpectedResultException` for any other result.
 
+Every cell except a resource's `destroy` also has a static `invoke` with the binding's own
+parameters: scalars in their Java carriers (unsigned ones as raw bits), every pointer, byte buffers
+included, as a raw `long` address, and any borrowed length passed explicitly. It returns the guest
+carrier of a scalar result and the raw address of a pointer or created resource. `invoke` coerces
+nothing, borrows nothing and allocates nothing, so the caller keeps each address valid for the
+call. It is the entry for host code that already holds native values: host code is compiled ahead
+of time, where the argument array, boxed carriers, `NativePointer` and `Borrow` objects of
+`execute` are not scalar-replaced. The cell's own `execute` methods coerce and then call it.
+
 Partial evaluation inlines only methods of build-time-initialized classes, so every class that
 takes part in a compiled guest call must initialize at image build time: `myna-truffle.jar` carries
 a `native-image.properties` for its own classes (keeping the empty-buffer dummy and the pin
@@ -77,6 +89,17 @@ threshold at run time, so no address or build-host setting reaches the image hea
 generated `native-image.properties` next to the bindings lists the cell classes. The bindings a cell
 calls keep their run-time address classes. A consumer's own node classes around cells need the same
 `--initialize-at-build-time` treatment, as for any Truffle language.
+
+The rule is per method, and it is silent when broken. A method that needs a class-initialization
+check (a static call into, or a static field read of, a class that initializes at run time) is left
+out of runtime compilation altogether: the image builds, the cell runs, and compiled code calls that
+method as an opaque function. Whatever it returns then cannot be scalar-replaced, and if the method
+is a cell body, the argument array and the boxed carriers are allocated for the call. `myna-truffle`
+therefore reaches its run-time holders (the empty-buffer address, the pin threshold, the scratch
+stacks) only from methods behind a `@TruffleBoundary`, and FFM cells call their bindings the same
+way. `tests/truffle_integration.py` builds its image with `-H:+PrintRuntimeCompileMethods` and
+fails if a cell or a coercion is missing from that listing; consumer glue can be checked the same
+way.
 
 Generated cells use no Truffle DSL. Consumers compile them against `myna-truffle.jar` and the public
 Truffle API only; the DSL processor is needed to build `myna-truffle` itself, not to use it.
@@ -140,6 +163,12 @@ contract states, and every borrow is released in a `finally`, in reverse acquisi
   guest code are last-in, first-out; releasing out of order or on another thread throws
   `IllegalStateException` and leaves the stack unchanged.
 
+A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
+scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
+copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
+hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
+buffer, heap buffer, Java string, anything else through interop) and compiles only those paths.
+
 The scratch stack's lifetimes have three caveats:
 
 - every thread that copies, virtual threads included, gets its own block of 4 KiB, growing to at
@@ -193,9 +222,19 @@ pinned fork) to build a Native Image. `truffle_transitions=boundary` puts each t
 no inlining. Leaves are unaffected by the option. Myna's own fixture uses the default; the generator
 tests cover `boundary`.
 
+A cell cannot make a transitioning call cheaper than the transition. Measured from compiled code,
+the direct stub call, a generated `boundary` cell and a hand-written `@TruffleBoundary` around the
+same `@CFunction` cost the same, with one array pinned or with ten arguments, because the stub call
+is itself a call into ahead-of-time code (see [Measurement](#measurement)). What a cell adds over a
+hand-written boundary is the contract (coercions, borrow lifetimes, ownership), at the cost of the
+type checks on its guest values. The lever for a short call is the import's leaf status: a
+`native_leaf` import (the binding ABI 2 default) has no transition and inlines, where
+`native_leaf=false` pays the transition on every route.
+
 FFM-backend cells call the module's `MynaFFM` static bindings (`_Downcall.HANDLE` over the
-`loaderLookup` address) and report linkage failures as guest errors, while guest exceptions and
-fatal VM errors pass through. They need the generated foreign Feature on a Native Image, exactly
+`loaderLookup` address) from a static method behind a `@TruffleBoundary`, since those bindings
+initialize at run time and invoke a method handle, and report linkage failures as guest errors,
+while guest exceptions and fatal VM errors pass through. They need the generated foreign Feature on a Native Image, exactly
 like any other FFM consumer; see [Measurement](#measurement) for their cost.
 
 ## Safety model
@@ -232,10 +271,11 @@ compilation traces as [benchmarking](benchmarking.md) requires.
 
 The checked-in [Linux amd64 baseline](../benchmarks/cells/baselines/wsl2-linux-amd64-2026-11-07.md)
 (five processes per case, a shared WSL2 workstation, so advisory) was measured at source revision
-`83229a2`, before the per-thread scratch stack and the typed `execute*` methods. Its copy and
-string figures therefore show the earlier per-call confined arena, its FFM figures include the
-boxed result, and it has no `typed-*` cases. It has not been regenerated since; the figures below
-are that baseline's, in ns per call:
+`83229a2`, before the per-thread scratch stack, the typed `execute*` methods and the
+runtime-compilation fix described [below](#after-the-runtime-compilation-fix). Its copy and string
+figures therefore show the earlier per-call confined arena, its borrow and FFM figures include
+allocations that no longer happen, and it has none of the `typed-*`, slab or hand-pinned cases. It
+has not been regenerated since; the figures below are that baseline's, in ns per call:
 
 | Path | Direct Java call | Cell via glue | Cell via interop wrapper |
 |---|---:|---:|---:|
@@ -247,12 +287,13 @@ are that baseline's, in ns per call:
 Leaf and transitioning cells cost exactly their direct calls and allocate nothing, so the
 coercions, the `Object[]` argument and the boxed result are all scalar-replaced; the executable
 wrapper's `DirectCallNode` hop is inlined too, so the generic interop path needs no language glue
-for scalar calls. FFM cells pay about 2 ns and 48 B per call over the direct FFM call: the boxing
-is not scalar-replaced across the downcall's exception handler. A Java string lent to a C string
+for scalar calls. FFM cells paid about 2 ns and 48 B per call over the direct FFM call in this
+baseline. A Java string lent to a C string
 parameter costs about 27 ns and 208 B (UTF-8 copy into a confined arena), against NFI's 37 ns for
 the same conversion.
 
-Borrows: lending `NativeBytes` costs about 2 ns and one 48-byte `Borrow` over the raw pointer.
+Borrows, in this baseline: lending `NativeBytes` cost about 2 ns and one 48-byte `Borrow` over the
+raw pointer.
 Pinning a heap array is a fixed cost of about 15 ns more, independent of size, while copying adds
 about 0.04 ns per byte on top of a similar fixed cost: at 16 bytes pin and copy are within 2.4 ns,
 at 256 bytes copying is 12 ns slower, at 4 KiB 180 ns slower. The default pin threshold is
@@ -262,23 +303,55 @@ should be revisited with the hosted ARM data and under GC pressure, which this h
 measure. For what each binding kind costs from guest code without cells, see
 [calling Myna bindings from Truffle guest code](truffle-guests.md).
 
+### After the runtime-compilation fix
+
+The baseline above predates a fix to what compiled code could inline: `BytesCoercion.execute` and
+every FFM cell body needed a class-initialization check, so they were left out of runtime
+compilation and called as opaque functions. That accounted for the 48 bytes per borrow, the FFM
+cells' allocation and most of their time. Measured before and after on a shared Apple M5 Max
+(`aarch64-apple-darwin`, same build settings, three processes per case, guest values held as
+non-constants; advisory, and not a checked-in baseline), in ns per call and Java heap bytes per
+call:
+
+| Case | Before | After | Direct call |
+|---|---:|---:|---:|
+| Ten-argument leaf, native buffers (`glue-slab-native`) | 8.41, 96 B | 2.96, 0 B | 3.59 |
+| Same through the interop wrapper | 8.51, 96 B | 2.98, 0 B | 3.59 |
+| Ten-argument transition (`glue-slab-step-native`) | 12.05, 96 B | 5.56, 0 B | 4.26 |
+| Same, heap buffers copied (`glue-slab-heap`, leaf) | 28.66, 96 B | 21.95, 0 B | — |
+| Sum of 256 native bytes (`glue-sum-native-256`) | 12.36, 48 B | 12.12, 0 B | 12.2 |
+| Sum of 16 copied heap bytes | 14.29, 48 B | 10.48, 0 B | 4.6 |
+| Sum of 256 pinned heap bytes, leaf | 20.76, 72 B | 16.84, 24 B | 16.65 by hand |
+| Sum of 256 pinned heap bytes, transition | 24.27, 72 B | 20.38, 24 B | 19.29 by hand |
+| Native and pinned alternating at one call site | 16.96, 60 B | 14.30, 12 B | — |
+| Java string to a C string (`glue-text`) | 20.64, 72 B | 17.63, 24 B | 1.75 |
+| FFM leaf cell (`glue-ffm-leaf`) | 9.29, 32 B | 4.63, 0 B | 4.21 |
+| FFM transitioning cell | 9.23, 32 B | 4.55, 0 B | 4.26 |
+
+"By hand" is a hand-written `PinnedObject` pin around the same binding; behind a
+`@TruffleBoundary` and visible to partial evaluation it costs the same (16.65 and 16.99 ns for the
+leaf, 19.29 and 19.51 ns across the transition). A bare transition costs the same on every route:
+3.78 ns direct, 3.70 ns through the cell, 3.75 ns behind a hand-written boundary and 3.79 ns
+through a `boundary` cell, against 1.03 ns for the leaf. The static `invoke` entry costs the direct
+call (3.66 ns for the ten-argument leaf, 4.47 ns for its transition) and allocates nothing from
+host code. What remains over the direct call in the ten-argument transition is the type checks on
+ten guest values.
+
 ### Follow-ups
 
-Findings from the first measurement that are tracked, not blocking:
+Findings that are tracked, not blocking:
 
-- FFM cells and borrowing cells allocate 48 bytes per call in compiled code: the boxed result,
-  the argument array and the `Borrow` are not scalar-replaced across the downcall's exception
-  handler and the borrow's `finally`. Native leaf and transition cells allocate nothing. Since
-  scalar cells return through their typed method, the FFM handler wraps a primitive return and
-  the box is gone: FFM cells measured 32 B per call on a shared Apple M5 Max, through `execute`
-  and through `executeLong` alike; the remaining 32 B are not yet attributed, and the time
-  difference was within that host's noise.
-- A Java string lent to a C string parameter cost about 27 ns per call in this baseline, mostly the
-  confined arena opened for the UTF-8 copy. Copies now use a per-thread scratch stack (see
-  [Borrows](#borrows)). On a shared Apple M5 Max, same build settings before and after, five
-  processes per case, `glue-text` went from 32.5 ns and 208 B to about 21 ns and 72 B, and
-  `glue-sum-copy-16` from 26.0 ns and 184 B to about 15 ns and 48 B (advisory: the host was not
-  quiet). These Mac figures are local before/after runs, not a checked-in baseline.
+- A Java string lent to a C string parameter still allocates its UTF-8 `byte[]` (24 bytes for the
+  11-byte benchmark string) and costs about 16 ns over a native C string. Encoding straight into
+  the scratch stack, and taking `TruffleString` contents without a Java `String`, would remove
+  both; neither is implemented.
+- A byte-pointer parameter without a `borrow` declaration is a C string parameter: a heap buffer
+  passed to it is copied with a NUL terminator, whatever its size, and never pinned.
+- Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
+  16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
+  2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
+- FFM cells pass `MemorySegment.ofAddress(address)` to the downcall, so the liveness and
+  confinement checks of the caller's own segment do not apply during the call.
 - The generator has no FFM critical cell variant; the direct FFM leaf (5.5 ns) already beats the
   measured critical downcall figures on this fork, so none is planned until a consumer asks.
 - Truffle NFI is an internal language: host code cannot `eval("nfi", ...)`, so the benchmark

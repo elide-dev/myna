@@ -32,6 +32,12 @@ import org.graalvm.nativeimage.PinnedObject;
  * ({@link Scratch}); larger copies, and copies that do not fit beside outstanding ones, get a
  * confined arena of their own. A pinned array does not move, so its address stays valid across any
  * safepoint between the pin and the call; an unpinned heap address is never handed to native code.
+ *
+ * <p>A borrow that a compiled cell acquires and releases is not allocated: lending native memory
+ * and scratch copies cost no Java heap, and a pin costs only the {@code PinnedObject} itself. That
+ * holds because nothing on the lend and release paths needs a class-initialization check (which
+ * would keep the method out of runtime compilation) or passes the borrow to a method behind a
+ * Truffle boundary; {@code tests/truffle_integration.py} checks both.
  */
 public final class Borrow {
   /**
@@ -42,7 +48,8 @@ public final class Borrow {
    * so that short-lived garbage is not pinned in the collector's chunks. {@code
    * -Dmyna.truffle.pinThreshold} overrides it. The value lives in a run-time-initialized holder so
    * the build host's setting is never baked into an image while {@code Borrow} itself initializes
-   * at build time and stays inlineable by partial evaluation.
+   * at build time and stays inlineable by partial evaluation. Reading it is a call out of compiled
+   * code for that reason; {@link BytesCoercion} reads it once per call site.
    */
   public static int pinThreshold() {
     return Threshold.VALUE;
@@ -52,47 +59,43 @@ public final class Borrow {
     static final int VALUE = Integer.getInteger("myna.truffle.pinThreshold", 256);
   }
 
-  private static final Borrow NONE = new Borrow(0, 0, null, null, 0, false, null, null, false);
+  /** What {@link #release()} undoes. */
+  private static final int LENT = 0;
 
-  // Kept to the 48 bytes of a Borrow without scratch copies: what must be undone is one owner.
-  private final long address;
-  private final long length;
-  private final Object owner;
-  private final MemorySegment copy;
-  private final byte[] array;
-  private final Object interopSource;
-  private final int offset;
-  private final boolean terminated;
-  private final boolean writeBack;
+  private static final int PINNED = 1;
+  private static final int SCRATCH = 2;
+  private static final int COPIED = 3;
+
+  private static final Borrow NONE = new Borrow();
+
+  // A borrow is filled in place, by exactly one lend method, and never handed to a method that
+  // partial evaluation does not inline: compiled code then keeps it in registers instead of
+  // allocating it, whichever kinds of value a call site has seen. Anything that must leave
+  // compiled code (the scratch push, an arena copy, write-back) takes and returns existing objects
+  // and primitives only.
+  private int kind;
+  private long address;
+  private long length;
+
+  /** A {@code PinnedObject}, the thread's {@link Scratch}, or the {@link Copy} of a large copy. */
+  private Object owner;
+
+  /** The array a writable copy is written back to on release; {@code null} for read-only copies. */
+  private byte[] array;
+
+  /** The interop buffer a writable copy came from, written back after {@link #array}. */
+  private Object interopSource;
+
+  /** Where a scratch copy starts in its thread's block. */
+  private int offset;
+
+  /** Whether a scratch copy has a NUL terminator after {@link #length} bytes. */
+  private boolean terminated;
+
   private boolean released;
 
-  /**
-   * @param owner what release undoes: a {@link Scratch} stack, the copy's own {@link Arena}, a
-   *     {@link PinnedObject}, or {@code null} for lent native memory
-   * @param copy the segment holding a copy at {@code offset}: the scratch block or the arena's
-   *     allocation
-   * @param terminated whether the copy has a NUL terminator after {@code length} bytes
-   */
-  private Borrow(
-      long address,
-      long length,
-      Object owner,
-      MemorySegment copy,
-      int offset,
-      boolean terminated,
-      byte[] array,
-      Object interopSource,
-      boolean writeBack) {
-    this.address = address;
-    this.length = length;
-    this.owner = owner;
-    this.copy = copy;
-    this.offset = offset;
-    this.terminated = terminated;
-    this.array = array;
-    this.interopSource = interopSource;
-    this.writeBack = writeBack;
-  }
+  /** The null borrow until a lend method fills it. */
+  Borrow() {}
 
   /** The null borrow for a nullable parameter. */
   public static Borrow none() {
@@ -101,20 +104,23 @@ public final class Borrow {
 
   /** Lends existing native memory for the call. */
   public static Borrow direct(long address, long length) {
-    return new Borrow(address, length, null, null, 0, false, null, null, false);
+    Borrow borrow = new Borrow();
+    borrow.lend(address, length);
+    return borrow;
   }
 
   /** Lends a heap array: pinned when large and in a Native Image, otherwise copied. */
   public static Borrow ofArray(byte[] array, boolean writable, boolean nulTerminated) {
-    if (!nulTerminated && array.length >= pinThreshold() && ImageInfo.inImageRuntimeCode())
-      return Pins.pin(array);
-    return copyOf(array, null, writable, nulTerminated);
+    Borrow borrow = new Borrow();
+    borrow.lendArray(array, writable, nulTerminated, pinThreshold());
+    return borrow;
   }
 
   /** Lends UTF-8 text, NUL-terminated for C strings. */
-  @TruffleBoundary
   public static Borrow ofString(String text, boolean nulTerminated) {
-    return copyOf(text.getBytes(StandardCharsets.UTF_8), null, false, nulTerminated);
+    Borrow borrow = new Borrow();
+    borrow.lendString(text, nulTerminated);
+    return borrow;
   }
 
   /**
@@ -123,9 +129,59 @@ public final class Borrow {
    * content; {@link #length()} still excludes it, and {@link #release()} only writes back {@code
    * length} bytes, so the terminator never reaches the source buffer.
    */
-  @TruffleBoundary
   public static Borrow ofBuffer(
       InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
+      throws UnsupportedMessageException {
+    Borrow borrow = new Borrow();
+    borrow.lendBuffer(interop, buffer, writable, nulTerminated);
+    return borrow;
+  }
+
+  /** A non-null address for an empty buffer; a call out of compiled code, like any slow path. */
+  @TruffleBoundary
+  static long emptyAddress() {
+    return EmptyBytes.address();
+  }
+
+  void lend(long address, long length) {
+    this.address = address;
+    this.length = length;
+  }
+
+  /** Lends bytes that {@code owner} must undo on release. */
+  private void own(int kind, Object owner, long address, long length) {
+    this.kind = kind;
+    this.owner = owner;
+    this.address = address;
+    this.length = length;
+  }
+
+  /**
+   * @param threshold {@link #pinThreshold()}, passed in so that compiled code reads it once per
+   *     call site and not on every call
+   */
+  void lendArray(byte[] array, boolean writable, boolean nulTerminated, int threshold) {
+    if (!nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode())
+      Pins.pin(this, array);
+    else lendCopy(array, null, writable, nulTerminated);
+  }
+
+  void lendString(String text, boolean nulTerminated) {
+    lendCopy(utf8(text), null, false, nulTerminated);
+  }
+
+  void lendBuffer(InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
+      throws UnsupportedMessageException {
+    lendCopy(read(interop, buffer, writable), buffer, writable, nulTerminated);
+  }
+
+  @TruffleBoundary
+  private static byte[] utf8(String text) {
+    return text.getBytes(StandardCharsets.UTF_8);
+  }
+
+  @TruffleBoundary
+  private static byte[] read(InteropLibrary interop, Object buffer, boolean writable)
       throws UnsupportedMessageException {
     long size = interop.getBufferSize(buffer);
     // A guest buffer's size is untrusted: a negative one must not reach the array allocation.
@@ -140,45 +196,29 @@ public final class Borrow {
     } catch (InvalidBufferOffsetException e) {
       throw new IllegalArgumentException("buffer shrank while being borrowed", e);
     }
-    return copyOf(bytes, buffer, writable, nulTerminated);
+    return bytes;
   }
 
   /**
    * Copies into the current thread's scratch stack when the copy fits, otherwise into an arena of
    * its own. The copy is pushed only once it is complete, so a failure leaves the stack unchanged.
    */
-  @TruffleBoundary
-  private static Borrow copyOf(
-      byte[] bytes, Object source, boolean writable, boolean nulTerminated) {
+  private void lendCopy(byte[] bytes, Object source, boolean writable, boolean nulTerminated) {
     long size = (long) bytes.length + (nulTerminated ? 1 : 0);
-    if (size <= Scratch.LARGEST) {
-      Scratch scratch = Scratches.CURRENT.get();
-      MemorySegment block = scratch.reserve(size);
-      if (block != null) {
-        int start = (int) scratch.top;
-        MemorySegment.copy(bytes, 0, block, ValueLayout.JAVA_BYTE, start, bytes.length);
-        if (nulTerminated) block.set(ValueLayout.JAVA_BYTE, start + bytes.length, (byte) 0);
-        Borrow borrow =
-            new Borrow(
-                block.address() + start,
-                bytes.length,
-                scratch,
-                block,
-                start,
-                nulTerminated,
-                bytes,
-                source,
-                writable);
-        scratch.top = start + Scratch.reservation(size);
-        return borrow;
-      }
+    Scratch scratch = size <= Scratch.LARGEST ? Scratch.push(bytes, nulTerminated) : null;
+    if (scratch != null) {
+      int start = (int) (scratch.top - Scratch.reservation(size));
+      own(SCRATCH, scratch, scratch.base + start, bytes.length);
+      this.offset = start;
+      this.terminated = nulTerminated;
+    } else {
+      Copy copy = Copy.of(bytes, nulTerminated);
+      own(COPIED, copy, copy.address, bytes.length);
     }
-    Arena arena = Arena.ofConfined();
-    MemorySegment segment = arena.allocate(Math.max(size, 1));
-    MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
-    if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
-    return new Borrow(
-        segment.address(), bytes.length, arena, segment, 0, nulTerminated, bytes, source, writable);
+    if (writable) {
+      this.array = bytes;
+      this.interopSource = source;
+    }
   }
 
   public long address() {
@@ -199,40 +239,24 @@ public final class Borrow {
    */
   public void release() {
     if (released) return;
-    Object owner = this.owner;
-    if (owner instanceof Scratch scratch) {
+    int kind = this.kind;
+    if (kind == SCRATCH) {
+      Scratch scratch = (Scratch) owner;
       scratch.check(offset, offset + Scratch.reservation(length + (terminated ? 1 : 0)));
       released = true;
-      if (writeBack) releaseScratch(scratch);
+      if (array != null) Scratch.writeBackAndPop(scratch, offset, array, interopSource);
       else scratch.top = offset;
       return;
     }
     released = true;
-    if (owner instanceof Arena arena) releaseCopy(arena);
-    else if (owner != null) Pins.unpin(owner);
+    if (kind == PINNED) Pins.unpin(owner);
+    else if (kind == COPIED) Copy.release((Copy) owner, array, interopSource);
   }
 
-  @TruffleBoundary
-  private void releaseScratch(Scratch scratch) {
-    try {
-      writeBack();
-    } finally {
-      scratch.top = offset;
-    }
-  }
-
-  @TruffleBoundary
-  private void releaseCopy(Arena arena) {
-    try {
-      if (writeBack) writeBack();
-    } finally {
-      arena.close();
-    }
-  }
-
-  private void writeBack() {
+  /** Copies the native bytes back into the borrowed array, then into its interop source. */
+  private static void writeBack(MemorySegment copy, long offset, byte[] array, Object source) {
     MemorySegment.copy(copy, ValueLayout.JAVA_BYTE, offset, array, 0, array.length);
-    if (interopSource != null) writeBackInterop();
+    if (source != null) writeBackInterop(array, source);
   }
 
   /**
@@ -241,10 +265,10 @@ public final class Borrow {
    * be written back: that is a guest error, reported after every surviving byte has been written,
    * not an internal one.
    */
-  private void writeBackInterop() {
-    InteropLibrary interop = InteropLibrary.getUncached(interopSource);
+  private static void writeBackInterop(byte[] array, Object source) {
+    InteropLibrary interop = InteropLibrary.getUncached(source);
     try {
-      for (int i = 0; i < array.length; i++) interop.writeBufferByte(interopSource, i, array[i]);
+      for (int i = 0; i < array.length; i++) interop.writeBufferByte(source, i, array[i]);
     } catch (InvalidBufferOffsetException e) {
       throw NativeCellException.of(
           null, "borrowed buffer shrank before write-back of byte ", e.getByteOffset());
@@ -254,12 +278,42 @@ public final class Borrow {
     }
   }
 
+  /** A copy too large for the scratch stack, or one that did not fit: an arena of its own. */
+  private static final class Copy {
+    final Arena arena;
+    final MemorySegment segment;
+    final long address;
+
+    private Copy(Arena arena, MemorySegment segment) {
+      this.arena = arena;
+      this.segment = segment;
+      this.address = segment.address();
+    }
+
+    @TruffleBoundary
+    static Copy of(byte[] bytes, boolean nulTerminated) {
+      Arena arena = Arena.ofConfined();
+      MemorySegment segment = arena.allocate(Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1));
+      MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
+      if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
+      return new Copy(arena, segment);
+    }
+
+    @TruffleBoundary
+    static void release(Copy copy, byte[] array, Object source) {
+      try {
+        if (array != null) writeBack(copy.segment, 0, array, source);
+      } finally {
+        copy.arena.close();
+      }
+    }
+  }
+
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
   private static final class Pins {
-    static Borrow pin(byte[] array) {
-      PinnedObject pinned = PinnedObject.create(array);
-      long address = pinned.addressOfArrayElement(0).rawValue();
-      return new Borrow(address, array.length, pinned, null, 0, false, array, null, false);
+    static void pin(Borrow borrow, byte[] array) {
+      PinnedObject pin = PinnedObject.create(array);
+      borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
     }
 
     static void unpin(Object pin) {
@@ -308,6 +362,9 @@ public final class Borrow {
     private MemorySegment block;
     private long wanted = INITIAL;
 
+    /** The address of {@link #block}, read by compiled code after a push. */
+    long base;
+
     /** The end of the innermost copy: zero when the stack is empty. */
     long top;
 
@@ -325,10 +382,40 @@ public final class Borrow {
       if (top == 0 && (block == null || block.byteSize() < wanted)) {
         long capacity = block == null ? INITIAL : block.byteSize();
         while (capacity < wanted && capacity < LIMIT) capacity *= 2;
-        if (block == null || capacity != block.byteSize())
+        if (block == null || capacity != block.byteSize()) {
           block = Arena.ofAuto().allocate(capacity, ALIGNMENT);
+          base = block.address();
+        }
       }
       return end <= block.byteSize() ? block : null;
+    }
+
+    /**
+     * Copies {@code bytes} onto the current thread's stack and returns that stack, whose {@link
+     * #top} is then the end of the copy, or returns {@code null} when the copy does not fit. The
+     * result is an existing object, so the caller's borrow stays out of this call.
+     */
+    @TruffleBoundary
+    static Scratch push(byte[] bytes, boolean nulTerminated) {
+      Scratch scratch = Scratches.CURRENT.get();
+      long size = (long) bytes.length + (nulTerminated ? 1 : 0);
+      MemorySegment block = scratch.reserve(size);
+      if (block == null) return null;
+      int start = (int) scratch.top;
+      MemorySegment.copy(bytes, 0, block, ValueLayout.JAVA_BYTE, start, bytes.length);
+      if (nulTerminated) block.set(ValueLayout.JAVA_BYTE, start + bytes.length, (byte) 0);
+      scratch.top = start + reservation(size);
+      return scratch;
+    }
+
+    /** Writes the copy at {@code start} back, then pops it whether or not that succeeded. */
+    @TruffleBoundary
+    static void writeBackAndPop(Scratch scratch, int start, byte[] array, Object source) {
+      try {
+        writeBack(scratch.block, start, array, source);
+      } finally {
+        scratch.top = start;
+      }
     }
 
     /**

@@ -15,7 +15,7 @@ final class EmptyBytes {
 
   private EmptyBytes() {}
 
-  static Borrow borrow() {
-    return Borrow.direct(DUMMY.address(), 0);
+  static long address() {
+    return DUMMY.address();
   }
 }

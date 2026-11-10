@@ -8,6 +8,7 @@ import dev.elide.myna.truffle.*;
 import org.graalvm.polyglot.Context;
 /** Native Image: cells through the interop wrapper, then from runtime-compiled Truffle code. */
 public final class CellsMain {
+  static volatile Object allocationCanary;
   /** Wraps a cell and records whether its most recent execution ran in compiled code. */
   static final class Probe extends NativeCell {
     static volatile boolean lastExecutionCompiled;
@@ -28,6 +29,36 @@ public final class CellsMain {
       int result = inner.executeInt(arguments);
       return new Object[] {result, CompilerDirectives.inCompiledCode()};
     }
+  }
+  /** Runs a cell many times inside one compiled root, so the host can measure what a call allocates. */
+  static final class Repeat extends NativeCell {
+    static final int CALLS = 4096;
+    @Node.Child private NativeCell inner;
+    Repeat(NativeCell inner) { super("repeat:" + inner.name(), inner.arity()); this.inner = inner; }
+    @Override public Object execute(Object[] arguments) {
+      long sum = 0;
+      for (int i = 0; i < CALLS; i++) sum += ((Number) inner.execute(arguments)).longValue();
+      return new Object[] {sum, CompilerDirectives.inCompiledCode()};
+    }
+  }
+  /**
+   * Java heap bytes one call allocates from compiled code must not exceed {@code perCall}: the
+   * argument array, boxed carriers and the borrow are scalar-replaced, so only what a call must
+   * allocate (a pin) remains. The slack covers the host call's own result and argument arrays.
+   */
+  static void allocates(String what, NativeCell cell, long perCall, long expected, Object... arguments) {
+    var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+    long thread = Thread.currentThread().threadId();
+    NativeFunction repeat = new Repeat(cell).function();
+    for (int warmup = 0; warmup < 20; warmup++) repeat.call(arguments);
+    long before = bean.getThreadAllocatedBytes(thread);
+    Object[] outcome = (Object[]) repeat.call(arguments);
+    long allocated = bean.getThreadAllocatedBytes(thread) - before;
+    if (!(Boolean) outcome[1]) throw new AssertionError(what + " did not run in compiled code");
+    if ((Long) outcome[0] != expected * Repeat.CALLS) throw new AssertionError(what + ": " + outcome[0]);
+    long limit = perCall * Repeat.CALLS + 1024;
+    if (allocated > limit) throw new AssertionError(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls, limit " + limit);
+    System.out.println(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " compiled calls");
   }
   /** Mirrors the fork's CFunctionRuntimeCompilationTest: compile immediately, then verify results in compiled code. */
   static void compiled(String what, NativeFunction probe, java.util.function.LongFunction<Object[]> args, java.util.function.LongFunction<Object> expected) {
@@ -77,6 +108,36 @@ public final class CellsMain {
         Borrow after = Borrow.ofString("probe", true);
         if (after.address() != base) throw new AssertionError("scratch stack unbalanced after compiled pair calls");
         after.release();
+        // What a compiled call allocates: nothing for scalars, lent native memory and scratch
+        // copies, and only the pin itself for a pinned heap array (never the borrow).
+        var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        if (!bean.isThreadAllocatedMemorySupported()) throw new AssertionError("allocation counter required");
+        bean.setThreadAllocatedMemoryEnabled(true);
+        long canaryBefore = bean.getThreadAllocatedBytes(Thread.currentThread().threadId());
+        allocationCanary = new byte[4096];
+        if (bean.getThreadAllocatedBytes(Thread.currentThread().threadId()) - canaryBefore < 4096)
+          throw new AssertionError("allocation counter canary failed");
+        byte[] small = new byte[64];
+        java.util.Arrays.fill(small, (byte) 2);
+        java.lang.foreign.MemorySegment lent = java.lang.foreign.Arena.global().allocate(64);
+        lent.fill((byte) 3);
+        allocates("add", new CellApiTruffle.add_Cell(), 0, 5, 2, 3);
+        allocates("checksum of native bytes", new CellApiTruffle.checksum_Cell(), 0, 64 * 3, NativeBytes.of(lent, false));
+        allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
+        allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
+        allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
+        // The static invoke entries take native carriers and raw addresses: from host code, which
+        // is compiled ahead of time and scalar-replaces nothing, a call allocates nothing.
+        if (CellApiTruffle.add_Cell.invoke(2, 3) != 5) throw new AssertionError("invoke add");
+        if (CellApiTruffle.lowByte_Cell.invoke(0x1ffL) != 0xff) throw new AssertionError("invoke lowByte");
+        long hostThread = Thread.currentThread().threadId();
+        long hostBefore = bean.getThreadAllocatedBytes(hostThread);
+        long hostSum = 0;
+        for (int i = 0; i < Repeat.CALLS; i++) hostSum += CellApiTruffle.checksum_Cell.invoke(lent.address(), 64) + CellApiTruffle.sleepyAdd_Cell.invoke(i, 1);
+        long hostAllocated = bean.getThreadAllocatedBytes(hostThread) - hostBefore;
+        if (hostSum != Repeat.CALLS * (64L * 3) + (long) Repeat.CALLS * (Repeat.CALLS + 1) / 2) throw new AssertionError("invoke sum " + hostSum);
+        if (hostAllocated > 1024) throw new AssertionError("invoke from host code allocated " + hostAllocated + " bytes");
+        System.out.println("invoke from host code allocated " + hostAllocated + " bytes over " + Repeat.CALLS + " calls");
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();

@@ -33,6 +33,21 @@ the shared comparison kernel, each call depending on the previous result:
   baseline. NFI is an internal language, so a two-method benchmark language (`BenchLanguage`)
   binds the symbol and hands the function to the host; it is the only DSL-processed source here.
 
+- `hand-step`: `Cells.step` behind a hand-written `@TruffleBoundary`, the shape cells are compared
+  with for transitioning imports; `glue-boundary-step` is the generated cell with
+  `truffle_transitions=boundary`.
+
+Slab cases call a ten-argument entry (two byte buffers, two opaque pointers, five integers),
+exported as a leaf (`slab`) and as a transition (`slab-step`): `direct-*` passes raw addresses,
+`invoke-*` calls the cell's static `invoke` with the same raw addresses,
+`hand-slab-step` does so behind a hand-written boundary, `glue-*-native` passes `NativeBytes` and
+`NativePointer` values through the cell, `glue-slab-heap` passes `HeapBytes` (both copied, since a
+byte pointer without a `borrow` declaration is NUL-terminated), `glue-boundary-*` uses the
+`boundary` cell and `interop-*` the executable wrapper.
+
+Guest values (buffers, pointers, arrays) live in non-final fields of the measuring node, so partial
+evaluation sees them as values, not constants, as it would for arguments arriving from guest code.
+
 Borrow cases call `myna_bench_sum(bytes, count, salt)`, a leaf that adds the bytes of a pattern
 buffer to the previous result, lending the same buffer on every call. Sizes are 16, 256, 1024,
 4096 and 65536 bytes; call counts scale down with size so each sample sums a similar volume.
@@ -41,6 +56,13 @@ buffer to the previous result, lending the same buffer on every call. Sizes are 
 - `glue-sum-native-N`: `NativeBytes` lent in place.
 - `glue-sum-pin-N`: `HeapBytes` with `-Dmyna.truffle.pinThreshold=1`, so the array is pinned.
 - `glue-sum-copy-N`: `HeapBytes` with the threshold above any size, so the array is copied.
+
+At 256 bytes the same sum also runs with one array pinned by hand, behind a boundary (`hand-sum-pin`)
+and visible to partial evaluation (`inline-sum-pin`), against the cell; `*-sum-step-*` repeats that
+across a transitioning import, and `glue-sum-mixed` alternates native memory and a pinned heap
+array at one call site.
+
+`--cases REGEX` runs a subset; a partial run is marked as a smoke run.
 
 String cases call `myna_bench_text(text, salt)` with an 11-byte string: `direct-text` passes a
 native C string, `glue-text` lends a Java string (UTF-8, NUL-terminated copy per call), `nfi-text`

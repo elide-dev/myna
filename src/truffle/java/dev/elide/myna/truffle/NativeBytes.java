@@ -28,9 +28,15 @@ public final class NativeBytes implements TruffleObject {
   private final MemorySegment segment;
   private final boolean writable;
 
+  // Read once: compiled code lends these without a call through the segment interface.
+  private final long address;
+  private final long size;
+
   private NativeBytes(MemorySegment segment, boolean writable) {
     this.segment = segment;
     this.writable = writable;
+    this.address = segment.address();
+    this.size = segment.byteSize();
   }
 
   /** Views {@code size} bytes at {@code address}; the caller vouches for the extent. */
@@ -47,11 +53,11 @@ public final class NativeBytes implements TruffleObject {
   }
 
   public long address() {
-    return segment.address();
+    return address;
   }
 
   public long size() {
-    return segment.byteSize();
+    return size;
   }
 
   public boolean isWritable() {
@@ -69,7 +75,7 @@ public final class NativeBytes implements TruffleObject {
 
   @ExportMessage
   long asPointer() {
-    return segment.address();
+    return address;
   }
 
   @ExportMessage
@@ -84,11 +90,11 @@ public final class NativeBytes implements TruffleObject {
 
   @ExportMessage
   long getBufferSize() {
-    return segment.byteSize();
+    return size;
   }
 
   private void check(long offset, int width) throws InvalidBufferOffsetException {
-    if (offset < 0 || offset > segment.byteSize() - width)
+    if (offset < 0 || offset > size - width)
       throw InvalidBufferOffsetException.create(offset, width);
   }
 
@@ -117,8 +123,7 @@ public final class NativeBytes implements TruffleObject {
       throws InvalidBufferOffsetException {
     if (length < 0) throw InvalidBufferOffsetException.create(offset, length);
     check(offset, 0);
-    if (offset > segment.byteSize() - length)
-      throw InvalidBufferOffsetException.create(offset, length);
+    if (offset > size - length) throw InvalidBufferOffsetException.create(offset, length);
     MemorySegment.copy(
         segment, ValueLayout.JAVA_BYTE, offset, destination, destinationOffset, length);
   }

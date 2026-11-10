@@ -844,7 +844,9 @@ class TruffleRuntimeTest {
     // Nulls and mismatches.
     assertEquals(0, nullable.execute(new ForeignNull()).address());
     assertEquals(0, nullable.execute(NativePointer.NULL).address());
-    assertSame(Borrow.none(), nullable.execute(new ForeignNull()));
+    Borrow lentNull = nullable.execute(new ForeignNull());
+    assertEquals(0, lentNull.address());
+    assertEquals(0, lentNull.length());
     assertEquals(
         "f: parameter text expects string, buffer or pointer, got Integer 1",
         assertThrows(NativeCellException.class, () -> cString.execute(1)).getMessage());
@@ -894,7 +896,7 @@ class TruffleRuntimeTest {
   }
 
   @Test
-  void borrowsOfLargeArraysCopyOnHotSpot() {
+  void borrowsOfLargeArraysCopyOnHotSpot() throws Exception {
     byte[] large = new byte[Borrow.pinThreshold() + 1];
     large[Borrow.pinThreshold()] = 42;
     Borrow borrow = Borrow.ofArray(large, true, false);
@@ -907,6 +909,54 @@ class TruffleRuntimeTest {
     assertEquals(0x10, direct.address());
     assertEquals(3, direct.length());
     direct.release();
+    // The null borrow lends the null address and has nothing to undo.
+    assertEquals(0, Borrow.none().address());
+    assertEquals(0, Borrow.none().length());
+    Borrow.none().release();
+    // The factories fill a fresh borrow exactly as a coercion does.
+    byte[] source = {1, 2, 3};
+    Borrow buffer =
+        Borrow.ofBuffer(InteropLibrary.getUncached(), new ForeignBuffer(source, true), true, false);
+    assertEquals(3, buffer.length());
+    MemorySegment.ofAddress(buffer.address())
+        .reinterpret(3)
+        .set(ValueLayout.JAVA_BYTE, 1, (byte) 9);
+    buffer.release();
+    assertEquals(9, source[1]);
+    buffer.release();
+  }
+
+  /** One call site lends every kind of value in turn and keeps lending each correctly. */
+  @Test
+  void bytesCoercionProfilesTheKindsItHasSeen() {
+    BytesCoercion site = new BytesCoercion("f", "bytes", true, false, true);
+    MemorySegment memory = Arena.global().allocate(4);
+    Object[] values = {
+      NativeBytes.of(memory, false),
+      new HeapBytes(new byte[] {1, 2}, false),
+      "abc",
+      new ForeignNull()
+    };
+    long[] lengths = {4, 2, 3, 0};
+    for (int round = 0; round < 3; round++) {
+      for (int i = 0; i < values.length; i++) {
+        Borrow borrow = site.execute(values[i]);
+        assertEquals(lengths[i], borrow.length());
+        assertEquals(i == 3, borrow.address() == 0);
+        if (i == 0) assertEquals(memory.address(), borrow.address());
+        borrow.release();
+      }
+    }
+    // A C string parameter terminates what it copies, whether a heap buffer or an interop string.
+    BytesCoercion text = new BytesCoercion("f", "text", false, false, false);
+    for (Object value :
+        new Object[] {new HeapBytes(new byte[] {7, 8}, false), new ForeignString()}) {
+      Borrow borrow = text.execute(value);
+      MemorySegment view =
+          MemorySegment.ofAddress(borrow.address()).reinterpret(borrow.length() + 1);
+      assertEquals(0, view.get(ValueLayout.JAVA_BYTE, borrow.length()));
+      borrow.release();
+    }
   }
 
   interface ThreadBody {
