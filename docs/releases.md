@@ -43,7 +43,7 @@ The GitHub-generated source archive and the workflow's attested `git archive` as
 
 ## Symbols and recovery
 
-See [operations](operations.md) for the managed staging connection. Build IDs/UUIDs must be nonempty and match the executable and sidecar. Native Image on macOS supplies method symbols rather than full source DWARF.
+See [operations](operations.md) for the managed staging connection. Build IDs/UUIDs must be nonempty and match the executable and sidecar. One identity must also name exactly one sidecar: the macOS LLVM applicator binds its UUID to its debug information (see [operations](operations.md)), so a `debuginfo_conflict` (HTTP 409) means different bytes were built under an already published identity and must not be retried or overridden. Native Image on macOS supplies method symbols rather than full source DWARF.
 
 The publisher retries transient failures only for replayable reads, content-addressed uploads, and symbol publication. It retains each successful receipt immediately. To recover a failed publication without rebuilding, download the original workflow's artifact, verify its source commit and platform, and run:
 

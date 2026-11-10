@@ -27,5 +27,9 @@ if [ "${1:-}" = "--llvm" ]; then
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/native.cmake"
   cmake --build build/llvm --parallel 4
   cp build/llvm/myna-llvm build/dist/myna-llvm
+  if [ "$(uname -s)" = Darwin ]; then
+    # Its dSYM carries source DWARF the UUID would otherwise not cover (llvm/debug-identity.cmake).
+    "${LLVM_BIN:?Pinned LLVM toolchain required}/llvm-objdump" --section-headers build/dist/myna-llvm | grep -q __myna_debug_id
+  fi
   scripts/symbols.sh build/dist/myna-llvm
 fi
