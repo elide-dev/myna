@@ -451,6 +451,189 @@ class OwnershipTest {
         SeamJson.canonical(declared));
   }
 
+  /** Creates that take pointers: a record and a C string, then a parent resource's handle. */
+  static final String CREATES =
+      "module creates target=aarch64-apple-darwin java_class=Api\n"
+          + "opaque Session\n"
+          + "opaque Stream\n"
+          + "struct Limits size=16 align=8\n"
+          + "  field max_bytes type=u64 offset=0\n"
+          + "  field max_depth type=u64 offset=8\n"
+          + "end\n"
+          + "resource Session representation=native threading=shared create=sessionCreate"
+          + " destroy=sessionDestroy\n"
+          + "resource Stream representation=native threading=confined create=streamCreate"
+          + " destroy=streamDestroy\n"
+          + "import sessionCreate symbol=session_create return=ptr<Session> error=no_failure"
+          + " nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+          + "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n"
+          + "  param name type=ptr<char> nullable=false ownership=borrowed access=read\n"
+          + "end\n"
+          + "import sessionDestroy symbol=session_destroy return=void error=no_failure"
+          + " nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+          + "  param session type=ptr<Session> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n"
+          + "import streamCreate symbol=stream_create return=ptr<Stream> error=no_failure"
+          + " nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+          + "  param session type=ptr<Session> nullable=false ownership=borrowed"
+          + " access=read_write\n"
+          + "  param max_bytes type=u64\n"
+          + "  param batch type=u16\n"
+          + "end\n"
+          + "import streamDestroy symbol=stream_destroy return=void error=no_failure"
+          + " nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"
+          + "  param stream type=ptr<Stream> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  @Test
+  void resourceCreatesPassPointerArgumentsThrough() throws Exception {
+    var output = Generator.generate(Dsl.parse(CREATES), true);
+    // Native Image: the raw binding's word carriers, by their qualified names.
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains(
+            """
+                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, org.graalvm.nativeimage.c.type.CCharPointer arg1) {
+                        java.util.Objects.requireNonNull(factory);
+                        long address = Api.sessionCreate(arg0, arg1).rawValue();
+                        if (address == 0) return null;
+                        return adoptUnsafe(address, factory);
+                    }
+            """),
+        java);
+    assertTrue(
+        java.contains(
+            """
+                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, long arg1, short arg2) {
+                        java.util.Objects.requireNonNull(factory);
+                        long address = Api.streamCreate(arg0, arg1, arg2).rawValue();
+            """),
+        java);
+    assertTrue(java.contains("factory.adopt(address, DESTRUCTOR, null)"), java);
+    assertTrue(
+        java.contains("factory.adopt(address, DESTRUCTOR, java.lang.Thread.currentThread())"),
+        java);
+    // FFM: pointers are the raw binding's segments.
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0, MemorySegment arg1) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.sessionCreate(arg0, arg1);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0, long arg1, short arg2) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.streamCreate(arg0, arg1, arg2);\n"),
+        ffm);
+    // Rust: nothing vouches for a pointer argument or for how long the resource needs it.
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            """
+                    /// # Safety
+                    /// Every pointer argument must satisfy the raw function's requirements, for as long
+                    /// as the created resource depends on it.
+                    pub unsafe fn create(limits: *const super::Limits, name: *const core::ffi::c_char) -> Option<Self> {
+                        core::ptr::NonNull::new(unsafe { super::sessionCreate(limits, name) }).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+            """),
+        rust);
+    assertTrue(
+        rust.contains(
+            """
+                    /// # Safety
+                    /// Every pointer argument must satisfy the raw function's requirements, for as long
+                    /// as the created resource depends on it.
+                    pub unsafe fn create(session: *mut super::Session, max_bytes: u64, batch: u16) -> Option<Self> {
+                        core::ptr::NonNull::new(unsafe { super::streamCreate(session, max_bytes, batch) }).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+            """),
+        rust);
+    // A create with scalar arguments only is the safe fn it has always been.
+    String scalars =
+        Generator.generate(
+                Dsl.parse(
+                    CREATES.replace(
+                        "  param session type=ptr<Session> nullable=false ownership=borrowed"
+                            + " access=read_write\n  param max_bytes",
+                        "  param max_bytes")),
+                true)
+            .get("seam.rs");
+    assertTrue(
+        scalars.contains(
+            "    impl Stream {\n"
+                + "        pub fn create(max_bytes: u64, batch: u16) -> Option<Self> {\n"
+                + "            core::ptr::NonNull::new(unsafe { super::streamCreate(max_bytes,"
+                + " batch) })"),
+        scalars);
+    String example = Generator.generate(Dsl.parse(source()), true).get("seam.rs");
+    assertTrue(example.contains("        pub fn create() -> Option<Self> {\n"), example);
+    assertFalse(example.contains("pub unsafe fn create"), example);
+    // Relaxed mode accepts the same shapes.
+    assertEquals(output, Generator.generate(Dsl.parse(CREATES), false));
+  }
+
+  static Stream<Arguments> createRejections() {
+    String limits =
+        "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";
+    return Stream.of(
+        // Arguments with no pass-through carrier in every backend.
+        Arguments.of(
+            limits,
+            "  param limits type=Limits\n",
+            "resource create takes only scalar and pointer arguments: sessionCreate limits"),
+        Arguments.of(
+            limits,
+            "  param visit type=fn<Visit>\n",
+            "resource create takes only scalar and pointer arguments: sessionCreate visit"),
+        // The handle is the result: null means failure, and nothing else is a create.
+        Arguments.of(
+            "return=ptr<Session>", "return=i32", "resource create must return ptr<resource>"),
+        Arguments.of(
+            "return=ptr<Session>",
+            "return=ptr<Stream>",
+            "resource create must return ptr<resource>"),
+        Arguments.of(
+            "return=ptr<Session>",
+            "return=ptr<ptr<Session>>",
+            "resource create must return ptr<resource>"),
+        // A create returns a pointer, so none of its byte pointers can be a call borrow.
+        Arguments.of(
+            "import sessionCreate",
+            "borrow sessionCreate name length=limits lifetime=call\nimport sessionCreate",
+            "call borrow cannot return a pointer"),
+        // Out-parameter handles and in-place results are not a form of resource.
+        Arguments.of(
+            "create=sessionCreate destroy=sessionDestroy",
+            "create=sessionCreate destroy=sessionDestroy out=handle",
+            "unknown options: [out]"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("createRejections")
+  void rejectsCreateShapesWithTheirReason(String from, String to, String message) {
+    String valid =
+        CREATES.replace("opaque Session\n", "opaque Session\ncallback Visit return=void\nend\n");
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(valid), true));
+    assertTrue(valid.contains(from), "mutation must affect fixture");
+    String changed = valid.replace(from, to);
+    for (boolean strict : new boolean[] {false, true}) {
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(Dsl.parse(changed), strict),
+              to);
+      // The parser prefixes its own errors with the source line; validation errors have none.
+      assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
+    }
+  }
+
   static Stream<Arguments> borrowRejections() {
     String output =
         "  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write"

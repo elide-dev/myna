@@ -22,10 +22,15 @@ final class RustOwnership {
       String n = r.name();
       Function create =
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
+      // Declared types live in the parent module; scalars are spelled the same either way.
       String parameters =
           String.join(
               ", ",
-              create.parameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList());
+              create.parameters().stream()
+                  .map(p -> p.name() + ": " + Types.rust(p, "super::"))
+                  .toList());
+      // Nothing vouches for a pointer argument, or for how long the resource depends on it.
+      boolean pointers = create.parameters().stream().anyMatch(p -> p.type() instanceof Pointer);
       String arguments =
           String.join(", ", create.parameters().stream().map(Parameter::name).toList());
       out.append("    pub struct ")
@@ -46,7 +51,14 @@ final class RustOwnership {
       out.append("    impl ")
           .append(n)
           .append(" {\n")
-          .append("        pub fn create(")
+          .append(
+              pointers
+                  ? "        /// # Safety\n"
+                      + "        /// Every pointer argument must satisfy the raw function's"
+                      + " requirements, for as long\n"
+                      + "        /// as the created resource depends on it.\n"
+                      + "        pub unsafe fn create("
+                  : "        pub fn create(")
           .append(parameters)
           .append(") -> Option<Self> {\n            core::ptr::NonNull::new(unsafe { super::")
           .append(r.create())

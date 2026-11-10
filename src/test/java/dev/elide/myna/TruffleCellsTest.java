@@ -789,6 +789,110 @@ class TruffleCellsTest {
   }
 
   @Test
+  void createCellsCoercePointerArgumentsAndReturnOwners() {
+    String source =
+        OwnershipTest.CREATES.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
+    String truffle = generate(source).get("ApiTruffle.java");
+    // A record pointer is an address and a byte pointer with an access lends its bytes; the
+    // created handle still comes back as an owner.
+    assertTrue(
+        truffle.contains(
+            """
+                    public static long invoke(long limits, long name) {
+                        return Api.sessionCreate(WordFactory.pointer(limits), WordFactory.pointer(name)).rawValue();
+                    }
+                    public sessionCreate_Cell() {
+                        super("sessionCreate", 2);
+                        this.coerce_limits = new PointerCoercion("sessionCreate", "limits", false, false);
+                        this.coerce_name = new BytesCoercion("sessionCreate", "name", false, false, false);
+                    }
+                    @Override
+                    public Object execute(Object[] arguments) {
+                        checkArity(arguments);
+                        long address_limits = coerce_limits.execute(arguments[0]);
+                        Borrow borrow_name = coerce_name.execute(arguments[1]);
+                        try {
+                            long created = invoke(address_limits, borrow_name.address());
+                            if (created == 0) return Carriers.none();
+                            return new NativeResource("Session", created, DESTRUCTOR, null);
+                        } finally {
+                            borrow_name.release();
+                        }
+                    }
+            """),
+        truffle);
+    // Another resource's handle is a pointer argument: PointerCoercion takes an open owner.
+    assertTrue(
+        truffle.contains(
+            """
+                    public static long invoke(long session, long max_bytes, short batch) {
+                        return Api.streamCreate(WordFactory.pointer(session), max_bytes, batch).rawValue();
+                    }
+                    public streamCreate_Cell() {
+                        super("streamCreate", 3);
+                        this.coerce_session = new PointerCoercion("streamCreate", "session", false, false);
+            """),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            """
+                        long created = invoke(address_session, value_max_bytes, value_batch);
+                        if (created == 0) return Carriers.none();
+                        return new NativeResource("Stream", created, DESTRUCTOR, Thread.currentThread());
+            """),
+        truffle);
+    // FFM cells: the same shape over the FFM binding.
+    String ffm =
+        generate(source.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        ffm.contains(
+            "                return ApiFFM.streamCreate(MemorySegment.ofAddress(session),"
+                + " max_bytes, batch).address();\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "                long created = invoke(address_limits, borrow_name.address());\n"
+                + "                if (created == 0) return Carriers.none();\n"
+                + "                return new NativeResource(\"Session\", created, DESTRUCTOR,"
+                + " null);\n"),
+        ffm);
+    // A raw byte buffer on a create keeps its count as a guest argument.
+    String raw =
+        generate(
+                source.replace(
+                    "access=read\nend\nimport sessionDestroy",
+                    "access=read truffle_buffer=true@explicit_contract\n"
+                        + "  param size type=u64\nend\nimport sessionDestroy"))
+            .get("ApiTruffle.java");
+    assertTrue(raw.contains("super(\"sessionCreate\", 3);"), raw);
+    assertTrue(
+        raw.contains("new BytesCoercion(\"sessionCreate\", \"name\", false, false, false, false);"),
+        raw);
+    // With cells on, a by-value record on a create is rejected with the cells' opt-out advice
+    // first, and by the resource rule once the import has opted out.
+    String record =
+        source.replace(
+            "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n",
+            "  param limits type=Limits\n");
+    assertTrue(
+        assertThrows(IllegalArgumentException.class, () -> generate(record))
+            .getMessage()
+            .contains("by-value records"));
+    assertEquals(
+        "resource create takes only scalar and pointer arguments: sessionCreate limits",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    generate(
+                        record.replace(
+                            "return=ptr<Session> error=no_failure",
+                            "return=ptr<Session> error=no_failure"
+                                + " truffle_cell=false@explicit_contract")))
+            .getMessage());
+  }
+
+  @Test
   void validationRejectsShapesCellsCannotCarry() {
     String records =
         MODULE

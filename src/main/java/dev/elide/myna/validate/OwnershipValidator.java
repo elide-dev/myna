@@ -75,10 +75,16 @@ final class OwnershipValidator {
       nativeCall(create);
       nativeCall(destroy);
       Type pointer = new Pointer(new Named(r.name()));
-      require(
-          create.parameters().stream().allMatch(p -> p.type() instanceof Scalar)
-              && create.returns().equals(pointer),
-          "resource create must take scalar arguments and return ptr<resource>");
+      require(create.returns().equals(pointer), "resource create must return ptr<resource>");
+      // Pointer arguments pass through each create wrapper under their own declared contracts,
+      // including another resource's handle: that parent's lifetime is the consumer's to keep.
+      for (Parameter argument : create.parameters())
+        require(
+            argument.type() instanceof Scalar || argument.type() instanceof Pointer,
+            "resource create takes only scalar and pointer arguments: "
+                + r.create()
+                + " "
+                + argument.name());
       require(
           destroy.returns() == Scalar.VOID && destroy.parameters().size() == 1,
           "resource destroy must take one pointer and return void");

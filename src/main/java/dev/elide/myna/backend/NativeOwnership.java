@@ -49,8 +49,9 @@ public final class NativeOwnership implements Backend {
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
+      // Pointer arguments keep the raw binding's word carriers; scalars are spelled as before.
       for (int i = 0; i < create.parameters().size(); i++) {
-        params.add(Types.java(create.parameters().get(i).type()) + " arg" + i);
+        params.add(NativeImage.qualifiedCarrier(create.parameters().get(i).type()) + " arg" + i);
         args.add("arg" + i);
       }
       out.append("    public static final class ")
