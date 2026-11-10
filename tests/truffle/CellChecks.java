@@ -29,11 +29,64 @@ public final class CellChecks {
     byte[] l = left.getBytes(StandardCharsets.UTF_8), r = right.getBytes(StandardCharsets.UTF_8);
     return ((long) l.length << 32) | ((long) r.length << 16) | ((l.length == 0 ? 0 : l[0] & 0xff) << 8) | (r.length == 0 ? 0 : r[0] & 0xff);
   }
+  /**
+   * Two borrows with lengths of their own beside a pointer that passes through: the guest gives
+   * the two buffers and the pointer, and the cell derives both lengths. {@code large} holds ones.
+   */
+  static void transfers(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment input = arena.allocate(4);
+      input.fill((byte) 5);
+      MemorySegment output = arena.allocate(3);
+      MemorySegment copied = arena.allocate(ValueLayout.JAVA_LONG);
+      NativePointer count = NativePointer.of(copied.address());
+      // Native memory is lent in place, both ways.
+      copied.set(ValueLayout.JAVA_LONG, 0, -1);
+      check(call(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output, true), count).equals(15L), "transfer native");
+      check(copied.get(ValueLayout.JAVA_LONG, 0) == 3 && output.get(ValueLayout.JAVA_BYTE, 2) == 5, "transfer wrote native memory in place");
+      // The pointer beside the buffers keeps its own contract: here, nullable.
+      check(call(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output, true), NativePointer.NULL).equals(15L), "transfer without a count");
+      check(call(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output, true), NativeVoid.INSTANCE).equals(15L), "transfer with interop null");
+      // Heap arrays, copied or pinned, in either position; a writable one is written back.
+      byte[] small = new byte[5];
+      check(call(cells, "transfer", new HeapBytes(new byte[] {1, 2, 3}, false), new HeapBytes(small, true), count).equals(6L), "transfer small heap");
+      check(small[0] == 1 && small[2] == 3 && small[3] == 0 && copied.get(ValueLayout.JAVA_LONG, 0) == 3, "transfer wrote a copied array back");
+      byte[] wide = new byte[large.length + 1];
+      check(call(cells, "transfer", new HeapBytes(large, false), new HeapBytes(wide, true), count).equals((long) large.length), "transfer large heap");
+      check(wide[0] == 1 && wide[large.length - 1] == 1 && wide[large.length] == 0 && copied.get(ValueLayout.JAVA_LONG, 0) == large.length, "transfer wrote a large array back");
+      // Mixed kinds: a string or a heap array into native memory, native memory into a heap array.
+      check(call(cells, "transfer", "abc", NativeBytes.of(output, true), count).equals(294L), "transfer string");
+      check(output.get(ValueLayout.JAVA_BYTE, 0) == 'a' && output.get(ValueLayout.JAVA_BYTE, 2) == 'c', "transfer copied the string's bytes, unterminated");
+      check(call(cells, "transfer", NativeBytes.of(input, false), new HeapBytes(small, true), NativePointer.NULL).equals(20L), "transfer native to heap");
+      check(small[0] == 5 && small[3] == 5 && small[4] == 0, "transfer native to heap wrote back");
+      // Either buffer may be empty.
+      check(call(cells, "transfer", new HeapBytes(new byte[0], false), NativeBytes.of(output, true), count).equals(0L), "transfer empty input");
+      check(copied.get(ValueLayout.JAVA_LONG, 0) == 0, "transfer empty input count");
+      copied.set(ValueLayout.JAVA_LONG, 0, -1);
+      check(call(cells, "transfer", NativeBytes.of(input, false), new HeapBytes(new byte[0], true), count).equals(0L), "transfer empty output");
+      check(copied.get(ValueLayout.JAVA_LONG, 0) == 0, "transfer empty output count");
+      // Both lengths are derived: the guest signature has the two buffers and the pointer only.
+      rejects(cells, "transfer", NativeBytes.of(input, false), 4L, NativeBytes.of(output, true), 3, count);
+      rejects(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output, true));
+      // Each buffer keeps its own access rules, and a bare pointer has no size to derive.
+      rejects(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output.asReadOnly(), true), count);
+      rejects(cells, "transfer", NativeBytes.of(input, false), "text", count);
+      rejects(cells, "transfer", NativePointer.of(input.address()), NativeBytes.of(output, true), count);
+      rejects(cells, "transfer", NativeBytes.of(input, false), NativePointer.of(output.address()), count);
+      rejects(cells, "transfer", NativeBytes.of(input, false), NativeBytes.of(output, true), 7);
+      // A second borrow that fails releases the first: the next call's copies still work.
+      rejects(cells, "transfer", "kept", 1, count);
+      check(call(cells, "transfer", "ab", new HeapBytes(small, true), count).equals(195L), "transfer after a failed second borrow");
+      check(small[0] == 'a' && small[1] == 'b' && small[2] == 5, "transfer after a failed second borrow wrote back");
+    }
+  }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
     // Host Java null bypasses guest interop values; exercise the public host call API.
     for (Object[] sample : new Object[][] {
         {"add", 1, null}, {"widen", 0, 0, 0, null}, {"scale", null, 2},
-        {"peek", null}, {"strlen", null}, {"checksum", null}, {"fill", null, 1}}) {
+        {"peek", null}, {"strlen", null}, {"checksum", null}, {"fill", null, 1},
+        {"transfer", null, new HeapBytes(new byte[1], true), NativePointer.NULL},
+        {"transfer", new HeapBytes(new byte[1], false), null, NativePointer.NULL}}) {
       String name = (String) sample[0];
       try {
         cells.apply(name).call(java.util.Arrays.copyOfRange(sample, 1, sample.length));
@@ -125,6 +178,7 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
+    transfers(cells, large);
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);
@@ -145,6 +199,33 @@ public final class CellChecks {
     check(call(cells, "counterCreate", -1) == NativeVoid.INSTANCE, "failed creation is null");
     rejects(cells, "counterDestroy", NativeVoid.INSTANCE);
     rejects(cells, "counterDestroy", NativePointer.of(16));
+    // A create that takes pointers: another resource's handle and a pointer to plain memory.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment step = arena.allocate(8);
+      step.set(ValueLayout.JAVA_LONG, 0, 5L);
+      Object parent = call(cells, "counterCreate", 10);
+      Object stepper = call(cells, "stepperCreate", parent, NativeBytes.of(step, false));
+      check(stepper instanceof NativeResource r && r.type().equals("Stepper"), "stepper owner");
+      check(call(cells, "counterLive").equals(2L), "counter and stepper live");
+      check(call(cells, "stepperNext", stepper).equals(10L), "stepper reads its counter");
+      check(call(cells, "counterNext", parent).equals(15L), "stepper advanced its counter");
+      // The handle argument is typed by its pointer, not by resource: a closed parent, a null
+      // and a failed creation are all reported, and nothing leaks.
+      step.set(ValueLayout.JAVA_LONG, 0, 0L);
+      check(call(cells, "stepperCreate", parent, NativeBytes.of(step, false)) == NativeVoid.INSTANCE, "failed stepper is null");
+      rejects(cells, "stepperCreate", NativeVoid.INSTANCE, NativeBytes.of(step, false));
+      rejects(cells, "stepperDestroy", parent);
+      // The stepper keeps its counter open: closing the counter under it would leave the stepper
+      // pointing at freed memory, so that is refused until the stepper is gone.
+      rejects(cells, "counterDestroy", parent);
+      check(call(cells, "counterLive").equals(2L), "parent survives a refused close");
+      check(call(cells, "stepperNext", stepper).equals(16L), "stepper still usable");
+      check(call(cells, "stepperDestroy", stepper) == NativeVoid.INSTANCE, "stepper destroyed");
+      rejects(cells, "stepperNext", stepper);
+      check(call(cells, "counterDestroy", parent) == NativeVoid.INSTANCE, "parent destroyed after its stepper");
+      rejects(cells, "stepperCreate", parent, NativeBytes.of(step, false));
+      check(call(cells, "counterLive").equals(0L), "both destroyed");
+    }
     Object other = call(cells, "counterCreate", 1);
     INTEROP.invokeMember(other, "close");
     check(call(cells, "counterLive").equals(0L), "closed through the member");

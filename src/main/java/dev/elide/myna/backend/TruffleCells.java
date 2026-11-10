@@ -48,14 +48,17 @@ public final class TruffleCells implements Backend {
     return fact != null && fact.enabled();
   }
 
-  /** The guest-facing shape of one cell. */
-  private record Cell(Function function, BufferBorrow borrow, Resource creates, Resource destroys) {
+  /**
+   * The guest-facing shape of one cell. Every borrowed length drops out of the guest signature: the
+   * guest passes each buffer and the cell derives its byte count.
+   */
+  private record Cell(Function function, CallBorrows borrows, Resource creates, Resource destroys) {
     boolean isLength(Parameter p) {
-      return borrow != null && p.name().equals(borrow.length());
+      return borrows.length(p) != null;
     }
 
     boolean isBuffer(Parameter p) {
-      return borrow != null && p.name().equals(borrow.parameter());
+      return borrows.buffer(p) != null;
     }
 
     int arity() {
@@ -67,7 +70,7 @@ public final class TruffleCells implements Backend {
   private static Cell cell(Module m, Function f) {
     return new Cell(
         f,
-        m.borrows().stream().filter(b -> b.function().equals(f.name())).findFirst().orElse(null),
+        CallBorrows.of(m, f),
         m.resources().stream().filter(r -> r.create().equals(f.name())).findFirst().orElse(null),
         m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null));
   }
@@ -153,7 +156,10 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
-    String prelude = "";
+    // The guest argument each parameter is coerced from, by parameter name. A borrowed length
+    // has none, so guest positions are not parameter positions.
+    var guest = new HashMap<String, String>();
+    var prelude = new StringBuilder();
     if (cell.destroys() == null) {
       int index = 0;
       for (Parameter p : f.parameters()) {
@@ -163,6 +169,7 @@ public final class TruffleCells implements Backend {
         }
         String field = "coerce_" + p.name();
         String argument = "arguments[" + index++ + "]";
+        guest.put(p.name(), argument);
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
         if (t instanceof Pointer || t instanceof FunctionPointer) {
@@ -306,24 +313,27 @@ public final class TruffleCells implements Backend {
         }
         arguments.add(local);
       }
-      if (cell.borrow() != null) {
-        Type lengthType =
-            f.parameters().stream().filter(cell::isLength).findFirst().orElseThrow().type();
-        String length = "borrow_" + cell.borrow().parameter() + ".length()";
-        if (lengthType == Scalar.I32 || lengthType == Scalar.U32) {
+      // Each borrowed length takes its place among the binding's arguments, derived from its
+      // buffer once every borrow is held.
+      for (int n = 0; n < f.parameters().size(); n++) {
+        Parameter p = f.parameters().get(n);
+        BufferBorrow borrow = cell.borrows().length(p);
+        if (borrow == null) continue;
+        String length = "borrow_" + borrow.parameter() + ".length()";
+        if (cell.borrows().narrow(borrow)) {
           // Range-checked before the call, outside any FFM failure handler.
-          String local = "length_" + cell.borrow().parameter();
-          prelude =
-              "            int "
-                  + local
-                  + " = Carriers.length32("
-                  + length
-                  + ", "
-                  + (lengthType == Scalar.U32)
-                  + ", this);\n";
+          String local = "length_" + borrow.parameter();
+          prelude
+              .append("            int ")
+              .append(local)
+              .append(" = Carriers.length32(")
+              .append(length)
+              .append(", ")
+              .append(p.type() == Scalar.U32)
+              .append(", this);\n");
           length = local;
         }
-        arguments.set(arguments.indexOf(null), length);
+        arguments.set(n, length);
       }
     }
     // Every cell but a destroy has a static invoke: the binding call with native carriers and raw
@@ -437,16 +447,51 @@ public final class TruffleCells implements Backend {
           .append("            return Carriers.none();\n");
     } else if (cell.creates() != null) {
       imports.add(RUNTIME + "NativeResource");
-      result
-          .append("            long created = ")
-          .append(call)
-          .append(";\n")
-          .append("            if (created == 0) return Carriers.none();\n")
-          .append("            return new NativeResource(")
-          .append(SeamJson.quote(cell.creates().name()))
-          .append(", created, DESTRUCTOR, ")
-          .append(cell.creates().shared() ? "null" : "Thread.currentThread()")
-          .append(");\n");
+      String type = SeamJson.quote(cell.creates().name());
+      String thread = cell.creates().shared() ? "null" : "Thread.currentThread()";
+      // The native side may keep any pointer it is not declared to drop. Where the guest passed
+      // another resource for one, the new resource holds it open: closing a session under its
+      // stream would otherwise be a use-after-free that guest code could trigger.
+      var retained = new ArrayList<String>();
+      for (Parameter p : f.parameters()) {
+        Fact dropped = p.facts().get("nocapture");
+        // The very expression the parameter was coerced from, never a recomputed position.
+        if (p.type() instanceof Pointer
+            && !(dropped != null && dropped.enabled() && dropped.approved()))
+          retained.add(guest.get(p.name()));
+      }
+      if (retained.isEmpty())
+        result
+            .append("            long created = ")
+            .append(call)
+            .append(";\n")
+            .append("            if (created == 0) return Carriers.none();\n")
+            .append("            return new NativeResource(")
+            .append(type)
+            .append(", created, DESTRUCTOR, ")
+            .append(thread)
+            .append(");\n");
+      else
+        result
+            .append("            Object hold = NativeResource.hold(")
+            .append(String.join(", ", retained))
+            .append(");\n")
+            .append("            boolean adopted = false;\n")
+            .append("            try {\n")
+            .append("                long created = ")
+            .append(call)
+            .append(";\n")
+            .append("                if (created == 0) return Carriers.none();\n")
+            .append("                NativeResource resource = new NativeResource(")
+            .append(type)
+            .append(", created, DESTRUCTOR, ")
+            .append(thread)
+            .append(", hold);\n")
+            .append("                adopted = true;\n")
+            .append("                return resource;\n")
+            .append("            } finally {\n")
+            .append("                if (!adopted) NativeResource.release(hold);\n")
+            .append("            }\n");
     } else {
       Type r = f.returns();
       if (r == Scalar.VOID) {

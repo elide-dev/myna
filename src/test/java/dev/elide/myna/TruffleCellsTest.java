@@ -552,8 +552,9 @@ class TruffleCellsTest {
   }
 
   /**
-   * A byte pointer beside other pointers cannot be a borrow, so by default it is a C string
-   * parameter. {@code truffle_buffer} declares it raw bytes: no terminator, pinned when large.
+   * A byte pointer without a borrow declaration is by default a C string parameter. {@code
+   * truffle_buffer} declares it raw bytes whose count stays a guest argument: no terminator, pinned
+   * when large.
    */
   @Test
   void truffleBufferLendsRawBytesBesideOtherPointers() {
@@ -642,6 +643,297 @@ class TruffleCellsTest {
                     + decode)
             .get("MynaTruffle.java")
             .contains("new BytesCoercion(\"decode\", \"data\", false, false, false, false);"));
+  }
+
+  /** Two borrows with lengths of their own, one length ahead of its buffer, beside pointers. */
+  static final String TRANSFER =
+      "opaque Session\n"
+          + "borrow transfer input length=count lifetime=call\n"
+          + "borrow transfer output length=capacity lifetime=call\n"
+          + "import transfer return=i32 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param session type=ptr<Session> nullable=false ownership=borrowed"
+          + " access=read_write\n"
+          + "  param input type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param count type=u64\n"
+          + "  param capacity type=u32\n"
+          + "  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+          + " nocapture=true@explicit_contract\n"
+          + "  param written type=ptr<u32> nullable=true ownership=borrowed access=write\n"
+          + "  param name type=ptr<char> nullable=false ownership=borrowed access=read\n"
+          + "  param flags type=u8\n"
+          + "end\n";
+
+  @Test
+  void severalBorrowsDropEveryLengthAndReleaseInReverse() {
+    String truffle = generate(MODULE + TRANSFER).get("MynaTruffle.java");
+    // Both lengths leave the guest signature; the other pointers keep their ordinary coercions.
+    assertTrue(truffle.contains("super(\"transfer\", 6);"), truffle);
+    assertTrue(truffle.contains("new PointerCoercion(\"transfer\", \"session\", false, false);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"input\", false, false, true);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"output\", false, true, true);"));
+    assertTrue(truffle.contains("new PointerCoercion(\"transfer\", \"written\", true, false);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"name\", false, false, false);"));
+    // invoke keeps the binding's own parameters, lengths included.
+    assertTrue(
+        truffle.contains(
+            "        public static int invoke(long session, long input, long count, int capacity,"
+                + " long output, long written, long name, byte flags) {\n"
+                + "            return MynaNative.transfer(WordFactory.pointer(session),"
+                + " WordFactory.pointer(input), count, capacity, WordFactory.pointer(output),"
+                + " WordFactory.pointer(written), WordFactory.pointer(name), flags);\n"),
+        truffle);
+    // Scalars and addresses coerce first; borrows are then acquired in parameter order, each
+    // 32-bit length is range-checked before the call, and releases nest in reverse.
+    assertTrue(
+        truffle.contains(
+            """
+                        checkArity(arguments);
+                        long address_session = coerce_session.execute(arguments[0]);
+                        long address_written = coerce_written.execute(arguments[3]);
+                        byte value_flags = (byte) coerce_flags.execute(arguments[5]);
+                        Borrow borrow_input = coerce_input.execute(arguments[1]);
+                        try {
+                            Borrow borrow_output = coerce_output.execute(arguments[2]);
+                            try {
+                                Borrow borrow_name = coerce_name.execute(arguments[4]);
+                                try {
+                                    int length_output = Carriers.length32(borrow_output.length(), true, this);
+                                    return invoke(address_session, borrow_input.address(), borrow_input.length(), length_output, borrow_output.address(), address_written, borrow_name.address(), value_flags);
+                                } finally {
+                                    borrow_name.release();
+                                }
+                            } finally {
+                                borrow_output.release();
+                            }
+                        } finally {
+                            borrow_input.release();
+                        }
+                    }
+            """),
+        truffle);
+    // Cells stay DSL-free and compilable: no try-with-resources, no boundary on a leaf.
+    assertFalse(truffle.contains("try ("), truffle);
+    assertFalse(truffle.contains("TruffleBoundary"), truffle);
+    // Two 32-bit lengths are both checked, each against its own signedness.
+    String narrow =
+        generate(MODULE + TRANSFER.replace("param count type=u64", "param count type=i32"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        narrow.contains(
+            "                        int length_input = Carriers.length32(borrow_input.length(),"
+                + " false, this);\n"
+                + "                        int length_output ="
+                + " Carriers.length32(borrow_output.length(), true, this);\n"
+                + "                        return invoke(address_session, borrow_input.address(),"
+                + " length_input, length_output, borrow_output.address(), address_written,"
+                + " borrow_name.address(), value_flags);\n"),
+        narrow);
+    // FFM cells: the same shape, with the downcall behind its boundary and the range check
+    // outside the failure handler.
+    String ffm =
+        generate(
+                MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
+                    + TRANSFER)
+            .get("MynaTruffle.java");
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        public static int invoke(long session, long input, long count, int"
+                + " capacity, long output, long written, long name, byte flags) {\n"
+                + "            try {\n"
+                + "                return MynaFFM.transfer(MemorySegment.ofAddress(session),"
+                + " MemorySegment.ofAddress(input), count, capacity,"
+                + " MemorySegment.ofAddress(output), MemorySegment.ofAddress(written),"
+                + " MemorySegment.ofAddress(name), flags);\n"
+                + "            } catch (Throwable $failure) {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "                        int length_output = Carriers.length32(borrow_output.length(),"
+                + " true, this);\n"
+                + "                        return invoke(address_session, borrow_input.address(),"
+                + " borrow_input.length(), length_output, borrow_output.address(),"
+                + " address_written, borrow_name.address(), value_flags);\n"),
+        ffm);
+    // A transitioning import in boundary mode keeps its call behind the boundary too.
+    String boundary =
+        generate(
+                MODULE.replace(
+                        "truffle_cells=true", "truffle_cells=true truffle_transitions=boundary")
+                    + TRANSFER.replace(
+                        "nounwind=true@explicit_contract\n",
+                        "nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        boundary.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        public static int invoke(long session, long input, long count, int"
+                + " capacity, long output, long written, long name, byte flags) {\n"
+                + "            return MynaNative.transfer("),
+        boundary);
+    // A buffer that is not a borrow keeps its count as a guest argument beside the borrows.
+    String mixed =
+        generate(
+                MODULE
+                    + TRANSFER.replace(
+                        "access=read\n  param flags",
+                        "access=read truffle_buffer=true@explicit_contract\n  param flags"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        mixed.contains("new BytesCoercion(\"transfer\", \"name\", false, false, false, false);"),
+        mixed);
+    assertTrue(mixed.contains("super(\"transfer\", 6);"), mixed);
+    // The ownership wrappers of the same declaration are generated beside the cells.
+    assertTrue(generate(MODULE + TRANSFER).containsKey("MynaOwnership.java"));
+  }
+
+  @Test
+  void createCellsCoercePointerArgumentsAndReturnOwners() {
+    String source =
+        OwnershipTest.CREATES.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
+    String truffle = generate(source).get("ApiTruffle.java");
+    // A record pointer is an address and a byte pointer with an access lends its bytes; the
+    // created handle still comes back as an owner. The native side may keep either pointer, so
+    // a resource passed for one is held open by the new owner, and released again if nothing
+    // was created.
+    assertTrue(
+        truffle.contains(
+            """
+                    public static long invoke(long limits, long name) {
+                        return Api.sessionCreate(WordFactory.pointer(limits), WordFactory.pointer(name)).rawValue();
+                    }
+                    public sessionCreate_Cell() {
+                        super("sessionCreate", 2);
+                        this.coerce_limits = new PointerCoercion("sessionCreate", "limits", false, false);
+                        this.coerce_name = new BytesCoercion("sessionCreate", "name", false, false, false);
+                    }
+                    @Override
+                    public Object execute(Object[] arguments) {
+                        checkArity(arguments);
+                        long address_limits = coerce_limits.execute(arguments[0]);
+                        Borrow borrow_name = coerce_name.execute(arguments[1]);
+                        try {
+                            Object hold = NativeResource.hold(arguments[0], arguments[1]);
+                            boolean adopted = false;
+                            try {
+                                long created = invoke(address_limits, borrow_name.address());
+                                if (created == 0) return Carriers.none();
+                                NativeResource resource = new NativeResource("Session", created, DESTRUCTOR, null, hold);
+                                adopted = true;
+                                return resource;
+                            } finally {
+                                if (!adopted) NativeResource.release(hold);
+                            }
+                        } finally {
+                            borrow_name.release();
+                        }
+                    }
+            """),
+        truffle);
+    // Another resource's handle is a pointer argument: PointerCoercion takes an open owner.
+    assertTrue(
+        truffle.contains(
+            """
+                    public static long invoke(long session, long max_bytes, short batch) {
+                        return Api.streamCreate(WordFactory.pointer(session), max_bytes, batch).rawValue();
+                    }
+                    public streamCreate_Cell() {
+                        super("streamCreate", 3);
+                        this.coerce_session = new PointerCoercion("streamCreate", "session", false, false);
+            """),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            """
+                        Object hold = NativeResource.hold(arguments[0]);
+                        boolean adopted = false;
+                        try {
+                            long created = invoke(address_session, value_max_bytes, value_batch);
+                            if (created == 0) return Carriers.none();
+                            NativeResource resource = new NativeResource("Stream", created, DESTRUCTOR, Thread.currentThread(), hold);
+                            adopted = true;
+                            return resource;
+                        } finally {
+                            if (!adopted) NativeResource.release(hold);
+                        }
+            """),
+        truffle);
+    // A pointer the callee is declared to drop is not held: the create keeps its plain shape.
+    String dropped =
+        generate(
+                source.replace(
+                    "  param session type=ptr<Session> nullable=false ownership=borrowed"
+                        + " access=read_write\n",
+                    "  param session type=ptr<Session> nullable=false ownership=borrowed"
+                        + " access=read_write nocapture=true@explicit_contract\n"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        dropped.contains(
+            "            return new NativeResource(\"Stream\", created, DESTRUCTOR,"
+                + " Thread.currentThread());\n"),
+        dropped);
+    assertFalse(dropped.contains("NativeResource.hold(arguments[0]);"), dropped);
+    // The hold names the guest argument the handle was coerced from, wherever it sits.
+    String session =
+        "  param session type=ptr<Session> nullable=false ownership=borrowed access=read_write\n";
+    String size = "  param max_bytes type=u64\n";
+    assertTrue(source.contains(session + size), "fixture order");
+    String reordered =
+        generate(source.replace(session + size, size + session)).get("ApiTruffle.java");
+    assertTrue(
+        reordered.contains("long address_session = coerce_session.execute(arguments[1]);"),
+        reordered);
+    assertTrue(reordered.contains("Object hold = NativeResource.hold(arguments[1]);"), reordered);
+    // FFM cells: the same shape over the FFM binding.
+    String ffm =
+        generate(source.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        ffm.contains(
+            "                return ApiFFM.streamCreate(MemorySegment.ofAddress(session),"
+                + " max_bytes, batch).address();\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "                    long created = invoke(address_limits, borrow_name.address());\n"
+                + "                    if (created == 0) return Carriers.none();\n"
+                + "                    NativeResource resource = new NativeResource(\"Session\","
+                + " created, DESTRUCTOR, null, hold);\n"),
+        ffm);
+    // A raw byte buffer on a create keeps its count as a guest argument.
+    String raw =
+        generate(
+                source.replace(
+                    "access=read\nend\nimport sessionDestroy",
+                    "access=read truffle_buffer=true@explicit_contract\n"
+                        + "  param size type=u64\nend\nimport sessionDestroy"))
+            .get("ApiTruffle.java");
+    assertTrue(raw.contains("super(\"sessionCreate\", 3);"), raw);
+    assertTrue(
+        raw.contains("new BytesCoercion(\"sessionCreate\", \"name\", false, false, false, false);"),
+        raw);
+    // With cells on, a by-value record on a create is rejected with the cells' opt-out advice
+    // first, and by the resource rule once the import has opted out.
+    String record =
+        source.replace(
+            "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n",
+            "  param limits type=Limits\n");
+    assertTrue(
+        assertThrows(IllegalArgumentException.class, () -> generate(record))
+            .getMessage()
+            .contains("by-value records"));
+    assertEquals(
+        "resource create takes only scalar and pointer arguments: sessionCreate limits",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    generate(
+                        record.replace(
+                            "return=ptr<Session> error=no_failure",
+                            "return=ptr<Session> error=no_failure"
+                                + " truffle_cell=false@explicit_contract")))
+            .getMessage());
   }
 
   @Test

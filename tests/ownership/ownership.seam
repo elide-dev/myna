@@ -1,0 +1,41 @@
+# The ownership example (examples/ownership.seam) plus a call with several buffers beside another
+# pointer. The integration fixtures in this directory are generated from this file, so that the
+# example, which is also a tracked benchmark workload, stays as it is.
+# Lifecycle contracts are explicit obligations of these native implementations.
+module ownership_demo target=aarch64-apple-darwin java_package=fixture.owned java_class=NativeApi
+opaque Ticket
+resource Ticket representation=native threading=shared create=ticketCreate destroy=ticketDestroy
+
+import ticketCreate symbol=ticket_create return=ptr<Ticket> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+end
+import ticketDestroy symbol=ticket_destroy return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param ticket type=ptr<Ticket> nullable=false ownership=transferred_to_callee access=read_write
+end
+
+# No retained pointers, no extra preconditions, and no access beyond the supplied length.
+borrow checksum bytes length=count lifetime=call
+import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+borrow increment bytes length=count lifetime=call
+import increment symbol=buffer_increment return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param count type=u64
+end
+# Several buffers per call: each borrow names a buffer and a length of its own. A write buffer is
+# lent exactly like a read_write one. Any other pointer passes through the wrappers under its own
+# declared contract, so the Rust wrapper is unsafe.
+borrow transfer input length=count lifetime=call
+borrow transfer output length=capacity lifetime=call
+import transfer symbol=buffer_transfer return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+  param copied type=ptr<u64> nullable=true ownership=borrowed access=write
+end
+import liveCount symbol=ticket_live return=i64 error=no_failure nounwind=true@explicit_contract
+end
+import failNext symbol=ticket_fail_next return=void error=no_failure nounwind=true@explicit_contract
+end

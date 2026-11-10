@@ -75,10 +75,16 @@ final class OwnershipValidator {
       nativeCall(create);
       nativeCall(destroy);
       Type pointer = new Pointer(new Named(r.name()));
-      require(
-          create.parameters().stream().allMatch(p -> p.type() instanceof Scalar)
-              && create.returns().equals(pointer),
-          "resource create must take scalar arguments and return ptr<resource>");
+      require(create.returns().equals(pointer), "resource create must return ptr<resource>");
+      // Pointer arguments pass through each create wrapper under their own declared contracts,
+      // including another resource's handle: that parent's lifetime is the consumer's to keep.
+      for (Parameter argument : create.parameters())
+        require(
+            argument.type() instanceof Scalar || argument.type() instanceof Pointer,
+            "resource create takes only scalar and pointer arguments: "
+                + r.create()
+                + " "
+                + argument.name());
       require(
           destroy.returns() == Scalar.VOID && destroy.parameters().size() == 1,
           "resource destroy must take one pointer and return void");
@@ -92,9 +98,19 @@ final class OwnershipValidator {
       require(
           p.facts().isEmpty(), "resource destroy cannot require additional pointer preconditions");
     }
-    names.clear();
+    // A function may declare several borrows; each has a buffer and a length of its own.
+    // Identifiers contain no space, so "function parameter" is a unique key.
+    var buffers = new HashSet<String>();
+    var lengths = new HashSet<String>();
     for (BufferBorrow b : m.borrows()) {
-      require(names.add(b.function()), "only one call buffer per function is supported");
+      require(
+          buffers.add(b.function() + " " + b.parameter()),
+          "duplicate borrow: " + b.function() + " " + b.parameter());
+      require(
+          lengths.add(b.function() + " " + b.length()),
+          "borrows cannot share a length parameter: " + b.function() + " " + b.length());
+    }
+    for (BufferBorrow b : m.borrows()) {
       Function f = functions.get(b.function());
       require(f != null, "unknown borrow function: " + b.function());
       nativeCall(f);
@@ -107,12 +123,18 @@ final class OwnershipValidator {
           p != null && length != null && p != length,
           "borrow must identify distinct buffer and length parameters");
       require(
+          !lengths.contains(b.function() + " " + b.parameter()),
+          "call buffer cannot be another borrow's length: " + b.function() + " " + b.parameter());
+      require(
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
           "call buffer requires borrowed ptr<u8>");
       require(!p.nullable(), "call buffer requires non-null ptr<u8>");
+      // A write buffer is a writable one: no wrapper relies on the callee not reading it.
       require(
-          p.access() == Access.READ || p.access() == Access.READ_WRITE,
-          "call buffer requires read or read_write access");
+          p.access() == Access.READ
+              || p.access() == Access.WRITE
+              || p.access() == Access.READ_WRITE,
+          "call buffer requires read, write or read_write access");
       require(
           Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(length.type()),
           "buffer length must be a 32/64-bit integer (bytes)");
@@ -125,10 +147,15 @@ final class OwnershipValidator {
               && !p.facts().containsKey("dereferenceable")
               && !p.facts().containsKey("noalias"),
           "call buffer cannot impose alignment, extent, or noalias preconditions");
+      // Other pointers pass through each wrapper under their own declared contracts. Callbacks,
+      // by-value records and isolate threads have no pass-through carrier in every backend.
       for (Parameter other : f.parameters())
         require(
-            other == p || other.type() instanceof Scalar,
-            "additional pointers are unsupported in call buffer wrappers");
+            other.type() instanceof Scalar || other.type() instanceof Pointer,
+            "call buffer wrappers pass only scalars and pointers beside their buffers: "
+                + b.function()
+                + " "
+                + other.name());
     }
   }
 

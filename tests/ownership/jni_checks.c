@@ -3,12 +3,16 @@
 #include "seam-jni.h"
 
 /* Enter generated error paths directly, including ones the Java convenience wrapper rejects. */
-JNIEXPORT jboolean JNICALL Java_JniMain_nativeErrors(JNIEnv *env, jclass clazz, jobject heap) {
+JNIEXPORT jboolean JNICALL Java_JniMain_nativeErrors(JNIEnv *env, jclass clazz, jobject heap, jobject direct) {
   jclass error = (*env)->FindClass(env, "java/lang/IllegalArgumentException");
   if (error == NULL) return JNI_FALSE;
   jobject inputs[] = {NULL, heap};
-  for (int i = 0; i < 2; i++) {
-    Java_fixture_owned_NativeApiJNI_checksumBuffer__Ljava_nio_ByteBuffer_2(env, clazz, inputs[i]);
+  /* One buffer, then each position of a two-buffer adapter beside a valid direct buffer. */
+  for (int i = 0; i < 6; i++) {
+    jobject input = inputs[i % 2];
+    if (i < 2) Java_fixture_owned_NativeApiJNI_checksumBuffer__Ljava_nio_ByteBuffer_2(env, clazz, input);
+    else Java_fixture_owned_NativeApiJNI_transferBuffer__Ljava_nio_ByteBuffer_2Ljava_nio_ByteBuffer_2J(
+        env, clazz, i < 4 ? input : direct, i < 4 ? direct : input, 0);
     jthrowable before = (*env)->ExceptionOccurred(env);
     if (before == NULL) return JNI_FALSE;
     /* A pending exception must survive entry to another generated wrapper unchanged. */

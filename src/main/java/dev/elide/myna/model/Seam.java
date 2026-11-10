@@ -259,7 +259,10 @@ public final class Seam {
   /** Explicit lifecycle contract for a unique native allocation. Null creation means failure. */
   public record Resource(String name, String create, String destroy, boolean shared) {}
 
-  /** A byte-buffer borrow valid only for the dynamic extent of one call. */
+  /**
+   * A byte-buffer borrow valid only for the dynamic extent of one call. A function may declare
+   * several, each with a buffer and a length parameter of its own.
+   */
   public record BufferBorrow(String function, String parameter, String length) {}
 
   /** Optional Native Image build integration, without dependencies on hosted SDK classes. */
@@ -433,7 +436,12 @@ public final class Seam {
 
     public Module {
       resources = resources.stream().sorted(Comparator.comparing(Resource::name)).toList();
-      borrows = borrows.stream().sorted(Comparator.comparing(BufferBorrow::function)).toList();
+      borrows =
+          borrows.stream()
+              .sorted(
+                  Comparator.comparing(BufferBorrow::function)
+                      .thenComparing(BufferBorrow::parameter))
+              .toList();
       opaqueTypes = opaqueTypes.stream().sorted().toList();
       callbacks = callbacks.stream().sorted(Comparator.comparing(Signature::name)).toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();

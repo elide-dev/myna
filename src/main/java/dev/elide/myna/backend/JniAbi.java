@@ -46,9 +46,20 @@ public final class JniAbi {
       String symbol,
       Carrier returns,
       List<Argument> arguments,
-      BufferBorrow borrow) {
+      List<BufferBorrow> borrows) {
     public Method {
       arguments = List.copyOf(arguments);
+      borrows = List.copyOf(borrows);
+    }
+
+    /** Whether {@code p} is the buffer of one of this method's borrows. */
+    public boolean buffer(Parameter p) {
+      return borrows.stream().anyMatch(b -> b.parameter().equals(p.name()));
+    }
+
+    /** Whether {@code p} is the length of one of this method's borrows. */
+    public boolean length(Parameter p) {
+      return borrows.stream().anyMatch(b -> b.length().equals(p.name()));
     }
 
     public String descriptor() {
@@ -85,37 +96,37 @@ public final class JniAbi {
     var result = new ArrayList<Method>();
     for (Function f : m.functions()) {
       if (f.direction() != Direction.IMPORT) continue;
-      result.add(lower(m, f, null));
-      for (BufferBorrow b : m.borrows()) {
-        if (b.function().equals(f.name())) {
-          if (m.functions().stream().anyMatch(other -> other.name().equals(f.name() + "Buffer")))
-            throw new IllegalArgumentException(
-                "JNI buffer adapter name collision: " + f.name() + "Buffer");
-          result.add(lower(m, f, b));
-        }
+      result.add(lower(m, f, List.of()));
+      // One buffer adapter per function, taking a ByteBuffer for each of its borrows.
+      var borrows = m.borrows().stream().filter(b -> b.function().equals(f.name())).toList();
+      if (!borrows.isEmpty()) {
+        if (m.functions().stream().anyMatch(other -> other.name().equals(f.name() + "Buffer")))
+          throw new IllegalArgumentException(
+              "JNI buffer adapter name collision: " + f.name() + "Buffer");
+        result.add(lower(m, f, borrows));
       }
     }
     return List.copyOf(result);
   }
 
-  private static Method lower(Module m, Function f, BufferBorrow borrow) {
+  private static Method lower(Module m, Function f, List<BufferBorrow> borrows) {
     var args = new ArrayList<Argument>();
     args.add(new Argument("env", new Carrier("", "JNIEnv *", "ptr", "")));
     args.add(new Argument("clazz", new Carrier("", "jclass", "ptr", "")));
     int i = 0;
     for (Parameter p : f.abiParameters()) {
       String name = "arg" + i++;
-      if (borrow != null && p.name().equals(borrow.length())) continue;
+      if (borrows.stream().anyMatch(b -> b.length().equals(p.name()))) continue;
       args.add(
           new Argument(
               name,
-              borrow != null && p.name().equals(borrow.parameter())
+              borrows.stream().anyMatch(b -> b.parameter().equals(p.name()))
                   ? new Carrier("java.nio.ByteBuffer", "jobject", "ptr", "Ljava/nio/ByteBuffer;")
                   : carrier(p.type())));
     }
     if (f.returns() instanceof Named)
       args.add(new Argument("result", carrier(new Pointer(f.returns()))));
-    String name = f.name() + (borrow == null ? "" : "Buffer");
+    String name = f.name() + (borrows.isEmpty() ? "" : "Buffer");
     // Long JNI names also distinguish a raw native method from a Java buffer overload.
     String descriptor =
         String.join("", args.stream().skip(2).map(a -> a.carrier().descriptor()).toList());
@@ -132,7 +143,7 @@ public final class JniAbi {
         symbol,
         carrier(f.returns() instanceof Named ? Scalar.VOID : f.returns()),
         args,
-        borrow);
+        borrows);
   }
 
   private static String mangle(String value) {

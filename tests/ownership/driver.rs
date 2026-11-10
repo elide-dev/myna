@@ -21,6 +21,14 @@ fn main() {
     assert_eq!(bytes, [2, 3, 0]);
     assert_eq!(checksum(&[]), 0);
     increment(&mut []);
+    // Two slices and a pointer the wrapper cannot vouch for, which makes it an unsafe fn.
+    let mut output = [0u8; 2];
+    let mut copied = u64::MAX;
+    assert_eq!(unsafe { transfer(&bytes, &mut output, &mut copied) }, 5);
+    assert_eq!((output, copied), ([2, 3], 2));
+    assert_eq!(unsafe { transfer(&[], &mut output, core::ptr::null_mut()) }, 0);
+    assert_eq!(unsafe { transfer(&bytes, &mut [], &mut copied) }, 0);
+    assert_eq!((output, copied), ([2, 3], 0));
     assert!(std::panic::catch_unwind(|| {
         let _owner = Ticket::create().unwrap();
         panic!("release during unwinding");

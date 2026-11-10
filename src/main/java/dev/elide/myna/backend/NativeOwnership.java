@@ -49,8 +49,9 @@ public final class NativeOwnership implements Backend {
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
+      // Pointer arguments keep the raw binding's word carriers; scalars are spelled as before.
       for (int i = 0; i < create.parameters().size(); i++) {
-        params.add(Types.java(create.parameters().get(i).type()) + " arg" + i);
+        params.add(NativeImage.qualifiedCarrier(create.parameters().get(i).type()) + " arg" + i);
         args.add("arg" + i);
       }
       out.append("    public static final class ")
@@ -118,109 +119,147 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    for (BufferBorrow b : m.borrows()) {
-      Function f =
-          m.functions().stream()
-              .filter(x -> x.name().equals(b.function()))
-              .findFirst()
-              .orElseThrow();
-      Parameter buffer =
-          f.parameters().stream()
-              .filter(p -> p.name().equals(b.parameter()))
-              .findFirst()
-              .orElseThrow();
-      boolean writable = buffer.access() == Access.READ_WRITE;
-      Type lengthType =
-          f.parameters().stream()
-              .filter(p -> p.name().equals(b.length()))
-              .findFirst()
-              .orElseThrow()
-              .type();
-      boolean narrow = lengthType == Scalar.I32 || lengthType == Scalar.U32;
-      String maxLength = lengthType == Scalar.I32 ? "2147483647L" : "4294967295L";
-      // Use positional generated names to avoid collisions with consumer parameter names.
-      var nativeParams = new ArrayList<String>();
-      var arrayParams = new ArrayList<String>();
-      var call = new ArrayList<String>();
-      int index = 0;
-      String bufferName = "";
-      for (Parameter p : f.parameters()) {
-        String name = "arg" + index++;
-        if (p == buffer) {
-          bufferName = name;
-          nativeParams.add("NativeBuffer " + name);
-          arrayParams.add("byte[] " + name);
-          call.add("pointer");
-        } else if (p.name().equals(b.length())) call.add(narrow ? "(int) length" : "length");
-        else {
-          nativeParams.add(Types.java(p.type()) + " " + name);
-          arrayParams.add(Types.java(p.type()) + " " + name);
-          call.add(name);
-        }
+    for (CallBorrows call : CallBorrows.of(m)) buffers(m, call, out);
+    return out.append("}\n").toString();
+  }
+
+  /** One acquired buffer of a wrapper: its positional argument and the suffix of its locals. */
+  private record Buffer(String name, String suffix, BufferBorrow borrow) {}
+
+  /**
+   * The off-heap and array wrappers of one function. Buffers are acquired or pinned in parameter
+   * order and released in reverse, each in a {@code finally} of its own; other parameters pass
+   * through in the carriers of the raw binding.
+   */
+  private static void buffers(Module m, CallBorrows call, StringBuilder out) {
+    Function f = call.function();
+    // Use positional generated names to avoid collisions with consumer parameter names.
+    var nativeParams = new ArrayList<String>();
+    var arrayParams = new ArrayList<String>();
+    var arguments = new ArrayList<String>();
+    var buffers = new ArrayList<Buffer>();
+    int index = 0;
+    for (Parameter p : f.parameters()) {
+      String name = "arg" + index++;
+      BufferBorrow buffer = call.buffer(p);
+      BufferBorrow length = call.length(p);
+      if (buffer != null) {
+        buffers.add(new Buffer(name, call.suffix(buffer), buffer));
+        nativeParams.add("NativeBuffer " + name);
+        arrayParams.add("byte[] " + name);
+        arguments.add("pointer" + call.suffix(buffer));
+      } else if (length != null)
+        arguments.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
+      else {
+        String carrier = NativeImage.qualifiedCarrier(p.type());
+        nativeParams.add(carrier + " " + name);
+        arrayParams.add(carrier + " " + name);
+        arguments.add(name);
       }
-      String invoke =
-          (f.returns() == Scalar.VOID ? "" : "return ")
-              + m.nativeClass()
-              + "."
-              + f.name()
-              + "("
-              + String.join(", ", call)
-              + ");";
-      out.append("    public static ")
-          .append(Types.java(f.returns()))
-          .append(' ')
-          .append(f.name())
-          .append('(')
-          .append(String.join(", ", nativeParams))
-          .append(") {\n")
-          .append("        ")
-          .append(bufferName)
+    }
+    String invoke =
+        (f.returns() == Scalar.VOID ? "" : "return ")
+            + m.nativeClass()
+            + "."
+            + f.name()
+            + "("
+            + String.join(", ", arguments)
+            + ");";
+    String returns = Types.java(f.returns());
+    out.append("    public static ")
+        .append(returns)
+        .append(' ')
+        .append(f.name())
+        .append('(')
+        .append(String.join(", ", nativeParams))
+        .append(") {\n");
+    String pad = "        ";
+    for (Buffer b : buffers) {
+      String s = b.suffix();
+      boolean writable = call.writable(b.borrow());
+      out.append(pad)
+          .append(b.name())
           .append(".acquire(")
           .append(writable)
-          .append(");\n        try {\n")
-          .append("            long length = ")
-          .append(bufferName)
-          .append(".byteSize();\n")
-          .append(
-              narrow
-                  ? "            if (length > "
-                      + maxLength
-                      + ") throw new IllegalArgumentException(\"buffer length exceeds ABI"
-                      + " range\");\n"
-                  : "")
-          .append("            long address = ")
-          .append(bufferName)
-          .append(".address();\n")
-          .append(
-              "            if (length < 0 || (address == 0 && length != 0)) throw new"
-                  + " IllegalArgumentException(\"invalid buffer extent\");\n")
-          .append(
-              "            org.graalvm.nativeimage.c.type.CCharPointer pointer = address == 0\n")
-          .append(
-              "                ? org.graalvm.nativeimage.StackValue.get(1) :"
-                  + " org.graalvm.word.WordFactory.pointer(address);\n")
-          .append("            ")
-          .append(invoke)
-          .append("\n        } finally {\n            ")
-          .append(bufferName)
-          .append(".release(")
-          .append(writable)
           .append(");\n")
-          .append("            java.lang.ref.Reference.reachabilityFence(")
-          .append(bufferName)
-          .append(");\n        }\n    }\n");
-      out.append(
-              "    /** Array convenience path; caller prevents conflicting concurrent array access."
-                  + " */\n")
-          .append("    public static ")
-          .append(Types.java(f.returns()))
-          .append(' ')
-          .append(f.name())
-          .append('(')
-          .append(String.join(", ", arrayParams))
-          .append(") {\n")
-          .append("        long length = ")
-          .append(bufferName)
+          .append(pad)
+          .append("try {\n")
+          .append(pad)
+          .append("    long length")
+          .append(s)
+          .append(" = ")
+          .append(b.name())
+          .append(".byteSize();\n");
+      if (call.narrow(b.borrow()))
+        out.append(pad)
+            .append("    if (length")
+            .append(s)
+            .append(" > ")
+            .append(call.maxLength(b.borrow()))
+            .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
+      out.append(pad)
+          .append("    long address")
+          .append(s)
+          .append(" = ")
+          .append(b.name())
+          .append(".address();\n")
+          .append(pad)
+          .append("    if (length")
+          .append(s)
+          .append(" < 0 || (address")
+          .append(s)
+          .append(" == 0 && length")
+          .append(s)
+          .append(" != 0)) throw new IllegalArgumentException(\"invalid buffer extent\");\n")
+          .append(pad)
+          .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
+          .append(s)
+          .append(" = address")
+          .append(s)
+          .append(" == 0\n")
+          .append(pad)
+          .append(
+              "        ? org.graalvm.nativeimage.StackValue.get(1) :"
+                  + " org.graalvm.word.WordFactory.pointer(address")
+          .append(s)
+          .append(");\n");
+      pad += "    ";
+    }
+    out.append(pad).append(invoke).append('\n');
+    for (Buffer b : buffers.reversed()) {
+      pad = pad.substring(4);
+      out.append(pad)
+          .append("} finally {\n")
+          .append(pad)
+          .append("    ")
+          .append(b.name())
+          .append(".release(")
+          .append(call.writable(b.borrow()))
+          .append(");\n")
+          .append(pad)
+          .append("    java.lang.ref.Reference.reachabilityFence(")
+          .append(b.name())
+          .append(");\n")
+          .append(pad)
+          .append("}\n");
+    }
+    out.append("    }\n")
+        .append(
+            "    /** Array convenience path; caller prevents conflicting concurrent array access."
+                + " */\n")
+        .append("    public static ")
+        .append(returns)
+        .append(' ')
+        .append(f.name())
+        .append('(')
+        .append(String.join(", ", arrayParams))
+        .append(") {\n");
+    // Plain try/finally throughout: try-with-resources compiles to Throwable.addSuppressed, which
+    // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
+    if (buffers.size() == 1) {
+      String name = buffers.getFirst().name();
+      out.append("        long length = ")
+          .append(name)
           .append(".length;\n")
           .append(
               "        if (length == 0) {\n"
@@ -230,12 +269,10 @@ public final class NativeOwnership implements Backend {
           .append(invoke)
           .append(f.returns() == Scalar.VOID ? "\n            return;" : "")
           .append("\n        }\n")
-          // A plain try/finally: try-with-resources compiles to Throwable.addSuppressed, which
-          // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
           .append(
               "        org.graalvm.nativeimage.PinnedObject pin ="
                   + " org.graalvm.nativeimage.PinnedObject.create(")
-          .append(bufferName)
+          .append(name)
           .append(");\n        try {\n")
           .append(
               "            org.graalvm.nativeimage.c.type.CCharPointer pointer ="
@@ -243,7 +280,55 @@ public final class NativeOwnership implements Backend {
                   + "            ")
           .append(invoke)
           .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
+      return;
     }
-    return out.append("}\n").toString();
+    // Several arrays: every length is read first, then each non-empty array is pinned in turn; an
+    // empty one has no element to pin and gets the stack dummy the declared non-null needs.
+    for (Buffer b : buffers)
+      out.append("        long length")
+          .append(b.suffix())
+          .append(" = ")
+          .append(b.name())
+          .append(".length;\n");
+    pad = "        ";
+    for (Buffer b : buffers) {
+      String s = b.suffix();
+      out.append(pad)
+          .append("org.graalvm.nativeimage.PinnedObject pin")
+          .append(s)
+          .append(" = length")
+          .append(s)
+          .append(" == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(")
+          .append(b.name())
+          .append(");\n")
+          .append(pad)
+          .append("try {\n")
+          .append(pad)
+          .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
+          .append(s)
+          .append(" = pin")
+          .append(s)
+          .append(" == null\n")
+          .append(pad)
+          .append("        ? org.graalvm.nativeimage.StackValue.get(1) : pin")
+          .append(s)
+          .append(".addressOfArrayElement(0);\n");
+      pad += "    ";
+    }
+    out.append(pad).append(invoke).append('\n');
+    for (Buffer b : buffers.reversed()) {
+      pad = pad.substring(4);
+      out.append(pad)
+          .append("} finally {\n")
+          .append(pad)
+          .append("    if (pin")
+          .append(b.suffix())
+          .append(" != null) pin")
+          .append(b.suffix())
+          .append(".close();\n")
+          .append(pad)
+          .append("}\n");
+    }
+    out.append("    }\n");
   }
 }

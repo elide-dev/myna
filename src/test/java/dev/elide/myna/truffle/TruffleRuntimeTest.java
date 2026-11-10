@@ -926,6 +926,103 @@ class TruffleRuntimeTest {
     buffer.release();
   }
 
+  /**
+   * A resource created from another keeps it open: the native side may still use the parent through
+   * the child, so closing the parent first is a guest error, not a use-after-free.
+   */
+  @Test
+  void resourcesHoldTheResourcesTheyWereCreatedFrom() {
+    List<String> freed = new ArrayList<>();
+    NativeResource session = new NativeResource("Session", 0x10, a -> freed.add("session"), null);
+    NativeResource other = new NativeResource("Session", 0x20, a -> freed.add("other"), null);
+    // Values that are not resources are ignored; every resource among them is held.
+    Object hold = NativeResource.hold(session, "text", NativePointer.of(8), other, null);
+    NativeResource stream =
+        new NativeResource("Stream", 0x30, a -> freed.add("stream"), null, hold);
+    NativeResource second =
+        new NativeResource(
+            "Stream", 0x40, a -> freed.add("second"), null, NativeResource.hold(session));
+    assertEquals(
+        "Session is held open by 2 resource(s) created from it; close them first",
+        assertThrows(NativeCellException.class, session::close).getMessage());
+    assertFalse(session.isClosed());
+    assertEquals(0x10, session.address());
+    stream.close();
+    assertEquals(
+        "Session is held open by 1 resource(s) created from it; close them first",
+        assertThrows(NativeCellException.class, session::close).getMessage());
+    other.close();
+    second.close();
+    stream.close();
+    session.close();
+    session.close();
+    assertEquals(List.of("stream", "other", "second", "session"), freed);
+    // A closed resource cannot be held, and a failed hold keeps nothing held.
+    NativeResource open = new NativeResource("Session", 0x50, a -> freed.add("open"), null);
+    assertEquals(
+        "Session is closed",
+        assertThrows(NativeCellException.class, () -> NativeResource.hold(open, session))
+            .getMessage());
+    // A hold that no resource took over is given back.
+    NativeResource.release(NativeResource.hold(open));
+    open.close();
+    assertTrue(open.isClosed());
+    // A destructor that fails still gives its parents back.
+    NativeResource parent = new NativeResource("Session", 0x60, a -> freed.add("parent"), null);
+    NativeResource failing =
+        new NativeResource(
+            "Stream",
+            0x70,
+            a -> {
+              throw new IllegalStateException("destroy failed");
+            },
+            null,
+            NativeResource.hold(parent));
+    assertThrows(IllegalStateException.class, failing::close);
+    parent.close();
+    assertTrue(parent.isClosed());
+  }
+
+  /**
+   * A shared parent that a cleaner reaches while a child still holds it is freed by the last child
+   * to go, never under it.
+   */
+  @Test
+  void abandonedParentsAreFreedByTheirLastDependent() {
+    List<String> freed = new ArrayList<>();
+    NativeResource session = new NativeResource("Session", 0x10, a -> freed.add("session"), null);
+    NativeResource first =
+        new NativeResource(
+            "Stream", 0x20, a -> freed.add("first"), null, NativeResource.hold(session));
+    NativeResource second =
+        new NativeResource(
+            "Stream", 0x30, a -> freed.add("second"), null, NativeResource.hold(session));
+    // What a registered cleaner runs once the session is unreachable.
+    Runnable abandon = stateOf(session);
+    abandon.run();
+    assertEquals(List.of(), freed);
+    // An abandoned parent takes no new dependents.
+    assertThrows(NativeCellException.class, () -> NativeResource.hold(session));
+    abandon.run();
+    first.close();
+    assertEquals(List.of("first"), freed);
+    second.close();
+    assertEquals(List.of("first", "second", "session"), freed);
+    abandon.run();
+    assertEquals(3, freed.size());
+  }
+
+  /** The release action a cleaner would run for {@code resource}. */
+  private static Runnable stateOf(NativeResource resource) {
+    try {
+      var field = NativeResource.class.getDeclaredField("state");
+      field.setAccessible(true);
+      return (Runnable) field.get(resource);
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
+  }
+
   /** A raw byte parameter lends what a C string parameter would, without the terminator. */
   @Test
   void rawByteParametersAreNotTerminatedAndAcceptBarePointers() throws Exception {

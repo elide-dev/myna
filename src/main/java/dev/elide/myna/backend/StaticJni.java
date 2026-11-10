@@ -77,7 +77,7 @@ public final class StaticJni {
           .append(method.returns().rust())
           .append(";\n");
       java.append("    ")
-          .append(method.borrow() == null ? "public" : "private")
+          .append(method.borrows().isEmpty() ? "public" : "private")
           .append(" static native ")
           .append(method.returns().java())
           .append(' ')
@@ -91,7 +91,7 @@ public final class StaticJni {
                       .map(a -> a.carrier().java() + " " + a.name())
                       .toList()))
           .append(");\n");
-      if (method.borrow() != null) bufferJava(method, java);
+      if (!method.borrows().isEmpty()) bufferJava(method, java);
       c.append("JNIEXPORT ")
           .append(method.returns().c())
           .append(" JNICALL ")
@@ -163,16 +163,54 @@ public final class StaticJni {
             + "\n");
   }
 
+  /** Distinguishes one buffer's locals: nothing for a method's only buffer, else its position. */
+  private static String suffix(JniAbi.Method method, int position) {
+    return method.borrows().size() == 1 ? "" : String.valueOf(position);
+  }
+
   private static void bufferJava(JniAbi.Method method, StringBuilder out) {
+    boolean several = method.borrows().size() > 1;
     var args = new ArrayList<String>();
-    String bufferName = "";
-    for (JniAbi.Argument a : method.arguments().subList(2, method.arguments().size())) {
-      if (a.carrier().c().equals("jobject")) {
-        bufferName = a.name();
-        args.add(a.name() + ".slice()");
-      } else args.add(a.name());
+    var checks = new StringBuilder();
+    int index = 0;
+    for (Parameter p : method.implementation().abiParameters()) {
+      String name = "arg" + index;
+      String segment = "segment" + suffix(method, index++);
+      if (method.length(p)) continue;
+      if (!method.buffer(p)) {
+        args.add(name);
+        continue;
+      }
+      args.add(name + ".slice()");
+      checks
+          .append("        if (!")
+          .append(name)
+          .append(".isDirect()) throw new IllegalArgumentException(\"direct buffer required\");\n");
+      if (p.access() != Access.READ)
+        checks
+            .append("        if (")
+            .append(name)
+            .append(
+                ".isReadOnly()) throw new IllegalArgumentException(\"writable buffer"
+                    + " required\");\n");
+      checks
+          .append("        java.lang.foreign.MemorySegment ")
+          .append(segment)
+          .append(" = java.lang.foreign.MemorySegment.ofBuffer(")
+          .append(name)
+          .append(");\n")
+          .append("        if (!")
+          .append(segment)
+          .append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
+          .append("        if (!")
+          .append(segment)
+          .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n");
     }
-    out.append("    /** Borrows remaining bytes of a direct buffer; preserves its position.\n")
+    out.append(
+            several
+                ? "    /** Borrows remaining bytes of each direct buffer; preserves their"
+                    + " positions.\n"
+                : "    /** Borrows remaining bytes of a direct buffer; preserves its position.\n")
         .append(
             "     * Caller must keep any backing arena open throughout the call, including"
                 + " callbacks.\n")
@@ -192,48 +230,34 @@ public final class StaticJni {
                     .map(a -> a.carrier().java() + " " + a.name())
                     .toList()))
         .append(") {\n")
-        .append("        if (!")
-        .append(bufferName)
-        .append(".isDirect()) throw new IllegalArgumentException(\"direct buffer required\");\n");
-    var buffer =
-        method.implementation().parameters().stream()
-            .filter(p -> p.name().equals(method.borrow().parameter()))
-            .findFirst()
-            .orElseThrow();
-    if (buffer.access() == Access.READ_WRITE)
-      out.append("        if (")
-          .append(bufferName)
-          .append(
-              ".isReadOnly()) throw new IllegalArgumentException(\"writable buffer required\");\n");
-    out.append(
-            "        java.lang.foreign.MemorySegment segment ="
-                + " java.lang.foreign.MemorySegment.ofBuffer(")
-        .append(bufferName)
-        .append(");\n")
-        .append(
-            "        if (!segment.scope().isAlive()) throw new IllegalStateException(\"closed"
-                + " buffer\");\n")
-        .append(
-            "        if (!segment.isAccessibleBy(Thread.currentThread())) throw new"
-                + " WrongThreadException();\n");
-    out.append("        ");
+        .append(checks)
+        .append("        ");
     if (!method.returns().java().equals("void")) out.append("return ");
     out.append(method.name()).append('(').append(String.join(", ", args)).append(");\n    }\n");
   }
 
   private static void call(JniAbi.Method method, StringBuilder out) {
     Function f = method.implementation();
-    BufferBorrow borrow = method.borrow();
-    String env = cName(method, "env"),
-        length = cName(method, "length"),
-        pointer = cName(method, "pointer"),
-        error = cName(method, "error"),
-        empty = cName(method, "empty");
+    String env = cName(method, "env");
+    String error = cName(method, "error");
+    // A length may precede its buffer, so each buffer's locals are named before any is emitted.
+    var lengths = new HashMap<String, String>();
+    int position = 0;
+    for (Parameter p : f.abiParameters()) {
+      String suffix = suffix(method, position++);
+      for (BufferBorrow b : method.borrows())
+        if (b.parameter().equals(p.name()))
+          lengths.put(b.length(), cName(method, "length" + suffix));
+    }
     var args = new ArrayList<String>();
     int index = 0;
     for (Parameter p : f.abiParameters()) {
+      String suffix = suffix(method, index);
       String name = cName(method, "arg" + index++);
-      if (borrow != null && p.name().equals(borrow.parameter())) {
+      if (method.buffer(p)) {
+        String length = cName(method, "length" + suffix);
+        String pointer = cName(method, "pointer" + suffix);
+        String empty = cName(method, "empty" + suffix);
         out.append("  jlong ")
             .append(length)
             .append(" = ")
@@ -312,8 +336,8 @@ public final class StaticJni {
             .append(empty)
             .append(";\n");
         args.add(pointer);
-      } else if (borrow != null && p.name().equals(borrow.length())) {
-        args.add("(" + Types.c(p.type()) + ")" + length);
+      } else if (method.length(p)) {
+        args.add("(" + Types.c(p.type()) + ")" + lengths.get(p.name()));
       } else if (p.type() instanceof Named) {
         args.add("*(" + Types.c(p.type()) + " *)(uintptr_t)" + name);
       } else if (p.type() instanceof Scalar) {

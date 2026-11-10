@@ -22,10 +22,15 @@ final class RustOwnership {
       String n = r.name();
       Function create =
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
+      // Declared types live in the parent module; scalars are spelled the same either way.
       String parameters =
           String.join(
               ", ",
-              create.parameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList());
+              create.parameters().stream()
+                  .map(p -> p.name() + ": " + Types.rust(p, "super::"))
+                  .toList());
+      // Nothing vouches for a pointer argument, or for how long the resource depends on it.
+      boolean pointers = create.parameters().stream().anyMatch(p -> p.type() instanceof Pointer);
       String arguments =
           String.join(", ", create.parameters().stream().map(Parameter::name).toList());
       out.append("    pub struct ")
@@ -46,7 +51,14 @@ final class RustOwnership {
       out.append("    impl ")
           .append(n)
           .append(" {\n")
-          .append("        pub fn create(")
+          .append(
+              pointers
+                  ? "        /// # Safety\n"
+                      + "        /// Every pointer argument must satisfy the raw function's"
+                      + " requirements, for as long\n"
+                      + "        /// as the created resource depends on it.\n"
+                      + "        pub unsafe fn create("
+                  : "        pub fn create(")
           .append(parameters)
           .append(") -> Option<Self> {\n            core::ptr::NonNull::new(unsafe { super::")
           .append(r.create())
@@ -98,31 +110,33 @@ final class RustOwnership {
           .append(n)
           .append(" { self.owner.pointer.as_ptr() }\n    }\n");
     }
-    for (BufferBorrow b : m.borrows()) {
-      Function f =
-          m.functions().stream()
-              .filter(x -> x.name().equals(b.function()))
-              .findFirst()
-              .orElseThrow();
-      Parameter buffer =
-          f.parameters().stream()
-              .filter(p -> p.name().equals(b.parameter()))
-              .findFirst()
-              .orElseThrow();
+    for (CallBorrows call : CallBorrows.of(m)) {
+      Function f = call.function();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
       for (Parameter p : f.parameters()) {
-        if (p == buffer) {
+        BufferBorrow length = call.length(p);
+        if (call.buffer(p) != null) {
           params.add(p.name() + (p.access() == Access.READ ? ": &[u8]" : ": &mut [u8]"));
           args.add(p.name() + (p.access() == Access.READ ? ".as_ptr()" : ".as_mut_ptr()"));
-        } else if (p.name().equals(b.length()))
-          args.add(buffer.name() + ".len().try_into().expect(\"buffer length exceeds ABI range\")");
+        } else if (length != null)
+          args.add(
+              length.parameter() + ".len().try_into().expect(\"buffer length exceeds ABI range\")");
         else {
-          params.add(p.name() + ": " + Types.rust(p));
+          // Declared types live in the parent module; scalars are spelled the same either way.
+          params.add(p.name() + ": " + Types.rust(p, "super::"));
           args.add(p.name());
         }
       }
-      out.append("    pub fn ")
+      // The slices vouch for the buffers. Nothing vouches for any other pointer, so a wrapper that
+      // passes one through is as unsafe as the raw function is for that argument.
+      boolean pointers = call.passesPointers();
+      if (pointers)
+        out.append(
+            "    /// # Safety\n"
+                + "    /// Every pointer other than a borrowed buffer must satisfy the raw"
+                + " function's requirements.\n");
+      out.append(pointers ? "    pub unsafe fn " : "    pub fn ")
           .append(f.name())
           .append('(')
           .append(String.join(", ", params))

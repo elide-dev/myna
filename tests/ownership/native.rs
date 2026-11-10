@@ -23,3 +23,17 @@ unsafe extern "C" { fn malloc(size: usize) -> *mut u8; fn free(ptr: *mut u8); }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_increment(p: *mut u8, count: u64) {
     for v in unsafe { core::slice::from_raw_parts_mut(p, count as usize) } { *v = v.wrapping_add(1); }
 }
+// Two borrowed buffers with lengths of their own, beside a pointer that is not a buffer: copies
+// what fits, stores how many bytes that was through `copied` when it is non-null, and returns
+// their sum. Raw accesses throughout: nothing here assumes the buffers are disjoint.
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_transfer(input: *const u8, count: u64, output: *mut u8, capacity: u32, copied: *mut u64) -> u64 {
+    let fits = core::cmp::min(count, capacity as u64) as usize;
+    let mut sum = 0u64;
+    for i in 0..fits {
+        let value = unsafe { input.add(i).read() };
+        unsafe { output.add(i).write(value); }
+        sum += value as u64;
+    }
+    if !copied.is_null() { unsafe { copied.write(fits as u64); } }
+    sum
+}

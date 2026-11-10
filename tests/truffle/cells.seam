@@ -3,6 +3,8 @@
 module truffle_fixture target=aarch64-apple-darwin java_package=fixture.cells java_class=CellApi truffle_cells=true c_context=fixture.cells.Directives c_library=cellsfixture c_library_static=true
 opaque Counter
 resource Counter representation=native threading=confined create=counterCreate destroy=counterDestroy
+opaque Stepper
+resource Stepper representation=native threading=confined create=stepperCreate destroy=stepperDestroy
 import add symbol=cells_add return=i32 error=no_failure
   param left type=i32
   param right type=i32
@@ -44,6 +46,15 @@ import fill symbol=cells_fill return=void error=no_failure nounwind=true@explici
   param count type=u32
   param value type=u8
 end
+borrow transfer input length=count lifetime=call
+borrow transfer output length=capacity lifetime=call
+import transfer symbol=cells_transfer return=u64 error=no_failure nounwind=true@explicit_contract
+  param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+  param copied type=ptr<i64> nullable=true ownership=borrowed access=write
+end
 import sumBytes symbol=cells_sum_bytes return=u64 error=no_failure nounwind=true@explicit_contract
   param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract truffle_buffer=true@explicit_contract
   param count type=u64
@@ -67,4 +78,14 @@ end
 import pair symbol=cells_pair return=i64 error=no_failure
   param left type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
   param right type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
+end
+import stepperCreate symbol=cells_stepper_create return=ptr<Stepper> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param counter type=ptr<Counter> nullable=false ownership=borrowed access=read_write
+  param step type=ptr<i64> nullable=false ownership=borrowed access=read
+end
+import stepperDestroy symbol=cells_stepper_destroy return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param stepper type=ptr<Stepper> nullable=false ownership=transferred_to_callee access=read_write
+end
+import stepperNext symbol=cells_stepper_next return=i64 error=no_failure
+  param stepper type=ptr<Stepper> nullable=false ownership=borrowed access=read_write
 end
