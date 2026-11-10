@@ -607,11 +607,41 @@ class TruffleCellsTest {
                 + "  param count type=u64\n"
                 + "end\n",
             "not already a borrow"
+          },
+          {
+            MODULE
+                + "export sink return=i64 error=abort isolate=thread java=fixture.Ops.sink\n"
+                + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+                + " truffle_buffer=true@explicit_contract\n"
+                + "end\n",
+            "import's byte pointer"
+          },
+          {
+            MODULE
+                + "callback Visitor return=i32\n  param value type=i64\nend\n"
+                + "import each return=i32 error=no_failure native_leaf=false@explicit_contract"
+                + " truffle_cell=false@explicit_contract\n"
+                + "  param visitor type=fn<Visitor> truffle_buffer=true@explicit_contract\n"
+                + "end\n",
+            "byte pointer"
           }
         }) {
       var error = assertThrows(IllegalArgumentException.class, () -> generate(invalid[0]));
       assertTrue(error.getMessage().contains(invalid[1]), error.getMessage());
     }
+    // A borrow on another function does not make this parameter one.
+    assertTrue(
+        generate(
+                MODULE
+                    + "borrow sum bytes length=count lifetime=call\n"
+                    + "import sum return=i64 error=no_failure nounwind=true@explicit_contract\n"
+                    + "  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read"
+                    + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+                    + "  param count type=u64\n"
+                    + "end\n"
+                    + decode)
+            .get("MynaTruffle.java")
+            .contains("new BytesCoercion(\"decode\", \"data\", false, false, false, false);"));
   }
 
   @Test
