@@ -254,6 +254,17 @@ a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCl
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
 owners refuse it. These are the same rules as the existing Native Image ownership API.
 
+A create declared with a `handle` keeps its C shape for the guest: the guest passes the struct
+the create writes through, and can read that struct's other fields afterwards. The cell compares
+the result with the statuses the resource lists as `success`, reads the resource pointer from the
+handle field (or takes the struct's own address, for a result initialized in place) and returns
+its owner. Any other result raises `NativeStatusException`, a `NativeCellException` that carries
+the result: `status()` for host code, a readable `status` member for guest code, on an ordinary
+runtime error. Success with a null handle is a plain `NativeCellException`. A struct initialized
+in place stays reachable for as long as its owner is open, and a struct that already has an owner
+cannot be initialized again. The cell's static `invoke` is unchanged by any of this: it returns
+the status and takes the struct's address, exactly as the C function does.
+
 A create may take pointers as well as scalars, coerced like any other cell's: a pointer to plain
 memory, a byte buffer, or another resource's owner passed where its handle is expected. The native
 side may keep any pointer it is given, so a resource created from another one holds it open:
@@ -421,10 +432,7 @@ Findings that are tracked, not blocking:
   buffer may be write-only (see [Borrows](#borrows)); a resource create may take pointers. Still
   rejected: a pointer result beside a borrow, one length shared by two buffers, and nullable or
   length-less buffers, for which `truffle_buffer` is the cells-side answer.
-- Not expressible, and needing design rather than a wider validator: creates that return a status
-  and write the handle into a field of a caller-allocated struct, results initialized in place
-  whose owner is the struct itself, which statuses of a function are failures, borrows that
-  outlive the call, and a child resource's dependence on its parent.
+- Not expressible yet: nullable and length-less buffers, and borrows that outlive the call.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.

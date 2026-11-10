@@ -25,7 +25,7 @@ public final class NativeOwnership implements Backend {
                 + " {\n    private "
                 + m.ownershipClass()
                 + "() {}\n");
-    if (!m.resources().isEmpty())
+    if (!m.returnedResources().isEmpty())
       out.append(
 """
         /** Called exactly once by the consumer when its resource is no longer accessible. */
@@ -44,7 +44,7 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    for (Resource r : m.resources()) {
+    for (Resource r : m.returnedResources()) {
       Function create =
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
       var params = new ArrayList<String>();

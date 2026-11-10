@@ -76,6 +76,20 @@ public final class CellsMain {
     if (allocated > perCall * Repeat.CALLS + 1024) throw new AssertionError(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls");
     System.out.println(what + " allocated " + allocated + " bytes over " + Repeat.CALLS + " calls");
   }
+  /** A create cell from compiled code: every call returns an open owner of the right resource. */
+  static void created(String what, NativeFunction probe, String type, Object... arguments) {
+    boolean compiled = false;
+    for (int i = 0; i < 2_000; i++) {
+      Object[] outcome = (Object[]) probe.call(arguments);
+      if (!(outcome[0] instanceof NativeResource owner) || !owner.type().equals(type) || owner.isClosed())
+        throw new AssertionError(what + ": " + outcome[0]);
+      owner.close();
+      if (compiled && !(Boolean) outcome[1]) throw new AssertionError(what + " left compiled code at " + i);
+      compiled |= (Boolean) outcome[1];
+    }
+    if (!compiled) throw new AssertionError(what + " root did not run in compiled code");
+    System.out.println(what + " created its resource from compiled code");
+  }
   /** Mirrors the fork's CFunctionRuntimeCompilationTest: compile immediately, then verify results in compiled code. */
   static void compiled(String what, NativeFunction probe, java.util.function.LongFunction<Object[]> args, java.util.function.LongFunction<Object> expected) {
     boolean compiled = false;
@@ -198,6 +212,14 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment cText = java.lang.foreign.Arena.global().allocateFrom("hello world");
         hostExecute(bean, "host execute: strlen of native bytes", 0, new CellApiTruffle.strlen_Cell(), NativeBytes.of(cText, false));
         hostExecute(bean, "host execute: strlen of a raw pointer", 0, new CellApiTruffle.strlen_Cell(), NativePointer.of(cText.address()));
+        // Creates that report a status and write their resource through a parameter, from
+        // compiled code: each call makes an owner, which is closed before the next.
+        java.lang.foreign.MemorySegment layoutResult = java.lang.foreign.Arena.global().allocate(24);
+        created("layoutCompile", new Probe(new CellApiTruffle.layoutCompile_Cell()).function(), "Layout",
+            new HeapBytes(new byte[] {9}, false), NativeBytes.of(layoutResult, true));
+        java.lang.foreign.MemorySegment viewMemory = java.lang.foreign.Arena.global().allocate(16);
+        created("viewInit", new Probe(new CellApiTruffle.viewInit_Cell()).function(), "View",
+            new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();

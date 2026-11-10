@@ -50,10 +50,14 @@ public final class NativeResource implements TruffleObject {
     final State[] parents;
     final AtomicInteger holds = new AtomicInteger();
 
-    State(long address, Destructor destructor, State[] parents) {
+    /** What must stay reachable while the allocation lives; dropped when it is freed. */
+    volatile Object kept;
+
+    State(long address, Destructor destructor, State[] parents, Object kept) {
       this.address = address;
       this.destructor = destructor;
       this.parents = parents;
+      this.kept = kept;
     }
 
     boolean released() {
@@ -117,6 +121,7 @@ public final class NativeResource implements TruffleObject {
       try {
         destructor.destroy(address);
       } finally {
+        kept = null;
         for (State parent : parents) parent.unhold();
       }
     }
@@ -147,10 +152,26 @@ public final class NativeResource implements TruffleObject {
    */
   public NativeResource(
       String type, long address, Destructor destructor, Thread requiredThread, Object hold) {
+    this(type, address, destructor, requiredThread, hold, null);
+  }
+
+  /**
+   * A resource that lives in memory a guest value provides: a struct initialized in place.
+   *
+   * @param kept the guest value whose memory the resource lives in; it stays reachable until the
+   *     resource is released. Whether that memory stays valid is still up to whoever owns it.
+   */
+  public NativeResource(
+      String type,
+      long address,
+      Destructor destructor,
+      Thread requiredThread,
+      Object hold,
+      Object kept) {
     if (address == 0) throw new IllegalArgumentException("null " + type);
     if (destructor == null) throw new IllegalArgumentException("missing destructor");
     this.type = type;
-    this.state = new State(address, destructor, hold == null ? State.NONE : (State[]) hold);
+    this.state = new State(address, destructor, hold == null ? State.NONE : (State[]) hold, kept);
     this.requiredThread = requiredThread;
   }
 

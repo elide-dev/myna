@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.validate;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import java.util.*;
@@ -57,7 +58,16 @@ final class OwnershipValidator {
     var lifecycle = new HashSet<String>();
     var rustTypes = new HashSet<String>();
     for (Resource r : m.resources()) {
-      require(m.opaqueTypes().contains(r.name()), "resource must name an opaque type: " + r.name());
+      // A resource initialized in place is the struct its handle parameter points to; every other
+      // resource is an opaque allocation.
+      boolean inPlace = r.handle() != null && r.handleField() == null;
+      if (inPlace)
+        require(
+            m.structs().stream().anyMatch(s -> s.name().equals(r.name())),
+            "a resource initialized in place must name a struct: " + r.name());
+      else
+        require(
+            m.opaqueTypes().contains(r.name()), "resource must name an opaque type: " + r.name());
       require(names.add(r.name()), "duplicate resource: " + r.name());
       require(
           rustTypes.add(r.name()) && rustTypes.add(r.name() + "Borrow"),
@@ -75,7 +85,12 @@ final class OwnershipValidator {
       nativeCall(create);
       nativeCall(destroy);
       Type pointer = new Pointer(new Named(r.name()));
-      require(create.returns().equals(pointer), "resource create must return ptr<resource>");
+      if (r.handle() == null) {
+        require(create.returns().equals(pointer), "resource create must return ptr<resource>");
+        require(r.success().isEmpty(), "success applies to a resource create with a handle");
+      } else {
+        handle(m, r, create);
+      }
       // Pointer arguments pass through each create wrapper under their own declared contracts,
       // including another resource's handle: that parent's lifetime is the consumer's to keep.
       for (Parameter argument : create.parameters())
@@ -156,6 +171,72 @@ final class OwnershipValidator {
                 + b.function()
                 + " "
                 + other.name());
+    }
+  }
+
+  /**
+   * A create that reports through its result and writes the resource where {@code handle} says.
+   * Only Truffle cells generate an owner for it, so the module must generate cells and the create
+   * must be one.
+   */
+  private static void handle(Module m, Resource r, Function create) {
+    String form = r.name() + " handle=" + r.handle();
+    require(
+        m.truffleConfig() != null && Seam.truffleCell(m, create),
+        "a resource handle is generated for Truffle cells only; "
+            + r.create()
+            + " needs one: "
+            + form);
+    String parameter = r.handleParameter();
+    String field = r.handleField();
+    require(
+        !parameter.isEmpty() && (field == null || (!field.isEmpty() && !field.contains("."))),
+        "resource handle is PARAMETER or PARAMETER.FIELD: " + form);
+    Parameter out =
+        create.parameters().stream()
+            .filter(p -> p.name().equals(parameter))
+            .findFirst()
+            .orElse(null);
+    require(
+        out != null
+            && out.type() instanceof Pointer
+            && !out.nullable()
+            && (out.access() == Access.WRITE || out.access() == Access.READ_WRITE),
+        "resource handle must name a non-null pointer parameter with write access: " + form);
+    Type pointee = ((Pointer) out.type()).pointee();
+    if (field == null) {
+      require(
+          pointee.equals(new Named(r.name())),
+          "a resource initialized in place is what its handle parameter points to: " + form);
+    } else {
+      Struct struct =
+          pointee instanceof Named named
+              ? m.structs().stream()
+                  .filter(s -> s.name().equals(named.name()))
+                  .findFirst()
+                  .orElse(null)
+              : null;
+      require(struct != null, "resource handle field requires a pointer to a struct: " + form);
+      require(
+          struct.fields().stream()
+              .anyMatch(
+                  f -> f.name().equals(field) && f.type().equals(new Pointer(new Named(r.name())))),
+          "resource handle field must be a ptr<resource> field of " + struct.name() + ": " + form);
+    }
+    if (create.returns() == Scalar.VOID) {
+      require(
+          r.success().isEmpty(),
+          "a create that returns void has no result to compare with success: " + form);
+    } else {
+      require(
+          create.returns() instanceof Scalar status
+              && status != Scalar.BOOL
+              && status != Scalar.F32
+              && status != Scalar.F64,
+          "a resource create with a handle returns an integer status or void: " + form);
+      require(
+          !r.success().isEmpty(),
+          "a resource create with a handle must list the results that mean success: " + form);
     }
   }
 

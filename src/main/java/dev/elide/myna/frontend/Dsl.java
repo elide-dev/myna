@@ -88,12 +88,22 @@ public final class Dsl {
             require(
                 threading.equals("confined") || threading.equals("shared"),
                 "threading must be confined or shared");
+            String create = takeRequired(opts, "create");
+            String destroy = takeRequired(opts, "destroy");
+            String handle = take(opts, "handle", null);
+            var success = new ArrayList<Long>();
+            String statuses = take(opts, "success", null);
+            if (statuses != null)
+              for (String status : statuses.split(",", -1)) {
+                try {
+                  success.add(Long.parseLong(status));
+                } catch (NumberFormatException e) {
+                  throw new IllegalArgumentException("success lists integer results: " + statuses);
+                }
+              }
             resources.add(
                 new Resource(
-                    words[1],
-                    takeRequired(opts, "create"),
-                    takeRequired(opts, "destroy"),
-                    threading.equals("shared")));
+                    words[1], create, destroy, threading.equals("shared"), handle, success));
             empty(opts);
           }
           case "borrow" -> {

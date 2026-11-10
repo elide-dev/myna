@@ -25,7 +25,7 @@ public final class Generator {
             new NativeImageProperties(),
             new NativeImageForeign(),
             new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
-    if (!module.resources().isEmpty() || !module.borrows().isEmpty()) {
+    if (!module.returnedResources().isEmpty() || !module.borrows().isEmpty()) {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
     }

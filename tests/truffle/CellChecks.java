@@ -231,6 +231,66 @@ public final class CellChecks {
       rejects(cells, "stepperCreate", parent, NativeBytes.of(step, false));
       check(call(cells, "counterLive").equals(0L), "both destroyed");
     }
+    // Creates that report a status and write the resource through a parameter. The guest passes
+    // the struct, as in C, and still reads its other fields.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result = arena.allocate(24);
+      Object out = NativeBytes.of(result, true);
+      Object layout = call(cells, "layoutCompile", new HeapBytes(new byte[] {5, 1}, false), out);
+      check(layout instanceof NativeResource r && r.type().equals("Layout"), "layout owner");
+      check(result.get(ValueLayout.JAVA_LONG, 0) == 2, "count beside the handle");
+      check(result.get(ValueLayout.JAVA_LONG, 16) == 4, "capacity beside the handle");
+      check(call(cells, "layoutWidth", layout).equals(5L), "layout usable");
+      check(call(cells, "counterLive").equals(1L), "one live layout");
+      // Every listed status is success.
+      Object second = call(cells, "layoutCompile", new HeapBytes(new byte[] {2}, false), out);
+      check(call(cells, "layoutWidth", second).equals(2L), "status 2 also creates");
+      check(call(cells, "layoutRelease", second) == NativeVoid.INSTANCE, "second released");
+      // Any other status is an error carrying it, and nothing is created.
+      try {
+        call(cells, "layoutCompile", new HeapBytes(new byte[0], false), out);
+        throw new AssertionError("a failed create returned");
+      } catch (NativeStatusException failed) {
+        check(failed.status() == 7, "status carried");
+        check(INTEROP.isException(failed), "an ordinary guest error");
+        check(INTEROP.readMember(failed, "status").equals(7L), "status member");
+        check(failed.getMessage().equals("layoutCompile created no resource: status 7"), failed.getMessage());
+      }
+      // Success without a handle is reported, not wrapped.
+      try {
+        call(cells, "layoutCompile", new HeapBytes(new byte[] {(byte) 0xff}, false), out);
+        throw new AssertionError("a create without a handle returned an owner");
+      } catch (NativeStatusException unexpected) {
+        throw new AssertionError("no status to report", unexpected);
+      } catch (NativeCellException missing) {
+        check(missing.getMessage().equals("layoutCompile reported success but wrote no resource"), missing.getMessage());
+      }
+      check(call(cells, "counterLive").equals(1L), "failed creates leave nothing");
+      rejects(cells, "layoutWidth", NativeVoid.INSTANCE);
+      check(call(cells, "layoutRelease", layout) == NativeVoid.INSTANCE, "layout released");
+      rejects(cells, "layoutWidth", layout);
+      // A result initialized in place: the struct is the resource and release takes it back.
+      MemorySegment view = arena.allocate(16);
+      Object memory = NativeBytes.of(view, true);
+      Object owned = call(cells, "viewInit", new HeapBytes(new byte[] {1, 2, 3}, false), memory);
+      check(owned instanceof NativeResource r && r.type().equals("View"), "view owner");
+      check(call(cells, "viewSum", owned).equals(6L), "view usable through its owner");
+      check(view.get(ValueLayout.JAVA_LONG, 0) == 6, "the guest's struct is the resource");
+      check(view.get(ValueLayout.JAVA_LONG, 8) != 0, "native state inside it");
+      check(call(cells, "counterLive").equals(1L), "one live view");
+      // A struct that has an owner cannot be initialized again.
+      rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), owned);
+      try {
+        call(cells, "viewInit", new HeapBytes(new byte[0], false), NativeBytes.of(arena.allocate(16), true));
+        throw new AssertionError("a failed init returned");
+      } catch (NativeStatusException failed) {
+        check(failed.status() == -1, "negative status carried");
+      }
+      check(call(cells, "viewRelease", owned) == NativeVoid.INSTANCE, "view released");
+      check(view.get(ValueLayout.JAVA_LONG, 8) == 0, "released through the struct's address");
+      rejects(cells, "viewSum", owned);
+      check(call(cells, "counterLive").equals(0L), "nothing left");
+    }
     Object other = call(cells, "counterCreate", 1);
     INTEROP.invokeMember(other, "close");
     check(call(cells, "counterLive").equals(0L), "closed through the member");

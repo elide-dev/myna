@@ -375,7 +375,7 @@ public final class TruffleCells implements Backend {
         inner.add(word ? wrapper + name + ")" : name);
       }
       boolean address =
-          cell.creates() != null
+          (cell.creates() != null && cell.creates().handle() == null)
               || f.returns() instanceof Pointer
               || f.returns() instanceof FunctionPointer;
       String raw =
@@ -471,38 +471,109 @@ public final class TruffleCells implements Backend {
             && !(dropped != null && dropped.enabled() && dropped.approved()))
           retained.add(guest.get(p.name()));
       }
-      if (retained.isEmpty())
-        result
-            .append("            long created = ")
+      String hold = retained.isEmpty() ? "" : ", hold";
+      String handle = cell.creates().handle();
+      String guard = "";
+      var body = new StringBuilder();
+      if (handle == null) {
+        body.append("long created = ")
             .append(call)
             .append(";\n")
-            .append("            if (created == 0) return Carriers.none();\n")
-            .append("            return new NativeResource(")
-            .append(type)
-            .append(", created, DESTRUCTOR, ")
-            .append(thread)
-            .append(");\n");
-      else
+            .append("if (created == 0) return Carriers.none();\n");
+      } else {
+        // The create reports through its result and writes the resource where the handle says.
+        String slot = "address_" + cell.creates().handleParameter();
+        if (f.returns() == Scalar.VOID) {
+          body.append(call).append(";\n");
+        } else {
+          var succeeded = new ArrayList<String>();
+          for (long status : cell.creates().success()) succeeded.add("status == " + status + "L");
+          body.append(typed((Scalar) f.returns())[0])
+              .append(" status = ")
+              .append(call)
+              .append(";\n")
+              .append("if (!(")
+              .append(String.join(" || ", succeeded))
+              .append(")) throw NativeCellException.status(")
+              .append(quotedName)
+              .append(", status, this);\n");
+          imports.add(RUNTIME + "NativeCellException");
+        }
+        String field = cell.creates().handleField();
+        if (field == null) {
+          // The struct the guest passed is the resource; it stays reachable with its owner.
+          body.append("long created = ").append(slot).append(";\n");
+          // Initializing a struct that already has an owner would give it two.
+          guard =
+              "            if ("
+                  + guest.get(cell.creates().handleParameter())
+                  + " instanceof NativeResource) throw NativeCellException.of(this, "
+                  + SeamJson.quote(
+                      f.name()
+                          + ": parameter "
+                          + cell.creates().handleParameter()
+                          + " expects memory for a new "
+                          + cell.creates().name()
+                          + ", got an existing owner")
+                  + ");\n";
+          imports.add(RUNTIME + "NativeCellException");
+          hold =
+              (retained.isEmpty() ? ", null" : ", hold")
+                  + ", "
+                  + guest.get(cell.creates().handleParameter());
+        } else {
+          Parameter parameter =
+              f.parameters().stream()
+                  .filter(p -> p.name().equals(cell.creates().handleParameter()))
+                  .findFirst()
+                  .orElseThrow();
+          String struct = ((Named) ((Pointer) parameter.type()).pointee()).name();
+          long offset =
+              m.structs().stream()
+                  .filter(x -> x.name().equals(struct))
+                  .findFirst()
+                  .orElseThrow()
+                  .fields()
+                  .stream()
+                  .filter(x -> x.name().equals(field))
+                  .findFirst()
+                  .orElseThrow()
+                  .offset();
+          body.append("long created = Carriers.readPointer(")
+              .append(slot)
+              .append(offset == 0 ? "" : " + " + offset + "L")
+              .append(");\n")
+              .append("if (created == 0) throw NativeCellException.noResource(")
+              .append(quotedName)
+              .append(", this);\n");
+          imports.add(RUNTIME + "NativeCellException");
+        }
+      }
+      String owner = "new NativeResource(" + type + ", created, DESTRUCTOR, " + thread + hold + ")";
+      result.append(guard);
+      if (retained.isEmpty()) {
+        for (String line : body.toString().split("\n"))
+          result.append("            ").append(line).append('\n');
+        result.append("            return ").append(owner).append(";\n");
+      } else {
         result
             .append("            Object hold = NativeResource.hold(")
             .append(String.join(", ", retained))
             .append(");\n")
             .append("            boolean adopted = false;\n")
-            .append("            try {\n")
-            .append("                long created = ")
-            .append(call)
+            .append("            try {\n");
+        for (String line : body.toString().split("\n"))
+          result.append("                ").append(line).append('\n');
+        result
+            .append("                NativeResource resource = ")
+            .append(owner)
             .append(";\n")
-            .append("                if (created == 0) return Carriers.none();\n")
-            .append("                NativeResource resource = new NativeResource(")
-            .append(type)
-            .append(", created, DESTRUCTOR, ")
-            .append(thread)
-            .append(", hold);\n")
             .append("                adopted = true;\n")
             .append("                return resource;\n")
             .append("            } finally {\n")
             .append("                if (!adopted) NativeResource.release(hold);\n")
             .append("            }\n");
+      }
     } else {
       Type r = f.returns();
       if (r == Scalar.VOID) {

@@ -4,9 +4,12 @@ package dev.elide.myna.truffle;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.oracle.truffle.api.interop.ExceptionType;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -924,6 +927,68 @@ class TruffleRuntimeTest {
     buffer.release();
     assertEquals(9, source[1]);
     buffer.release();
+  }
+
+  /**
+   * A failed resource create is a guest error that carries the native result: a number for host
+   * code and a {@code status} member for guests, on an otherwise ordinary exception.
+   */
+  @Test
+  void statusErrorsCarryTheNativeResult() throws Exception {
+    NativeStatusException failed = NativeCellException.status("compile", -7, null);
+    assertEquals(-7, failed.status());
+    assertEquals("compile created no resource: status -7", failed.getMessage());
+    InteropLibrary interop = InteropLibrary.getUncached();
+    assertTrue(interop.isException(failed));
+    assertSame(
+        failed, assertThrows(NativeStatusException.class, () -> interop.throwException(failed)));
+    assertEquals(ExceptionType.RUNTIME_ERROR, interop.getExceptionType(failed));
+    assertTrue(interop.hasExceptionMessage(failed));
+    assertEquals(failed.getMessage(), interop.getExceptionMessage(failed));
+    assertTrue(interop.hasMembers(failed));
+    Object members = interop.getMembers(failed);
+    assertEquals(1, interop.getArraySize(members));
+    assertTrue(interop.isArrayElementReadable(members, 0));
+    assertFalse(interop.isArrayElementReadable(members, 1));
+    assertEquals("status", interop.readArrayElement(members, 0));
+    assertThrows(InvalidArrayIndexException.class, () -> interop.readArrayElement(members, 1));
+    assertTrue(interop.isMemberReadable(failed, "status"));
+    assertFalse(interop.isMemberReadable(failed, "other"));
+    assertEquals(-7L, interop.readMember(failed, "status"));
+    assertThrows(UnknownIdentifierException.class, () -> interop.readMember(failed, "other"));
+    // Success without a resource has no status to carry: it is a plain cell error.
+    NativeCellException missing = NativeCellException.noResource("compile", null);
+    assertFalse(missing instanceof NativeStatusException);
+    assertEquals("compile reported success but wrote no resource", missing.getMessage());
+  }
+
+  /** The handle a create wrote is read back as a pointer-sized word. */
+  @Test
+  void carriersReadTheHandleACreateWrote() {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment slot = arena.allocate(16);
+      slot.set(ValueLayout.JAVA_LONG, 8, 0x1234_5678_9abcL);
+      assertEquals(0x1234_5678_9abcL, Carriers.readPointer(slot.address() + 8));
+      assertEquals(0, Carriers.readPointer(slot.address()));
+    }
+  }
+
+  /** A resource that lives in a guest value's memory keeps that value until it is released. */
+  @Test
+  void inPlaceResourcesKeepTheirMemoryReachableUntilReleased() throws Exception {
+    Object memory = new Object();
+    NativeResource view = new NativeResource("View", 0x10, a -> {}, null, null, memory);
+    var kept = stateOf(view).getClass().getDeclaredField("kept");
+    kept.setAccessible(true);
+    assertSame(memory, kept.get(stateOf(view)));
+    view.close();
+    assertNull(kept.get(stateOf(view)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("View", 0, a -> {}, null, null, memory));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("View", 0x10, null, null, null, memory));
   }
 
   /**
