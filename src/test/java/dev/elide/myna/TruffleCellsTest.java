@@ -794,7 +794,9 @@ class TruffleCellsTest {
         OwnershipTest.CREATES.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
     String truffle = generate(source).get("ApiTruffle.java");
     // A record pointer is an address and a byte pointer with an access lends its bytes; the
-    // created handle still comes back as an owner.
+    // created handle still comes back as an owner. The native side may keep either pointer, so
+    // a resource passed for one is held open by the new owner, and released again if nothing
+    // was created.
     assertTrue(
         truffle.contains(
             """
@@ -812,9 +814,17 @@ class TruffleCellsTest {
                         long address_limits = coerce_limits.execute(arguments[0]);
                         Borrow borrow_name = coerce_name.execute(arguments[1]);
                         try {
-                            long created = invoke(address_limits, borrow_name.address());
-                            if (created == 0) return Carriers.none();
-                            return new NativeResource("Session", created, DESTRUCTOR, null);
+                            Object hold = NativeResource.hold(arguments[0], arguments[1]);
+                            boolean adopted = false;
+                            try {
+                                long created = invoke(address_limits, borrow_name.address());
+                                if (created == 0) return Carriers.none();
+                                NativeResource resource = new NativeResource("Session", created, DESTRUCTOR, null, hold);
+                                adopted = true;
+                                return resource;
+                            } finally {
+                                if (!adopted) NativeResource.release(hold);
+                            }
                         } finally {
                             borrow_name.release();
                         }
@@ -836,11 +846,34 @@ class TruffleCellsTest {
     assertTrue(
         truffle.contains(
             """
-                        long created = invoke(address_session, value_max_bytes, value_batch);
-                        if (created == 0) return Carriers.none();
-                        return new NativeResource("Stream", created, DESTRUCTOR, Thread.currentThread());
+                        Object hold = NativeResource.hold(arguments[0]);
+                        boolean adopted = false;
+                        try {
+                            long created = invoke(address_session, value_max_bytes, value_batch);
+                            if (created == 0) return Carriers.none();
+                            NativeResource resource = new NativeResource("Stream", created, DESTRUCTOR, Thread.currentThread(), hold);
+                            adopted = true;
+                            return resource;
+                        } finally {
+                            if (!adopted) NativeResource.release(hold);
+                        }
             """),
         truffle);
+    // A pointer the callee is declared to drop is not held: the create keeps its plain shape.
+    String dropped =
+        generate(
+                source.replace(
+                    "  param session type=ptr<Session> nullable=false ownership=borrowed"
+                        + " access=read_write\n",
+                    "  param session type=ptr<Session> nullable=false ownership=borrowed"
+                        + " access=read_write nocapture=true@explicit_contract\n"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        dropped.contains(
+            "            return new NativeResource(\"Stream\", created, DESTRUCTOR,"
+                + " Thread.currentThread());\n"),
+        dropped);
+    assertFalse(dropped.contains("NativeResource.hold(arguments[0]);"), dropped);
     // FFM cells: the same shape over the FFM binding.
     String ffm =
         generate(source.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
@@ -852,10 +885,10 @@ class TruffleCellsTest {
         ffm);
     assertTrue(
         ffm.contains(
-            "                long created = invoke(address_limits, borrow_name.address());\n"
-                + "                if (created == 0) return Carriers.none();\n"
-                + "                return new NativeResource(\"Session\", created, DESTRUCTOR,"
-                + " null);\n"),
+            "                    long created = invoke(address_limits, borrow_name.address());\n"
+                + "                    if (created == 0) return Carriers.none();\n"
+                + "                    NativeResource resource = new NativeResource(\"Session\","
+                + " created, DESTRUCTOR, null, hold);\n"),
         ffm);
     // A raw byte buffer on a create keeps its count as a guest argument.
     String raw =

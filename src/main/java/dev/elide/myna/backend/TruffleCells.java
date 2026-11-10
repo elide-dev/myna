@@ -443,16 +443,51 @@ public final class TruffleCells implements Backend {
           .append("            return Carriers.none();\n");
     } else if (cell.creates() != null) {
       imports.add(RUNTIME + "NativeResource");
-      result
-          .append("            long created = ")
-          .append(call)
-          .append(";\n")
-          .append("            if (created == 0) return Carriers.none();\n")
-          .append("            return new NativeResource(")
-          .append(SeamJson.quote(cell.creates().name()))
-          .append(", created, DESTRUCTOR, ")
-          .append(cell.creates().shared() ? "null" : "Thread.currentThread()")
-          .append(");\n");
+      String type = SeamJson.quote(cell.creates().name());
+      String thread = cell.creates().shared() ? "null" : "Thread.currentThread()";
+      // The native side may keep any pointer it is not declared to drop. Where the guest passed
+      // another resource for one, the new resource holds it open: closing a session under its
+      // stream would otherwise be a use-after-free that guest code could trigger.
+      var retained = new ArrayList<String>();
+      for (int i = 0; i < f.parameters().size(); i++) {
+        Parameter p = f.parameters().get(i);
+        Fact dropped = p.facts().get("nocapture");
+        if (p.type() instanceof Pointer
+            && !(dropped != null && dropped.enabled() && dropped.approved()))
+          retained.add("arguments[" + i + "]");
+      }
+      if (retained.isEmpty())
+        result
+            .append("            long created = ")
+            .append(call)
+            .append(";\n")
+            .append("            if (created == 0) return Carriers.none();\n")
+            .append("            return new NativeResource(")
+            .append(type)
+            .append(", created, DESTRUCTOR, ")
+            .append(thread)
+            .append(");\n");
+      else
+        result
+            .append("            Object hold = NativeResource.hold(")
+            .append(String.join(", ", retained))
+            .append(");\n")
+            .append("            boolean adopted = false;\n")
+            .append("            try {\n")
+            .append("                long created = ")
+            .append(call)
+            .append(";\n")
+            .append("                if (created == 0) return Carriers.none();\n")
+            .append("                NativeResource resource = new NativeResource(")
+            .append(type)
+            .append(", created, DESTRUCTOR, ")
+            .append(thread)
+            .append(", hold);\n")
+            .append("                adopted = true;\n")
+            .append("                return resource;\n")
+            .append("            } finally {\n")
+            .append("                if (!adopted) NativeResource.release(hold);\n")
+            .append("            }\n");
     } else {
       Type r = f.returns();
       if (r == Scalar.VOID) {

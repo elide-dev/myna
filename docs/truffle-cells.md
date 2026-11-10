@@ -255,8 +255,15 @@ adds an optional cleaner for shared resources; a cleaner thread cannot honor con
 owners refuse it. These are the same rules as the existing Native Image ownership API.
 
 A create may take pointers as well as scalars, coerced like any other cell's: a pointer to plain
-memory, a byte buffer, or another resource's owner passed where its handle is expected. A resource
-created from another one must be closed before its parent; the cell does not track that.
+memory, a byte buffer, or another resource's owner passed where its handle is expected. The native
+side may keep any pointer it is given, so a resource created from another one holds it open:
+closing the parent while a child is open raises `NativeCellException` and leaves it open, and it
+closes normally once its children have. A shared parent that becomes unreachable while a child is
+still open is freed when the last child is. A pointer parameter declared
+`nocapture=true@explicit_contract` is not retained by the callee, so a resource passed for it is
+not held. Plain memory passed to a create (a `NativePointer`, a `NativeBytes`) has no owner the
+cell can hold; keeping it valid for as long as the created resource uses it stays with whoever
+handed it to the guest.
 
 Generated array convenience methods pin with a plain `try`/`finally`, not try-with-resources:
 javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation

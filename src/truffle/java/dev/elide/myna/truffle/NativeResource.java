@@ -12,7 +12,7 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 import java.lang.ref.Cleaner;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A guest-visible owner of one unique native allocation declared with Myna's {@code resource}
@@ -32,20 +32,93 @@ public final class NativeResource implements TruffleObject {
     void destroy(long address);
   }
 
-  /** Release state kept apart from the owner so a cleaner does not retain the referent. */
+  /**
+   * Release state kept apart from the owner so a cleaner does not retain the referent.
+   *
+   * <p>{@link #holds} is {@link #RELEASED} once the allocation is freed. Until then its low bits
+   * count the open resources created from this one, which keep it from closing, and {@link
+   * #PENDING} records that a cleaner wanted to free it while it was still held: the last dependent
+   * to go frees it then.
+   */
   private static final class State implements Runnable {
+    static final int RELEASED = -1;
+    static final int PENDING = 1 << 30;
+    private static final State[] NONE = {};
+
     final long address;
     final Destructor destructor;
-    final AtomicBoolean released = new AtomicBoolean();
+    final State[] parents;
+    final AtomicInteger holds = new AtomicInteger();
 
-    State(long address, Destructor destructor) {
+    State(long address, Destructor destructor, State[] parents) {
       this.address = address;
       this.destructor = destructor;
+      this.parents = parents;
     }
 
+    boolean released() {
+      return holds.get() == RELEASED;
+    }
+
+    /** Keeps this resource open for a dependent; fails once it is released or abandoned. */
+    boolean hold() {
+      while (true) {
+        int value = holds.get();
+        if (value < 0 || (value & PENDING) != 0) return false;
+        if (holds.compareAndSet(value, value + 1)) return true;
+      }
+    }
+
+    /** Ends one dependent's hold, freeing a resource whose cleaner was waiting for it. */
+    void unhold() {
+      while (true) {
+        int value = holds.get();
+        if (value == (PENDING | 1)) {
+          if (holds.compareAndSet(value, RELEASED)) {
+            destroy();
+            return;
+          }
+        } else if (holds.compareAndSet(value, value - 1)) {
+          return;
+        }
+      }
+    }
+
+    /** An explicit close: frees unless held, and returns how many dependents hold it open. */
+    int close() {
+      while (true) {
+        int value = holds.get();
+        if (value == RELEASED) return 0;
+        int dependents = value & ~PENDING;
+        if (dependents > 0) return dependents;
+        if (holds.compareAndSet(value, RELEASED)) {
+          destroy();
+          return 0;
+        }
+      }
+    }
+
+    /** The cleaner's release: frees now, or leaves it to the last dependent. */
     @Override
     public void run() {
-      if (released.compareAndSet(false, true)) destructor.destroy(address);
+      while (true) {
+        int value = holds.get();
+        if (value == RELEASED) return;
+        if ((value & ~PENDING) > 0) {
+          if (holds.compareAndSet(value, value | PENDING)) return;
+        } else if (holds.compareAndSet(value, RELEASED)) {
+          destroy();
+          return;
+        }
+      }
+    }
+
+    private void destroy() {
+      try {
+        destructor.destroy(address);
+      } finally {
+        for (State parent : parents) parent.unhold();
+      }
     }
   }
 
@@ -63,11 +136,52 @@ public final class NativeResource implements TruffleObject {
    *     shared resource
    */
   public NativeResource(String type, long address, Destructor destructor, Thread requiredThread) {
+    this(type, address, destructor, requiredThread, null);
+  }
+
+  /**
+   * A resource created from other resources, which it keeps open until it is closed itself.
+   *
+   * @param hold what {@link #hold} returned for the resources this one was created from; the new
+   *     resource takes it over and gives it up when it is released
+   */
+  public NativeResource(
+      String type, long address, Destructor destructor, Thread requiredThread, Object hold) {
     if (address == 0) throw new IllegalArgumentException("null " + type);
     if (destructor == null) throw new IllegalArgumentException("missing destructor");
     this.type = type;
-    this.state = new State(address, destructor);
+    this.state = new State(address, destructor, hold == null ? State.NONE : (State[]) hold);
     this.requiredThread = requiredThread;
+  }
+
+  /**
+   * Keeps every open resource among {@code candidates} from closing, for a native call that may
+   * retain their handles in what it creates. Values that are not resources are ignored. The result
+   * goes to the created resource's constructor, or to {@link #release} when nothing was created.
+   *
+   * @throws NativeCellException if one of the resources is already closed; nothing stays held
+   */
+  @TruffleBoundary
+  public static Object hold(Object... candidates) {
+    int count = 0;
+    for (Object candidate : candidates) if (candidate instanceof NativeResource) count++;
+    State[] held = new State[count];
+    int next = 0;
+    for (Object candidate : candidates) {
+      if (!(candidate instanceof NativeResource resource)) continue;
+      if (!resource.state.hold()) {
+        for (int i = 0; i < next; i++) held[i].unhold();
+        throw NativeCellException.of(null, resource.type, " is closed");
+      }
+      held[next++] = resource.state;
+    }
+    return held;
+  }
+
+  /** Gives up a {@link #hold} that no created resource took over. */
+  @TruffleBoundary
+  public static void release(Object hold) {
+    for (State state : (State[]) hold) state.unhold();
   }
 
   public String type() {
@@ -79,7 +193,7 @@ public final class NativeResource implements TruffleObject {
   }
 
   public boolean isClosed() {
-    return state.released.get();
+    return state.released();
   }
 
   private boolean accessible() {
@@ -96,10 +210,26 @@ public final class NativeResource implements TruffleObject {
     return state.address;
   }
 
-  /** Releases the allocation exactly once. A second close is a no-op. */
+  /**
+   * Releases the allocation exactly once. A second close is a no-op.
+   *
+   * @throws NativeCellException if resources created from this one are still open: the native side
+   *     may still use it through them, so they are closed first
+   */
   public void close() {
     if (!accessible()) throw wrongThread();
-    state.run();
+    int dependents = state.close();
+    if (dependents > 0) throw held(dependents);
+  }
+
+  @TruffleBoundary
+  private NativeCellException held(int dependents) {
+    return NativeCellException.of(
+        null,
+        type,
+        " is held open by ",
+        dependents,
+        " resource(s) created from it; close them first");
   }
 
   /**

@@ -215,6 +215,11 @@ public final class CellChecks {
       check(call(cells, "stepperCreate", parent, NativeBytes.of(step, false)) == NativeVoid.INSTANCE, "failed stepper is null");
       rejects(cells, "stepperCreate", NativeVoid.INSTANCE, NativeBytes.of(step, false));
       rejects(cells, "stepperDestroy", parent);
+      // The stepper keeps its counter open: closing the counter under it would leave the stepper
+      // pointing at freed memory, so that is refused until the stepper is gone.
+      rejects(cells, "counterDestroy", parent);
+      check(call(cells, "counterLive").equals(2L), "parent survives a refused close");
+      check(call(cells, "stepperNext", stepper).equals(16L), "stepper still usable");
       check(call(cells, "stepperDestroy", stepper) == NativeVoid.INSTANCE, "stepper destroyed");
       rejects(cells, "stepperNext", stepper);
       check(call(cells, "counterDestroy", parent) == NativeVoid.INSTANCE, "parent destroyed after its stepper");
