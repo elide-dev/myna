@@ -143,7 +143,8 @@ final class OwnershipValidator {
       require(
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
           "call buffer requires borrowed ptr<u8>");
-      require(!p.nullable(), "call buffer requires non-null ptr<u8>");
+      // A nullable buffer may be absent: its wrappers pass the null pointer with length zero, which
+      // the callee must accept. Nothing more is required of the declaration.
       // A write buffer is a writable one: no wrapper relies on the callee not reading it.
       require(
           p.access() == Access.READ

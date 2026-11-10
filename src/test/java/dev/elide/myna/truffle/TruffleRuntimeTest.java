@@ -1288,6 +1288,53 @@ class TruffleRuntimeTest {
     });
   }
 
+  /**
+   * A nullable borrow: every spelling of null is an absent buffer, lent as the null address with
+   * the length zero a cell derives from it. Anything present keeps a borrow's rules, and a buffer
+   * that is present and empty keeps its non-null address.
+   */
+  @Test
+  void nullableBorrowsLendTheNullAddressForNullOnly() {
+    for (boolean writable : new boolean[] {false, true}) {
+      var buffer = new BytesCoercion("f", "bytes", true, writable, true);
+      Object[] absent = {
+        null, new ForeignNull(), NativeVoid.INSTANCE, NativePointer.NULL, new ForeignPointer(0)
+      };
+      // Twice over: the first pass records each kind at this call site, the second reuses it.
+      for (int round = 0; round < 2; round++) {
+        for (Object value : absent) {
+          Borrow borrow = buffer.execute(value);
+          assertEquals(0, borrow.address());
+          assertEquals(0, borrow.length());
+          borrow.release();
+        }
+      }
+      Borrow empty = buffer.execute(NativeBytes.of(0, 0, writable));
+      assertNotEquals(0, empty.address());
+      assertEquals(0, empty.length());
+      empty.release();
+      Borrow emptyCopy = buffer.execute(new HeapBytes(new byte[0], writable));
+      assertNotEquals(0, emptyCopy.address());
+      assertEquals(0, emptyCopy.length());
+      emptyCopy.release();
+      byte[] array = {1, 2, 3};
+      Borrow copy = buffer.execute(new HeapBytes(array, writable));
+      assertEquals(3, copy.length());
+      assertEquals(
+          2, MemorySegment.ofAddress(copy.address()).reinterpret(3).get(ValueLayout.JAVA_BYTE, 1));
+      copy.release();
+      // A pointer that is not null still has no size to derive, and the diagnostic names null.
+      String expected = (writable ? "" : "string, ") + "sized buffer or null";
+      assertEquals(
+          "f: parameter bytes expects " + expected + ", got NativePointer",
+          assertThrows(NativeCellException.class, () -> buffer.execute(NativePointer.of(0x1000)))
+              .getMessage());
+      assertEquals(
+          "f: parameter bytes expects " + expected + ", got Integer 1",
+          assertThrows(NativeCellException.class, () -> buffer.execute(1)).getMessage());
+    }
+  }
+
   /** One call site lends every kind of value in turn and keeps lending each correctly. */
   @Test
   void bytesCoercionProfilesTheKindsItHasSeen() {

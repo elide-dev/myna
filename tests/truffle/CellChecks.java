@@ -80,13 +80,60 @@ public final class CellChecks {
       check(small[0] == 'a' && small[1] == 'b' && small[2] == 5, "transfer after a failed second borrow wrote back");
     }
   }
+  /** What cells_decode reports for an absent output buffer: the null pointer with capacity zero. */
+  public static final long ABSENT = 1L << 32;
+  /**
+   * A nullable borrow: interop null, a null pointer or host null is an absent buffer, for which
+   * the cell lends the null address and derives length zero. A buffer that is present, empty or
+   * not, is lent as any other borrow is and never has the null address.
+   */
+  static void decodes(Function<String, NativeFunction> cells) throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment data = arena.allocate(3);
+      data.fill((byte) 4);
+      MemorySegment text = arena.allocate(2);
+      check(call(cells, "decode", NativeBytes.of(data, false), NativeBytes.of(text, true)).equals(3L), "decode native");
+      check(text.get(ValueLayout.JAVA_BYTE, 0) == 5 && text.get(ValueLayout.JAVA_BYTE, 1) == 5, "decode wrote native memory in place");
+      // Absent, in each spelling a guest or a host has for it.
+      check(call(cells, "decode", NativeBytes.of(data, false), NativeVoid.INSTANCE).equals(3L | ABSENT), "decode with interop null");
+      check(call(cells, "decode", NativeBytes.of(data, false), NativePointer.NULL).equals(3L | ABSENT), "decode with the null pointer");
+      check(cells.apply("decode").call(NativeBytes.of(data, false), null).equals(3L | ABSENT), "decode with host null");
+      check(call(cells, "decode", "abc", NativeVoid.INSTANCE).equals(3L | ABSENT), "decode a string without an output");
+      check(call(cells, "decode", new HeapBytes(new byte[0], false), NativeVoid.INSTANCE).equals(ABSENT), "decode nothing without an output");
+      // Present and empty is not absent: every kind of empty buffer keeps a non-null address.
+      check(call(cells, "decode", NativeBytes.of(data, false), new HeapBytes(new byte[0], true)).equals(3L), "decode into an empty heap array");
+      check(call(cells, "decode", NativeBytes.of(data, false), NativeBytes.of(text.asSlice(2, 0), true)).equals(3L), "decode into empty native memory");
+      // A heap output is copied and written back as for any writable borrow.
+      byte[] small = new byte[4];
+      check(call(cells, "decode", new HeapBytes(new byte[] {1, 2, 3}, false), new HeapBytes(small, true)).equals(3L), "decode heap");
+      check(small[0] == 2 && small[2] == 4 && small[3] == 0, "decode wrote a copied array back");
+      // One call site sees absent and present outputs in turn.
+      NativeFunction site = cells.apply("decode");
+      for (int i = 0; i < 6; i++) {
+        Object output = (i & 1) == 0 ? NativeVoid.INSTANCE : new HeapBytes(small, true);
+        check(INTEROP.execute(site, "ab", output).equals((i & 1) == 0 ? 2L | ABSENT : 2L), "decode alternating at " + i);
+      }
+      check(small[0] == 'a' + 1 && small[1] == 'b' + 1 && small[2] == 4, "decode alternating wrote back");
+      // The length is derived, so the guest signature is the two buffers only.
+      rejects(cells, "decode", NativeBytes.of(data, false));
+      rejects(cells, "decode", NativeBytes.of(data, false), NativeVoid.INSTANCE, 0);
+      // Only the nullable buffer may be absent, and a present one keeps every other rule: no
+      // strings or read-only buffers for a writable borrow, and no bare pointer without a size.
+      rejects(cells, "decode", NativeVoid.INSTANCE, NativeBytes.of(text, true));
+      rejects(cells, "decode", NativeBytes.of(data, false), "text");
+      rejects(cells, "decode", NativeBytes.of(data, false), NativeBytes.of(text.asReadOnly(), true));
+      rejects(cells, "decode", NativeBytes.of(data, false), NativePointer.of(text.address()));
+      rejects(cells, "decode", NativeBytes.of(data, false), 7);
+    }
+  }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
     // Host Java null bypasses guest interop values; exercise the public host call API.
     for (Object[] sample : new Object[][] {
         {"add", 1, null}, {"widen", 0, 0, 0, null}, {"scale", null, 2},
         {"peek", null}, {"strlen", null}, {"checksum", null}, {"fill", null, 1},
         {"transfer", null, new HeapBytes(new byte[1], true), NativePointer.NULL},
-        {"transfer", new HeapBytes(new byte[1], false), null, NativePointer.NULL}}) {
+        {"transfer", new HeapBytes(new byte[1], false), null, NativePointer.NULL},
+        {"decode", null, new HeapBytes(new byte[1], true)}}) {
       String name = (String) sample[0];
       try {
         cells.apply(name).call(java.util.Arrays.copyOfRange(sample, 1, sample.length));
@@ -179,6 +226,7 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
     transfers(cells, large);
+    decodes(cells);
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);

@@ -59,11 +59,41 @@ public final class FfmBindingMain {
         rejects(IllegalStateException.class, () -> binding.transfer(bytes, closed, copied));
         if (copied.get(ValueLayout.JAVA_LONG, 0) != 0 || target.get(ValueLayout.JAVA_BYTE, 0) != 2)
           throw new AssertionError("a rejected transfer reached native code");
+        // A nullable buffer: null, or the null address with length zero, is an absent buffer and
+        // reaches native code as the null pointer with length zero, which the fixture reports as
+        // ABSENT. A segment that is present, empty or not, never has the null address.
+        final long absent = 1L << 32;
+        var text = memory.allocate(2);
+        if (binding.decode(bytes.asReadOnly(), text) != 3 || text.get(ValueLayout.JAVA_BYTE, 0) != 3
+            || text.get(ValueLayout.JAVA_BYTE, 1) != 4) throw new AssertionError("decode");
+        if (binding.decode(bytes, null) != (3 | absent)) throw new AssertionError("absent output");
+        if (binding.decode(bytes, MemorySegment.NULL) != (3 | absent)) throw new AssertionError("null output");
+        if (binding.decode(bytes, MemorySegment.ofAddress(0)) != (3 | absent)) throw new AssertionError("zero output");
+        if (binding.decode(bytes, text.asSlice(2, 0)) != 3) throw new AssertionError("empty output is present");
+        // The required buffer stays a present one at the null address; only the other is absent.
+        if (binding.decode(MemorySegment.NULL, null) != absent) throw new AssertionError("empty input, absent output");
+        if (binding.decode(MemorySegment.NULL, text) != 0) throw new AssertionError("empty input");
+        // A buffer that is present is validated as any other is; an absent one is not looked at.
+        rejects(IllegalArgumentException.class, () -> binding.decode(bytes, text.asReadOnly()));
+        rejects(IllegalArgumentException.class, () -> binding.decode(bytes, MemorySegment.ofArray(new byte[1])));
+        rejects(IllegalArgumentException.class, () -> binding.decode(bytes, MemorySegment.ofArray(new byte[0])));
+        rejects(IllegalArgumentException.class, () -> binding.decode(bytes, MemorySegment.NULL.reinterpret(1)));
+        rejects(IllegalStateException.class, () -> binding.decode(bytes, closed));
+        rejects(NullPointerException.class, () -> binding.decode(null, text));
+        if (binding.decode(bytes, MemorySegment.NULL.asReadOnly()) != (3 | absent)) throw new AssertionError("read-only null");
+        // One optional segment.
+        if (binding.tally(bytes.asReadOnly()) != 9) throw new AssertionError("tally");
+        if (binding.tally(null) != absent || binding.tally(MemorySegment.NULL) != absent) throw new AssertionError("absent input");
+        if (binding.tally(bytes.asSlice(3, 0)) != 0) throw new AssertionError("empty input is present");
+        rejects(IllegalArgumentException.class, () -> binding.tally(MemorySegment.ofArray(new byte[0])));
+        rejects(IllegalStateException.class, () -> binding.tally(closed));
         var failure = new AtomicReference<Throwable>();
         var thread = new Thread(() -> {
           try {
             rejects(WrongThreadException.class, () -> binding.checksum(bytes));
             rejects(WrongThreadException.class, () -> binding.transfer(bytes, target, copied));
+            rejects(WrongThreadException.class, () -> binding.decode(bytes, text));
+            rejects(WrongThreadException.class, () -> binding.tally(bytes));
             rejects(WrongThreadException.class, () -> binding.liveCount());
           } catch (Throwable error) { failure.set(error); }
         });

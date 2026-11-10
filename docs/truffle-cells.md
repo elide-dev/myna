@@ -42,10 +42,10 @@ One per-parameter fact refines an import's byte pointers:
 
 - `truffle_buffer=true@explicit_contract` on a `ptr<u8>`, `ptr<i8>` or `ptr<char>` parameter with a
   declared access says it is a byte buffer, not a C string. A `borrow` says that too and derives
-  the length as well, beside any other pointer parameters, so prefer it for a non-null buffer with
-  a length parameter of its own, whatever its access. This fact is for the buffers a `borrow`
-  cannot describe (nullable ones, or an extent that is not one length parameter) and for counts
-  the guest should keep passing. Without either, such an input is treated as a C string: a heap
+  the length as well, beside any other pointer parameters, so prefer it for a buffer with a length
+  parameter of its own, whatever its access and whether or not it may be null. This fact is for
+  the buffers a `borrow` cannot describe (an extent that is not one length parameter) and for
+  counts the guest should keep passing. Without either, such an input is treated as a C string: a heap
   buffer is copied whole with a terminating NUL on every call and never pinned. With the
   fact, the cell lends the bytes as they are: native memory in place, a heap array pinned when it
   reaches the pin threshold and copied without a terminator otherwise, and a string as its UTF-8
@@ -134,7 +134,7 @@ through it, and partial evaluation reduces a monomorphic site to a type check or
 | `ptr<u8>`, `ptr<i8>`, `ptr<char>` with `access=write` or `read_write` | buffers and pointers; strings are rejected | — |
 | byte pointers declared `truffle_buffer` | strings (UTF-8, read access only), buffers, pointers; nothing is NUL-terminated and the count is a guest argument | — |
 | byte pointers with unspecified access | pointers only, like any other pointer | — |
-| `borrow` buffers (the count is derived) | strings for read access, `NativeBytes`, `HeapBytes`, any interop buffer; a bare pointer has no size and is rejected | — |
+| `borrow` buffers (the count is derived) | strings for read access, `NativeBytes`, `HeapBytes`, any interop buffer; a bare pointer has no size and is rejected; `null` only when nullable, as an absent buffer of length zero | — |
 | `void` | — | `NativeVoid.INSTANCE` (interop `null`) |
 
 Failures raise `NativeCellException`, an `AbstractTruffleException` that guest languages see as an
@@ -187,6 +187,29 @@ argument under its own contract. `invoke` keeps all five binding parameters. The
 check that two buffers of a call are disjoint: lent native memory aliases and copies do not, and a
 read buffer that overlaps a writable one breaks the guest's side of the contract either way.
 
+A buffer declared `nullable=true` may be absent, as an optional output buffer is:
+
+```text
+borrow decode data length=length lifetime=call
+borrow decode text length=capacity lifetime=call
+import decode symbol=cells_decode return=u64 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param text type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+end
+```
+
+The guest calls `decode(data, text)` or `decode(data, null)`. For interop `null`, an interop
+pointer to address zero (`NativePointer.NULL`) or host `null`, the cell lends the null address and
+derives length zero, so the native function receives `NULL` and `0`; there is nothing to release.
+Any other value is a buffer that is present and is lent as every borrow is, with a non-null address
+even when it is empty, so the function can tell the two apart. Only null is absent: a pointer to
+any other address still has no size to derive and is rejected, and a buffer declared
+`nullable=false` rejects null as before. Pointers default to `nullable=true`, so a buffer declared
+without `nullable` takes null. See [nullable buffers](ownership.md#nullable-buffers) for the same
+declaration in the other wrappers.
+
 Scalars and addresses coerce first. Every borrow of the call (declared buffers, C strings and
 `truffle_buffer` bytes alike) is then acquired in parameter order, and a later one that fails
 releases the earlier ones. Each borrow lasts exactly the dynamic extent of the call, as the contract
@@ -211,14 +234,17 @@ buffer, heap buffer, Java string, raw pointer, anything else through interop) an
 those paths. Several borrows on one call cost what each costs alone:
 `tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native
 buffers and between copied heap arrays, and the two pins (48 bytes) between two pinned arrays.
+An absent nullable buffer costs nothing either: 0 bytes per compiled `decode` call for interop
+`null`, the null pointer and host `null` alike, and a call site that sees absent and present
+buffers in turn stays in compiled code.
 
 ASCII text is written straight onto the scratch stack, so a string argument allocates nothing
 either; text with other characters is encoded into a UTF-8 array first.
 
 The same holds for a cell's `execute` called from host code in a Native Image, which is compiled
 ahead of time without partial evaluation: `tests/truffle_integration.py` measures 0 bytes per call
-there for native memory, raw pointers, scratch copies and ASCII strings, and the pin alone for a
-pinned array. On HotSpot the host JIT decides: scalar replacement depends on its inlining and on
+there for native memory, raw pointers, scratch copies, ASCII strings and absent nullable buffers,
+and the pin alone for a pinned array. On HotSpot the host JIT decides: scalar replacement depends on its inlining and on
 type profiles shared by every call site in the process. With the Graal JIT the borrow is
 scalar-replaced as long as no call site lends through the generic interop path; C2 allocates it
 (56 bytes per byte parameter) once the coercion has been compiled on its own. Host code that must
@@ -440,10 +466,10 @@ Findings that are tracked, not blocking:
   and 24 B with the larger one pinned. The fact is for buffers large enough that copying them on
   every call is the cost, and for callees that must not see a terminator.
 - A `borrow` now sits beside other pointer parameters, a function may declare several, and a
-  buffer may be write-only (see [Borrows](#borrows)); a resource create may take pointers. Still
-  rejected: a pointer result beside a borrow, one length shared by two buffers, and nullable or
-  length-less buffers, for which `truffle_buffer` is the cells-side answer.
-- Not expressible yet: nullable and length-less buffers, and borrows that outlive the call.
+  buffer may be write-only or nullable (see [Borrows](#borrows)); a resource create may take
+  pointers. Still rejected: a pointer result beside a borrow, one length shared by two buffers,
+  and length-less buffers, for which `truffle_buffer` is the cells-side answer.
+- Not expressible yet: length-less buffers, and borrows that outlive the call.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.

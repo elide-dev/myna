@@ -181,6 +181,93 @@ class JniTest {
   }
 
   @Test
+  void nullByteBuffersAreAbsentNullableBuffers() {
+    var output = StaticJni.generate(Dsl.parse(OwnershipTest.DECODE));
+    String java = output.get("ApiJNI.java");
+    // Only a buffer that is present is checked and sliced; the non-nullable one is as before.
+    assertTrue(
+        java.contains(
+            """
+                public static long decode(java.nio.ByteBuffer arg0, java.nio.ByteBuffer arg2) {
+                    if (!arg0.isDirect()) throw new IllegalArgumentException("direct buffer required");
+                    java.lang.foreign.MemorySegment segment0 = java.lang.foreign.MemorySegment.ofBuffer(arg0);
+                    if (!segment0.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!segment0.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    if (arg2 != null) {
+                        if (!arg2.isDirect()) throw new IllegalArgumentException("direct buffer required");
+                        if (arg2.isReadOnly()) throw new IllegalArgumentException("writable buffer required");
+                        java.lang.foreign.MemorySegment segment2 = java.lang.foreign.MemorySegment.ofBuffer(arg2);
+                        if (!segment2.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                        if (!segment2.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    }
+                    return decodeBuffer(arg0.slice(), arg2 == null ? null : arg2.slice());
+                }
+            """),
+        java);
+    assertTrue(
+        java.contains(
+            """
+                public static long tally(java.nio.ByteBuffer arg0) {
+                    if (arg0 != null) {
+                        if (!arg0.isDirect()) throw new IllegalArgumentException("direct buffer required");
+                        java.lang.foreign.MemorySegment segment = java.lang.foreign.MemorySegment.ofBuffer(arg0);
+                        if (!segment.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                        if (!segment.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    }
+                    return tallyBuffer(arg0 == null ? null : arg0.slice());
+                }
+            """),
+        java);
+    assertTrue(java.contains("        clearBuffer(arg1 == null ? null : arg1.slice());\n"), java);
+    // The adapter keeps NULL and length zero for an absent buffer, where an invalid one is
+    // rejected and an empty one gets storage; a null jobject for the other buffer is still invalid.
+    String c = output.get("seam-jni.c");
+    assertTrue(
+        c.contains(
+            """
+              jlong length0 = arg0 == NULL ? -1 : (*env)->GetDirectBufferCapacity(env, arg0);
+            """),
+        c);
+    assertTrue(
+        c.contains(
+            """
+              uint8_t empty0 = 0;
+              if (length0 == 0) pointer0 = &empty0;
+              jlong length2 = arg2 == NULL ? 0 : (*env)->GetDirectBufferCapacity(env, arg2);
+              if ((*env)->ExceptionCheck(env)) return 0;
+              void *pointer2 = arg2 == NULL ? NULL : (*env)->GetDirectBufferAddress(env, arg2);
+              if ((*env)->ExceptionCheck(env)) return 0;
+              if (length2 < 0 || (length2 != 0 && pointer2 == NULL)) {
+            """),
+        c);
+    assertTrue(
+        c.contains(
+            """
+              uint8_t empty2 = 0;
+              if (arg2 != NULL && length2 == 0) pointer2 = &empty2;
+              return (jlong)decode(pointer0, (uint64_t)length0, pointer2, (uint32_t)length2);
+            }
+            """),
+        c);
+    assertTrue(
+        c.contains(
+            """
+              uint8_t empty = 0;
+              if (arg1 != NULL && length == 0) pointer = &empty;
+              clear((int32_t)length, pointer);
+            }
+            """),
+        c);
+    // Nullability changes neither the method's name nor its descriptor.
+    var required =
+        JniAbi.methods(Dsl.parse(OwnershipTest.DECODE.replace("nullable=true", "nullable=false")));
+    var optional = JniAbi.methods(Dsl.parse(OwnershipTest.DECODE));
+    assertEquals(
+        required.stream().map(JniAbi.Method::symbol).toList(),
+        optional.stream().map(JniAbi.Method::symbol).toList());
+  }
+
+  @Test
   void cliMakesJniOptionalAndChecksItsOutputs() throws Exception {
     var out = new PrintStream(new ByteArrayOutputStream());
     Path destination = temp.resolve("generated");

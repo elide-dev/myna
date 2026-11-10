@@ -335,7 +335,10 @@ public final class JavaFfm implements Backend {
 
   /**
    * The segment wrapper of one function: every buffer is validated in parameter order, and a buffer
-   * of length zero gets temporary storage for the declared non-null pointer.
+   * of length zero gets temporary storage, so that a buffer that is present never has the null
+   * address. A nullable buffer may be absent instead ({@code null}, or a native segment of length
+   * zero at the null address, as {@code MemorySegment.NULL} is): it is not validated and passes the
+   * null pointer with length zero.
    */
   private static void buffer(CallBorrows call, StringBuilder out) {
     Function f = call.function();
@@ -361,33 +364,61 @@ public final class JavaFfm implements Backend {
         continue;
       }
       String s = call.suffix(buffer);
+      boolean nullable = call.nullable(buffer);
+      // A nullable buffer's checks apply only when it is present; its length is zero otherwise.
+      String pad = nullable ? "                " : "            ";
       params.add("MemorySegment " + arg);
       args.add("pointer" + s);
+      if (nullable)
+        checks
+            .append("            boolean absent")
+            .append(s)
+            .append(" = ")
+            .append(arg)
+            .append(" == null || (")
+            .append(arg)
+            .append(".isNative() && ")
+            .append(arg)
+            .append(".address() == 0 && ")
+            .append(arg)
+            .append(".byteSize() == 0);\n")
+            .append("            long length")
+            .append(s)
+            .append(" = 0;\n")
+            .append("            if (!absent")
+            .append(s)
+            .append(") {\n");
       checks
-          .append("            if (!")
+          .append(pad)
+          .append("if (!")
           .append(arg)
           .append(
               ".isNative()) throw new IllegalArgumentException(\"native segment required\");\n");
       if (call.writable(buffer))
         checks
-            .append("            if (")
+            .append(pad)
+            .append("if (")
             .append(arg)
             .append(
                 ".isReadOnly()) throw new IllegalArgumentException(\"writable segment"
                     + " required\");\n");
       checks
-          .append("            if (!")
+          .append(pad)
+          .append("if (!")
           .append(arg)
           .append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
-          .append("            if (!")
+          .append(pad)
+          .append("if (!")
           .append(arg)
           .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n")
-          .append("            long length")
+          .append(pad)
+          .append(nullable ? "length" : "long length")
           .append(s)
           .append(" = ")
           .append(arg)
           .append(".byteSize();\n")
-          .append("            if (length")
+          .append(pad)
+          .append("if (length")
           .append(s)
           .append(" != 0 && ")
           .append(arg)
@@ -395,22 +426,29 @@ public final class JavaFfm implements Backend {
               ".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
       if (call.narrow(buffer))
         checks
-            .append("            if (length")
+            .append(pad)
+            .append("if (length")
             .append(s)
             .append(" > ")
             .append(call.maxLength(buffer))
             .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
-      present.add("length" + s + " != 0");
+      if (nullable) checks.append("            }\n");
+      // Only a buffer that is present and empty needs temporary storage.
+      String missing = nullable ? "absent" + s + " ? MemorySegment.NULL : " : "";
+      String filled = "length" + s + " != 0";
+      if (nullable) filled = "absent" + s + " || " + filled;
+      present.add(nullable && several ? "(" + filled + ")" : filled);
       lent.append("                MemorySegment pointer")
           .append(s)
           .append(" = ")
+          .append(missing)
           .append(arg)
           .append(";\n");
       temporary
           .append("                MemorySegment pointer")
           .append(s)
           .append(" = ")
-          .append(several ? "length" + s + " != 0 ? " + arg + " : " : "")
+          .append(several ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
           .append("empty.allocate(1);\n");
     }
     String invoke =

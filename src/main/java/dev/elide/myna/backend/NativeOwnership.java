@@ -123,13 +123,18 @@ public final class NativeOwnership implements Backend {
     return out.append("}\n").toString();
   }
 
+  /** What an absent buffer passes: the null pointer, in the buffer's own word carrier. */
+  private static final String NULL_POINTER = "org.graalvm.word.WordFactory.nullPointer()";
+
   /** One acquired buffer of a wrapper: its positional argument and the suffix of its locals. */
   private record Buffer(String name, String suffix, BufferBorrow borrow) {}
 
   /**
    * The off-heap and array wrappers of one function. Buffers are acquired or pinned in parameter
    * order and released in reverse, each in a {@code finally} of its own; other parameters pass
-   * through in the carriers of the raw binding.
+   * through in the carriers of the raw binding. A {@code null} argument for a nullable buffer is an
+   * absent buffer: never acquired, pinned or released, and passed as the null pointer with length
+   * zero.
    */
   private static void buffers(Module m, CallBorrows call, StringBuilder out) {
     Function f = call.function();
@@ -177,7 +182,11 @@ public final class NativeOwnership implements Backend {
     for (Buffer b : buffers) {
       String s = b.suffix();
       boolean writable = call.writable(b.borrow());
+      boolean nullable = call.nullable(b.borrow());
+      // What an absent buffer reads as, ahead of each use of a nullable one.
+      String absent = nullable ? b.name() + " == null ? 0 : " : "";
       out.append(pad)
+          .append(nullable ? "if (" + b.name() + " != null) " : "")
           .append(b.name())
           .append(".acquire(")
           .append(writable)
@@ -188,6 +197,7 @@ public final class NativeOwnership implements Backend {
           .append("    long length")
           .append(s)
           .append(" = ")
+          .append(absent)
           .append(b.name())
           .append(".byteSize();\n");
       if (call.narrow(b.borrow()))
@@ -201,6 +211,7 @@ public final class NativeOwnership implements Backend {
           .append("    long address")
           .append(s)
           .append(" = ")
+          .append(absent)
           .append(b.name())
           .append(".address();\n")
           .append(pad)
@@ -214,7 +225,9 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
           .append(s)
-          .append(" = address")
+          .append(" = ")
+          .append(nullable ? b.name() + " == null ? " + NULL_POINTER + " : " : "")
+          .append("address")
           .append(s)
           .append(" == 0\n")
           .append(pad)
@@ -232,6 +245,7 @@ public final class NativeOwnership implements Backend {
           .append("} finally {\n")
           .append(pad)
           .append("    ")
+          .append(call.nullable(b.borrow()) ? "if (" + b.name() + " != null) " : "")
           .append(b.name())
           .append(".release(")
           .append(call.writable(b.borrow()))
@@ -258,6 +272,16 @@ public final class NativeOwnership implements Backend {
     // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
     if (buffers.size() == 1) {
       String name = buffers.getFirst().name();
+      if (call.nullable(buffers.getFirst().borrow()))
+        out.append("        if (")
+            .append(name)
+            .append(" == null) {\n            long length = 0;\n")
+            .append("            org.graalvm.nativeimage.c.type.CCharPointer pointer = ")
+            .append(NULL_POINTER)
+            .append(";\n            ")
+            .append(invoke)
+            .append(f.returns() == Scalar.VOID ? "\n            return;" : "")
+            .append("\n        }\n");
       out.append("        long length = ")
           .append(name)
           .append(".length;\n")
@@ -283,11 +307,13 @@ public final class NativeOwnership implements Backend {
       return;
     }
     // Several arrays: every length is read first, then each non-empty array is pinned in turn; an
-    // empty one has no element to pin and gets the stack dummy the declared non-null needs.
+    // empty one has no element to pin and gets the stack dummy a present buffer's non-null address
+    // needs, and an absent one gets the null pointer.
     for (Buffer b : buffers)
       out.append("        long length")
           .append(b.suffix())
           .append(" = ")
+          .append(call.nullable(b.borrow()) ? b.name() + " == null ? 0 : " : "")
           .append(b.name())
           .append(".length;\n");
     pad = "        ";
@@ -306,7 +332,9 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
           .append(s)
-          .append(" = pin")
+          .append(" = ")
+          .append(call.nullable(b.borrow()) ? b.name() + " == null ? " + NULL_POINTER + " : " : "")
+          .append("pin")
           .append(s)
           .append(" == null\n")
           .append(pad)

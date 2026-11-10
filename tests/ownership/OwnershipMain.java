@@ -186,6 +186,7 @@ public final class OwnershipMain {
     check(NativeApiOwnership.checksum(empty) == 0);
     NativeApiOwnership.increment(empty);
     verifySeveralBuffers(empty);
+    verifyNullableBuffers(empty);
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
   }
 
@@ -255,6 +256,79 @@ public final class OwnershipMain {
     } finally {
       UnmanagedMemory.free(copied);
     }
+  }
+
+  /**
+   * A nullable buffer: {@code null} is an absent buffer, which is never acquired, pinned or
+   * released and reaches native code as the null pointer with length zero. The fixture reports
+   * that as {@code ABSENT}; a buffer that is present, empty or not, never has the null address.
+   */
+  private static void verifyNullableBuffers(NativeApiOwnership.NativeBuffer empty) {
+    final long absent = 1L << 32;
+    // Arrays, an optional output beside a required input: only what is non-empty is pinned.
+    byte[] data = {1, 2, 3};
+    byte[] text = new byte[2];
+    check(NativeApiOwnership.decode(data, text) == 3 && text[0] == 2 && text[1] == 3);
+    check(NativeApiOwnership.decode(data, (byte[]) null) == (3 | absent));
+    check(NativeApiOwnership.decode(data, new byte[0]) == 3);
+    check(NativeApiOwnership.decode(new byte[0], (byte[]) null) == absent);
+    for (int i = 0; i < 1000; i++) {
+      byte[] optional = (i & 1) == 0 ? null : text;
+      check(NativeApiOwnership.decode(data, optional) == ((i & 1) == 0 ? 3 | absent : 3));
+    }
+    // One optional array. A literal null fits both overloads, so it names the one it means.
+    check(NativeApiOwnership.tally(data) == 6);
+    check(NativeApiOwnership.tally(new byte[0]) == 0);
+    check(NativeApiOwnership.tally((byte[]) null) == absent);
+
+    // Off-heap: an absent buffer is neither acquired nor released, and the other one still is.
+    Buffer input = new Buffer("in");
+    Buffer output = new Buffer("out");
+    for (int i = 0; i < 3; i++) input.pointer.write(i, (byte) (7 + i));
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.decode(input, output) == 3);
+    check(output.pointer.read(0) == 8 && output.pointer.read(2) == 10);
+    check(Buffer.EVENTS.toString().equals("+inr +outw -outw -inr "));
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.decode(input, (NativeApiOwnership.NativeBuffer) null) == (3 | absent));
+    check(Buffer.EVENTS.toString().equals("+inr -inr "));
+    check(input.leases == 0 && output.leases == 0);
+    // Present and empty at address zero is not absent: it gets the stack dummy.
+    check(NativeApiOwnership.decode(input, empty) == 3);
+    check(NativeApiOwnership.decode(empty, (NativeApiOwnership.NativeBuffer) null) == absent);
+    for (int i = 0; i < 1000; i++) {
+      NativeApiOwnership.NativeBuffer optional = (i & 1) == 0 ? null : output;
+      check(NativeApiOwnership.decode(input, optional) == ((i & 1) == 0 ? 3 | absent : 3));
+    }
+    check(input.leases == 0 && output.leases == 0);
+    // A buffer that is present keeps every rule: it must be acquirable and have a valid extent.
+    Buffer.EVENTS.setLength(0);
+    output.writableAllowed = false;
+    rejects(() -> NativeApiOwnership.decode(input, output));
+    check(Buffer.EVENTS.toString().equals("+inr -inr "));
+    output.writableAllowed = true;
+    Buffer.EVENTS.setLength(0);
+    output.size = -1;
+    rejects(() -> NativeApiOwnership.decode(input, output));
+    check(Buffer.EVENTS.toString().equals("+inr +outw -outw -inr "));
+    output.size = 3;
+    // The buffer that is not nullable still is not.
+    try {
+      NativeApiOwnership.decode((NativeApiOwnership.NativeBuffer) null, output);
+      throw new AssertionError("a null buffer was accepted where none may be absent");
+    } catch (NullPointerException expected) {
+      check(output.leases == 0);
+    }
+    // One optional off-heap buffer.
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.tally(input) == 24);
+    check(Buffer.EVENTS.toString().equals("+inr -inr "));
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.tally((NativeApiOwnership.NativeBuffer) null) == absent);
+    check(Buffer.EVENTS.length() == 0);
+    check(NativeApiOwnership.tally(empty) == 0);
+    input.dispose();
+    output.dispose();
   }
 
   private static void verifyConfinedResources() throws Throwable {

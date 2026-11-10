@@ -134,8 +134,8 @@ class OwnershipTest {
         "access=read nocapture|access=write nocapture",
         "readonly=true@explicit_contract|readonly=true@heuristic",
         "type=ptr<u8>|type=ptr<i64>",
-        "nullable=false ownership=borrowed|ownership=borrowed",
-        "nullable=false ownership=borrowed|nullable=true ownership=borrowed",
+        "nullable=false ownership=borrowed|nullable=true ownership=borrowed"
+            + " nonnull=true@explicit_contract",
         "readonly=true@explicit_contract|readonly=true@explicit_contract"
             + " noalias=true@explicit_contract",
         "resource Ticket representation|resource Ticket representation=native threading=shared"
@@ -861,8 +861,8 @@ class OwnershipTest {
         // Every per-buffer rule applies to each buffer.
         Arguments.of(
             output,
-            output.replace("nullable=false", "nullable=true"),
-            "call buffer requires non-null ptr<u8>"),
+            output.replace("nullable=false", "nullable=true nonnull=true@explicit_contract"),
+            "nonnull contradicts nullable=true"),
         Arguments.of(
             output, output.replace("ptr<u8>", "ptr<i8>"), "call buffer requires borrowed ptr<u8>"),
         Arguments.of(
@@ -931,47 +931,259 @@ class OwnershipTest {
     }
   }
 
+  /**
+   * An optional output beside a required input, one optional input on its own, and one optional
+   * buffer behind its 32-bit length on a void function, declared without {@code nullable}.
+   */
+  static final String DECODE =
+      "module decoder target=aarch64-apple-darwin java_class=Api\n"
+          + "borrow decode data length=length lifetime=call\n"
+          + "borrow decode text length=capacity lifetime=call\n"
+          + "import decode return=u64 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u64\n"
+          + "  param text type=ptr<u8> nullable=true ownership=borrowed access=write"
+          + " nocapture=true@explicit_contract\n"
+          + "  param capacity type=u32\n"
+          + "end\n"
+          + "borrow tally bytes length=count lifetime=call\n"
+          + "import tally return=u64 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param bytes type=ptr<u8> nullable=true ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param count type=u64\n"
+          + "end\n"
+          + "borrow clear bytes length=count lifetime=call\n"
+          + "import clear return=void error=no_failure nounwind=true@explicit_contract\n"
+          + "  param count type=i32\n"
+          + "  param bytes type=ptr<u8> ownership=borrowed access=read_write"
+          + " nocapture=true@explicit_contract\n"
+          + "end\n";
+
   @Test
-  void rejectsNullableBorrowBufferInBothModes() throws Exception {
+  void nullableBuffersAreAcceptedInBothModes() throws Exception {
     assertTrue(
         source().contains("nullable=false ownership=borrowed"),
         "fixture must hold nullable=false on a borrow buffer");
-    String message = "call buffer requires non-null ptr<u8>";
-
-    // DSL default is nullable=true: omitting nullable=false silently yields nullable=true.
+    // The DSL default is nullable=true, so a buffer declared without nullable is a nullable one.
     String defaulted = source().replace("nullable=false ownership=borrowed", "ownership=borrowed");
-    var relaxedDefault =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> Generator.generate(Dsl.parse(defaulted), false),
-            "relaxed mode must reject defaulted-nullable borrow buffer");
-    assertEquals(message, relaxedDefault.getMessage());
-    var strictDefault =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> Generator.generate(Dsl.parse(defaulted), true),
-            "strict mode must reject defaulted-nullable borrow buffer");
-    assertEquals(message, strictDefault.getMessage());
-
-    // Explicit nullable=true must also be rejected.
     String explicit =
         source().replace("nullable=false ownership=borrowed", "nullable=true ownership=borrowed");
-    var relaxedExplicit =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> Generator.generate(Dsl.parse(explicit), false),
-            "relaxed mode must reject explicit nullable=true borrow buffer");
-    assertEquals(message, relaxedExplicit.getMessage());
-    var strictExplicit =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> Generator.generate(Dsl.parse(explicit), true),
-            "strict mode must reject explicit nullable=true borrow buffer");
-    assertEquals(message, strictExplicit.getMessage());
+    for (boolean strict : new boolean[] {false, true}) {
+      var required = Generator.generate(Dsl.parse(source()), strict);
+      var optional = Generator.generate(Dsl.parse(explicit), strict);
+      assertEquals(optional, Generator.generate(Dsl.parse(defaulted), strict));
+      // Nullability is part of the descriptor, and only the nullable form takes an absent buffer.
+      assertNotEquals(required.get("seam.abi"), optional.get("seam.abi"));
+      assertTrue(required.get("seam.rs").contains("pub fn checksum(bytes: &[u8]) -> u64 {"));
+      assertFalse(required.get("seam.rs").contains("Option<&"), required.get("seam.rs"));
+      assertFalse(required.get("NativeApiOwnership.java").contains("== null"));
+      assertFalse(required.get("NativeApiFFM.java").contains("absent"));
+      assertTrue(
+          optional.get("seam.rs").contains("pub fn checksum(bytes: Option<&[u8]>) -> u64 {"),
+          optional.get("seam.rs"));
+      assertTrue(
+          optional.get("seam.rs").contains("pub fn increment(bytes: Option<&mut [u8]>) {"),
+          optional.get("seam.rs"));
+      assertTrue(
+          optional
+              .get("NativeApiOwnership.java")
+              .contains("        if (arg0 != null) arg0.acquire(false);\n"));
+    }
+    // A buffer cannot be both: the general rule for every pointer still applies to it.
+    String contradictory =
+        source()
+            .replace(
+                "nullable=false ownership=borrowed access=read nocapture",
+                "nullable=true ownership=borrowed access=read nonnull=true@explicit_contract"
+                    + " nocapture");
+    assertNotEquals(source(), contradictory);
+    for (boolean strict : new boolean[] {false, true})
+      assertEquals(
+          "nonnull contradicts nullable=true",
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> Generator.generate(Dsl.parse(contradictory), strict))
+              .getMessage());
+  }
 
-    // Control: the original non-nullable fixture still generates in both modes.
-    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source()), false));
-    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source()), true));
+  @Test
+  void absentBuffersAreNeverAcquiredPinnedOrReleased() {
+    String java = Generator.generate(Dsl.parse(DECODE), true).get("ApiOwnership.java");
+    // Off-heap: a null NativeBuffer is absent. It is not acquired or released, reads as length
+    // zero and passes the null pointer; one that is present keeps the stack dummy when empty.
+    assertTrue(
+        java.contains(
+            """
+                public static long decode(NativeBuffer arg0, NativeBuffer arg2) {
+                    arg0.acquire(false);
+                    try {
+                        long length0 = arg0.byteSize();
+                        long address0 = arg0.address();
+                        if (length0 < 0 || (address0 == 0 && length0 != 0)) throw new IllegalArgumentException("invalid buffer extent");
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer0 = address0 == 0
+                            ? org.graalvm.nativeimage.StackValue.get(1) : org.graalvm.word.WordFactory.pointer(address0);
+                        if (arg2 != null) arg2.acquire(true);
+                        try {
+                            long length2 = arg2 == null ? 0 : arg2.byteSize();
+                            if (length2 > 4294967295L) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                            long address2 = arg2 == null ? 0 : arg2.address();
+                            if (length2 < 0 || (address2 == 0 && length2 != 0)) throw new IllegalArgumentException("invalid buffer extent");
+                            org.graalvm.nativeimage.c.type.CCharPointer pointer2 = arg2 == null ? org.graalvm.word.WordFactory.nullPointer() : address2 == 0
+                                ? org.graalvm.nativeimage.StackValue.get(1) : org.graalvm.word.WordFactory.pointer(address2);
+                            return Api.decode(pointer0, length0, pointer2, (int) length2);
+                        } finally {
+                            if (arg2 != null) arg2.release(true);
+                            java.lang.ref.Reference.reachabilityFence(arg2);
+                        }
+                    } finally {
+                        arg0.release(false);
+                        java.lang.ref.Reference.reachabilityFence(arg0);
+                    }
+                }
+            """),
+        java);
+    // Arrays beside others: a null array has length zero, is not pinned, and passes null.
+    assertTrue(
+        java.contains(
+            """
+                /** Array convenience path; caller prevents conflicting concurrent array access. */
+                public static long decode(byte[] arg0, byte[] arg2) {
+                    long length0 = arg0.length;
+                    long length2 = arg2 == null ? 0 : arg2.length;
+                    org.graalvm.nativeimage.PinnedObject pin0 = length0 == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(arg0);
+                    try {
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer0 = pin0 == null
+                            ? org.graalvm.nativeimage.StackValue.get(1) : pin0.addressOfArrayElement(0);
+                        org.graalvm.nativeimage.PinnedObject pin2 = length2 == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(arg2);
+                        try {
+                            org.graalvm.nativeimage.c.type.CCharPointer pointer2 = arg2 == null ? org.graalvm.word.WordFactory.nullPointer() : pin2 == null
+                                ? org.graalvm.nativeimage.StackValue.get(1) : pin2.addressOfArrayElement(0);
+                            return Api.decode(pointer0, length0, pointer2, (int) length2);
+                        } finally {
+                            if (pin2 != null) pin2.close();
+                        }
+                    } finally {
+                        if (pin0 != null) pin0.close();
+                    }
+                }
+            """),
+        java);
+    // One array: the absent case returns ahead of the path a single buffer has always had.
+    assertTrue(
+        java.contains(
+            """
+                /** Array convenience path; caller prevents conflicting concurrent array access. */
+                public static long tally(byte[] arg0) {
+                    if (arg0 == null) {
+                        long length = 0;
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer = org.graalvm.word.WordFactory.nullPointer();
+                        return Api.tally(pointer, length);
+                    }
+                    long length = arg0.length;
+                    if (length == 0) {
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer = org.graalvm.nativeimage.StackValue.get(1);
+                        return Api.tally(pointer, length);
+                    }
+                    org.graalvm.nativeimage.PinnedObject pin = org.graalvm.nativeimage.PinnedObject.create(arg0);
+                    try {
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer = pin.addressOfArrayElement(0);
+                        return Api.tally(pointer, length);
+                    } finally {
+                        pin.close();
+                    }
+                }
+            """),
+        java);
+    // A void result returns explicitly, and a 32-bit length is still range-checked and narrowed.
+    assertTrue(
+        java.contains(
+            """
+                public static void clear(NativeBuffer arg1) {
+                    if (arg1 != null) arg1.acquire(true);
+                    try {
+                        long length = arg1 == null ? 0 : arg1.byteSize();
+                        if (length > 2147483647L) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                        long address = arg1 == null ? 0 : arg1.address();
+                        if (length < 0 || (address == 0 && length != 0)) throw new IllegalArgumentException("invalid buffer extent");
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer = arg1 == null ? org.graalvm.word.WordFactory.nullPointer() : address == 0
+                            ? org.graalvm.nativeimage.StackValue.get(1) : org.graalvm.word.WordFactory.pointer(address);
+                        Api.clear((int) length, pointer);
+                    } finally {
+                        if (arg1 != null) arg1.release(true);
+                        java.lang.ref.Reference.reachabilityFence(arg1);
+                    }
+                }
+                /** Array convenience path; caller prevents conflicting concurrent array access. */
+                public static void clear(byte[] arg1) {
+                    if (arg1 == null) {
+                        long length = 0;
+                        org.graalvm.nativeimage.c.type.CCharPointer pointer = org.graalvm.word.WordFactory.nullPointer();
+                        Api.clear((int) length, pointer);
+                        return;
+                    }
+                    long length = arg1.length;
+            """),
+        java);
+    // Plain try/finally only: these wrappers may sit on partially evaluated paths (#87).
+    assertFalse(java.contains("try ("), java);
+    assertFalse(java.contains("addSuppressed"), java);
+    // Declaring the same buffers non-null gives the wrappers such buffers have always had.
+    String required =
+        Generator.generate(
+                Dsl.parse(
+                    DECODE
+                        .replace("nullable=true", "nullable=false")
+                        .replace(
+                            "type=ptr<u8> ownership=borrowed",
+                            "type=ptr<u8> nullable=false ownership=borrowed")),
+                true)
+            .get("ApiOwnership.java");
+    assertFalse(required.contains("nullPointer"), required);
+    assertFalse(required.contains("arg2 == null") || required.contains("arg2 != null"), required);
+    assertTrue(required.contains("            arg2.acquire(true);\n"), required);
+  }
+
+  @Test
+  void nullableBuffersAreOptionalSlicesInRust() {
+    String rust = Generator.generate(Dsl.parse(DECODE), true).get("seam.rs");
+    // None is the null pointer with length zero. The option is consumed once, under its own
+    // name, whichever of the buffer and its length comes first among the arguments.
+    assertTrue(
+        rust.contains(
+            """
+            pub mod ownership {
+                pub fn clear(bytes: Option<&mut [u8]>) {
+                    let bytes = bytes.map_or((core::ptr::null_mut(), 0), |bytes| (bytes.as_mut_ptr(), bytes.len()));
+                    unsafe { super::clear(bytes.1.try_into().expect("buffer length exceeds ABI range"), bytes.0) }
+                }
+                pub fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64 {
+                    let text = text.map_or((core::ptr::null_mut(), 0), |text| (text.as_mut_ptr(), text.len()));
+                    unsafe { super::decode(data.as_ptr(), data.len().try_into().expect("buffer length exceeds ABI range"), text.0, text.1.try_into().expect("buffer length exceeds ABI range")) }
+                }
+                pub fn tally(bytes: Option<&[u8]>) -> u64 {
+                    let bytes = bytes.map_or((core::ptr::null(), 0), |bytes| (bytes.as_ptr(), bytes.len()));
+                    unsafe { super::tally(bytes.0, bytes.1.try_into().expect("buffer length exceeds ABI range")) }
+                }
+            }
+            """),
+        rust);
+    // The wrapper is unsafe for a pointer that passes through, never for an optional buffer.
+    String pointer =
+        Generator.generate(
+                Dsl.parse(
+                    DECODE.replace(
+                        "  param capacity type=u32\n",
+                        "  param capacity type=u32\n  param written type=ptr<u32>\n")),
+                true)
+            .get("seam.rs");
+    assertTrue(
+        pointer.contains(
+            "    pub unsafe fn decode(data: &[u8], text: Option<&mut [u8]>, written: *mut u32)"
+                + " -> u64 {\n"
+                + "        let text = text.map_or("),
+        pointer);
+    assertTrue(pointer.contains("    pub fn tally(bytes: Option<&[u8]>) -> u64 {\n"), pointer);
   }
 
   @ParameterizedTest

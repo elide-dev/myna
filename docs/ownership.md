@@ -65,7 +65,7 @@ end
 
 `borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid.
 
-Each buffer is a non-null borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. Additional `align`, `dereferenceable`, or `noalias` requirements on a buffer are rejected.
+Each buffer is a borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. A buffer declared `nullable=false` is always present; any other buffer is a [nullable buffer](#nullable-buffers) that may be absent. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. Additional `align`, `dereferenceable`, or `noalias` requirements on a buffer are rejected.
 
 A `write` buffer is a writable buffer, handled exactly like a `read_write` one by every wrapper: a mutable slice in Rust, a writable acquisition or segment in Java, a copy that is filled from the caller's bytes and written back in a Truffle cell. No wrapper relies on the callee not reading it, so the callee always sees the caller's initialized bytes, and the declaration needs no `writeonly` fact (an approved one remains an LLVM contract of its own).
 
@@ -88,7 +88,38 @@ end
 - A pointer result beside a borrow stays rejected: nothing yet ties a returned pointer to the buffer it may point into.
 - No wrapper checks that two buffers of one call are disjoint. Rust's borrow rules exclude a `&mut` slice that overlaps another; everywhere else, passing overlapping memory as a read buffer and a writable buffer breaks the read contract above and is the caller's error.
 
-Rust wrappers take `&[u8]` or `&mut [u8]` for each buffer and derive each length. Length overflow panics before the foreign call. Empty slices are supported. No allocation, copying, or runtime ownership bookkeeping is introduced by these wrappers. A wrapper whose other parameters are all scalars is a safe `fn`: its slices vouch for everything it passes. A wrapper that passes any other pointer through is an `unsafe fn` with a `# Safety` section, because nothing vouches for that pointer; the example above generates
+### Nullable buffers
+
+A buffer parameter that is `nullable=true` may be absent, as an optional output buffer is:
+
+```text
+borrow decode data length=length lifetime=call
+borrow decode text length=capacity lifetime=call
+import decode symbol=buffer_decode return=u64 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param text type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+end
+```
+
+- **An absent buffer reaches the native function as the null pointer with length zero**, in every wrapper. The declaration states that the function accepts exactly that for the parameter. No wrapper passes null with a nonzero length, or a null buffer for a parameter declared `nullable=false`.
+- A buffer that is present behaves exactly as a non-nullable one does, and never has the null address: one that is present and empty still gets a non-null address with length zero, so the function can tell "no buffer" from "a buffer with no room".
+- Pointer parameters default to `nullable=true`, so **a buffer declared without `nullable` is a nullable one**. Write `nullable=false` for a buffer that must always be there; such a declaration generates what it always has. A `nonnull` fact on a nullable buffer is rejected, as on any nullable pointer.
+- Each wrapper spells "absent" in its own way:
+
+| Wrapper | Present | Absent |
+| --- | --- | --- |
+| Rust | `Some(slice)` of `Option<&[u8]>` / `Option<&mut [u8]>` | `None` |
+| Native Image, off-heap | a `NativeBuffer` | `null`: never acquired or released |
+| Native Image, `byte[]` | an array | `null`: never pinned |
+| FFM | a native `MemorySegment` | `null`, or a native segment of length zero at address zero such as `MemorySegment.NULL` |
+| Static JNI | a direct `ByteBuffer` | `null` |
+| Truffle cell | a buffer (or a string, for read access) | interop `null`, an interop pointer to address zero, or host `null` |
+
+The example above generates `pub fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64` in Rust, and `decode(data, null)` is unambiguous in Java because `data` has a type. Where every buffer of a function is nullable, a call that passes only literal `null`s fits both the `NativeBuffer` and the `byte[]` overload and must name the one it means, as in `tally((byte[]) null)` for a function with one optional buffer; a `null` held in a typed variable needs no cast.
+
+Rust wrappers take `&[u8]` or `&mut [u8]` for each buffer (`Option<&[u8]>` or `Option<&mut [u8]>` for a nullable one) and derive each length. Length overflow panics before the foreign call. Empty slices are supported. No allocation, copying, or runtime ownership bookkeeping is introduced by these wrappers. A wrapper whose other parameters are all scalars is a safe `fn`: its slices vouch for everything it passes. A wrapper that passes any other pointer through is an `unsafe fn` with a `# Safety` section, because nothing vouches for that pointer; the example above generates
 
 ```rust
 /// # Safety
@@ -111,11 +142,11 @@ A Netty/Bemo adapter can implement these methods on an existing buffer/view: ret
 
 The generated call path performs acquire → address/length validation → direct C API call → release in `finally`, with a reachability fence. It adds no per-call Java allocation, copying, monitor, or registry lookup; the consumer hooks determine any retention cost. With an externally guaranteed lifetime/access discipline, those hooks can be no-ops. The raw generated binding remains available for callers that already enforce all contracts.
 
-With several buffers, each is acquired and validated in parameter order and released in reverse, in a `finally` of its own. A buffer that cannot be acquired releases exactly the buffers already held; one that fails validation is released along with them. Either way the call never reaches native code. Each buffer is acquired separately, so whether one owner may back two buffers of the same call (a read lease and a write lease at once) is the consumer's `acquire` policy. Other pointer parameters keep the raw binding's word carriers (`CIntPointer`, `PointerBase`, …) and are not checked.
+With several buffers, each is acquired and validated in parameter order and released in reverse, in a `finally` of its own. A buffer that cannot be acquired releases exactly the buffers already held; one that fails validation is released along with them. Either way the call never reaches native code. A `null` argument for a nullable buffer is skipped: nothing is acquired, validated or released for it, and the buffers around it are handled as before. Each buffer is acquired separately, so whether one owner may back two buffers of the same call (a read lease and a write lease at once) is the consumer's `acquire` policy. Other pointer parameters keep the raw binding's word carriers (`CIntPointer`, `PointerBase`, …) and are not checked.
 
-Negative lengths, lengths outside the ABI integer range, and null addresses with nonzero lengths fail before native entry. For empty buffers at address zero, generated code supplies a non-null stack dummy with length zero. The consumer must validate actual allocation bounds; an address and length alone cannot prove those bounds.
+Negative lengths, lengths outside the ABI integer range, and null addresses with nonzero lengths fail before native entry. For empty buffers at address zero, generated code supplies a non-null stack dummy with length zero; that holds for a nullable buffer too, since a `NativeBuffer` that is passed is present whatever it reports. The consumer must validate actual allocation bounds; an address and length alone cannot prove those bounds.
 
-An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. There is no overload that mixes arrays with `NativeBuffer`s.
+An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. A `null` array for a nullable buffer is not pinned and passes the null pointer. There is no overload that mixes arrays with `NativeBuffer`s.
 
 ## Creates that report a status (Truffle cells only)
 
@@ -159,19 +190,19 @@ other import. See [Truffle native cells](truffle-cells.md#ownership) for what th
 
 ## Truffle cells
 
-With `truffle_cells=true`, the same declarations project into guest-callable cells: each `borrow` drops its length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
+With `truffle_cells=true`, the same declarations project into guest-callable cells: each `borrow` drops its length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call, takes interop `null` for a nullable buffer that is absent, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function and beside pass-through pointers. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 
-1. Native operations consuming owned resources, with explicit transfer-on-success/failure rules; typed element views; nullable buffers, buffers without a length parameter of their own, and one length shared by several buffers.
+1. Native operations consuming owned resources, with explicit transfer-on-success/failure rules; typed element views; buffers without a length parameter of their own, and one length shared by several buffers.
 2. Returned buffer views tied to an owner, including mutation/invalidation rules and pooled-buffer retention.
 3. SVM-managed Java objects represented by isolate-bound rooted handles; release of a handle is distinct from destruction of its referent.
 4. Retained asynchronous buffer borrows and retain/release protocols. FFM upcall stubs already have explicit caller-owned arena lifetimes.
 
 These future forms currently fail parsing/validation rather than receiving invented safe lifetimes. GC-rooted Java objects must not be declared as `representation=native`. Cross-isolate ownership and automatic lifetime inference are not implemented.
 
-The [owned example](../examples/ownership.seam) and [consumer fixture](../tests/ownership/OwnershipMain.java) provide concrete starting points; the fixture is generated from [the example plus a call with several buffers beside another pointer](../tests/ownership/ownership.seam). Integration tests execute both generated Rust ownership and Native Image consumer APIs against actual native allocations, check failure cleanup and repeated release, run the two-buffer `transfer` import through every wrapper (Rust, Native Image off-heap and array, FFM, static JNI), and compile-fail Rust borrow escape, confined cross-thread moves and a pointer-passing wrapper called outside `unsafe`.
+The [owned example](../examples/ownership.seam) and [consumer fixture](../tests/ownership/OwnershipMain.java) provide concrete starting points; the fixture is generated from [the example plus a call with several buffers beside another pointer and two calls with a nullable buffer](../tests/ownership/ownership.seam). Integration tests execute both generated Rust ownership and Native Image consumer APIs against actual native allocations, check failure cleanup and repeated release, run the two-buffer `transfer` import and the nullable `decode` and `tally` imports, with their buffer absent and present, through every wrapper (Rust, Native Image off-heap and array, FFM, static JNI), and compile-fail Rust borrow escape, confined cross-thread moves and a pointer-passing wrapper called outside `unsafe`.

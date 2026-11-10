@@ -31,6 +31,16 @@ uint64_t cells_transfer(const uint8_t *input, uint64_t count, uint8_t *output, u
   if (copied) *copied = (int64_t)fits;
   return sum;
 }
+// An optional output buffer: text may be NULL with capacity zero. Writes each input byte plus one
+// into what fits of a buffer that is present and returns the bytes the whole output needs, with
+// bit 32 set when there is no buffer. A buffer that is present never has the null address, even
+// when it is empty; NULL with a capacity breaks the contract and returns UINT64_MAX.
+uint64_t cells_decode(const uint8_t *data, uint64_t length, uint8_t *text, uint32_t capacity) {
+  if (!text) return capacity == 0 ? length | (UINT64_C(1) << 32) : UINT64_MAX;
+  uint64_t fits = length < capacity ? length : capacity;
+  for (uint64_t i = 0; i < fits; i++) text[i] = (uint8_t)(data[i] + 1);
+  return length;
+}
 // A byte buffer whose count stays an explicit argument, beside a second pointer.
 uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bias) {
   uint64_t sum = bias ? (uint64_t)*bias : 0;
