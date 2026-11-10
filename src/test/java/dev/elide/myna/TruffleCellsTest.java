@@ -49,7 +49,7 @@ class TruffleCellsTest {
         generate(
             MODULE.replace("module cells ", "module cells java_package=a.b java_class=Api ") + ADD);
     assertTrue(named.containsKey("ApiTruffle.java"));
-    assertTrue(named.get("ApiTruffle.java").contains("return Api.add(value_left, value_right);"));
+    assertTrue(named.get("ApiTruffle.java").contains("return Api.add(left, right);"));
     assertTrue(named.get("ApiTruffle.java").contains("package a.b;"));
     // Scalar results get the typed entry point, and execute boxes it.
     assertTrue(
@@ -132,37 +132,43 @@ class TruffleCellsTest {
         truffle.contains(
             "new IntegerCoercion(\"add\", \"left\", 32, false, CoercionPolicy.STRICT)"));
     assertTrue(truffle.contains("int value_left = (int) coerce_left.execute(arguments[0]);"));
-    assertTrue(truffle.contains("return CellApi.add(value_left, value_right);"));
+    // The call itself is a static invoke with native carriers and raw addresses, which the cell
+    // body calls after coercing and host code may call directly.
+    assertTrue(
+        truffle.contains(
+            "        public static int invoke(int left, int right) {\n"
+                + "            return CellApi.add(left, right);\n"));
+    assertTrue(truffle.contains("return invoke(value_left, value_right);"));
     // Unsigned and small carriers: raw bits in, numeric values out.
     assertTrue(
         truffle.contains(
             "new IntegerCoercion(\"widen\", \"small\", 8, true, CoercionPolicy.STRICT)"));
     assertTrue(truffle.contains("byte value_small = (byte) coerce_small.execute(arguments[0]);"));
-    assertTrue(truffle.contains("return Carriers.u8(CellApi.lowByte(value_value));"));
+    assertTrue(truffle.contains("return Carriers.u8(CellApi.lowByte(value));"));
     assertTrue(truffle.contains("boolean value_flag = coerce_flag.execute(arguments[3]);"));
     assertTrue(truffle.contains("float value_value = (float) coerce_value.execute(arguments[0]);"));
     assertTrue(truffle.contains("double value_factor = coerce_factor.execute(arguments[1]);"));
     // Pointers are opaque; raw numbers only where the binding opted in.
     assertTrue(truffle.contains("new PointerCoercion(\"peek\", \"cell\", false, false)"));
     assertTrue(truffle.contains("new PointerCoercion(\"rawLength\", \"text\", true, true)"));
-    assertTrue(truffle.contains("return CellApi.peek(WordFactory.pointer(address_cell));"));
-    assertTrue(truffle.contains("CellApi.poke(WordFactory.pointer(address_cell), value_value);"));
+    assertTrue(truffle.contains("return CellApi.peek(WordFactory.pointer(cell));"));
+    assertTrue(truffle.contains("CellApi.poke(WordFactory.pointer(cell), value);"));
+    assertTrue(truffle.contains("invoke(address_cell, value_value);"));
     assertTrue(truffle.contains("return Carriers.none();"));
     // C strings and call borrows lend bytes for exactly the call.
     assertTrue(truffle.contains("new BytesCoercion(\"strlen\", \"text\", false, false, false)"));
     assertTrue(truffle.contains("new BytesCoercion(\"checksum\", \"bytes\", false, false, true)"));
     assertTrue(truffle.contains("new BytesCoercion(\"fill\", \"bytes\", false, true, true)"));
+    assertTrue(truffle.contains("return invoke(borrow_bytes.address(), borrow_bytes.length());"));
     assertTrue(
         truffle.contains(
-            "return CellApi.checksum(WordFactory.pointer(borrow_bytes.address()),"
-                + " borrow_bytes.length());"));
+            "        public static long invoke(long bytes, long count) {\n"
+                + "            return CellApi.checksum(WordFactory.pointer(bytes), count);\n"));
     assertTrue(
         truffle.contains(
             "int length_bytes = Carriers.length32(borrow_bytes.length(), true, this);"));
-    assertTrue(
-        truffle.contains(
-            "CellApi.fill(WordFactory.pointer(borrow_bytes.address()), length_bytes,"
-                + " value_value);"));
+    assertTrue(truffle.contains("invoke(borrow_bytes.address(), length_bytes, value_value);"));
+    assertTrue(truffle.contains("CellApi.fill(WordFactory.pointer(bytes), count, value);"));
     assertTrue(truffle.contains("super(\"fill\", 2);"), "length parameter is derived");
     assertTrue(truffle.contains("super(\"checksum\", 1);"));
     assertTrue(truffle.contains("borrow_bytes.release();"));
@@ -171,7 +177,7 @@ class TruffleCellsTest {
     int borrow = fill.indexOf("Borrow borrow_bytes = coerce_bytes.execute(arguments[0]);");
     assertTrue(coerce > 0 && borrow > coerce, "scalars coerce before any borrow is acquired");
     // Ownership: owners in, owners out.
-    assertTrue(truffle.contains("long created = CellApi.counterCreate(value_start).rawValue();"));
+    assertTrue(truffle.contains("long created = invoke(value_start);"));
     assertTrue(truffle.contains("if (created == 0) return Carriers.none();"));
     assertTrue(
         truffle.contains(
@@ -249,22 +255,26 @@ class TruffleCellsTest {
     assertTrue(
         truffle.contains(
             "@CompilerDirectives.TruffleBoundary\n"
-                + "        private static long call(long a0, long a1) {\n"
-                + "            return CellApi.sleepyAdd(a0, a1);"));
-    assertTrue(truffle.contains("return call(value_left, value_right);"));
+                + "        public static long invoke(long left, long right) {\n"
+                + "            return CellApi.sleepyAdd(left, right);"));
+    assertTrue(truffle.contains("return invoke(value_left, value_right);"));
     assertTrue(
         truffle.contains(
-            "private static long call(long a0) {\n"
-                + "            return CellApi.counterCreate(a0).rawValue();"));
-    assertTrue(truffle.contains("long created = call(value_start);"));
+            "@CompilerDirectives.TruffleBoundary\n"
+                + "        public static long invoke(long start) {\n"
+                + "            return CellApi.counterCreate(start).rawValue();"));
+    assertTrue(truffle.contains("long created = invoke(value_start);"));
     assertTrue(truffle.contains("DESTRUCTOR = counterCreate_Cell::destroy;"));
     assertTrue(
         truffle.contains(
             "private static void destroy(long address) {\n"
                 + "            CellApi.counterDestroy(WordFactory.pointer(address));"));
     // Leaves are untouched: they inline into compiled guest code on every fork.
-    assertTrue(truffle.contains("return CellApi.add(value_left, value_right);"));
-    assertFalse(truffle.contains("private static int call("));
+    assertTrue(
+        truffle.contains(
+            "         */\n"
+                + "        public static int invoke(int left, int right) {\n"
+                + "            return CellApi.add(left, right);"));
     String pointers =
         generate(
                 MODULE.replace(
@@ -277,14 +287,14 @@ class TruffleCellsTest {
                     + "  param flags type=u16\n"
                     + "end\n")
             .get("MynaTruffle.java");
-    assertTrue(pointers.contains("private static long call(long a0, long a1, short a2) {"));
+    assertTrue(pointers.contains("public static long invoke(long name, long mode, short flags) {"));
     assertTrue(
         pointers.contains(
-            "return MynaNative.open(WordFactory.pointer(a0), WordFactory.pointer(a1),"
-                + " a2).rawValue();"));
+            "return MynaNative.open(WordFactory.pointer(name), WordFactory.pointer(mode),"
+                + " flags).rawValue();"));
     assertTrue(
         pointers.contains(
-            "return Carriers.pointer(call(borrow_name.address(), address_mode, value_flags));"));
+            "return Carriers.pointer(invoke(borrow_name.address(), address_mode, value_flags));"));
   }
 
   @Test
@@ -302,21 +312,20 @@ class TruffleCellsTest {
     assertTrue(
         truffle.contains(
             "        @CompilerDirectives.TruffleBoundary\n"
-                + "        private static int call(int a0, int a1) {\n"
+                + "        public static int invoke(int left, int right) {\n"
                 + "            try {\n"
-                + "                return CellApiFFM.add(a0, a1);\n"
-                + "            } catch (Throwable failure) {\n"
-                + "                throw failed(failure);\n"
+                + "                return CellApiFFM.add(left, right);\n"
+                + "            } catch (Throwable $failure) {\n"
+                + "                throw failed($failure);\n"
                 + "            }\n"
                 + "        }\n"));
-    assertTrue(truffle.contains("return call(value_left, value_right);"));
-    assertFalse(truffle.contains("return CellApiFFM.add(value_left, value_right);"));
+    assertTrue(truffle.contains("return invoke(value_left, value_right);"));
     assertTrue(truffle.contains("CoercionPolicy.WRAP"));
     assertFalse(truffle.contains("CoercionPolicy.STRICT"));
-    assertTrue(truffle.contains("CellApiFFM.poke(MemorySegment.ofAddress(a0), a1);"));
-    assertTrue(truffle.contains("call(address_cell, value_value);"));
-    assertTrue(truffle.contains("return CellApiFFM.counterCreate(a0).address();"));
-    assertTrue(truffle.contains("long created = call(value_start);"));
+    assertTrue(truffle.contains("CellApiFFM.poke(MemorySegment.ofAddress(cell), value);"));
+    assertTrue(truffle.contains("invoke(address_cell, value_value);"));
+    assertTrue(truffle.contains("return CellApiFFM.counterCreate(start).address();"));
+    assertTrue(truffle.contains("long created = invoke(value_start);"));
     assertTrue(
         truffle.contains(
             "DESTRUCTOR = address -> { try {"
@@ -328,7 +337,12 @@ class TruffleCellsTest {
             "return NativeCellException.of(null, \"native call failed: \", failure);"));
     assertFalse(truffle.contains("WordFactory"));
     // Every FFM call is behind a boundary, leaf or not, whatever the transition mode.
-    assertFalse(truffle.contains("return CellApiFFM.sleepyAdd(value_"));
+    assertTrue(
+        truffle.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        public static long invoke(long left, long right) {\n"
+                + "            try {\n"
+                + "                return CellApiFFM.sleepyAdd(left, right);\n"));
     String empty =
         generate(
                 MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
@@ -352,7 +366,7 @@ class TruffleCellsTest {
     source.append("opaque Handle\nimport r_ptr return=ptr<Handle> error=no_failure\nend\n");
     source.append("callback Cb return=i32\nend\nimport r_fn return=fn<Cb> error=no_failure\nend\n");
     String truffle = generate(source.toString()).get("MynaTruffle.java");
-    assertTrue(truffle.contains("MynaNative.r_void();\n            return Carriers.none();"));
+    assertTrue(truffle.contains("            MynaNative.r_void();\n        }\n"));
     assertTrue(truffle.contains("return MynaNative.r_bool();"));
     assertTrue(truffle.contains("return (int) MynaNative.r_char();"));
     assertTrue(truffle.contains("return (int) MynaNative.r_i8();"));
@@ -367,8 +381,8 @@ class TruffleCellsTest {
     assertTrue(truffle.contains("return MynaNative.r_isize();"));
     assertTrue(truffle.contains("return (double) MynaNative.r_f32();"));
     assertTrue(truffle.contains("return MynaNative.r_f64();"));
-    assertTrue(truffle.contains("return Carriers.pointer(MynaNative.r_ptr().rawValue());"));
-    assertTrue(truffle.contains("return Carriers.pointer(MynaNative.r_fn().rawValue());"));
+    assertTrue(truffle.contains("return MynaNative.r_ptr().rawValue();"));
+    assertTrue(truffle.contains("return MynaNative.r_fn().rawValue();"));
     String ffm =
         generate(
                 source
@@ -376,11 +390,11 @@ class TruffleCellsTest {
                     .replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
             .get("MynaTruffle.java");
     assertTrue(ffm.contains("return MynaFFM.r_ptr().address();"));
-    assertTrue(ffm.contains("return Carriers.pointer(call());"));
+    assertTrue(ffm.contains("return Carriers.pointer(invoke());"));
     assertTrue(
         ffm.contains(
-            "                MynaFFM.r_void();\n            } catch (Throwable failure) {"));
-    assertTrue(ffm.contains("call();\n            return Carriers.none();"));
+            "                MynaFFM.r_void();\n            } catch (Throwable $failure) {"));
+    assertTrue(ffm.contains("invoke();\n            return Carriers.none();"));
   }
 
   /**
@@ -460,8 +474,7 @@ class TruffleCellsTest {
             "new IntegerCoercion(\"p_char\", \"c\", 8, true, CoercionPolicy.STRICT)"),
         "FFM cells on AAPCS64 Linux: char coerces as u8");
     assertTrue(
-        unsignedFfm.contains("return MynaFFM.r_char();")
-            && unsignedFfm.contains("return Carriers.u8(call());"),
+        unsignedFfm.contains("return Carriers.u8(MynaFFM.r_char());"),
         "FFM cells on AAPCS64 Linux: char return masks to 0..255");
   }
 
@@ -532,9 +545,7 @@ class TruffleCellsTest {
     assertTrue(
         narrow.contains(
             "int length_bytes = Carriers.length32(borrow_bytes.length(), false, this);"));
-    assertTrue(
-        narrow.contains(
-            "MynaNative.sum(length_bytes, WordFactory.pointer(borrow_bytes.address()))"));
+    assertTrue(narrow.contains("return invoke(length_bytes, borrow_bytes.address());"));
     assertTrue(
         narrow.contains("coerce_bytes.execute(arguments[0])"),
         "the buffer is the only guest argument");
@@ -682,12 +693,12 @@ class TruffleCellsTest {
     assertTrue(
         fill.contains(
             "int length_bytes = Carriers.length32(borrow_bytes.length(), true, this);\n"
-                + "                call(borrow_bytes.address(), length_bytes);"));
+                + "                invoke(borrow_bytes.address(), length_bytes);"));
     assertTrue(
         fill.contains(
             "            try {\n"
-                + "                MynaFFM.fill(MemorySegment.ofAddress(a0), a1);\n"
-                + "            } catch (Throwable failure) {"));
+                + "                MynaFFM.fill(MemorySegment.ofAddress(bytes), count);\n"
+                + "            } catch (Throwable $failure) {"));
   }
 
   @Test

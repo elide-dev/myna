@@ -126,6 +126,18 @@ public final class CellsMain {
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
+        // The static invoke entries take native carriers and raw addresses: from host code, which
+        // is compiled ahead of time and scalar-replaces nothing, a call allocates nothing.
+        if (CellApiTruffle.add_Cell.invoke(2, 3) != 5) throw new AssertionError("invoke add");
+        if (CellApiTruffle.lowByte_Cell.invoke(0x1ffL) != 0xff) throw new AssertionError("invoke lowByte");
+        long hostThread = Thread.currentThread().threadId();
+        long hostBefore = bean.getThreadAllocatedBytes(hostThread);
+        long hostSum = 0;
+        for (int i = 0; i < Repeat.CALLS; i++) hostSum += CellApiTruffle.checksum_Cell.invoke(lent.address(), 64) + CellApiTruffle.sleepyAdd_Cell.invoke(i, 1);
+        long hostAllocated = bean.getThreadAllocatedBytes(hostThread) - hostBefore;
+        if (hostSum != Repeat.CALLS * (64L * 3) + (long) Repeat.CALLS * (Repeat.CALLS + 1) / 2) throw new AssertionError("invoke sum " + hostSum);
+        if (hostAllocated > 1024) throw new AssertionError("invoke from host code allocated " + hostAllocated + " bytes");
+        System.out.println("invoke from host code allocated " + hostAllocated + " bytes over " + Repeat.CALLS + " calls");
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();

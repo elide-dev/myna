@@ -114,6 +114,8 @@ public abstract class Bodies extends NativeCell {
       case "direct-slab" -> new DirectSlab(name, false);
       case "direct-slab-step" -> new DirectSlab(name, true);
       case "hand-slab-step" -> new HandSlab(name);
+      case "invoke-slab" -> new InvokeSlab(name, false);
+      case "invoke-slab-step" -> new InvokeSlab(name, true);
       case "glue-slab-native" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), false);
       case "glue-slab-heap" -> new GlueSlab(name, new CellsTruffle.slab_Cell(), true);
       case "glue-slab-step-native" -> new GlueSlab(name, new CellsTruffle.slabStep_Cell(), false);
@@ -530,6 +532,28 @@ public abstract class Bodies extends NativeCell {
                 : Cells.slab(
                     WordFactory.pointer(data), SLAB_SIZE, WordFactory.pointer(aux), WordFactory.pointer(aux),
                     WordFactory.pointer(data), 3, -1, 7, 11, x);
+      return x;
+    }
+  }
+
+  /** The cells' static invoke entries: native carriers and raw addresses, no coercion. */
+  static final class InvokeSlab extends Bodies {
+    private final long data = nativePattern(SLAB_SIZE).address();
+    private final long aux = nativePattern(16).address();
+    private final boolean step;
+
+    InvokeSlab(String name, boolean step) {
+      super(name);
+      this.step = step;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++)
+        x =
+            step
+                ? CellsTruffle.slabStep_Cell.invoke(data, SLAB_SIZE, aux, aux, data, 3, -1, 7, 11, x)
+                : CellsTruffle.slab_Cell.invoke(data, SLAB_SIZE, aux, aux, data, 3, -1, 7, 11, x);
       return x;
     }
   }

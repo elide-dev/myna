@@ -35,7 +35,7 @@ SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ff
           'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
           'hand-step', 'glue-boundary-step']
 # A ten-argument entry (two byte buffers, two opaque pointers, integers), as a leaf and a transition.
-SLAB = ['direct-slab', 'glue-slab-native', 'glue-slab-heap', 'interop-slab-native', 'direct-slab-step', 'hand-slab-step',
+SLAB = ['direct-slab', 'invoke-slab', 'invoke-slab-step', 'glue-slab-native', 'glue-slab-heap', 'interop-slab-native', 'direct-slab-step', 'hand-slab-step',
         'glue-slab-step-native', 'glue-boundary-slab-step-native', 'interop-slab-step-native']
 SLAB_DELTA = 256 + 7 + 7 + 3 - 1 + 7 + 11 + 2
 # Pinning one heap array by hand (behind a boundary, and visible to partial evaluation) against the

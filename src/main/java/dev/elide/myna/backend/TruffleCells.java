@@ -323,71 +323,96 @@ public final class TruffleCells implements Backend {
         arguments.set(arguments.indexOf(null), length);
       }
     }
-    // A transitioning call in boundary mode, and every FFM call, sits in a static method behind a
-    // Truffle boundary. FFM bindings initialize at run time and invoke a method handle, which
-    // runtime compilation cannot inline: called from the cell body, they would keep the whole
-    // cell out of compiled code, coercions included.
+    // Every cell but a destroy has a static invoke: the binding call with native carriers and raw
+    // addresses, which the cell body calls after coercing and which host code may call directly.
+    // A transitioning call in boundary mode, and every FFM call, puts it behind a Truffle
+    // boundary. FFM bindings initialize at run time and invoke a method handle, which runtime
+    // compilation cannot inline: called from the cell body, they would keep the whole cell out of
+    // compiled code, coercions included.
     boolean boundary =
         cell.destroys() == null
             && (ffm
                 || (!Seam.nativeLeaf(f) && config.transitions() == TruffleTransitions.BOUNDARY));
-    String call = bindings + "." + f.name() + "(" + String.join(", ", arguments) + ")";
-    var boundaryMethod = new StringBuilder();
-    if (boundary) {
-      // Pointers cross the boundary as addresses; the boundary method rebuilds the words.
-      imports.add("com.oracle.truffle.api.CompilerDirectives");
+    String call = null;
+    var invokeMethod = new StringBuilder();
+    if (cell.destroys() == null) {
+      // Pointers cross as addresses; invoke rebuilds the words or segments.
       String wrapper = ffm ? "MemorySegment.ofAddress(" : "WordFactory.pointer(";
       var parameters = new ArrayList<String>();
       var forwarded = new ArrayList<String>();
       var inner = new ArrayList<String>();
       for (int n = 0; n < arguments.size(); n++) {
         String argument = arguments.get(n);
-        String name = "a" + n;
+        String name = f.parameters().get(n).name();
         boolean word = argument.startsWith(wrapper);
-        String carrier = word ? "long" : carrierOf(f, n);
-        parameters.add(carrier + " " + name);
+        parameters.add((word ? "long" : carrierOf(f, n)) + " " + name);
         forwarded.add(
             word ? argument.substring(wrapper.length(), argument.length() - 1) : argument);
         inner.add(word ? wrapper + name + ")" : name);
       }
-      String returns = cell.creates() != null ? "long" : boundaryReturn(f.returns());
-      String invoke =
+      boolean address =
+          cell.creates() != null
+              || f.returns() instanceof Pointer
+              || f.returns() instanceof FunctionPointer;
+      String raw =
           bindings
               + "."
               + f.name()
               + "("
               + String.join(", ", inner)
               + ")"
-              + (cell.creates() != null
-                      || f.returns() instanceof Pointer
-                      || f.returns() instanceof FunctionPointer
-                  ? (ffm ? ".address()" : ".rawValue()")
-                  : "");
-      String statement = (returns.equals("void") ? "" : "return ") + invoke + ";\n";
-      boundaryMethod
+              + (address ? (ffm ? ".address()" : ".rawValue()") : "");
+      String returns;
+      String value;
+      if (address) {
+        returns = "long";
+        value = raw;
+      } else if (f.returns() == Scalar.VOID) {
+        returns = "void";
+        value = raw;
+      } else {
+        returns = typed((Scalar) f.returns())[0];
+        value = converted((Scalar) f.returns(), raw, charUnsigned);
+      }
+      String statement = (returns.equals("void") ? "" : "return ") + value + ";\n";
+      invokeMethod
+          .append(
+              "        /**\n"
+                  + "         * The call with native carriers and raw addresses: no coercion, no"
+                  + " borrow and no\n"
+                  + "         * allocation. The caller keeps every address valid for the call and"
+                  + " passes any length\n"
+                  + "         * itself.")
           .append(
               ffm
-                  ? "        /** The FFM downcall behind a Truffle boundary; linkage failures"
-                      + " become guest errors. */\n"
-                  : "        /** Transitioning call behind a Truffle boundary: compiled on every"
-                      + " fork, never inlined. */\n")
-          .append("        @CompilerDirectives.TruffleBoundary\n")
-          .append("        private static ")
+                  ? " The FFM downcall sits behind a Truffle boundary; linkage failures become\n"
+                      + "         * guest errors.\n"
+                  : boundary
+                      ? " The transitioning call sits behind a Truffle boundary: compiled on\n"
+                          + "         * every fork, never inlined.\n"
+                      : "\n")
+          .append("         */\n");
+      if (boundary) {
+        imports.add("com.oracle.truffle.api.CompilerDirectives");
+        invokeMethod.append("        @CompilerDirectives.TruffleBoundary\n");
+      }
+      invokeMethod
+          .append("        public static ")
           .append(returns)
-          .append(" call(")
+          .append(" invoke(")
           .append(String.join(", ", parameters))
           .append(") {\n");
       if (ffm)
         // FFM bindings throw Throwable; the handler wraps only the call.
-        boundaryMethod
+        invokeMethod
             .append("            try {\n                ")
             .append(statement)
-            .append("            } catch (Throwable failure) {\n")
-            .append("                throw failed(failure);\n")
+            .append("            } catch (Throwable $failure) {\n")
+            .append("                throw failed($failure);\n")
             .append("            }\n");
-      else boundaryMethod.append("            ").append(statement);
-      boundaryMethod.append("        }\n");
-      call = "call(" + String.join(", ", forwarded) + ")";
+      else invokeMethod.append("            ").append(statement);
+      invokeMethod.append("        }\n");
+      call = "invoke(" + String.join(", ", forwarded) + ")";
     }
     var result = new StringBuilder(prelude);
     if (cell.destroys() != null) {
@@ -411,7 +436,7 @@ public final class TruffleCells implements Backend {
       imports.add(RUNTIME + "NativeResource");
       result
           .append("            long created = ")
-          .append(boundary ? call : call + ".rawValue()")
+          .append(call)
           .append(";\n")
           .append("            if (created == 0) return Carriers.none();\n")
           .append("            return new NativeResource(")
@@ -427,18 +452,9 @@ public final class TruffleCells implements Backend {
             .append(call)
             .append(";\n            return Carriers.none();\n");
       } else {
-        String invoke = call;
         if (r instanceof Pointer || r instanceof FunctionPointer)
-          result
-              .append("            return Carriers.pointer(")
-              .append(invoke)
-              .append(boundary ? "" : ".rawValue()")
-              .append(");\n");
-        else
-          result
-              .append("            return ")
-              .append(converted((Scalar) r, invoke, charUnsigned))
-              .append(";\n");
+          result.append("            return Carriers.pointer(").append(call).append(");\n");
+        else result.append("            return ").append(call).append(";\n");
       }
     }
     // Scalars coerce first; each borrow then opens its own try, so a later failure releases every
@@ -501,7 +517,7 @@ public final class TruffleCells implements Backend {
             .append(";\n        }\n");
       }
     }
-    out.append(boundaryMethod)
+    out.append(invokeMethod)
         .append("        public ")
         .append(f.name())
         .append("_Cell() {\n            super(")

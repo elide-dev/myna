@@ -87,6 +87,14 @@ public final class CellApiTruffle {
     public static final class add_Cell extends NativeCell {
         @Node.Child private IntegerCoercion coerce_left;
         @Node.Child private IntegerCoercion coerce_right;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static int invoke(int left, int right) {
+            return CellApi.add(left, right);
+        }
         public add_Cell() {
             super("add", 2);
             this.coerce_left = new IntegerCoercion("add", "left", 32, false, CoercionPolicy.STRICT);
@@ -101,12 +109,20 @@ public final class CellApiTruffle {
             checkArity(arguments);
             int value_left = (int) coerce_left.execute(arguments[0]);
             int value_right = (int) coerce_right.execute(arguments[1]);
-            return CellApi.add(value_left, value_right);
+            return invoke(value_left, value_right);
         }
     }
     /** Leaf import cells_checksum through the Native Image binding. */
     public static final class checksum_Cell extends NativeCell {
         @Node.Child private BytesCoercion coerce_bytes;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long bytes, long count) {
+            return CellApi.checksum(WordFactory.pointer(bytes), count);
+        }
         public checksum_Cell() {
             super("checksum", 1);
             this.coerce_bytes = new BytesCoercion("checksum", "bytes", false, false, true);
@@ -120,7 +136,7 @@ public final class CellApiTruffle {
             checkArity(arguments);
             Borrow borrow_bytes = coerce_bytes.execute(arguments[0]);
             try {
-                return CellApi.checksum(WordFactory.pointer(borrow_bytes.address()), borrow_bytes.length());
+                return invoke(borrow_bytes.address(), borrow_bytes.length());
             } finally {
                 borrow_bytes.release();
             }
@@ -130,6 +146,14 @@ public final class CellApiTruffle {
     public static final class counterCreate_Cell extends NativeCell {
         @Node.Child private IntegerCoercion coerce_start;
         private static final NativeResource.Destructor DESTRUCTOR = address -> CellApi.counterDestroy(WordFactory.pointer(address));
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long start) {
+            return CellApi.counterCreate(start).rawValue();
+        }
         public counterCreate_Cell() {
             super("counterCreate", 1);
             this.coerce_start = new IntegerCoercion("counterCreate", "start", 64, false, CoercionPolicy.STRICT);
@@ -138,7 +162,7 @@ public final class CellApiTruffle {
         public Object execute(Object[] arguments) {
             checkArity(arguments);
             long value_start = coerce_start.execute(arguments[0]);
-            long created = CellApi.counterCreate(value_start).rawValue();
+            long created = invoke(value_start);
             if (created == 0) return Carriers.none();
             return new NativeResource("Counter", created, DESTRUCTOR, Thread.currentThread());
         }
@@ -160,6 +184,14 @@ public final class CellApiTruffle {
     /** Leaf import cells_counter_next through the Native Image binding. */
     public static final class counterNext_Cell extends NativeCell {
         @Node.Child private PointerCoercion coerce_counter;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long counter) {
+            return CellApi.counterNext(WordFactory.pointer(counter));
+        }
         public counterNext_Cell() {
             super("counterNext", 1);
             this.coerce_counter = new PointerCoercion("counterNext", "counter", false, false);
@@ -172,13 +204,21 @@ public final class CellApiTruffle {
         public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_counter = coerce_counter.execute(arguments[0]);
-            return CellApi.counterNext(WordFactory.pointer(address_counter));
+            return invoke(address_counter);
         }
     }
     /** Leaf import cells_fill through the Native Image binding. */
     public static final class fill_Cell extends NativeCell {
         @Node.Child private BytesCoercion coerce_bytes;
         @Node.Child private IntegerCoercion coerce_value;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static void invoke(long bytes, int count, byte value) {
+            CellApi.fill(WordFactory.pointer(bytes), count, value);
+        }
         public fill_Cell() {
             super("fill", 2);
             this.coerce_bytes = new BytesCoercion("fill", "bytes", false, true, true);
@@ -191,7 +231,7 @@ public final class CellApiTruffle {
             Borrow borrow_bytes = coerce_bytes.execute(arguments[0]);
             try {
                 int length_bytes = Carriers.length32(borrow_bytes.length(), true, this);
-                CellApi.fill(WordFactory.pointer(borrow_bytes.address()), length_bytes, value_value);
+                invoke(borrow_bytes.address(), length_bytes, value_value);
                 return Carriers.none();
             } finally {
                 borrow_bytes.release();
@@ -201,6 +241,14 @@ public final class CellApiTruffle {
     /** Leaf import cells_low_byte through the Native Image binding. */
     public static final class lowByte_Cell extends NativeCell {
         @Node.Child private IntegerCoercion coerce_value;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static int invoke(long value) {
+            return Carriers.u8(CellApi.lowByte(value));
+        }
         public lowByte_Cell() {
             super("lowByte", 1);
             this.coerce_value = new IntegerCoercion("lowByte", "value", 64, false, CoercionPolicy.STRICT);
@@ -213,12 +261,20 @@ public final class CellApiTruffle {
         public int executeInt(Object[] arguments) {
             checkArity(arguments);
             long value_value = coerce_value.execute(arguments[0]);
-            return Carriers.u8(CellApi.lowByte(value_value));
+            return invoke(value_value);
         }
     }
     /** Leaf import cells_peek through the Native Image binding. */
     public static final class peek_Cell extends NativeCell {
         @Node.Child private PointerCoercion coerce_cell;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long cell) {
+            return CellApi.peek(WordFactory.pointer(cell));
+        }
         public peek_Cell() {
             super("peek", 1);
             this.coerce_cell = new PointerCoercion("peek", "cell", false, false);
@@ -231,13 +287,21 @@ public final class CellApiTruffle {
         public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_cell = coerce_cell.execute(arguments[0]);
-            return CellApi.peek(WordFactory.pointer(address_cell));
+            return invoke(address_cell);
         }
     }
     /** Leaf import cells_poke through the Native Image binding. */
     public static final class poke_Cell extends NativeCell {
         @Node.Child private PointerCoercion coerce_cell;
         @Node.Child private IntegerCoercion coerce_value;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static void invoke(long cell, long value) {
+            CellApi.poke(WordFactory.pointer(cell), value);
+        }
         public poke_Cell() {
             super("poke", 2);
             this.coerce_cell = new PointerCoercion("poke", "cell", false, false);
@@ -248,13 +312,21 @@ public final class CellApiTruffle {
             checkArity(arguments);
             long address_cell = coerce_cell.execute(arguments[0]);
             long value_value = coerce_value.execute(arguments[1]);
-            CellApi.poke(WordFactory.pointer(address_cell), value_value);
+            invoke(address_cell, value_value);
             return Carriers.none();
         }
     }
     /** Leaf import cells_raw_length through the Native Image binding. */
     public static final class rawLength_Cell extends NativeCell {
         @Node.Child private PointerCoercion coerce_text;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long text) {
+            return CellApi.rawLength(WordFactory.pointer(text));
+        }
         public rawLength_Cell() {
             super("rawLength", 1);
             this.coerce_text = new PointerCoercion("rawLength", "text", true, true);
@@ -267,13 +339,21 @@ public final class CellApiTruffle {
         public long executeLong(Object[] arguments) {
             checkArity(arguments);
             long address_text = coerce_text.execute(arguments[0]);
-            return CellApi.rawLength(WordFactory.pointer(address_text));
+            return invoke(address_text);
         }
     }
     /** Leaf import cells_scale through the Native Image binding. */
     public static final class scale_Cell extends NativeCell {
         @Node.Child private FloatingCoercion coerce_value;
         @Node.Child private FloatingCoercion coerce_factor;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static double invoke(float value, double factor) {
+            return CellApi.scale(value, factor);
+        }
         public scale_Cell() {
             super("scale", 2);
             this.coerce_value = new FloatingCoercion("scale", "value");
@@ -288,13 +368,21 @@ public final class CellApiTruffle {
             checkArity(arguments);
             float value_value = (float) coerce_value.execute(arguments[0]);
             double value_factor = coerce_factor.execute(arguments[1]);
-            return CellApi.scale(value_value, value_factor);
+            return invoke(value_value, value_factor);
         }
     }
     /** Transitioning import cells_sleepy_add through the Native Image binding. */
     public static final class sleepyAdd_Cell extends NativeCell {
         @Node.Child private IntegerCoercion coerce_left;
         @Node.Child private IntegerCoercion coerce_right;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long left, long right) {
+            return CellApi.sleepyAdd(left, right);
+        }
         public sleepyAdd_Cell() {
             super("sleepyAdd", 2);
             this.coerce_left = new IntegerCoercion("sleepyAdd", "left", 64, false, CoercionPolicy.STRICT);
@@ -309,12 +397,20 @@ public final class CellApiTruffle {
             checkArity(arguments);
             long value_left = coerce_left.execute(arguments[0]);
             long value_right = coerce_right.execute(arguments[1]);
-            return CellApi.sleepyAdd(value_left, value_right);
+            return invoke(value_left, value_right);
         }
     }
     /** Leaf import cells_strlen through the Native Image binding. */
     public static final class strlen_Cell extends NativeCell {
         @Node.Child private BytesCoercion coerce_text;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(long text) {
+            return CellApi.strlen(WordFactory.pointer(text));
+        }
         public strlen_Cell() {
             super("strlen", 1);
             this.coerce_text = new BytesCoercion("strlen", "text", false, false, false);
@@ -328,7 +424,7 @@ public final class CellApiTruffle {
             checkArity(arguments);
             Borrow borrow_text = coerce_text.execute(arguments[0]);
             try {
-                return CellApi.strlen(WordFactory.pointer(borrow_text.address()));
+                return invoke(borrow_text.address());
             } finally {
                 borrow_text.release();
             }
@@ -340,6 +436,14 @@ public final class CellApiTruffle {
         @Node.Child private IntegerCoercion coerce_medium;
         @Node.Child private IntegerCoercion coerce_wide;
         @Node.Child private BooleanCoercion coerce_flag;
+        /**
+         * The call with native carriers and raw addresses: no coercion, no borrow and no
+         * allocation. The caller keeps every address valid for the call and passes any length
+         * itself.
+         */
+        public static long invoke(byte small, short medium, int wide, boolean flag) {
+            return CellApi.widen(small, medium, wide, flag);
+        }
         public widen_Cell() {
             super("widen", 4);
             this.coerce_small = new IntegerCoercion("widen", "small", 8, true, CoercionPolicy.STRICT);
@@ -358,7 +462,7 @@ public final class CellApiTruffle {
             short value_medium = (short) coerce_medium.execute(arguments[1]);
             int value_wide = (int) coerce_wide.execute(arguments[2]);
             boolean value_flag = coerce_flag.execute(arguments[3]);
-            return CellApi.widen(value_small, value_medium, value_wide, value_flag);
+            return invoke(value_small, value_medium, value_wide, value_flag);
         }
     }
 }
