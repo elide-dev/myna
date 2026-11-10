@@ -7,6 +7,7 @@ import org.graalvm.nativeimage.hosted.RuntimeForeignAccess;
 
 public final class MynaForeignFeature implements Feature {
     @Override public void duringSetup(DuringSetupAccess access) {
+        RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM");
         RuntimeForeignAccess.registerForDowncall(MynaFFM.classify_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$classify_Downcall");
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.myna.generated.MynaFFM$classify_Binding");

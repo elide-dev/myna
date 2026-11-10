@@ -253,6 +253,41 @@ It rejects smoke runs and mismatched workload sources, hardware, runtime, compil
 iteration counts or case sets. Changes are advisory percentages; timing thresholds
 belong on controlled runners, not shared CI hosts.
 
+### Paired performance gates
+
+Comparisons between runs stay advisory, but within one run, every generated binding must keep
+pace with its matched handwritten or direct call. Run `benchmarks/gate.py` on the controlled x86-64
+benchmark host after each floor, comparison and cells run, before results are checked in:
+`python3 benchmarks/gate.py comparison build/comparison/results.json` (or `floor`, `cells`). Each
+pair calls the same native function under the same transition contract, in fresh processes
+interleaved on one host, so host speed and drift cancel out. A pair fails when the generated case's
+median of process medians exceeds its reference's by more than 2% (`--tolerance`), and the cases
+also separate: with each side's fastest and slowest process set aside, every remaining generated
+process is slower. A single outlier process can neither fail the gate nor hide a gap. The hosted
+CI benchmark workflows stay advisory and do not run the gate.
+
+Each reference has the same structure as the generated code it gates. A generated library
+binding is an object that owns its library's symbol segments, so its reference is a handwritten
+object holding the segment in a final field (`manual-instance-library-ffm`,
+`manual-instance-critical-ffm`); reaching an instance costs one dependent load more than a static
+handle. The generated static entries are gated against static handwritten handles.
+
+A pair with a known, explained gap carries its own allowance and reason in `gate.py`. The
+allowance keeps that gap from growing; lower it when the gap is fixed. No pair currently needs
+one.
+
+The gate exists because the generated typed critical AOT FFM call was 15% slower than the
+handwritten one, and nothing failed. The generated library binding held each symbol address in an
+`Optional`, and in Native Image every call paid for an extra dependent load and a type check. The
+same investigation found the static AOT FFM entry 3.3% behind: every call checked two
+run-time-initialized classes and dispatched on the lookup segment's scope. The generator now
+initializes the descriptor-only outer class at build time and passes the `loaderLookup` address as
+`MemorySegment.ofAddress`, whose global scope is known when compiling. The static entry now beats
+the handwritten unbound handle (4.82 against 5.56 ns/call on Linux x86-64). Static entries for
+native leaves are critical downcalls (0.964 against 1.392 ns/call for a handwritten critical
+handle), and FFM Truffle cells over leaf imports, which call them, dropped from 5.83 to 1.60
+ns/call, level with native cells.
+
 ThinLTO and full LTO tests retain before/after optimized C and Rust IR, final
 linker IR, disassembly and artifact/tool hashes under
 `build/reports/thinlto/<target>/` and `build/reports/fulllto/<target>/`.
@@ -295,12 +330,13 @@ comparison and [operations](operations.md) for symbol-sidecar publication.
 
 ## Performance charts
 
-The historical v0.7.2 comparison chart uses `benchmarks/comparison/baselines/hosted-arm64-0.7.2.json`, a five-process Linux ARM run with CPU features and source hashes verified against release commit `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. Its raw process samples and report are checked in. Source/build identities are retained rather than rewritten to pretend the data came from a later commit.
+The README charts come from one November 10, 2026 run on a Linux x86-64 workstation; [the evidence record](../benchmarks/comparison/evidence/readme-2026-11-10/README.md) lists their inputs, provenance and the commands for all three. The earlier v0.7.2 hosted ARM comparison, `benchmarks/comparison/baselines/hosted-arm64-0.7.2.json`, stays checked in with its raw process samples and source hashes verified against release commit `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. Source/build identities are retained rather than rewritten to pretend the data came from a later commit.
 
 ```sh
 python3 -m venv build/charts-venv
 build/charts-venv/bin/pip install --require-hashes -r benchmarks/comparison/requirements.txt
-build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/hosted-arm64-0.7.2.json
+build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.json \
+  --host 'Threadripper PRO 9965WX · Linux x86-64' --date 2026-11-10
 python3 scripts/check-hygiene.py
 ```
 

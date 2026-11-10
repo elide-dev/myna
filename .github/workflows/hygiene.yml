@@ -31,13 +31,16 @@ jobs:
       - run: python3 -m unittest discover -s tests -p test_ci_changes.py
       - run: python3 -m unittest discover -s tests -p test_publish_symbols.py
       - run: python3 -m unittest discover -s tests -p test_build_policy.py
+      - run: python3 -m unittest discover -s tests -p test_gate.py
       - name: Render performance charts from retained measurements
         run: |
           python3 -m venv build/charts-venv
           build/charts-venv/bin/pip install --require-hashes -r benchmarks/comparison/requirements.txt
-          build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/hosted-arm64-0.7.2.json --output build/charts/svm-boundaries
+          host='Threadripper PRO 9965WX · Linux x86-64'
+          build/charts-venv/bin/python benchmarks/comparison/abi2-chart.py benchmarks/comparison/baselines/default-leaf-2026-11-10-linux-x86_64.json --host "$host" --date 2026-11-10 --output build/charts/default-leaf
+          build/charts-venv/bin/python benchmarks/comparison/chart.py benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.json --host "$host" --date 2026-11-10 --output build/charts/svm-boundaries
+          build/charts-venv/bin/python benchmarks/cells/chart.py benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.json --host "$host" --date 2026-11-10 --output build/charts/truffle-cells
           build/charts-venv/bin/python benchmarks/comparison/floor-chart.py --output build/charts/leaf-floor
-          build/charts-venv/bin/python benchmarks/comparison/abi2-chart.py --output build/charts/default-leaf
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: performance-charts

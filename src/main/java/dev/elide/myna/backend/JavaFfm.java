@@ -152,11 +152,15 @@ public final class JavaFfm implements Backend {
           .append("    private static final class ")
           .append(f.name())
           .append("_Binding {\n")
-          .append("        static final MemorySegment ADDRESS = SymbolLookup.loaderLookup().find(")
+          // loaderLookup symbols stay loaded while this class's loader is reachable, so the raw
+          // address is as live as the segment. Passing MemorySegment.ofAddress gives the downcall
+          // a segment whose global scope is known when compiling, which removes the per-call
+          // scope dispatch and liveness check a lookup segment needs.
+          .append("        static final long ADDRESS = SymbolLookup.loaderLookup().find(")
           .append(prepared.symbol())
           .append(").orElseThrow(() -> new UnsatisfiedLinkError(")
           .append(prepared.symbol())
-          .append("));\n    }\n")
+          .append(")).address();\n    }\n")
           .append("    public static ")
           .append(carrier)
           .append(' ')
@@ -168,11 +172,15 @@ public final class JavaFfm implements Backend {
       out.append(ffm)
           .append('.')
           .append(f.name())
-          .append("_Downcall.HANDLE.invokeExact(")
+          // A binding ABI 2 leaf is bounded, nonblocking and never re-enters Java: exactly the
+          // contract of a critical downcall, which skips the thread-state transition. This is the
+          // FFM counterpart of the direct Native Image leaf.
+          .append(prepared.leaf() ? "_CriticalDowncall" : "_Downcall")
+          .append(".HANDLE.invokeExact(MemorySegment.ofAddress(")
           .append(ffm)
           .append('.')
           .append(f.name())
-          .append("_Binding.ADDRESS")
+          .append("_Binding.ADDRESS)")
           .append(prepared.arguments().isEmpty() ? "" : ", ")
           .append(prepared.arguments())
           .append(");\n    }\n");
@@ -272,9 +280,9 @@ public final class JavaFfm implements Backend {
         .append(" {\n");
     for (FfmFunction function : functions) {
       Function f = function.function();
-      out.append("        private final java.util.Optional<MemorySegment> ")
-          .append(f.name())
-          .append("_address;\n");
+      // A typed, nullable field keeps the per-call path to one load and a null check; an
+      // Optional adds a dependent load and, in Native Image, a type check on every call.
+      out.append("        private final MemorySegment ").append(f.name()).append("_address;\n");
     }
     out.append("        public ")
         .append(cls)
@@ -290,7 +298,7 @@ public final class JavaFfm implements Backend {
           .append(f.name())
           .append("_address = lookup.find(")
           .append(function.symbol())
-          .append(");\n");
+          .append(").orElse(null);\n");
     }
     out.append("        }\n");
     for (FfmFunction function : functions) {
@@ -302,7 +310,11 @@ public final class JavaFfm implements Backend {
           .append(f.name())
           .append('(')
           .append(function.parameters())
-          .append(") throws Throwable {\n            ");
+          .append(") throws Throwable {\n            if (this.")
+          .append(f.name())
+          .append("_address == null) throw new UnsatisfiedLinkError(")
+          .append(function.symbol())
+          .append(");\n            ");
       if (f.returns() != Scalar.VOID) out.append("return (").append(carrier).append(") ");
       out.append(ffm)
           .append('.')
@@ -310,9 +322,7 @@ public final class JavaFfm implements Backend {
           .append(critical ? "_CriticalDowncall" : "_Downcall")
           .append(".HANDLE.invokeExact(this.")
           .append(f.name())
-          .append("_address.orElseThrow(() -> new UnsatisfiedLinkError(")
-          .append(function.symbol())
-          .append("))")
+          .append("_address")
           .append(function.arguments().isEmpty() ? "" : ", ")
           .append(function.arguments())
           .append(");\n        }\n");

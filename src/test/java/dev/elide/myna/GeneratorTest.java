@@ -45,6 +45,18 @@ class GeneratorTest {
         generate(leaf.replace("native_leaf=true", "native_leaf=false"))
             .get("MynaNative.java")
             .contains("NO_TRANSITION"));
+    // The FFM static entry follows the same contract: leaves skip the transition as critical
+    // downcalls, and an explicit normal transition keeps the transitioning adapter.
+    assertTrue(
+        output
+            .get("MynaFFM.java")
+            .contains(
+                "MynaFFM.inspect_CriticalDowncall.HANDLE.invokeExact(MemorySegment.ofAddress("));
+    String normal =
+        generate(leaf.replace("native_leaf=true", "native_leaf=false")).get("MynaFFM.java");
+    assertTrue(
+        normal.contains("MynaFFM.inspect_Downcall.HANDLE.invokeExact(MemorySegment.ofAddress("));
+    assertFalse(normal.contains("inspect_CriticalDowncall"));
     String heuristic = leaf.replace("explicit_contract", "heuristic");
     assertThrows(IllegalArgumentException.class, () -> generate(heuristic));
     assertFalse(
@@ -218,7 +230,9 @@ class GeneratorTest {
                 + " throws Throwable {"),
         ffm);
     assertTrue(
-        ffm.contains("invokeExact(MynaFFM.put_Binding.ADDRESS, a, b & 0xff, c & 0xffff, d, e, f)"),
+        ffm.contains(
+            "invokeExact(MemorySegment.ofAddress(MynaFFM.put_Binding.ADDRESS), a, b & 0xff, c &"
+                + " 0xffff, d, e, f)"),
         ffm);
     // Signed (i8/i16), bool, 32-bit parameters, isolate, and returns are NOT widened or masked.
     assertTrue(
@@ -230,7 +244,10 @@ class GeneratorTest {
         ffm.contains(
             "public static short get(MemorySegment isolate_thread, short a) throws Throwable {"),
         ffm);
-    assertTrue(ffm.contains("invokeExact(MynaFFM.get_Binding.ADDRESS, isolate_thread, a)"), ffm);
+    assertTrue(
+        ffm.contains(
+            "invokeExact(MemorySegment.ofAddress(MynaFFM.get_Binding.ADDRESS), isolate_thread, a)"),
+        ffm);
     assertFalse(ffm.contains("a & 0xff"), ffm);
     assertFalse(ffm.contains("a & 0xffff"), ffm);
     assertFalse(ffm.contains("JAVA_CHAR"), ffm);
@@ -802,13 +819,16 @@ class GeneratorTest {
     assertTrue(
         ffm.contains(
             "return (long)"
-                + " MynaFFM.inspect_Downcall.HANDLE.invokeExact(MynaFFM.inspect_Binding.ADDRESS,"
-                + " value)"));
-    assertTrue(ffm.contains("static final MemorySegment ADDRESS = SymbolLookup.loaderLookup()"));
+                + " MynaFFM.inspect_CriticalDowncall.HANDLE.invokeExact("
+                + "MemorySegment.ofAddress(MynaFFM.inspect_Binding.ADDRESS), value)"));
+    assertTrue(ffm.contains("static final long ADDRESS = SymbolLookup.loaderLookup()"));
+    assertFalse(
+        ffm.contains("MynaFFM.inspect_Downcall.HANDLE.invokeExact(MemorySegment.ofAddress("));
     assertTrue(ffm.contains("downcallHandle(MynaFFM.inspect_DESCRIPTOR)"));
     assertFalse(ffm.contains("invokeWithArguments"));
     String feature = output.get("MynaForeignFeature.java");
     assertTrue(feature.contains("duringSetup"));
+    assertTrue(feature.contains("initializeAtBuildTime(\"dev.elide.myna.generated.MynaFFM\");"));
     assertTrue(
         feature.contains(
             "initializeAtBuildTime(\"dev.elide.myna.generated.MynaFFM$inspect_Downcall\")"));
