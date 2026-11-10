@@ -1,9 +1,9 @@
 {
-  "benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.json": "3900c1acf3c2bee68ef2dd6ae60d5792a44ec8a02f72acbde31bb2f3b23d6ec1",
-  "benchmarks/cells/chart.py": "62a007636c87285e9c0419745d9b50310968382e031f8b069323cd6f6f880bfe",
+  "benchmarks/cells/baselines/unclemax-linux-x86_64-2026-11-10.json": "500a12a4cc64ba0d9a2c71358d126cf18c56e5fcfd29924924e6d1b7207ae835",
+  "benchmarks/cells/chart.py": "6ef1856e03da13e2ef9d0bec4f50a099ced027353c0ae1fa3981df241d3a3059",
   "benchmarks/comparison/brand.py": "209ad7b1382c36ec39ea90f9030f2fb664016e04a06e455660fb20b44e1024ab",
   "benchmarks/comparison/fonts.json": "44170183b8757c680f94ebd6487f7700b9bae4fe0b70370072860dc9deea1751",
   "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
-  "docs/charts/truffle-cells.svg": "eae34037ab9708663867282c948641745b5f062ad383b98036cdd68d23f5875f",
-  "docs/charts/truffle-cells.png": "302ee26c0266fb5b88375dd3289043905143b43988477b1a1cba12c03f175b39"
+  "docs/charts/truffle-cells.svg": "f39b443932c70b0122fa1fa4bb463882d2df2d755e54ae845167ccb601d4de25",
+  "docs/charts/truffle-cells.png": "f22dafdb47826a861d044b4f55234d24ebc422df50509297f5b5b8d07f0083f0"
 }

@@ -286,8 +286,10 @@ same investigation found the static AOT FFM entry 3.3% behind: every call checke
 run-time-initialized classes and dispatched on the lookup segment's scope. The generator now
 initializes the descriptor-only outer class at build time and passes the `loaderLookup` address as
 `MemorySegment.ofAddress`, whose global scope is known when compiling. The static entry now beats
-the handwritten unbound handle (4.87 against 5.58 ns/call on Linux x86-64). FFM Truffle cells,
-which call that entry, dropped from 5.83 to 5.09 ns/call, equal to the direct FFM call.
+the handwritten unbound handle (4.82 against 5.56 ns/call on Linux x86-64). Static entries for
+native leaves are critical downcalls (0.993 against 1.391 ns/call for a handwritten critical
+handle), and FFM Truffle cells over leaf imports, which call them, dropped from 5.83 to 1.60
+ns/call, level with native cells.
 
 ThinLTO and full LTO tests retain before/after optimized C and Rust IR, final
 linker IR, disassembly and artifact/tool hashes under

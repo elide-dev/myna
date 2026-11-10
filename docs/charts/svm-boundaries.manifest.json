@@ -1,9 +1,9 @@
 {
-  "benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.json": "a65fea0fffe0c5f066dd12628317c0f484fcd9865effb847444991141971b825",
-  "benchmarks/comparison/chart.py": "a9a6135dbf31c4e55e935b0a26a6b17d4b0411a86a517b7b5a5e30bb88ae3a3d",
+  "benchmarks/comparison/baselines/scalar-2026-11-10-linux-x86_64.json": "d873f53a933f87801b4edac2de194f203b7865680f5c77959d45b3a1970571a7",
+  "benchmarks/comparison/chart.py": "c1ff0756b799a9a70b6744e4f57c2daf0e57dc382455fea7d64d993122e19a5b",
   "benchmarks/comparison/brand.py": "209ad7b1382c36ec39ea90f9030f2fb664016e04a06e455660fb20b44e1024ab",
   "benchmarks/comparison/fonts.json": "44170183b8757c680f94ebd6487f7700b9bae4fe0b70370072860dc9deea1751",
   "benchmarks/comparison/requirements.txt": "7a051527a28dc5af2f676240ed1570d4de52078edcd7831fa01aeab20b882833",
-  "docs/charts/svm-boundaries.svg": "4d51a194778eafce957dcbe4714ba269c7b5e18175adabee57399563abb9e1da",
-  "docs/charts/svm-boundaries.png": "89a05da95a74733ee6f94a351b04d3606880474bfd18c257cee36c6879c9f27c"
+  "docs/charts/svm-boundaries.svg": "1e28db07d122f9fdae35930a9de419155c5e02b983c2a80a4962fd91d1cdcba3",
+  "docs/charts/svm-boundaries.png": "7fb4aebcdb316960eb6c2bd96827eb3d2eda787b8920e3695aa61126fa945245"
 }

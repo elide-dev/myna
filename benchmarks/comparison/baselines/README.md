@@ -24,7 +24,7 @@ adapter improvement and absence of a demonstrated generator penalty at this nois
 level; they do not establish a universal minimum or a portable percentage advantage.
 
 
-`default-leaf-2026-11-10-linux-x86_64` and `scalar-2026-11-10-linux-x86_64` are the November 10, 2026 unclemax (Threadripper PRO 9965WX) runs at release 0.16.0 that drive the README's floor and boundary charts. The Truffle cell run from the same session is in `../../cells/baselines/`. See [their measurement record](../evidence/readme-2026-11-10/README.md). They are local measurements, without a CI provenance claim.
+`default-leaf-2026-11-10-linux-x86_64` and `scalar-2026-11-10-linux-x86_64` are the November 10, 2026 unclemax (Threadripper PRO 9965WX) runs at `4f88a77` that drive the README's floor and boundary charts; the Truffle cell run from the same session is in `../../cells/baselines/`. `default-leaf-0.16.0-linux-x86_64` and `scalar-0.16.0-linux-x86_64` are the same host's runs of release 0.16.0 from earlier that day, kept as the record of the AOT FFM gaps that change fixed. See [their measurement record](../evidence/readme-2026-11-10/README.md). They are local measurements, without a CI provenance claim.
 
 `hosted-arm64-0.7.2` is the earlier five-process CI baseline for release source `7401c446ef9ad80d7bd14a9bf92f360a04956b80`. It includes full ARM CPU identity and points to the originating workflow. It drove the SVM charts before the November 10 rerun; it is still a shared-host measurement, not a controlled-hardware timing gate.
 

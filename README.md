@@ -99,9 +99,9 @@ Calls that cannot meet the bounded, nonblocking, non-reentrant leaf contract mus
 
 ## Native-call microbenchmark
 
-In the November 10, 2026 rerun on Linux x86-64 (Threadripper PRO 9965WX), generated SVM identity loops take **0.787 ns/call**. Handwritten Native Image `@CFunction(transition = NO_TRANSITION)` bindings to the same native function take **1.481 ns/call**. These are elapsed loop time divided by call count, summarized as the median of five process medians.
+In the November 10, 2026 rerun on Linux x86-64 (Threadripper PRO 9965WX), generated SVM identity loops take **0.788 ns/call**. Handwritten Native Image `@CFunction(transition = NO_TRANSITION)` bindings to the same native function take **1.482 ns/call**. These are elapsed loop time divided by call count, summarized as the median of five process medians.
 
-![Time per call in an identity loop on a Threadripper PRO 9965WX: Myna generated binding 0.787 ns, handwritten @CFunction leaf 1.481 ns, native C function pointer 0.740 ns; bars show medians and whiskers span five process medians](docs/charts/default-leaf.svg)
+![Time per call in an identity loop on a Threadripper PRO 9965WX: Myna generated binding 0.788 ns, handwritten @CFunction leaf 1.482 ns, native C function pointer 0.741 ns; bars show medians and whiskers span five process medians](docs/charts/default-leaf.svg)
 
 Each case uses five fresh processes, each with ten warmup and ten retained samples. Generated and handwritten SVM paths use the same image build; all three series call the same native kernel object. Timings include the callee and loop, with no control subtraction. The C function-pointer series is a reference floor with explicit four-call unrolling, so loop structure also differs. Whiskers show the min–max of the five process medians, not confidence intervals. Myna's median is 0.047 ns above the native pointer floor; these runs do not establish a win over native C. The November 7 Apple M5 Max run (0.516 vs. 0.997 ns/call) is retained in the [Mac analysis](benchmarks/comparison/baselines/default-leaf-2026-11-07-macos-arm64.md). Compare implementations **within each host**.
 
@@ -112,9 +112,9 @@ The inspected generated SVM paths call the linked symbol without a standalone ge
 <details>
 <summary>Normal transitions, JNI and AOT FFM comparisons</summary>
 
-The same host's scalar comparison pairs each generated binding with a handwritten equivalent under the same transition contract. Normal transitions (**4.81 ns/call**) and static JNI (**17.4 ns/call**) are at parity. Generated native leaves take **0.844 ns/call** against **1.545 ns/call** handwritten. At this revision, two AOT FFM paths trail their handwritten pairs: static FFM calls (5.74 against 5.55 ns/call) and typed critical FFM downcalls (**1.60** against **1.39 ns/call**). Both causes are fixed in the generator. Library bindings no longer hold symbol addresses in an `Optional`, and static entries pass a global-scope segment from a build-time-initialized class. On the same host, the fixed generator measures 4.87 against 5.58 ns/call for static FFM, now faster than handwritten, and 1.41 against 1.39 for typed critical calls. [Paired performance gates](docs/benchmarking.md#paired-performance-gates) now fail CI when a generated binding falls behind its handwritten pair.
+The same host's scalar comparison pairs each generated binding with a handwritten equivalent under the same transition contract. Normal transitions (**4.81 ns/call**) and static JNI (**17.45 ns/call**) are at parity. Generated native leaves take **0.845 ns/call** against **1.485 ns/call** handwritten. Generated AOT FFM calls beat handwritten unbound downcall handles. Static calls take **4.82** against **5.56 ns/call**. Static calls to a native leaf, which are critical downcalls by default, take **0.993** against **1.391 ns/call** for the handwritten critical handle. Explicit library bindings match handwritten objects holding the same symbol segments (1.39 against 1.41 ns/call for critical leaves). [Paired performance gates](docs/benchmarking.md#paired-performance-gates) fail CI when a generated binding falls behind its matched handwritten pair; release 0.16.0's typed critical calls (1.60 against 1.39 ns/call) would have failed them.
 
-![Myna generated versus handwritten Native Image scalar call latency across normal transitions, native leaves, static JNI, AOT FFM and critical AOT FFM](docs/charts/svm-boundaries.svg)
+![Myna generated versus handwritten Native Image scalar call latency: normal transitions 4.81 vs 4.81 ns, native leaves 0.845 vs 1.485 ns, static JNI 17.45 vs 17.45 ns, AOT FFM 4.82 vs 5.56 ns, AOT FFM native leaf 0.993 vs 1.391 ns](docs/charts/svm-boundaries.svg)
 
 Latencies include the callee and loop; the control is not subtracted. Transition contracts differ across pairs. These measurements are not universal latency guarantees.
 
@@ -125,9 +125,9 @@ Latencies include the callee and loop; the control is not subtracted. Transition
 <details>
 <summary>Truffle native cell costs</summary>
 
-From runtime-compiled Truffle code on the same host, a generated cell over a leaf import takes **1.575 ns/call**, matching a plain Java call to the binding (1.574 ns/call). Truffle NFI calls the same symbol in **21.8 ns/call**. Over a transitioning import, the cell, the direct call and a handwritten `@TruffleBoundary` each take about **5.0 ns/call**.
+From runtime-compiled Truffle code on the same host, a generated cell over a leaf import takes **1.581 ns/call**, matching a plain Java call to the binding (1.579 ns/call). A cell on the FFM backend, which calls the leaf as a critical downcall, takes **1.595 ns/call** (5.83 at release 0.16.0). Truffle NFI calls the same symbol in **21.0 ns/call**. Over a transitioning import, the cell, the direct call and a handwritten `@TruffleBoundary` each take about **5.0 ns/call**.
 
-![Truffle native cell call latency: Myna cells at the direct binding call's cost for leaf and transitioning imports, against Truffle NFI and a handwritten boundary](docs/charts/truffle-cells.svg)
+![Truffle cell call latency: for a leaf import, Myna cells 1.581 ns, through interop 1.581 ns, on the FFM backend 1.595 ns, the direct binding call 1.579 ns and Truffle NFI 20.98 ns; for a transitioning import, the Myna cell, direct call and handwritten boundary about 5.0 ns](docs/charts/truffle-cells.svg)
 
 Every measured sample ran in compiled code. Buffer, text and borrow cases are in the full report.
 

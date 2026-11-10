@@ -1,7 +1,7 @@
 {
   "host": "unclemax",
-  "revision": "c8802c553835cb48b4d3f764b90dadfb7aebfee5",
-  "checkout": "/tmp/myna-readme-2026-11-10.aHcRCQ/source",
+  "revision": "4f88a774516021f3dec587cd9ac9f8ab7ec28334",
+  "checkout": "/tmp/myna-pr-rerun.JxEa56/source",
   "mise": "2026.11.5 linux-x64 (2026-11-09)",
   "mise_global_config": "isolated (empty file)",
   "kernel": "7.0.0-43-generic",

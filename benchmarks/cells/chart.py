@@ -32,6 +32,7 @@ chart_groups = [
     {'title': 'Leaf import', 'subtitle': 'binding ABI 2 default', 'rows': [
         cell('typed-leaf', 'Myna cell', 'typed glue · executeLong'),
         cell('interop-leaf', 'Myna cell via interop', 'InteropLibrary · executable'),
+        cell('typed-ffm-leaf', 'Myna FFM cell', 'FFM backend · critical downcall'),
         floor('direct-leaf'),
         {'label': 'Truffle NFI', 'sublabel': 'libffi backend · same symbol', 'color': brand.BASELINE,
          'values': groups['nfi-leaf']}]},
