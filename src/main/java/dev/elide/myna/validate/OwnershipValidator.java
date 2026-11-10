@@ -92,9 +92,19 @@ final class OwnershipValidator {
       require(
           p.facts().isEmpty(), "resource destroy cannot require additional pointer preconditions");
     }
-    names.clear();
+    // A function may declare several borrows; each has a buffer and a length of its own.
+    // Identifiers contain no space, so "function parameter" is a unique key.
+    var buffers = new HashSet<String>();
+    var lengths = new HashSet<String>();
     for (BufferBorrow b : m.borrows()) {
-      require(names.add(b.function()), "only one call buffer per function is supported");
+      require(
+          buffers.add(b.function() + " " + b.parameter()),
+          "duplicate borrow: " + b.function() + " " + b.parameter());
+      require(
+          lengths.add(b.function() + " " + b.length()),
+          "borrows cannot share a length parameter: " + b.function() + " " + b.length());
+    }
+    for (BufferBorrow b : m.borrows()) {
       Function f = functions.get(b.function());
       require(f != null, "unknown borrow function: " + b.function());
       nativeCall(f);
@@ -106,6 +116,9 @@ final class OwnershipValidator {
       require(
           p != null && length != null && p != length,
           "borrow must identify distinct buffer and length parameters");
+      require(
+          !lengths.contains(b.function() + " " + b.parameter()),
+          "call buffer cannot be another borrow's length: " + b.function() + " " + b.parameter());
       require(
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
           "call buffer requires borrowed ptr<u8>");
@@ -125,10 +138,15 @@ final class OwnershipValidator {
               && !p.facts().containsKey("dereferenceable")
               && !p.facts().containsKey("noalias"),
           "call buffer cannot impose alignment, extent, or noalias preconditions");
+      // Other pointers pass through each wrapper under their own declared contracts. Callbacks,
+      // by-value records and isolate threads have no pass-through carrier in every backend.
       for (Parameter other : f.parameters())
         require(
-            other == p || other.type() instanceof Scalar,
-            "additional pointers are unsupported in call buffer wrappers");
+            other.type() instanceof Scalar || other.type() instanceof Pointer,
+            "call buffer wrappers pass only scalars and pointers beside their buffers: "
+                + b.function()
+                + " "
+                + other.name());
     }
   }
 

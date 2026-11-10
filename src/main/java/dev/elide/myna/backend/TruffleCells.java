@@ -48,14 +48,17 @@ public final class TruffleCells implements Backend {
     return fact != null && fact.enabled();
   }
 
-  /** The guest-facing shape of one cell. */
-  private record Cell(Function function, BufferBorrow borrow, Resource creates, Resource destroys) {
+  /**
+   * The guest-facing shape of one cell. Every borrowed length drops out of the guest signature: the
+   * guest passes each buffer and the cell derives its byte count.
+   */
+  private record Cell(Function function, CallBorrows borrows, Resource creates, Resource destroys) {
     boolean isLength(Parameter p) {
-      return borrow != null && p.name().equals(borrow.length());
+      return borrows.length(p) != null;
     }
 
     boolean isBuffer(Parameter p) {
-      return borrow != null && p.name().equals(borrow.parameter());
+      return borrows.buffer(p) != null;
     }
 
     int arity() {
@@ -67,7 +70,7 @@ public final class TruffleCells implements Backend {
   private static Cell cell(Module m, Function f) {
     return new Cell(
         f,
-        m.borrows().stream().filter(b -> b.function().equals(f.name())).findFirst().orElse(null),
+        CallBorrows.of(m, f),
         m.resources().stream().filter(r -> r.create().equals(f.name())).findFirst().orElse(null),
         m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null));
   }
@@ -153,7 +156,7 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
-    String prelude = "";
+    var prelude = new StringBuilder();
     if (cell.destroys() == null) {
       int index = 0;
       for (Parameter p : f.parameters()) {
@@ -306,24 +309,27 @@ public final class TruffleCells implements Backend {
         }
         arguments.add(local);
       }
-      if (cell.borrow() != null) {
-        Type lengthType =
-            f.parameters().stream().filter(cell::isLength).findFirst().orElseThrow().type();
-        String length = "borrow_" + cell.borrow().parameter() + ".length()";
-        if (lengthType == Scalar.I32 || lengthType == Scalar.U32) {
+      // Each borrowed length takes its place among the binding's arguments, derived from its
+      // buffer once every borrow is held.
+      for (int n = 0; n < f.parameters().size(); n++) {
+        Parameter p = f.parameters().get(n);
+        BufferBorrow borrow = cell.borrows().length(p);
+        if (borrow == null) continue;
+        String length = "borrow_" + borrow.parameter() + ".length()";
+        if (cell.borrows().narrow(borrow)) {
           // Range-checked before the call, outside any FFM failure handler.
-          String local = "length_" + cell.borrow().parameter();
-          prelude =
-              "            int "
-                  + local
-                  + " = Carriers.length32("
-                  + length
-                  + ", "
-                  + (lengthType == Scalar.U32)
-                  + ", this);\n";
+          String local = "length_" + borrow.parameter();
+          prelude
+              .append("            int ")
+              .append(local)
+              .append(" = Carriers.length32(")
+              .append(length)
+              .append(", ")
+              .append(p.type() == Scalar.U32)
+              .append(", this);\n");
           length = local;
         }
-        arguments.set(arguments.indexOf(null), length);
+        arguments.set(n, length);
       }
     }
     // Every cell but a destroy has a static invoke: the binding call with native carriers and raw

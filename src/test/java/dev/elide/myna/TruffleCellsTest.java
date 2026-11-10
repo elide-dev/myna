@@ -552,8 +552,9 @@ class TruffleCellsTest {
   }
 
   /**
-   * A byte pointer beside other pointers cannot be a borrow, so by default it is a C string
-   * parameter. {@code truffle_buffer} declares it raw bytes: no terminator, pinned when large.
+   * A byte pointer without a borrow declaration is by default a C string parameter. {@code
+   * truffle_buffer} declares it raw bytes whose count stays a guest argument: no terminator, pinned
+   * when large.
    */
   @Test
   void truffleBufferLendsRawBytesBesideOtherPointers() {
@@ -642,6 +643,149 @@ class TruffleCellsTest {
                     + decode)
             .get("MynaTruffle.java")
             .contains("new BytesCoercion(\"decode\", \"data\", false, false, false, false);"));
+  }
+
+  /** Two borrows with lengths of their own, one length ahead of its buffer, beside pointers. */
+  static final String TRANSFER =
+      "opaque Session\n"
+          + "borrow transfer input length=count lifetime=call\n"
+          + "borrow transfer output length=capacity lifetime=call\n"
+          + "import transfer return=i32 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param session type=ptr<Session> nullable=false ownership=borrowed"
+          + " access=read_write\n"
+          + "  param input type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param count type=u64\n"
+          + "  param capacity type=u32\n"
+          + "  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+          + " nocapture=true@explicit_contract\n"
+          + "  param written type=ptr<u32> nullable=true ownership=borrowed access=write\n"
+          + "  param name type=ptr<char> nullable=false ownership=borrowed access=read\n"
+          + "  param flags type=u8\n"
+          + "end\n";
+
+  @Test
+  void severalBorrowsDropEveryLengthAndReleaseInReverse() {
+    String truffle = generate(MODULE + TRANSFER).get("MynaTruffle.java");
+    // Both lengths leave the guest signature; the other pointers keep their ordinary coercions.
+    assertTrue(truffle.contains("super(\"transfer\", 6);"), truffle);
+    assertTrue(truffle.contains("new PointerCoercion(\"transfer\", \"session\", false, false);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"input\", false, false, true);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"output\", false, true, true);"));
+    assertTrue(truffle.contains("new PointerCoercion(\"transfer\", \"written\", true, false);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"transfer\", \"name\", false, false, false);"));
+    // invoke keeps the binding's own parameters, lengths included.
+    assertTrue(
+        truffle.contains(
+            "        public static int invoke(long session, long input, long count, int capacity,"
+                + " long output, long written, long name, byte flags) {\n"
+                + "            return MynaNative.transfer(WordFactory.pointer(session),"
+                + " WordFactory.pointer(input), count, capacity, WordFactory.pointer(output),"
+                + " WordFactory.pointer(written), WordFactory.pointer(name), flags);\n"),
+        truffle);
+    // Scalars and addresses coerce first; borrows are then acquired in parameter order, each
+    // 32-bit length is range-checked before the call, and releases nest in reverse.
+    assertTrue(
+        truffle.contains(
+            """
+                        checkArity(arguments);
+                        long address_session = coerce_session.execute(arguments[0]);
+                        long address_written = coerce_written.execute(arguments[3]);
+                        byte value_flags = (byte) coerce_flags.execute(arguments[5]);
+                        Borrow borrow_input = coerce_input.execute(arguments[1]);
+                        try {
+                            Borrow borrow_output = coerce_output.execute(arguments[2]);
+                            try {
+                                Borrow borrow_name = coerce_name.execute(arguments[4]);
+                                try {
+                                    int length_output = Carriers.length32(borrow_output.length(), true, this);
+                                    return invoke(address_session, borrow_input.address(), borrow_input.length(), length_output, borrow_output.address(), address_written, borrow_name.address(), value_flags);
+                                } finally {
+                                    borrow_name.release();
+                                }
+                            } finally {
+                                borrow_output.release();
+                            }
+                        } finally {
+                            borrow_input.release();
+                        }
+                    }
+            """),
+        truffle);
+    // Cells stay DSL-free and compilable: no try-with-resources, no boundary on a leaf.
+    assertFalse(truffle.contains("try ("), truffle);
+    assertFalse(truffle.contains("TruffleBoundary"), truffle);
+    // Two 32-bit lengths are both checked, each against its own signedness.
+    String narrow =
+        generate(MODULE + TRANSFER.replace("param count type=u64", "param count type=i32"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        narrow.contains(
+            "                        int length_input = Carriers.length32(borrow_input.length(),"
+                + " false, this);\n"
+                + "                        int length_output ="
+                + " Carriers.length32(borrow_output.length(), true, this);\n"
+                + "                        return invoke(address_session, borrow_input.address(),"
+                + " length_input, length_output, borrow_output.address(), address_written,"
+                + " borrow_name.address(), value_flags);\n"),
+        narrow);
+    // FFM cells: the same shape, with the downcall behind its boundary and the range check
+    // outside the failure handler.
+    String ffm =
+        generate(
+                MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
+                    + TRANSFER)
+            .get("MynaTruffle.java");
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        public static int invoke(long session, long input, long count, int"
+                + " capacity, long output, long written, long name, byte flags) {\n"
+                + "            try {\n"
+                + "                return MynaFFM.transfer(MemorySegment.ofAddress(session),"
+                + " MemorySegment.ofAddress(input), count, capacity,"
+                + " MemorySegment.ofAddress(output), MemorySegment.ofAddress(written),"
+                + " MemorySegment.ofAddress(name), flags);\n"
+                + "            } catch (Throwable $failure) {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "                        int length_output = Carriers.length32(borrow_output.length(),"
+                + " true, this);\n"
+                + "                        return invoke(address_session, borrow_input.address(),"
+                + " borrow_input.length(), length_output, borrow_output.address(),"
+                + " address_written, borrow_name.address(), value_flags);\n"),
+        ffm);
+    // A transitioning import in boundary mode keeps its call behind the boundary too.
+    String boundary =
+        generate(
+                MODULE.replace(
+                        "truffle_cells=true", "truffle_cells=true truffle_transitions=boundary")
+                    + TRANSFER.replace(
+                        "nounwind=true@explicit_contract\n",
+                        "nounwind=true@explicit_contract native_leaf=false@explicit_contract\n"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        boundary.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        public static int invoke(long session, long input, long count, int"
+                + " capacity, long output, long written, long name, byte flags) {\n"
+                + "            return MynaNative.transfer("),
+        boundary);
+    // A buffer that is not a borrow keeps its count as a guest argument beside the borrows.
+    String mixed =
+        generate(
+                MODULE
+                    + TRANSFER.replace(
+                        "access=read\n  param flags",
+                        "access=read truffle_buffer=true@explicit_contract\n  param flags"))
+            .get("MynaTruffle.java");
+    assertTrue(
+        mixed.contains("new BytesCoercion(\"transfer\", \"name\", false, false, false, false);"),
+        mixed);
+    assertTrue(mixed.contains("super(\"transfer\", 6);"), mixed);
+    // The ownership wrappers of the same declaration are generated beside the cells.
+    assertTrue(generate(MODULE + TRANSFER).containsKey("MynaOwnership.java"));
   }
 
   @Test

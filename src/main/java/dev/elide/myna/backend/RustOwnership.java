@@ -98,31 +98,33 @@ final class RustOwnership {
           .append(n)
           .append(" { self.owner.pointer.as_ptr() }\n    }\n");
     }
-    for (BufferBorrow b : m.borrows()) {
-      Function f =
-          m.functions().stream()
-              .filter(x -> x.name().equals(b.function()))
-              .findFirst()
-              .orElseThrow();
-      Parameter buffer =
-          f.parameters().stream()
-              .filter(p -> p.name().equals(b.parameter()))
-              .findFirst()
-              .orElseThrow();
+    for (CallBorrows call : CallBorrows.of(m)) {
+      Function f = call.function();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
       for (Parameter p : f.parameters()) {
-        if (p == buffer) {
+        BufferBorrow length = call.length(p);
+        if (call.buffer(p) != null) {
           params.add(p.name() + (p.access() == Access.READ ? ": &[u8]" : ": &mut [u8]"));
           args.add(p.name() + (p.access() == Access.READ ? ".as_ptr()" : ".as_mut_ptr()"));
-        } else if (p.name().equals(b.length()))
-          args.add(buffer.name() + ".len().try_into().expect(\"buffer length exceeds ABI range\")");
+        } else if (length != null)
+          args.add(
+              length.parameter() + ".len().try_into().expect(\"buffer length exceeds ABI range\")");
         else {
-          params.add(p.name() + ": " + Types.rust(p));
+          // Declared types live in the parent module; scalars are spelled the same either way.
+          params.add(p.name() + ": " + Types.rust(p, "super::"));
           args.add(p.name());
         }
       }
-      out.append("    pub fn ")
+      // The slices vouch for the buffers. Nothing vouches for any other pointer, so a wrapper that
+      // passes one through is as unsafe as the raw function is for that argument.
+      boolean pointers = call.passesPointers();
+      if (pointers)
+        out.append(
+            "    /// # Safety\n"
+                + "    /// Every pointer other than a borrowed buffer must satisfy the raw"
+                + " function's requirements.\n");
+      out.append(pointers ? "    pub unsafe fn " : "    pub fn ")
           .append(f.name())
           .append('(')
           .append(String.join(", ", params))

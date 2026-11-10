@@ -131,6 +131,73 @@ class FfmTest {
   }
 
   @Test
+  void segmentWrappersValidateEveryBuffer() throws Exception {
+    String ffm = generate(OwnershipTest.TRANSFER).get("ApiFFM.java");
+    // Every segment gets the single-buffer checks; a pointer beside them passes through.
+    String wrapper =
+        """
+                /** Borrows each entire native segment for this call; lengths are in bytes. */
+                public int transfer(MemorySegment arg0, MemorySegment arg1, MemorySegment arg4, MemorySegment arg5, byte arg6) throws Throwable {
+                    if (!arg1.isNative()) throw new IllegalArgumentException("native segment required");
+                    if (!arg1.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!arg1.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    long length1 = arg1.byteSize();
+                    if (length1 != 0 && arg1.address() == 0) throw new IllegalArgumentException("null buffer address");
+                    if (!arg4.isNative()) throw new IllegalArgumentException("native segment required");
+                    if (arg4.isReadOnly()) throw new IllegalArgumentException("writable segment required");
+                    if (!arg4.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!arg4.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    long length4 = arg4.byteSize();
+                    if (length4 != 0 && arg4.address() == 0) throw new IllegalArgumentException("null buffer address");
+                    if (length4 > 4294967295L) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                    if (length1 != 0 && length4 != 0) {
+                        MemorySegment pointer1 = arg1;
+                        MemorySegment pointer4 = arg4;
+                        return this.transfer(arg0, pointer1, length1, (int) length4, pointer4, arg5, arg6);
+                    }
+                    try (Arena empty = Arena.ofConfined()) {
+                        MemorySegment pointer1 = length1 != 0 ? arg1 : empty.allocate(1);
+                        MemorySegment pointer4 = length4 != 0 ? arg4 : empty.allocate(1);
+                        return this.transfer(arg0, pointer1, length1, (int) length4, pointer4, arg5, arg6);
+                    }
+                }
+        """;
+    assertTrue(ffm.contains(wrapper), ffm);
+    // A leaf gets the wrapper on the critical binding as well.
+    assertEquals(2, ffm.split(java.util.regex.Pattern.quote(wrapper), -1).length - 1, ffm);
+    String none =
+        generate(OwnershipTest.TRANSFER.replace("return=i32", "return=void")).get("ApiFFM.java");
+    assertTrue(
+        none.contains(
+            "                this.transfer(arg0, pointer1, length1, (int) length4, pointer4, arg5,"
+                + " arg6);\n"
+                + "                return;\n"
+                + "            }\n"
+                + "            try (Arena empty = Arena.ofConfined()) {\n"),
+        none);
+    // One buffer beside a pointer keeps the single-buffer wrapper.
+    String single =
+        generate(
+                Files.readString(Path.of("examples/ownership.seam"))
+                    .replace(
+                        "param count type=u64\nend\nborrow increment",
+                        "param count type=u64\n  param seed type=ptr<u64> access=read\n"
+                            + "end\nborrow increment"))
+            .get("NativeApiFFM.java");
+    assertTrue(
+        single.contains(
+            "        /** Borrows the entire native segment for this call; length is in bytes. */\n"
+                + "        public long checksum(MemorySegment arg0, MemorySegment arg2) throws"
+                + " Throwable {\n"),
+        single);
+    assertTrue(
+        single.contains(
+            "                MemorySegment pointer = empty.allocate(1);\n"
+                + "                return this.checksum(pointer, length, arg2);\n"),
+        single);
+  }
+
+  @Test
   void resourceFactoriesHaveExplicitDestructors() throws Exception {
     String source = Files.readString(Path.of("examples/ownership.seam"));
     String ffm =

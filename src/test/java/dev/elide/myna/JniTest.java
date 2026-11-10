@@ -11,6 +11,7 @@ import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam.*;
 import java.io.*;
 import java.nio.file.*;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -89,6 +90,94 @@ class JniTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> StaticJni.generate(Dsl.parse("module empty target=aarch64-apple-darwin\n")));
+  }
+
+  @Test
+  void bufferAdaptersTakeOneByteBufferPerBorrow() {
+    var m = Dsl.parse(OwnershipTest.TRANSFER);
+    var methods = JniAbi.methods(m);
+    // One raw method and one buffer adapter, whatever the number of borrows.
+    assertEquals(
+        List.of("transfer", "transferBuffer"), methods.stream().map(x -> x.name()).toList());
+    var adapter = methods.getLast();
+    assertEquals(2, adapter.borrows().size());
+    assertTrue(methods.getFirst().borrows().isEmpty());
+    // Both lengths are derived; the other pointers stay raw addresses.
+    assertEquals("(JLjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;JB)I", adapter.descriptor());
+    assertEquals(
+        "Java_dev_elide_myna_generated_ApiJNI_transferBuffer"
+            + "__JLjava_nio_ByteBuffer_2Ljava_nio_ByteBuffer_2JB",
+        adapter.symbol());
+    var output = StaticJni.generate(m);
+    String java = output.get("ApiJNI.java");
+    assertTrue(
+        java.contains(
+            """
+                public static native int transfer(long arg0, long arg1, long arg2, int arg3, long arg4, long arg5, byte arg6);
+                private static native int transferBuffer(long arg0, java.nio.ByteBuffer arg1, java.nio.ByteBuffer arg4, long arg5, byte arg6);
+                /** Borrows remaining bytes of each direct buffer; preserves their positions.
+                 * Caller must keep any backing arena open throughout the call, including callbacks.
+                 * Liveness/thread checks do not pin the arena against concurrent or reentrant closure. */
+                public static int transfer(long arg0, java.nio.ByteBuffer arg1, java.nio.ByteBuffer arg4, long arg5, byte arg6) {
+                    if (!arg1.isDirect()) throw new IllegalArgumentException("direct buffer required");
+                    java.lang.foreign.MemorySegment segment1 = java.lang.foreign.MemorySegment.ofBuffer(arg1);
+                    if (!segment1.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!segment1.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    if (!arg4.isDirect()) throw new IllegalArgumentException("direct buffer required");
+                    if (arg4.isReadOnly()) throw new IllegalArgumentException("writable buffer required");
+                    java.lang.foreign.MemorySegment segment4 = java.lang.foreign.MemorySegment.ofBuffer(arg4);
+                    if (!segment4.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!segment4.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    return transferBuffer(arg0, arg1.slice(), arg4.slice(), arg5, arg6);
+                }
+            """),
+        java);
+    // Each buffer has locals of its own; a length that precedes its buffer still reads them.
+    String c = output.get("seam-jni.c");
+    assertTrue(
+        c.contains(
+            """
+              jlong length1 = arg1 == NULL ? -1 : (*env)->GetDirectBufferCapacity(env, arg1);
+              if ((*env)->ExceptionCheck(env)) return 0;
+              void *pointer1 = arg1 == NULL ? NULL : (*env)->GetDirectBufferAddress(env, arg1);
+              if ((*env)->ExceptionCheck(env)) return 0;
+              if (length1 < 0 || (length1 != 0 && pointer1 == NULL)) {
+            """),
+        c);
+    assertTrue(
+        c.contains(
+            """
+              uint8_t empty1 = 0;
+              if (length1 == 0) pointer1 = &empty1;
+              jlong length4 = arg4 == NULL ? -1 : (*env)->GetDirectBufferCapacity(env, arg4);
+            """),
+        c);
+    assertTrue(
+        c.contains(
+            """
+              uint8_t empty4 = 0;
+              if (length4 == 0) pointer4 = &empty4;
+              return (jint)transfer((struct Session *)(uintptr_t)arg0, pointer1, (uint64_t)length1, (uint32_t)length4, pointer4, (uint32_t *)(uintptr_t)arg5, (uint8_t)arg6);
+            }
+            """),
+        c);
+    // The raw adapter is untouched by the borrows.
+    assertTrue(
+        c.contains(
+            "  return (jint)transfer((struct Session *)(uintptr_t)arg0, (uint8_t *)(uintptr_t)arg1,"
+                + " (uint64_t)arg2, (uint32_t)arg3, (uint8_t *)(uintptr_t)arg4, (uint32_t"
+                + " *)(uintptr_t)arg5, (uint8_t)arg6);\n"),
+        c);
+    // A native symbol named like a buffer local is not hidden by it.
+    String shadowed =
+        StaticJni.generate(
+                Dsl.parse(
+                    OwnershipTest.TRANSFER.replace(
+                        "import transfer return=i32", "import transfer symbol=length4 return=i32")))
+            .get("seam-jni.c");
+    assertTrue(shadowed.contains("  jlong length4_ = arg4 == NULL ? -1 :"), shadowed);
+    assertTrue(shadowed.contains("(uint32_t)length4_, pointer4,"), shadowed);
+    assertTrue(shadowed.contains("return (jint)length4((struct Session *)"), shadowed);
   }
 
   @Test

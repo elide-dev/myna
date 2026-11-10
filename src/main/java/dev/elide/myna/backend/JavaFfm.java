@@ -317,48 +317,105 @@ public final class JavaFfm implements Backend {
           .append(function.arguments())
           .append(");\n        }\n");
     }
-    for (BufferBorrow borrow : m.borrows())
-      if (functions.stream().anyMatch(f -> f.function().name().equals(borrow.function())))
-        buffer(m, borrow, out);
+    for (CallBorrows call : CallBorrows.of(m))
+      if (functions.stream().anyMatch(f -> f.function().name().equals(call.function().name())))
+        buffer(call, out);
     out.append("    }\n");
   }
 
-  private static void buffer(Module m, BufferBorrow borrow, StringBuilder out) {
-    Function f =
-        m.functions().stream()
-            .filter(x -> x.name().equals(borrow.function()))
-            .findFirst()
-            .orElseThrow();
-    Parameter buffer =
-        f.parameters().stream()
-            .filter(p -> p.name().equals(borrow.parameter()))
-            .findFirst()
-            .orElseThrow();
-    Type length =
-        f.parameters().stream()
-            .filter(p -> p.name().equals(borrow.length()))
-            .findFirst()
-            .orElseThrow()
-            .type();
+  /**
+   * The segment wrapper of one function: every buffer is validated in parameter order, and a buffer
+   * of length zero gets temporary storage for the declared non-null pointer.
+   */
+  private static void buffer(CallBorrows call, StringBuilder out) {
+    Function f = call.function();
+    boolean several = call.borrows().size() > 1;
     var params = new ArrayList<String>();
     var args = new ArrayList<String>();
-    String name = "";
+    var checks = new StringBuilder();
+    var lent = new StringBuilder();
+    var temporary = new StringBuilder();
+    var present = new ArrayList<String>();
     int index = 0;
     for (Parameter p : f.parameters()) {
       String arg = "arg" + index++;
-      if (p == buffer) {
-        name = arg;
-        params.add("MemorySegment " + arg);
-        args.add("pointer");
-      } else if (p.name().equals(borrow.length())) {
-        args.add(length == Scalar.I32 || length == Scalar.U32 ? "(int) length" : "length");
-      } else {
-        params.add(Types.ffmCarrier(p.type()) + " " + arg);
-        args.add(arg);
+      BufferBorrow buffer = call.buffer(p);
+      BufferBorrow length = call.length(p);
+      if (buffer == null) {
+        if (length != null)
+          args.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
+        else {
+          params.add(Types.ffmCarrier(p.type()) + " " + arg);
+          args.add(arg);
+        }
+        continue;
       }
+      String s = call.suffix(buffer);
+      params.add("MemorySegment " + arg);
+      args.add("pointer" + s);
+      checks
+          .append("            if (!")
+          .append(arg)
+          .append(
+              ".isNative()) throw new IllegalArgumentException(\"native segment required\");\n");
+      if (call.writable(buffer))
+        checks
+            .append("            if (")
+            .append(arg)
+            .append(
+                ".isReadOnly()) throw new IllegalArgumentException(\"writable segment"
+                    + " required\");\n");
+      checks
+          .append("            if (!")
+          .append(arg)
+          .append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
+          .append("            if (!")
+          .append(arg)
+          .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n")
+          .append("            long length")
+          .append(s)
+          .append(" = ")
+          .append(arg)
+          .append(".byteSize();\n")
+          .append("            if (length")
+          .append(s)
+          .append(" != 0 && ")
+          .append(arg)
+          .append(
+              ".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
+      if (call.narrow(buffer))
+        checks
+            .append("            if (length")
+            .append(s)
+            .append(" > ")
+            .append(call.maxLength(buffer))
+            .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
+      present.add("length" + s + " != 0");
+      lent.append("                MemorySegment pointer")
+          .append(s)
+          .append(" = ")
+          .append(arg)
+          .append(";\n");
+      temporary
+          .append("                MemorySegment pointer")
+          .append(s)
+          .append(" = ")
+          .append(several ? "length" + s + " != 0 ? " + arg + " : " : "")
+          .append("empty.allocate(1);\n");
     }
+    String invoke =
+        (f.returns() == Scalar.VOID ? "" : "return ")
+            + "this."
+            + f.name()
+            + "("
+            + String.join(", ", args)
+            + ");\n";
     out.append(
-            "        /** Borrows the entire native segment for this call; length is in bytes. */\n")
+            several
+                ? "        /** Borrows each entire native segment for this call; lengths are in"
+                    + " bytes. */\n"
+                : "        /** Borrows the entire native segment for this call; length is in bytes."
+                    + " */\n")
         .append("        public ")
         .append(Types.ffmCarrier(f.returns()))
         .append(' ')
@@ -366,47 +423,20 @@ public final class JavaFfm implements Backend {
         .append('(')
         .append(String.join(", ", params))
         .append(") throws Throwable {\n")
-        .append("            if (!")
-        .append(name)
-        .append(".isNative()) throw new IllegalArgumentException(\"native segment required\");\n");
-    if (buffer.access() == Access.READ_WRITE)
-      out.append("            if (")
-          .append(name)
-          .append(
-              ".isReadOnly()) throw new IllegalArgumentException(\"writable segment"
-                  + " required\");\n");
-    out.append("            if (!")
-        .append(name)
-        .append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
-        .append("            if (!")
-        .append(name)
-        .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n")
-        .append("            long length = ")
-        .append(name)
-        .append(".byteSize();\n");
-    out.append("            if (length != 0 && ")
-        .append(name)
-        .append(".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
-    if (length == Scalar.I32 || length == Scalar.U32)
-      out.append("            if (length > ")
-          .append(length == Scalar.I32 ? "2147483647L" : "4294967295L")
-          .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
-    out.append("            if (length != 0) {\n")
-        .append("                MemorySegment pointer = ")
-        .append(name)
-        .append(";\n                ");
-    if (f.returns() != Scalar.VOID) out.append("return ");
-    out.append("this.").append(f.name()).append('(').append(String.join(", ", args)).append(");\n");
+        .append(checks)
+        .append("            if (")
+        .append(String.join(" && ", present))
+        .append(") {\n")
+        .append(lent)
+        .append("                ")
+        .append(invoke);
     if (f.returns() == Scalar.VOID) out.append("                return;\n");
     out.append("            }\n")
         .append("            try (Arena empty = Arena.ofConfined()) {\n")
-        .append("                MemorySegment pointer = empty.allocate(1);\n                ");
-    if (f.returns() != Scalar.VOID) out.append("return ");
-    out.append("this.")
-        .append(f.name())
-        .append('(')
-        .append(String.join(", ", args))
-        .append(");\n            }\n        }\n");
+        .append(temporary)
+        .append("                ")
+        .append(invoke)
+        .append("            }\n        }\n");
   }
 
   /**

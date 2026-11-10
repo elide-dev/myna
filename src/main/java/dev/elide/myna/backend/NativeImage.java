@@ -36,6 +36,13 @@ public final class NativeImage implements Backend {
           "VoidPointer", "org.graalvm.nativeimage.c.type",
           "WordPointer", "org.graalvm.nativeimage.c.type");
 
+  /** The carrier by its qualified name, for generated classes that import nothing. */
+  static String qualifiedCarrier(Type type) {
+    String c = Types.java(type);
+    if (WORD_TYPES.containsKey(c)) return WORD_TYPES.get(c) + "." + c;
+    return type instanceof Pointer ? "org.graalvm.nativeimage.c.type." + c : c;
+  }
+
   private static void carrierImport(Set<String> imports, Type type) {
     if (type instanceof FunctionPointer) return; // nested in the generated class
     String c = Types.java(type);
