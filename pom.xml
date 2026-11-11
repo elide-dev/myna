@@ -31,7 +31,7 @@
         <configuration><annotationProcessorPaths><path><groupId>org.graalvm.truffle</groupId><artifactId>truffle-dsl-processor</artifactId><version>25.5.5-elide.28</version></path></annotationProcessorPaths></configuration>
       </plugin>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.2</version>
+        <groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.7.0</version>
         <executions><execution><id>feature</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals>
           <configuration><sources><source>src/feature/java</source><source>src/values/java</source><source>src/truffle/java</source></sources></configuration>
         </execution></executions>
