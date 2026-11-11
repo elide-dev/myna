@@ -789,6 +789,71 @@ class TruffleCellsTest {
   }
 
   /**
+   * A nullable borrow takes interop null for an absent buffer: the coercion is told so, and the
+   * cell is otherwise the one a non-nullable borrow gets, deriving the length from whatever was
+   * lent. Null lends the null address with length zero.
+   */
+  @Test
+  void nullableBorrowsLendNullAndDeriveLengthZero() {
+    String module = "module decoder target=aarch64-apple-darwin java_class=Api";
+    assertTrue(OwnershipTest.DECODE.startsWith(module + "\n"));
+    String source = OwnershipTest.DECODE.replace(module, module + " truffle_cells=true");
+    var cells = generate(source);
+    String truffle = cells.get("ApiTruffle.java");
+    assertTrue(truffle.contains("new BytesCoercion(\"decode\", \"data\", false, false, true);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"decode\", \"text\", true, true, true);"));
+    assertTrue(truffle.contains("new BytesCoercion(\"tally\", \"bytes\", true, false, true);"));
+    // Declared without nullable, a buffer is nullable like any other pointer.
+    assertTrue(truffle.contains("new BytesCoercion(\"clear\", \"bytes\", true, true, true);"));
+    assertTrue(truffle.contains("super(\"decode\", 2);"), truffle);
+    assertTrue(
+        truffle.contains(
+            """
+                        checkArity(arguments);
+                        Borrow borrow_data = coerce_data.execute(arguments[0]);
+                        try {
+                            Borrow borrow_text = coerce_text.execute(arguments[1]);
+                            try {
+                                int length_text = Carriers.length32(borrow_text.length(), true, this);
+                                return invoke(borrow_data.address(), borrow_data.length(), borrow_text.address(), length_text);
+                            } finally {
+                                borrow_text.release();
+                            }
+                        } finally {
+                            borrow_data.release();
+                        }
+                    }
+            """),
+        truffle);
+    // Nullability reaches the cell through that one coercion argument and the fingerprint.
+    var required =
+        generate(
+            source
+                .replace("nullable=true", "nullable=false")
+                .replace(
+                    "type=ptr<u8> ownership=borrowed",
+                    "type=ptr<u8> nullable=false ownership=borrowed"));
+    assertEquals(
+        required
+            .get("ApiTruffle.java")
+            .replace(required.get("seam.abi").strip(), cells.get("seam.abi").strip()),
+        truffle
+            .replace("\"text\", true, true, true)", "\"text\", false, true, true)")
+            .replace("\"bytes\", true, false, true)", "\"bytes\", false, false, true)")
+            .replace("\"bytes\", true, true, true)", "\"bytes\", false, true, true)"));
+    // FFM cells pass the null segment for the null address, through the same invoke.
+    String ffm =
+        generate(source.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("ApiTruffle.java");
+    assertTrue(ffm.contains("new BytesCoercion(\"decode\", \"text\", true, true, true);"), ffm);
+    assertTrue(
+        ffm.contains(
+            "return ApiFFM.decode(MemorySegment.ofAddress(data), length,"
+                + " MemorySegment.ofAddress(text), capacity);"),
+        ffm);
+  }
+
+  /**
    * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
    * create writes into a struct the runtime owns; the cell compares the result with the listed
    * statuses, reads the resource from that struct and returns its owner, and the guest's buffer

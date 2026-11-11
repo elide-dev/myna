@@ -34,6 +34,7 @@ public final class JniMain {
     } catch (IllegalArgumentException expected) { }
     verifyArenaBuffers();
     verifySeveralBuffers();
+    verifyNullableBuffers();
     System.out.println("Static JNI scalar, ownership and direct buffer calls passed");
   }
 
@@ -73,6 +74,46 @@ public final class JniMain {
       if (copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 0 || target.get(1) != 1)
         throw new AssertionError("a rejected transfer reached native code");
     }
+  }
+
+  /**
+   * A nullable buffer: a null ByteBuffer is an absent buffer and reaches native code as the null
+   * pointer with length zero, which the fixture reports as ABSENT. A buffer that is present, with
+   * bytes remaining or not, never has the null address.
+   */
+  private static void verifyNullableBuffers() {
+    final long absent = 1L << 32;
+    var data = ByteBuffer.allocateDirect(5);
+    data.put(new byte[] {99, 1, 2, 3, 99}).position(1).limit(4);
+    var text = ByteBuffer.allocateDirect(4);
+    // The whole allocation, to see that only the remaining range was written.
+    var whole = text.duplicate();
+    text.position(1).limit(3);
+    if (NativeApiJNI.decode(data.asReadOnlyBuffer(), text) != 3) throw new AssertionError("decode");
+    if (whole.get(0) != 0 || whole.get(1) != 2 || whole.get(2) != 3 || whole.get(3) != 0) throw new AssertionError("decoded bytes");
+    if (data.position() != 1 || text.position() != 1) throw new AssertionError("positions");
+    if (NativeApiJNI.decode(data, null) != (3 | absent)) throw new AssertionError("absent output");
+    text.position(3);
+    if (NativeApiJNI.decode(data, text) != 3) throw new AssertionError("empty output is present");
+    text.position(1);
+    data.position(4);
+    if (NativeApiJNI.decode(data, null) != absent) throw new AssertionError("empty input, absent output");
+    data.position(1);
+    // A buffer that is present is checked as any other is.
+    rejects(IllegalArgumentException.class, () -> NativeApiJNI.decode(data, text.asReadOnlyBuffer()));
+    rejects(IllegalArgumentException.class, () -> NativeApiJNI.decode(data, ByteBuffer.allocate(1)));
+    ByteBuffer closed;
+    try (var inner = Arena.ofConfined()) { closed = inner.allocate(1).asByteBuffer(); }
+    rejects(IllegalStateException.class, () -> NativeApiJNI.decode(data, closed));
+    // The buffer that is not nullable still is not.
+    rejects(NullPointerException.class, () -> NativeApiJNI.decode(null, text));
+    // One optional buffer.
+    if (NativeApiJNI.tally(data) != 6) throw new AssertionError("tally");
+    if (NativeApiJNI.tally(null) != absent) throw new AssertionError("absent input");
+    data.position(4);
+    if (NativeApiJNI.tally(data) != 0) throw new AssertionError("empty input is present");
+    rejects(IllegalArgumentException.class, () -> NativeApiJNI.tally(ByteBuffer.allocate(1)));
+    rejects(IllegalStateException.class, () -> NativeApiJNI.tally(closed));
   }
 
   private static void rejects(Class<? extends Throwable> expected, Runnable action) {

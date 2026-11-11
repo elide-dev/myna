@@ -55,6 +55,16 @@ import transfer symbol=cells_transfer return=u64 error=no_failure nounwind=true@
   param capacity type=u32
   param copied type=ptr<i64> nullable=true ownership=borrowed access=write
 end
+# A nullable borrow: the guest passes null for an absent output buffer, and the cell lends the null
+# address and derives length zero.
+borrow decode data length=length lifetime=call
+borrow decode text length=capacity lifetime=call
+import decode symbol=cells_decode return=u64 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param text type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+end
 import sumBytes symbol=cells_sum_bytes return=u64 error=no_failure nounwind=true@explicit_contract
   param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract truffle_buffer=true@explicit_contract
   param count type=u64

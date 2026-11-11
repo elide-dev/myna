@@ -1,6 +1,7 @@
 # The ownership example (examples/ownership.seam) plus a call with several buffers beside another
-# pointer. The integration fixtures in this directory are generated from this file, so that the
-# example, which is also a tracked benchmark workload, stays as it is.
+# pointer and two calls with a nullable buffer. The integration fixtures in this directory are
+# generated from this file, so that the example, which is also a tracked benchmark workload, stays
+# as it is.
 # Lifecycle contracts are explicit obligations of these native implementations.
 module ownership_demo target=aarch64-apple-darwin java_package=fixture.owned java_class=NativeApi
 opaque Ticket
@@ -34,6 +35,22 @@ import transfer symbol=buffer_transfer return=u64 error=no_failure nounwind=true
   param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=u32
   param copied type=ptr<u64> nullable=true ownership=borrowed access=write
+end
+# A nullable buffer may be absent: every wrapper then passes the null pointer with length zero,
+# which the callee must accept. A buffer that is present, empty or not, is lent as any other is.
+# decode has an optional output beside a required input; tally has one optional input.
+borrow decode data length=length lifetime=call
+borrow decode text length=capacity lifetime=call
+import decode symbol=buffer_decode return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param text type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u32
+end
+borrow tally bytes length=count lifetime=call
+import tally symbol=buffer_tally return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
 end
 import liveCount symbol=ticket_live return=i64 error=no_failure nounwind=true@explicit_contract
 end

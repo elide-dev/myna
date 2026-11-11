@@ -25,6 +25,20 @@ JNIEXPORT jboolean JNICALL Java_JniMain_nativeErrors(JNIEnv *env, jclass clazz, 
     (*env)->DeleteLocalRef(env, after);
     if (!same || !expected) return JNI_FALSE;
   }
+  /* A nullable buffer is the exception: NULL is an absent buffer, which reaches the native function
+     as a null pointer with length zero (bit 32 of the result) and raises nothing. Any other
+     invalid buffer for the same parameter is still rejected. */
+  jlong absent = Java_fixture_owned_NativeApiJNI_decodeBuffer__Ljava_nio_ByteBuffer_2Ljava_nio_ByteBuffer_2(env, clazz, direct, NULL);
+  if ((*env)->ExceptionCheck(env) || absent != (((jlong)1 << 32) | 1)) return JNI_FALSE;
+  absent = Java_fixture_owned_NativeApiJNI_tallyBuffer__Ljava_nio_ByteBuffer_2(env, clazz, NULL);
+  if ((*env)->ExceptionCheck(env) || absent != ((jlong)1 << 32)) return JNI_FALSE;
+  Java_fixture_owned_NativeApiJNI_decodeBuffer__Ljava_nio_ByteBuffer_2Ljava_nio_ByteBuffer_2(env, clazz, direct, heap);
+  jthrowable rejected = (*env)->ExceptionOccurred(env);
+  if (rejected == NULL) return JNI_FALSE;
+  (*env)->ExceptionClear(env);
+  jboolean invalid = (*env)->IsInstanceOf(env, rejected, error);
+  (*env)->DeleteLocalRef(env, rejected);
+  if (!invalid) return JNI_FALSE;
   (*env)->DeleteLocalRef(env, error);
   return JNI_TRUE;
 }

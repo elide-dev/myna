@@ -64,8 +64,7 @@ public final class CellsMain {
     pinsPerCall = allocated / Repeat.CALLS;
   }
   /** What a cell's typed execute allocates per call from host code, which is compiled ahead of time. */
-  static void hostExecute(com.sun.management.ThreadMXBean bean, String what, long perCall, NativeCell cell, Object argument) throws Exception {
-    Object[] arguments = {argument};
+  static void hostExecute(com.sun.management.ThreadMXBean bean, String what, long perCall, NativeCell cell, Object... arguments) throws Exception {
     long thread = Thread.currentThread().threadId();
     long sum = 0;
     for (int i = 0; i < 64; i++) sum += cell.executeLong(arguments);
@@ -187,6 +186,25 @@ public final class CellsMain {
         allocates("transfer between pinned heap arrays", new CellApiTruffle.transfer_Cell(), 64, large.length,
             pinned, new HeapBytes(new byte[large.length], true), NativePointer.NULL);
         if (pinsPerCall < 32) throw new AssertionError("transfer did not pin both large heap arrays: " + pinsPerCall + " bytes per call");
+        // A nullable borrow from compiled code. One call site sees an absent and a present output
+        // in turn and stays compiled; absent, in any spelling, lends the null address and derives
+        // length zero without allocating, exactly as lending native memory does.
+        java.lang.foreign.MemorySegment decoded = java.lang.foreign.Arena.global().allocate(64);
+        compiled("decode", new Probe(new CellApiTruffle.decode_Cell()).function(),
+            i -> new Object[] {NativeBytes.of(lent, false), (i & 1) == 0 ? NativeVoid.INSTANCE : NativeBytes.of(decoded, true)},
+            i -> (i & 1) == 0 ? 64L | CellChecks.ABSENT : 64L);
+        if (decoded.get(java.lang.foreign.ValueLayout.JAVA_BYTE, 0) != 4 || decoded.get(java.lang.foreign.ValueLayout.JAVA_BYTE, 63) != 4)
+          throw new AssertionError("compiled decode did not write in place");
+        allocates("decode without an output buffer (interop null)", new CellApiTruffle.decode_Cell(), 0, 64L | CellChecks.ABSENT,
+            NativeBytes.of(lent, false), NativeVoid.INSTANCE);
+        allocates("decode without an output buffer (null pointer)", new CellApiTruffle.decode_Cell(), 0, 64L | CellChecks.ABSENT,
+            NativeBytes.of(lent, false), NativePointer.NULL);
+        allocates("decode without an output buffer (host null)", new CellApiTruffle.decode_Cell(), 0, 64L | CellChecks.ABSENT,
+            NativeBytes.of(lent, false), null);
+        allocates("decode into a native buffer", new CellApiTruffle.decode_Cell(), 0, 64,
+            NativeBytes.of(lent, false), NativeBytes.of(decoded, true));
+        allocates("decode into a copied heap array", new CellApiTruffle.decode_Cell(), 0, 64,
+            NativeBytes.of(lent, false), new HeapBytes(new byte[64], true));
         // The static invoke entries take native carriers and raw addresses: from host code, which
         // is compiled ahead of time and scalar-replaces nothing, a call allocates nothing.
         if (CellApiTruffle.add_Cell.invoke(2, 3) != 5) throw new AssertionError("invoke add");
@@ -195,6 +213,8 @@ public final class CellsMain {
         copied.set(java.lang.foreign.ValueLayout.JAVA_LONG, 0, -1);
         if (CellApiTruffle.transfer_Cell.invoke(lent.address(), 64, written.address(), 16, copied.address()) != 16 * 3
             || copied.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0) != 16) throw new AssertionError("invoke transfer");
+        // invoke takes the null address and a zero length for an absent buffer, as the cell does.
+        if (CellApiTruffle.decode_Cell.invoke(lent.address(), 64, 0, 0) != (64L | CellChecks.ABSENT)) throw new AssertionError("invoke decode");
         long hostThread = Thread.currentThread().threadId();
         long hostBefore = bean.getThreadAllocatedBytes(hostThread);
         long hostSum = 0;
@@ -212,6 +232,10 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment cText = java.lang.foreign.Arena.global().allocateFrom("hello world");
         hostExecute(bean, "host execute: strlen of native bytes", 0, new CellApiTruffle.strlen_Cell(), NativeBytes.of(cText, false));
         hostExecute(bean, "host execute: strlen of a raw pointer", 0, new CellApiTruffle.strlen_Cell(), NativePointer.of(cText.address()));
+        // An absent nullable buffer, in each of its spellings, beside lent native memory.
+        hostExecute(bean, "host execute: decode without an output buffer (null pointer)", 0, new CellApiTruffle.decode_Cell(), NativeBytes.of(lent, false), NativePointer.NULL);
+        hostExecute(bean, "host execute: decode without an output buffer (interop null)", 0, new CellApiTruffle.decode_Cell(), NativeBytes.of(lent, false), NativeVoid.INSTANCE);
+        hostExecute(bean, "host execute: decode without an output buffer (host null)", 0, new CellApiTruffle.decode_Cell(), NativeBytes.of(lent, false), null);
         // Creates that report a status and write their resource through a parameter, from
         // compiled code: each call makes an owner, which is closed before the next.
         java.lang.foreign.MemorySegment layoutResult = java.lang.foreign.Arena.global().allocate(24);

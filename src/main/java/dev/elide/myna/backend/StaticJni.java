@@ -181,30 +181,40 @@ public final class StaticJni {
         args.add(name);
         continue;
       }
-      args.add(name + ".slice()");
+      // A null ByteBuffer for a nullable buffer is an absent one: nothing to check or slice.
+      boolean nullable = p.nullable();
+      String pad = nullable ? "            " : "        ";
+      args.add(nullable ? name + " == null ? null : " + name + ".slice()" : name + ".slice()");
+      if (nullable) checks.append("        if (").append(name).append(" != null) {\n");
       checks
-          .append("        if (!")
+          .append(pad)
+          .append("if (!")
           .append(name)
           .append(".isDirect()) throw new IllegalArgumentException(\"direct buffer required\");\n");
       if (p.access() != Access.READ)
         checks
-            .append("        if (")
+            .append(pad)
+            .append("if (")
             .append(name)
             .append(
                 ".isReadOnly()) throw new IllegalArgumentException(\"writable buffer"
                     + " required\");\n");
       checks
-          .append("        java.lang.foreign.MemorySegment ")
+          .append(pad)
+          .append("java.lang.foreign.MemorySegment ")
           .append(segment)
           .append(" = java.lang.foreign.MemorySegment.ofBuffer(")
           .append(name)
           .append(");\n")
-          .append("        if (!")
+          .append(pad)
+          .append("if (!")
           .append(segment)
           .append(".scope().isAlive()) throw new IllegalStateException(\"closed buffer\");\n")
-          .append("        if (!")
+          .append(pad)
+          .append("if (!")
           .append(segment)
           .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n");
+      if (nullable) checks.append("        }\n");
     }
     out.append(
             several
@@ -258,11 +268,14 @@ public final class StaticJni {
         String length = cName(method, "length" + suffix);
         String pointer = cName(method, "pointer" + suffix);
         String empty = cName(method, "empty" + suffix);
+        // A null jobject is an invalid buffer, unless the buffer is nullable: then it is an absent
+        // one, which keeps the null pointer and length zero where an empty one gets storage.
+        boolean nullable = p.nullable();
         out.append("  jlong ")
             .append(length)
             .append(" = ")
             .append(name)
-            .append(" == NULL ? -1 : (*")
+            .append(nullable ? " == NULL ? 0 : (*" : " == NULL ? -1 : (*")
             .append(env)
             .append(")->GetDirectBufferCapacity(")
             .append(env)
@@ -329,6 +342,7 @@ public final class StaticJni {
             .append("  uint8_t ")
             .append(empty)
             .append(" = 0;\n  if (")
+            .append(nullable ? name + " != NULL && " : "")
             .append(length)
             .append(" == 0) ")
             .append(pointer)

@@ -61,6 +61,15 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
     return parameter(b.parameter()).access() != Access.READ;
   }
 
+  /**
+   * Whether the buffer may be absent. Every wrapper then takes its own spelling of "no buffer" and
+   * passes the null pointer with length zero; a buffer that is present, empty or not, is lent
+   * exactly as a non-nullable one is.
+   */
+  boolean nullable(BufferBorrow b) {
+    return parameter(b.parameter()).nullable();
+  }
+
   /** Whether the length travels in a 32-bit carrier, so the byte count needs a range check. */
   boolean narrow(BufferBorrow b) {
     Type type = parameter(b.length()).type();

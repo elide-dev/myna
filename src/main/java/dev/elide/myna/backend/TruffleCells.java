@@ -201,7 +201,8 @@ public final class TruffleCells implements Backend {
                 .append(", ")
                 .append(declared)
                 .append(", ")
-                .append(p.nullable() && !cell.isBuffer(p))
+                // Null lends the null address; a nullable borrow then derives length zero.
+                .append(p.nullable())
                 .append(", ")
                 .append(writable)
                 .append(", ")

@@ -198,6 +198,100 @@ class FfmTest {
   }
 
   @Test
+  void nullSegmentsAreAbsentNullableBuffers() {
+    String ffm = generate(OwnershipTest.DECODE).get("ApiFFM.java");
+    // An absent buffer (null, or the null address with length zero) is not validated and passes
+    // MemorySegment.NULL; only a buffer that is present and empty needs temporary storage.
+    String wrapper =
+        """
+                /** Borrows each entire native segment for this call; lengths are in bytes. */
+                public long decode(MemorySegment arg0, MemorySegment arg2) throws Throwable {
+                    if (!arg0.isNative()) throw new IllegalArgumentException("native segment required");
+                    if (!arg0.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!arg0.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    long length0 = arg0.byteSize();
+                    if (length0 != 0 && arg0.address() == 0) throw new IllegalArgumentException("null buffer address");
+                    boolean absent2 = arg2 == null || (arg2.isNative() && arg2.address() == 0 && arg2.byteSize() == 0);
+                    long length2 = 0;
+                    if (!absent2) {
+                        if (!arg2.isNative()) throw new IllegalArgumentException("native segment required");
+                        if (arg2.isReadOnly()) throw new IllegalArgumentException("writable segment required");
+                        if (!arg2.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                        if (!arg2.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                        length2 = arg2.byteSize();
+                        if (length2 != 0 && arg2.address() == 0) throw new IllegalArgumentException("null buffer address");
+                        if (length2 > 4294967295L) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                    }
+                    if (length0 != 0 && (absent2 || length2 != 0)) {
+                        MemorySegment pointer0 = arg0;
+                        MemorySegment pointer2 = absent2 ? MemorySegment.NULL : arg2;
+                        return this.decode(pointer0, length0, pointer2, (int) length2);
+                    }
+                    try (Arena empty = Arena.ofConfined()) {
+                        MemorySegment pointer0 = length0 != 0 ? arg0 : empty.allocate(1);
+                        MemorySegment pointer2 = absent2 ? MemorySegment.NULL : length2 != 0 ? arg2 : empty.allocate(1);
+                        return this.decode(pointer0, length0, pointer2, (int) length2);
+                    }
+                }
+        """;
+    assertTrue(ffm.contains(wrapper), ffm);
+    // A leaf gets the wrapper on the critical binding as well.
+    assertEquals(2, ffm.split(java.util.regex.Pattern.quote(wrapper), -1).length - 1, ffm);
+    // One buffer: the temporary path is reached only by a buffer that is present and empty.
+    assertTrue(
+        ffm.contains(
+            """
+                    public long tally(MemorySegment arg0) throws Throwable {
+                        boolean absent = arg0 == null || (arg0.isNative() && arg0.address() == 0 && arg0.byteSize() == 0);
+                        long length = 0;
+                        if (!absent) {
+                            if (!arg0.isNative()) throw new IllegalArgumentException("native segment required");
+                            if (!arg0.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                            if (!arg0.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                            length = arg0.byteSize();
+                            if (length != 0 && arg0.address() == 0) throw new IllegalArgumentException("null buffer address");
+                        }
+                        if (absent || length != 0) {
+                            MemorySegment pointer = absent ? MemorySegment.NULL : arg0;
+                            return this.tally(pointer, length);
+                        }
+                        try (Arena empty = Arena.ofConfined()) {
+                            MemorySegment pointer = empty.allocate(1);
+                            return this.tally(pointer, length);
+                        }
+                    }
+            """),
+        ffm);
+    // A void result, with a signed 32-bit length checked only for a buffer that is present.
+    assertTrue(
+        ffm.contains(
+            """
+                            length = arg1.byteSize();
+                            if (length != 0 && arg1.address() == 0) throw new IllegalArgumentException("null buffer address");
+                            if (length > 2147483647L) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                        }
+                        if (absent || length != 0) {
+                            MemorySegment pointer = absent ? MemorySegment.NULL : arg1;
+                            this.clear((int) length, pointer);
+                            return;
+                        }
+            """),
+        ffm);
+    // Declared non-null, the same buffers get the wrappers they have always had.
+    String required =
+        generate(
+                OwnershipTest.DECODE
+                    .replace("nullable=true", "nullable=false")
+                    .replace(
+                        "type=ptr<u8> ownership=borrowed",
+                        "type=ptr<u8> nullable=false ownership=borrowed"))
+            .get("ApiFFM.java");
+    assertFalse(required.contains("absent"), required);
+    assertFalse(required.contains("MemorySegment.NULL"), required);
+    assertTrue(required.contains("            if (length0 != 0 && length2 != 0) {\n"), required);
+  }
+
+  @Test
   void resourceFactoriesHaveExplicitDestructors() throws Exception {
     String source = Files.readString(Path.of("examples/ownership.seam"));
     String ffm =

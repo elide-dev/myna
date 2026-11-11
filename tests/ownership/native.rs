@@ -37,3 +37,19 @@ unsafe extern "C" { fn malloc(size: usize) -> *mut u8; fn free(ptr: *mut u8); }
     if !copied.is_null() { unsafe { copied.write(fits as u64); } }
     sum
 }
+// An optional output buffer: `text` may be null with capacity zero. Writes each input byte plus
+// one into what fits of a buffer that is present and returns the bytes the whole output needs,
+// with ABSENT set when there is no buffer. A buffer that is present never has the null address,
+// even when it is empty; null with a capacity breaks the contract and returns u64::MAX.
+const ABSENT: u64 = 1 << 32;
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_decode(data: *const u8, length: u64, text: *mut u8, capacity: u32) -> u64 {
+    if text.is_null() { return if capacity == 0 { length | ABSENT } else { u64::MAX }; }
+    let fits = core::cmp::min(length, capacity as u64) as usize;
+    for i in 0..fits { unsafe { text.add(i).write(data.add(i).read().wrapping_add(1)); } }
+    length
+}
+// One optional input buffer: the sum of its bytes, or ABSENT for the null pointer with count zero.
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_tally(bytes: *const u8, count: u64) -> u64 {
+    if bytes.is_null() { return if count == 0 { ABSENT } else { u64::MAX }; }
+    (0..count as usize).map(|i| u64::from(unsafe { bytes.add(i).read() })).sum()
+}

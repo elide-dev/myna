@@ -114,14 +114,43 @@ final class RustOwnership {
       Function f = call.function();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
+      // A nullable buffer is an Option of the slice. It is consumed once, into the pointer and
+      // byte count the call passes, under the parameter's own name: no other name is introduced.
+      var absent = new StringBuilder();
       for (Parameter p : f.parameters()) {
+        BufferBorrow buffer = call.buffer(p);
         BufferBorrow length = call.length(p);
-        if (call.buffer(p) != null) {
-          params.add(p.name() + (p.access() == Access.READ ? ": &[u8]" : ": &mut [u8]"));
-          args.add(p.name() + (p.access() == Access.READ ? ".as_ptr()" : ".as_mut_ptr()"));
+        if (buffer != null) {
+          boolean shared = p.access() == Access.READ;
+          String slice = shared ? "&[u8]" : "&mut [u8]";
+          String pointer = shared ? ".as_ptr()" : ".as_mut_ptr()";
+          if (call.nullable(buffer)) {
+            params.add(p.name() + ": Option<" + slice + ">");
+            args.add(p.name() + ".0");
+            absent
+                .append("        let ")
+                .append(p.name())
+                .append(" = ")
+                .append(p.name())
+                .append(".map_or((core::ptr::")
+                .append(shared ? "null" : "null_mut")
+                .append("(), 0), |")
+                .append(p.name())
+                .append("| (")
+                .append(p.name())
+                .append(pointer)
+                .append(", ")
+                .append(p.name())
+                .append(".len()));\n");
+          } else {
+            params.add(p.name() + ": " + slice);
+            args.add(p.name() + pointer);
+          }
         } else if (length != null)
           args.add(
-              length.parameter() + ".len().try_into().expect(\"buffer length exceeds ABI range\")");
+              length.parameter()
+                  + (call.nullable(length) ? ".1" : ".len()")
+                  + ".try_into().expect(\"buffer length exceeds ABI range\")");
         else {
           // Declared types live in the parent module; scalars are spelled the same either way.
           params.add(p.name() + ": " + Types.rust(p, "super::"));
@@ -142,7 +171,9 @@ final class RustOwnership {
           .append(String.join(", ", params))
           .append(')');
       if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
-      out.append(" {\n        unsafe { super::")
+      out.append(" {\n")
+          .append(absent)
+          .append("        unsafe { super::")
           .append(f.name())
           .append('(')
           .append(String.join(", ", args))
