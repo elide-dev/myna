@@ -42,6 +42,15 @@ public final class TruffleCells implements Backend {
         || (charUnsigned && type == Scalar.CHAR);
   }
 
+  /** The resource a pointer type points to, or null when its pointee is not a declared resource. */
+  private static String resourceType(Module m, Type type) {
+    if (!(type instanceof Pointer pointer) || !(pointer.pointee() instanceof Named named))
+      return null;
+    return m.resources().stream().anyMatch(r -> r.name().equals(named.name()))
+        ? named.name()
+        : null;
+  }
+
   /** Whether the parameter opted out of C string treatment with {@code truffle_buffer}. */
   private static boolean rawBytes(Parameter p) {
     Fact fact = p.facts().get("truffle_buffer");
@@ -213,6 +222,8 @@ public final class TruffleCells implements Backend {
                 .append(p.nullable())
                 .append(", ")
                 .append(rawPointers)
+                // A pointer to a declared resource takes only an owner of that resource.
+                .append(resourceType(m, t) == null ? "" : ", " + SeamJson.quote(resourceType(m, t)))
                 .append(");\n");
             String local = "address_" + p.name();
             locals

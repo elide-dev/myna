@@ -831,7 +831,8 @@ class TruffleCellsTest {
                     }
             """),
         truffle);
-    // Another resource's handle is a pointer argument: PointerCoercion takes an open owner.
+    // Another resource's handle is a pointer argument: PointerCoercion takes an open owner of
+    // that resource and no other, while a pointer to a plain record stays untyped.
     assertTrue(
         truffle.contains(
             """
@@ -840,7 +841,7 @@ class TruffleCellsTest {
                     }
                     public streamCreate_Cell() {
                         super("streamCreate", 3);
-                        this.coerce_session = new PointerCoercion("streamCreate", "session", false, false);
+                        this.coerce_session = new PointerCoercion("streamCreate", "session", false, false, "Session");
             """),
         truffle);
     assertTrue(
@@ -858,6 +859,9 @@ class TruffleCellsTest {
                             if (!adopted) NativeResource.release(hold);
                         }
             """),
+        truffle);
+    assertTrue(
+        truffle.contains("new PointerCoercion(\"sessionCreate\", \"limits\", false, false);"),
         truffle);
     // A pointer the callee is declared to drop is not held: the create keeps its plain shape.
     String dropped =

@@ -15,11 +15,23 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 public final class PointerCoercion extends Coercion {
   private final boolean nullable;
   private final boolean rawNumbers;
+  private final String resource;
 
   public PointerCoercion(String function, String parameter, boolean nullable, boolean rawNumbers) {
+    this(function, parameter, nullable, rawNumbers, null);
+  }
+
+  /**
+   * @param resource the declared resource type the parameter points to, or {@code null} when it
+   *     points to anything else. A {@link NativeResource} of another type is then rejected: its
+   *     address is a different native object, and the callee would read it as this one.
+   */
+  public PointerCoercion(
+      String function, String parameter, boolean nullable, boolean rawNumbers, String resource) {
     super(function, parameter);
     this.nullable = nullable;
     this.rawNumbers = rawNumbers;
+    this.resource = resource;
   }
 
   public long execute(Object value) {
@@ -34,7 +46,10 @@ public final class PointerCoercion extends Coercion {
 
   private long slow(Object value) {
     if (value == null) return checked(0, value);
-    if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
+    if (value instanceof NativeResource owner) {
+      if (resource != null && !sameType(resource, owner.type())) throw wrongResource(owner);
+      if (owner.isClosed()) throw closed(owner);
+    }
     InteropLibrary interop = interop();
     try {
       if (interop.isPointer(value)) return checked(interop.asPointer(value), value);
@@ -49,6 +64,24 @@ public final class PointerCoercion extends Coercion {
     // Closed after the first check but before isPointer(): report the close, not a type error.
     if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
     throw mismatch(nullable ? "pointer or null" : "pointer", value);
+  }
+
+  @CompilerDirectives.TruffleBoundary
+  private static boolean sameType(String expected, String actual) {
+    return expected.equals(actual);
+  }
+
+  private NativeCellException wrongResource(NativeResource owner) {
+    CompilerDirectives.transferToInterpreter();
+    return NativeCellException.of(
+        this,
+        function,
+        ": parameter ",
+        parameter,
+        " expects a ",
+        resource,
+        " resource, got a ",
+        owner.type());
   }
 
   private NativeCellException closed(NativeResource resource) {
