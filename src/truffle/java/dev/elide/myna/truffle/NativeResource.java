@@ -117,6 +117,12 @@ public final class NativeResource implements TruffleObject {
       }
     }
 
+    /**
+     * Runs once, whichever of close, the cleaner or the last dependent gets here. Behind a
+     * boundary: releasing parents recurses through this method, which partial evaluation of a
+     * compiled close (a destroy cell, a guest {@code close}) would otherwise inline without end.
+     */
+    @TruffleBoundary
     private void destroy() {
       try {
         destructor.destroy(address);
