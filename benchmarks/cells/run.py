@@ -34,6 +34,10 @@ SIZES = (16, 256, 1024, 4096, 65536)
 SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ffm-step', 'glue-leaf', 'glue-step',
           'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
           'hand-step', 'glue-boundary-step']
+# String arguments: Java strings and guest (Truffle) strings, by what their UTF-8 encoding needs.
+TEXTS = {'-utf8': 'h\u00e9llo w\u00f6rld', '-wide': '\u3053\u3093\u306b\u3061\u306f\u4e16\u754c'}
+STRINGS = ['glue-text-utf8', 'glue-text-wide', 'glue-text-truffle', 'glue-text-truffle-utf8', 'glue-text-truffle-wide',
+           'glue-text-truffle-fresh', 'glue-ffm-text']
 # A ten-argument entry (two byte buffers, two opaque pointers, integers), as a leaf and a transition.
 SLAB = ['direct-slab', 'invoke-slab', 'invoke-slab-step', 'glue-slab-native', 'glue-slab-heap', 'glue-slab-bytes-heap', 'interop-slab-native', 'direct-slab-step', 'hand-slab-step',
         'glue-slab-step-native', 'glue-boundary-slab-step-native', 'interop-slab-step-native']
@@ -44,7 +48,20 @@ PIN_SIZE = 256
 PINS = [f'{kind}-{PIN_SIZE}' for kind in ('glue-sum-mixed', 'hand-sum-pin', 'inline-sum-pin', 'direct-sum-step', 'glue-sum-step-native',
                                           'glue-sum-step-pin', 'hand-sum-step-pin', 'inline-sum-step-pin')]
 BORROWS = [f'{kind}-{size}' for size in SIZES for kind in ('direct-sum', 'glue-sum-native', 'glue-sum-pin', 'glue-sum-copy')]
-CASES = SCALAR + SLAB + BORROWS + PINS
+# FFM cells lending bytes. The binding with the caller's segment (global, then shared), then the cell
+# over a segment of the global arena, of a shared arena (whose scope a downcall acquires atomically),
+# of an arena confined to the measuring thread, and over a copied heap array, which has no segment.
+# Typed glue repeats the native, shared and confined cases against the direct calls with a confined
+# segment too.
+FFM_SUMS = [f'{kind}-{PIN_SIZE}' for kind in ('direct-ffm-sum', 'direct-ffm-sum-shared', 'direct-ffm-sum-confined', 'glue-ffm-sum-native',
+                                              'glue-ffm-sum-shared', 'glue-ffm-sum-confined', 'glue-ffm-sum-copy', 'typed-ffm-sum-native',
+                                              'typed-ffm-sum-shared', 'typed-ffm-sum-confined')]
+# Two lent byte buffers on one FFM call: both native (global, then one shared arena), both copied,
+# and one of each, against the static slab entry with segments, with two shared segments, and with a
+# native segment and the heap array copied through Myna's own borrow.
+FFM_SLAB = ['direct-ffm-slab', 'direct-ffm-slab-shared', 'direct-ffm-slab-mixed', 'glue-ffm-slab-native', 'glue-ffm-slab-shared',
+            'glue-ffm-slab-heap', 'glue-ffm-slab-mixed', 'typed-ffm-slab-native', 'typed-ffm-slab-shared', 'typed-ffm-slab-mixed']
+CASES = SCALAR + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',
            'jniutils', 'nativebridge', 'truffle-nfi', 'truffle-nfi-libffi')
 
@@ -64,8 +81,9 @@ def expected(name, count, seed):
         return (seed + count * sum((i * 31 + 7) & 0xff for i in range(size))) % (1 << 64)
     if '-slab' in name:
         return (seed + count * SLAB_DELTA) % (1 << 64)
-    if name.endswith('-text'):
-        return (seed + count * len('hello world')) % (1 << 64)
+    if '-text' in name:
+        text = next((text for suffix, text in TEXTS.items() if name.endswith(suffix)), 'hello world')
+        return (seed + count * len(text.encode())) % (1 << 64)
     mul, add, a, b, n = 1, 0, 1664525, 1013904223, count
     while n:
         if n & 1: mul, add = (a * mul) % (1 << 64), (a * add + b) % (1 << 64)

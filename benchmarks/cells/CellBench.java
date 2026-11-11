@@ -24,7 +24,7 @@ public final class CellBench {
       return seed + count * sum;
     }
     if (name.contains("-slab")) return seed + count * Bodies.SLAB_DELTA;
-    if (name.endsWith("-text")) return seed + (long) count * Bodies.TEXT.length();
+    if (name.contains("-text")) return seed + (long) count * Bodies.text(name).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
     long x = seed;
     for (int i = 0; i < count; i++) x = x * 1664525L + 1013904223L;
     return x;

@@ -11,6 +11,8 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.strings.TruffleString;
+import dev.elide.myna.truffle.Borrow;
 import dev.elide.myna.truffle.HeapBytes;
 import dev.elide.myna.truffle.NativeBytes;
 import dev.elide.myna.truffle.NativeCell;
@@ -18,6 +20,7 @@ import dev.elide.myna.truffle.NativeFunction;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.nio.charset.StandardCharsets;
 import dev.elide.myna.truffle.NativePointer;
 import org.graalvm.nativeimage.PinnedObject;
 import org.graalvm.word.WordFactory;
@@ -32,6 +35,22 @@ public abstract class Bodies extends NativeCell {
   public static volatile boolean lastCompiled;
 
   public static final String TEXT = "hello world";
+
+  /** Eleven characters of which two take two UTF-8 bytes each: 13 bytes. */
+  public static final String TEXT_UTF8 = "h\u00e9llo w\u00f6rld";
+
+  /** Seven characters outside Latin-1 that take three UTF-8 bytes each: 21 bytes. */
+  public static final String TEXT_WIDE = "\u3053\u3093\u306b\u3061\u306f\u4e16\u754c";
+
+  /** The text a string case lends; the Python oracle agrees on its UTF-8 length. */
+  public static String text(String name) {
+    return name.endsWith("-utf8") ? TEXT_UTF8 : name.endsWith("-wide") ? TEXT_WIDE : TEXT;
+  }
+
+  /** The same text as a guest string: UTF-16, as JavaScript strings are. */
+  static TruffleString guestText(String name) {
+    return TruffleString.fromJavaStringUncached(text(name), TruffleString.Encoding.UTF_16);
+  }
 
   /** The slab entry's data size and what one call adds to its salt; the Python oracle agrees. */
   public static final int SLAB_SIZE = 256;
@@ -72,6 +91,26 @@ public abstract class Bodies extends NativeCell {
     return segment;
   }
 
+  /**
+   * The pattern in an arena that stays open for the process: a shared one, whose scope a downcall
+   * acquires atomically, or one confined to the measuring thread, whose owner it checks.
+   */
+  static MemorySegment scopedPattern(int size, boolean shared) {
+    MemorySegment segment = (shared ? Arena.ofShared() : Arena.ofConfined()).allocate(size);
+    MemorySegment.copy(pattern(size), 0, segment, ValueLayout.JAVA_BYTE, 0, size);
+    return segment;
+  }
+
+  /** The slab's two byte buffers in one shared arena that stays open for the process. */
+  static MemorySegment[] sharedSlab() {
+    Arena arena = Arena.ofShared();
+    MemorySegment data = arena.allocate(SLAB_SIZE);
+    MemorySegment aux = arena.allocate(16);
+    MemorySegment.copy(pattern(SLAB_SIZE), 0, data, ValueLayout.JAVA_BYTE, 0, SLAB_SIZE);
+    MemorySegment.copy(pattern(16), 0, aux, ValueLayout.JAVA_BYTE, 0, 16);
+    return new MemorySegment[] {data, aux};
+  }
+
   public static Bodies create(String name) {
     if (name.contains("-sum-")) {
       int size = Integer.parseInt(name.substring(name.lastIndexOf('-') + 1));
@@ -88,6 +127,16 @@ public abstract class Bodies extends NativeCell {
         case "direct-sum-step" -> new DirectSumStep(name, size);
         case "glue-sum-step-native" -> new GlueSum(name, new CellsTruffle.sumStep_Cell(), NativeBytes.of(nativePattern(size), false));
         case "glue-sum-step-pin" -> new GlueSum(name, new CellsTruffle.sumStep_Cell(), new HeapBytes(pattern(size), false));
+        case "direct-ffm-sum" -> new DirectFfmSum(name, nativePattern(size));
+        case "direct-ffm-sum-shared" -> new DirectFfmSum(name, scopedPattern(size, true));
+        case "direct-ffm-sum-confined" -> new DirectFfmSum(name, scopedPattern(size, false));
+        case "typed-ffm-sum-native" -> new TypedFfmSum(name, NativeBytes.of(nativePattern(size), false));
+        case "typed-ffm-sum-shared" -> new TypedFfmSum(name, NativeBytes.of(scopedPattern(size, true), false));
+        case "typed-ffm-sum-confined" -> new TypedFfmSum(name, NativeBytes.of(scopedPattern(size, false), false));
+        case "glue-ffm-sum-native" -> new GlueSum(name, new FfmCellsTruffle.sum_Cell(), NativeBytes.of(nativePattern(size), false));
+        case "glue-ffm-sum-shared" -> new GlueSum(name, new FfmCellsTruffle.sum_Cell(), NativeBytes.of(scopedPattern(size, true), false));
+        case "glue-ffm-sum-confined" -> new GlueSum(name, new FfmCellsTruffle.sum_Cell(), NativeBytes.of(scopedPattern(size, false), false));
+        case "glue-ffm-sum-copy" -> new GlueSum(name, new FfmCellsTruffle.sum_Cell(), new HeapBytes(pattern(size), false));
         default -> throw new IllegalArgumentException(name);
       };
     }
@@ -106,7 +155,10 @@ public abstract class Bodies extends NativeCell {
       case "typed-step" -> new TypedStep(name);
       case "typed-ffm-leaf" -> new TypedFfmLeaf(name);
       case "typed-ffm-step" -> new TypedFfmStep(name);
-      case "glue-text" -> new GlueText(name, new CellsTruffle.text_Cell());
+      case "glue-text", "glue-text-utf8", "glue-text-wide" -> new GlueText(name, text(name));
+      case "glue-text-truffle", "glue-text-truffle-utf8", "glue-text-truffle-wide" -> new GlueText(name, guestText(name));
+      case "glue-ffm-text" -> new GlueText(name, new FfmCellsTruffle.text_Cell(), TEXT);
+      case "glue-text-truffle-fresh" -> new GlueFreshText(name);
       case "interop-leaf" -> new Interop(name, CellsTruffle.leaf());
       case "interop-step" -> new Interop(name, CellsTruffle.step());
       case "hand-step" -> new HandStep(name);
@@ -121,6 +173,16 @@ public abstract class Bodies extends NativeCell {
       case "glue-slab-bytes-heap" -> new GlueSlab(name, new CellsTruffle.slabBytes_Cell(), true);
       case "glue-slab-step-native" -> new GlueSlab(name, new CellsTruffle.slabStep_Cell(), false);
       case "glue-boundary-slab-step-native" -> new GlueSlab(name, new BoundaryCellsTruffle.slabStep_Cell(), false);
+      case "direct-ffm-slab" -> new DirectFfmSlab(name, nativePattern(SLAB_SIZE), nativePattern(16));
+      case "direct-ffm-slab-shared" -> new DirectFfmSlab(name, sharedSlab());
+      case "direct-ffm-slab-mixed" -> new DirectFfmSlabMixed(name);
+      case "glue-ffm-slab-native" -> new GlueSlab(name, new FfmCellsTruffle.slab_Cell(), false, false);
+      case "glue-ffm-slab-shared" -> new GlueSlab(name, new FfmCellsTruffle.slab_Cell(), sharedSlab());
+      case "typed-ffm-slab-native" -> new TypedFfmSlab(name, NativeBytes.of(nativePattern(SLAB_SIZE), false), NativeBytes.of(nativePattern(16), false));
+      case "typed-ffm-slab-shared" -> new TypedFfmSlab(name, sharedSlab());
+      case "typed-ffm-slab-mixed" -> new TypedFfmSlab(name, NativeBytes.of(nativePattern(SLAB_SIZE), false), new HeapBytes(pattern(16), false));
+      case "glue-ffm-slab-heap" -> new GlueSlab(name, new FfmCellsTruffle.slab_Cell(), true, true);
+      case "glue-ffm-slab-mixed" -> new GlueSlab(name, new FfmCellsTruffle.slab_Cell(), false, true);
       case "interop-slab-native" -> new InteropSlab(name, CellsTruffle.slab());
       case "interop-slab-step-native" -> new InteropSlab(name, CellsTruffle.slabStep());
       case "nfi-leaf" -> new Nfi(name, false);
@@ -215,6 +277,28 @@ public abstract class Bodies extends NativeCell {
     }
   }
 
+  /** The FFM binding with the caller's own segment: the floor for an FFM cell that lends bytes. */
+  static final class DirectFfmSum extends Bodies {
+    private final MemorySegment segment;
+    private final long size;
+
+    DirectFfmSum(String name, MemorySegment segment) {
+      super(name);
+      this.segment = segment;
+      this.size = segment.byteSize();
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      try {
+        for (int i = 0; i < count; i++) x = FfmCellsFFM.sum(segment, size, x);
+      } catch (Throwable t) {
+        throw failure(t);
+      }
+      return x;
+    }
+  }
+
   static final class DirectText extends Bodies {
     private final long address;
 
@@ -292,6 +376,25 @@ public abstract class Bodies extends NativeCell {
     }
   }
 
+  /** Typed glue over the FFM sum cell, lending one buffer. */
+  static final class TypedFfmSum extends Bodies {
+    @Node.Child private FfmCellsTruffle.sum_Cell cell = new FfmCellsTruffle.sum_Cell();
+
+    // Deliberately not final: a guest value, which partial evaluation must not fold to a constant.
+    private Object buffer;
+
+    TypedFfmSum(String name, Object buffer) {
+      super(name);
+      this.buffer = buffer;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {buffer, x});
+      return x;
+    }
+  }
+
   static final class TypedFfmStep extends Bodies {
     @Node.Child private FfmCellsTruffle.step_Cell cell = new FfmCellsTruffle.step_Cell();
 
@@ -348,17 +451,51 @@ public abstract class Bodies extends NativeCell {
     }
   }
 
+  /** A string argument: a Java string, or a guest string as a Truffle language passes it. */
   static final class GlueText extends Bodies {
     @Node.Child private NativeCell cell;
 
-    GlueText(String name, NativeCell cell) {
+    // Deliberately not final: a guest value, which partial evaluation must not fold to a constant.
+    private Object text;
+
+    GlueText(String name, Object text) {
+      this(name, new CellsTruffle.text_Cell(), text);
+    }
+
+    GlueText(String name, NativeCell cell, Object text) {
       super(name);
       this.cell = cell;
+      this.text = text;
     }
 
     @Override
     long run(int count, long x, Object extra) {
-      for (int i = 0; i < count; i++) x = (Long) cell.execute(new Object[] {TEXT, x});
+      for (int i = 0; i < count; i++) x = (Long) cell.execute(new Object[] {text, x});
+      return x;
+    }
+  }
+
+  /**
+   * A guest string that is new on every call, as guest code that builds its strings passes them:
+   * nothing cached on an earlier call (a Java string, a transcoded copy) can be reused.
+   */
+  static final class GlueFreshText extends Bodies {
+    @Node.Child private NativeCell cell = new CellsTruffle.text_Cell();
+    @Node.Child private TruffleString.FromByteArrayNode fromBytes = TruffleString.FromByteArrayNode.create();
+
+    // Not final, like the other guest values.
+    private byte[] bytes = TEXT.getBytes(StandardCharsets.ISO_8859_1);
+
+    GlueFreshText(String name) {
+      super(name);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) {
+        TruffleString fresh = fromBytes.execute(bytes, 0, bytes.length, TruffleString.Encoding.ISO_8859_1, false);
+        x = (Long) cell.execute(new Object[] {fresh, x});
+      }
       return x;
     }
   }
@@ -537,6 +674,98 @@ public abstract class Bodies extends NativeCell {
     }
   }
 
+  /** The FFM slab binding with the caller's own segments: the floor for the FFM slab cells. */
+  static final class DirectFfmSlab extends Bodies {
+    private final MemorySegment data;
+    private final MemorySegment aux;
+
+    DirectFfmSlab(String name, MemorySegment data, MemorySegment aux) {
+      super(name);
+      this.data = data;
+      this.aux = aux;
+    }
+
+    DirectFfmSlab(String name, MemorySegment[] buffers) {
+      this(name, buffers[0], buffers[1]);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      try {
+        for (int i = 0; i < count; i++) x = FfmCellsFFM.slab(data, SLAB_SIZE, aux, aux, data, 3, -1, 7, 11, x);
+      } catch (Throwable t) {
+        throw failure(t);
+      }
+      return x;
+    }
+  }
+
+  /**
+   * The FFM slab binding with a native segment and a heap array, copied for each call as the cells
+   * copy it: through Myna's own borrow, NUL-terminated as a C string parameter is.
+   */
+  static final class DirectFfmSlabMixed extends Bodies {
+    private final MemorySegment data = nativePattern(SLAB_SIZE);
+    private final MemorySegment other = nativePattern(16);
+    private byte[] aux = pattern(16); // not final, like the cells' guest values
+
+    DirectFfmSlabMixed(String name) {
+      super(name);
+    }
+
+    /** The call behind one boundary with the copy's address, as the cells make their FFM calls. */
+    @CompilerDirectives.TruffleBoundary
+    private static long call(MemorySegment data, long aux, MemorySegment other, long x) {
+      try {
+        return FfmCellsFFM.slab(data, SLAB_SIZE, MemorySegment.ofAddress(aux), other, other, 3, -1, 7, 11, x);
+      } catch (Throwable t) {
+        throw failure(t);
+      }
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) {
+        // Copied in compiled code, which keeps the borrow out of the heap, as the cells do.
+        Borrow copy = Borrow.ofArray(aux, false, true);
+        try {
+          x = call(data, copy.address(), other, x);
+        } finally {
+          copy.release();
+        }
+      }
+      return x;
+    }
+  }
+
+  /** Typed glue over the FFM slab cell: ten guest values, primitive result. */
+  static final class TypedFfmSlab extends Bodies {
+    @Node.Child private FfmCellsTruffle.slab_Cell cell = new FfmCellsTruffle.slab_Cell();
+
+    // Not final: guest values, which partial evaluation must not fold to constants.
+    private Object data;
+    private Object aux;
+    private Object context = NativePointer.of(nativePattern(16).address());
+    private Object output = NativePointer.of(nativePattern(16).address());
+
+    TypedFfmSlab(String name, Object data, Object aux) {
+      super(name);
+      this.data = data;
+      this.aux = aux;
+    }
+
+    TypedFfmSlab(String name, MemorySegment[] buffers) {
+      this(name, NativeBytes.of(buffers[0], false), NativeBytes.of(buffers[1], false));
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++)
+        x = cell.executeLong(new Object[] {data, (long) SLAB_SIZE, aux, context, output, 3, -1, 7L, 11L, x});
+      return x;
+    }
+  }
+
   /** The cells' static invoke entries: native carriers and raw addresses, no coercion. */
   static final class InvokeSlab extends Bodies {
     private final long data = nativePattern(SLAB_SIZE).address();
@@ -593,10 +822,24 @@ public abstract class Bodies extends NativeCell {
     private Object output;
 
     GlueSlab(String name, NativeCell cell, boolean heap) {
+      this(name, cell, heap, heap);
+    }
+
+    GlueSlab(String name, NativeCell cell, MemorySegment[] buffers) {
       super(name);
       this.cell = cell;
-      this.data = heap ? new HeapBytes(pattern(SLAB_SIZE), false) : NativeBytes.of(nativePattern(SLAB_SIZE), false);
-      this.aux = heap ? new HeapBytes(pattern(16), false) : NativeBytes.of(nativePattern(16), false);
+      this.data = NativeBytes.of(buffers[0], false);
+      this.aux = NativeBytes.of(buffers[1], false);
+      this.context = NativePointer.of(nativePattern(16).address());
+      this.output = NativePointer.of(nativePattern(16).address());
+    }
+
+    /** Either byte buffer from the heap or from native memory, independently. */
+    GlueSlab(String name, NativeCell cell, boolean heapData, boolean heapAux) {
+      super(name);
+      this.cell = cell;
+      this.data = heapData ? new HeapBytes(pattern(SLAB_SIZE), false) : NativeBytes.of(nativePattern(SLAB_SIZE), false);
+      this.aux = heapAux ? new HeapBytes(pattern(16), false) : NativeBytes.of(nativePattern(16), false);
       this.context = NativePointer.of(nativePattern(16).address());
       this.output = NativePointer.of(nativePattern(16).address());
     }
