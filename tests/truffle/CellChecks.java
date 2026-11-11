@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package fixture.cells;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.truffle.*;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -28,6 +29,32 @@ public final class CellChecks {
   public static long pair(String left, String right) {
     byte[] l = left.getBytes(StandardCharsets.UTF_8), r = right.getBytes(StandardCharsets.UTF_8);
     return ((long) l.length << 32) | ((long) r.length << 16) | ((l.length == 0 ? 0 : l[0] & 0xff) << 8) | (r.length == 0 ? 0 : r[0] & 0xff);
+  }
+  /** A guest string as JavaScript passes one: a UTF-16 TruffleString, never a Java string. */
+  public static TruffleString guest(String text) {
+    return TruffleString.fromCharArrayUTF16Uncached(text.toCharArray());
+  }
+  /**
+   * Guest strings lend the bytes their Java strings would, to C strings and to borrowed buffers
+   * alike: ASCII, Latin-1, wider text, a surrogate pair, and an unpaired surrogate as a question
+   * mark. They are read-only, like Java strings.
+   */
+  static void guestStrings(Function<String, NativeFunction> cells) throws Exception {
+    for (String text : new String[] {"", "abc", "h\u00e9llo", "\u3053\u3093\u306b\u3061\u306f", "a\ud83d\ude00b", "a\ud83db",
+        "x".repeat(100), "\u00e9".repeat(100), "\u20ac".repeat(100)}) {
+      byte[] utf8 = text.getBytes(StandardCharsets.UTF_8);
+      long sum = 0;
+      for (byte b : utf8) sum += b & 0xff;
+      check(call(cells, "strlen", guest(text)).equals((long) utf8.length), "strlen of a guest string: " + text);
+      check(call(cells, "checksum", guest(text)).equals(sum), "checksum of a guest string: " + text);
+      check(call(cells, "pair", guest(text), text).equals(pair(text, text)), "pair of a guest and a Java string: " + text);
+      check(call(cells, "pair", "left", guest(text)).equals(pair("left", text)), "pair of a Java and a guest string: " + text);
+    }
+    check(call(cells, "sumBytes", guest("abc"), 3L, NativePointer.NULL).equals(294L), "sumBytes guest string");
+    rejects(cells, "fill", guest("text"), 1);
+    // A string in another encoding, as Python passes one, and one made from a Java string.
+    check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
+    check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
   }
   /**
    * Two borrows with lengths of their own beside a pointer that passes through: the guest gives
@@ -227,6 +254,7 @@ public final class CellChecks {
     }
     transfers(cells, large);
     decodes(cells);
+    guestStrings(cells);
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);
