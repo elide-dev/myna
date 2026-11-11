@@ -106,7 +106,7 @@ class TruffleIntegrationTests(unittest.TestCase):
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The generated properties cover the cells; the probes are the consumer's own node classes.
-                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat",
+                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
                              f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
@@ -136,7 +136,7 @@ class TruffleIntegrationTests(unittest.TestCase):
             "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release", "GuestText.push",
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
             "BytesCoercion.emptyAddress",
-            "NativeCellRootNode.execute")]
+            "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText")]
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
 

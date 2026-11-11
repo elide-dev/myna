@@ -255,6 +255,90 @@ public final class CellChecks {
       rejects(cells, "decode", NativeBytes.of(data, false), 7);
     }
   }
+  /** The sum cells_adopt records: the adopted bytes plus the key's, both unsigned. */
+  static long sum(byte[]... parts) {
+    long sum = 0;
+    for (byte[] part : parts) for (byte b : part) sum += b & 0xff;
+    return sum;
+  }
+  /**
+   * A borrow held by the resource its create makes: the native side reads the adopted bytes after
+   * the call, until its release, and once more during it. A copy (heap arrays, strings) is the
+   * resource's own, so the guest's later writes and other calls' scratch copies do not reach it;
+   * native memory is lent in place. The borrow ends exactly once, after the release, and at once
+   * when the create fails.
+   */
+  static void adopts(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result = arena.allocate(24);
+      Object out = NativeBytes.of(result, true);
+      // A small heap array, which a call borrow would copy onto the scratch stack.
+      byte[] small = {1, 2, 3, 4};
+      Object owner = call(cells, "adopt", new HeapBytes(small, false), "k", out);
+      check(owner instanceof NativeResource r && r.type().equals("Adopted"), "adopted owner");
+      check(result.get(ValueLayout.JAVA_LONG, 16) == 10 + 'k', "the call borrow is read during the call");
+      check(result.get(ValueLayout.JAVA_LONG, 8) == 4, "derived length");
+      check(call(cells, "counterLive").equals(live + 1), "one live adoption");
+      // Later calls reuse the scratch stack; the held copy is elsewhere and stays intact.
+      check(call(cells, "checksum", new HeapBytes(new byte[] {9, 9, 9, 9}, false)).equals(36L), "a later scratch copy");
+      check(call(cells, "pair", "overwrite", "the scratch stack").equals(pair("overwrite", "the scratch stack")), "later C strings");
+      small[0] = 100;
+      check(call(cells, "adoptedSum", owner).equals(10L), "held copy intact after other calls and guest writes");
+      // A large array is copied too, never pinned across calls.
+      byte[] big = large.clone();
+      Object bigOwner = call(cells, "adopt", new HeapBytes(big, false), null, out);
+      java.util.Arrays.fill(big, (byte) 0);
+      check(call(cells, "adoptedSum", bigOwner).equals(sum(large)), "large held copy intact");
+      // Strings, Java and guest, are held as their UTF-8 bytes.
+      Object text = call(cells, "adopt", "h\u00e9llo", null, out);
+      check(call(cells, "adoptedSum", text).equals(sum("h\u00e9llo".getBytes(StandardCharsets.UTF_8))), "held Java string");
+      Object guestText = call(cells, "adopt", guest("\u20acuro"), null, out);
+      check(call(cells, "adoptedSum", guestText).equals(sum("\u20acuro".getBytes(StandardCharsets.UTF_8))), "held guest string");
+      // Native memory is lent in place: the struct records the guest's own address.
+      MemorySegment lent = arena.allocate(8);
+      lent.fill((byte) 2);
+      Object inPlace = call(cells, "adopt", NativeBytes.of(lent, false), new HeapBytes(new byte[] {1}, false), out);
+      check(result.get(ValueLayout.JAVA_LONG, 0) == lent.address(), "native memory lent in place");
+      check(call(cells, "adoptedSum", inPlace).equals(16L), "native memory read after the call");
+      check(call(cells, "counterLive").equals(live + 5), "five live adoptions");
+      // A failed create keeps nothing: the status is raised and the borrow ends at once.
+      for (Object empty : new Object[] {new HeapBytes(new byte[0], false), "", NativeVoid.INSTANCE, NativePointer.NULL}) {
+        try {
+          call(cells, "adopt", empty, null, out);
+          throw new AssertionError("an empty adoption returned");
+        } catch (NativeStatusException failed) {
+          check(failed.status() == 3, "adopt status carried");
+        }
+      }
+      check(call(cells, "counterLive").equals(live + 5), "failed adoptions create nothing");
+      // Release reads the bytes once more, then the borrow ends; a second release does nothing.
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "adopted released");
+      check(call(cells, "adoptedLast").equals(10L), "bytes still held during release");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "second release is a no-op");
+      INTEROP.invokeMember(owner, "close");
+      check(call(cells, "adoptedLast").equals(10L), "no second native release");
+      rejects(cells, "adoptedSum", owner);
+      // The owner is confined: another thread can neither close it nor end its borrow.
+      Throwable[] failure = new Throwable[1];
+      Thread other = new Thread(() -> {
+        try { ((NativeResource) bigOwner).close(); } catch (Throwable t) { failure[0] = t; }
+      });
+      other.start();
+      other.join();
+      check(failure[0] instanceof NativeCellException, "confined close from another thread refused");
+      check(call(cells, "adoptedSum", bigOwner).equals(sum(large)), "held copy survives a refused close");
+      for (Object o : new Object[] {bigOwner, text, guestText, inPlace})
+        check(call(cells, "adoptedRelease", o) == NativeVoid.INSTANCE, "released");
+      check(call(cells, "adoptedLast").equals(16L), "in-place bytes read during release");
+      check(call(cells, "counterLive").equals(live), "every adoption released");
+      // Refused before anything is lent: a writable buffer is fine, a bare pointer has no size.
+      rejects(cells, "adopt", NativePointer.of(lent.address()), null, out);
+      rejects(cells, "adopt", 7, null, out);
+      rejects(cells, "adopt", owner, null, out);
+      check(call(cells, "counterLive").equals(live), "refused adoptions create nothing");
+    }
+  }
   public static void run(Function<String, NativeFunction> cells) throws Exception {
     // Host Java null bypasses guest interop values; exercise the public host call API.
     for (Object[] sample : new Object[][] {
@@ -367,6 +451,7 @@ public final class CellChecks {
       check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "hold marked its entry");
       check(call(cells, "hold", new HeapBytes(new byte[] {1, 2}, false), NativeBytes.of(gate, true)).equals(3L), "hold of a heap array");
     }
+    adopts(cells, large);
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);

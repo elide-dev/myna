@@ -148,7 +148,11 @@ public final class SeamJson {
                               + quote(b.parameter())
                               + ",\"length\":"
                               + quote(b.length())
-                              + ",\"lifetime\":\"call\"}")
+                              // A held borrow names its resource; call borrows keep their form.
+                              + (b.held()
+                                  ? ",\"lifetime\":\"resource\",\"resource\":" + quote(b.resource())
+                                  : ",\"lifetime\":\"call\"")
+                              + "}")
                       .toList());
     return result;
   }

@@ -102,7 +102,7 @@ public final class NativeOwnership implements Backend {
                   + "        }\n"
                   + "    }\n");
     }
-    if (!m.borrows().isEmpty())
+    if (!m.callBorrows().isEmpty())
       out.append(
 """
         /**

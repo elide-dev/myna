@@ -11,7 +11,7 @@ final class RustOwnership {
   private RustOwnership() {}
 
   static String generate(Module m) {
-    if (m.returnedResources().isEmpty() && m.borrows().isEmpty()) return "";
+    if (m.returnedResources().isEmpty() && m.callBorrows().isEmpty()) return "";
     var out =
         new StringBuilder(
             "\n"

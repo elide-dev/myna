@@ -58,6 +58,16 @@ PAIRS = {
         (None, 'typed-ffm-slab-native', 'direct-ffm-slab', None, ''),
         (None, 'typed-ffm-slab-shared', 'direct-ffm-slab-shared', None, ''),
         (None, 'typed-ffm-slab-mixed', 'direct-ffm-slab-mixed', None, ''),
+        # A create cell against the same create and destroy called directly, over the same native
+        # memory. The direct pair writes the caller's own struct; the cell also allocates its owner
+        # and the runtime's struct (calloc and free), checks and copies the guest's buffer, and, for
+        # the held borrow, keeps the borrow on the owner. Measured on the controlled x86-64 host at
+        # e9f004a (before rebasing onto #116, which changed only FFM cells): +92.3% and +113.2%;
+        # the allowances leave about 5% of headroom over that.
+        (None, 'glue-create-scan-native-256', 'direct-create-scan-256', 1.0,
+         'the cell allocates an owner and a runtime struct the direct call does not'),
+        (None, 'glue-create-adopt-native-256', 'direct-create-adopt-256', 1.25,
+         'as scan, and the owner keeps the held borrow until its release'),
     ],
 }
 

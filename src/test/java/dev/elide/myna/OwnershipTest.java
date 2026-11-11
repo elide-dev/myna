@@ -805,6 +805,14 @@ class OwnershipTest {
     assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
   }
 
+  /** A resource whose create returns it has no handle parameter or field. */
+  @Test
+  void returnedResourcesHaveNoHandle() {
+    var session = Dsl.parse(CREATES).resources().getFirst();
+    assertNull(session.handleParameter());
+    assertNull(session.handleField());
+  }
+
   /** A returned-pointer resource has no result to list as success. */
   @Test
   void successBelongsToHandleCreates() {
@@ -817,6 +825,204 @@ class OwnershipTest {
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true))
             .getMessage());
+  }
+
+  /**
+   * A create that keeps its input until its resource is released: the borrow is held by the
+   * resource, and a call borrow on the same create still ends with the call.
+   */
+  static final String HELD =
+      HANDLES
+          .replace(
+              "borrow layoutCompile schema length=length lifetime=call\n",
+              "borrow layoutCompile schema length=length lifetime=resource:Layout\n")
+          .replace(
+              "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+                  + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
+              "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+                  + " readonly=true@explicit_contract\n");
+
+  /**
+   * Only a Truffle cell's owner can end a borrow after its call, so the other backends leave a
+   * create with a held buffer to its raw binding: no call-scoped wrapper, which would end it early.
+   */
+  @Test
+  void heldBorrowsAreProjectedByCellsOnly() {
+    assertNotEquals(HANDLES, HELD);
+    var output = Generator.generate(Dsl.parse(HELD), true);
+    assertTrue(output.get("ApiTruffle.java").contains("borrow_schema.keep()"));
+    // Nothing is left for the ownership class: the only borrow is held.
+    assertFalse(output.containsKey("ApiOwnership.java"));
+    assertFalse(output.get("ApiFFM.java").contains("NativeBuffer"));
+    assertFalse(output.get("ApiFFM.java").contains("layoutCompile(MemorySegment schema)"));
+    assertFalse(output.get("seam.rs").contains("pub mod ownership"));
+    var jni = StaticJni.generate(Dsl.parse(HELD));
+    assertFalse(jni.get("ApiJNI.java").contains("layoutCompileBuffer"), jni.get("ApiJNI.java"));
+    // The raw binding is unchanged.
+    assertTrue(
+        output.get("seam.rs").contains("pub fn layoutCompile(schema: *const u8, length: u64,"),
+        output.get("seam.rs"));
+    String json = output.get("seam.json");
+    assertTrue(
+        json.contains(
+            "{\"function\":\"layoutCompile\",\"parameter\":\"schema\",\"length\":\"length\","
+                + "\"lifetime\":\"resource\",\"resource\":\"Layout\"}"),
+        json);
+    assertNotEquals(
+        Generator.generate(Dsl.parse(HANDLES), true).get("seam.abi"), output.get("seam.abi"));
+    // A call borrow beside a held one: the function still has no call-scoped wrapper anywhere,
+    // and the cell lends the call borrow for the call only.
+    String mixed =
+        HELD.replace(
+                "  param length type=u64\n  param result",
+                "  param length type=u64\n"
+                    + "  param key type=ptr<u8> nullable=true ownership=borrowed access=read"
+                    + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+                    + "  param keyLength type=u32\n"
+                    + "  param result")
+            .replace(
+                "borrow layoutCompile schema",
+                "borrow layoutCompile key length=keyLength lifetime=call\n"
+                    + "borrow layoutCompile schema");
+    var both = Generator.generate(Dsl.parse(mixed), true);
+    assertFalse(both.containsKey("ApiOwnership.java"));
+    assertTrue(
+        both.get("seam.json")
+            .contains("\"parameter\":\"key\",\"length\":\"keyLength\",\"lifetime\":\"call\""));
+    String truffle = both.get("ApiTruffle.java");
+    assertTrue(
+        truffle.contains("new HeldBytesCoercion(\"layoutCompile\", \"schema\", false)"), truffle);
+    assertTrue(
+        truffle.contains("new BytesCoercion(\"layoutCompile\", \"key\", true, false, true)"),
+        truffle);
+    assertTrue(truffle.contains(", borrow_schema.keep());"), truffle);
+    assertFalse(truffle.contains("borrow_key.keep()"), truffle);
+    // A call borrow elsewhere in the module keeps its wrappers.
+    String other =
+        HELD
+            + "borrow checksum bytes length=count lifetime=call\n"
+            + "import checksum return=u64 error=no_failure nounwind=true@explicit_contract\n"
+            + "  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "end\n";
+    String ownership = Generator.generate(Dsl.parse(other), true).get("ApiOwnership.java");
+    assertTrue(ownership.contains("checksum(NativeBuffer"), ownership);
+    assertFalse(ownership.contains("layoutCompile("), ownership);
+  }
+
+  static Stream<Arguments> heldRejections() {
+    String held = "borrow layoutCompile schema length=length lifetime=resource:Layout";
+    String schema =
+        "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " readonly=true@explicit_contract\n";
+    String form = ": layoutCompile schema lifetime=resource:";
+    return Stream.of(
+        Arguments.of(
+            held,
+            held.replace("resource:Layout", "resource:"),
+            "lifetime is call or resource:RESOURCE: resource:"),
+        Arguments.of(
+            held,
+            held.replace("resource:Layout", "forever"),
+            "lifetime is call or resource:RESOURCE: forever"),
+        Arguments.of(
+            held,
+            held.replace("Layout", "Absent"),
+            "a held borrow names a declared resource" + form + "Absent"),
+        Arguments.of(
+            held,
+            held.replace("Layout", "View"),
+            "a held borrow belongs to its resource's create, viewInit" + form + "View"),
+        Arguments.of(
+            schema,
+            schema
+                .replace("access=read", "access=read_write")
+                .replace(" readonly=true@explicit_contract", ""),
+            "a held buffer is read-only (access=read)" + form + "Layout"),
+        Arguments.of(
+            schema,
+            schema.replace("access=read", "access=read nocapture=true@explicit_contract"),
+            "a held buffer is captured by its create and cannot be nocapture" + form + "Layout"),
+        // The call-borrow rules still apply to a held buffer.
+        Arguments.of(
+            schema,
+            schema.replace(" readonly=true@explicit_contract", ""),
+            "shared call buffer requires approved readonly=true"),
+        Arguments.of(
+            schema,
+            schema.replace("ptr<u8>", "ptr<u16>"),
+            "call buffer requires borrowed ptr<u8>"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("heldRejections")
+  void rejectsHeldBorrowsWithTheirReason(String from, String to, String message) {
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(HELD), true));
+    assertTrue(HELD.contains(from), "mutation must affect fixture");
+    String changed = HELD.replace(from, to);
+    var error =
+        assertThrows(
+            IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), true), to);
+    assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
+  }
+
+  /**
+   * A held borrow needs a cell, and a create that reports a status: a returned pointer is rejected
+   * beside any borrow, and no other backend can end a borrow after its call.
+   */
+  @Test
+  void heldBorrowsNeedACellThatReportsAStatus() {
+    String open =
+        "module held target=aarch64-apple-darwin java_class=Api\n"
+            + "opaque Doc\n"
+            + "resource Doc representation=native threading=confined create=docOpen"
+            + " destroy=docClose\n"
+            + "borrow docOpen data length=length lifetime=resource:Doc\n"
+            + "import docOpen return=ptr<Doc> error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " readonly=true@explicit_contract\n"
+            + "  param length type=u64\n"
+            + "end\n"
+            + "import docClose return=void error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param doc type=ptr<Doc> nullable=false ownership=transferred_to_callee"
+            + " access=read_write\n"
+            + "end\n";
+    assertEquals(
+        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
+            + " lifetime=resource:Doc",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(open), true))
+            .getMessage());
+    String cells = open.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
+    assertEquals(
+        "a held borrow needs a create that reports a status and writes its resource through a"
+            + " parameter (handle=...): docOpen data lifetime=resource:Doc",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
+            .getMessage());
+    // A module that generates cells, but not for this create.
+    String noCell =
+        cells.replace(
+            " native_leaf=false@explicit_contract\n  param data",
+            " native_leaf=false@explicit_contract truffle_cell=false@explicit_contract\n"
+                + "  param data");
+    assertNotEquals(cells, noCell);
+    assertEquals(
+        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
+            + " lifetime=resource:Doc",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(noCell), true))
+            .getMessage());
+    String optedOut =
+        HELD.replace(
+            "import layoutCompile return=i32 error=no_failure",
+            "import layoutCompile return=i32 error=no_failure"
+                + " truffle_cell=false@explicit_contract");
+    assertThrows(
+        IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(optedOut), true));
   }
 
   static Stream<Arguments> borrowRejections() {

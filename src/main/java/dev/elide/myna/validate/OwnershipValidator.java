@@ -129,7 +129,6 @@ final class OwnershipValidator {
       Function f = functions.get(b.function());
       require(f != null, "unknown borrow function: " + b.function());
       nativeCall(f);
-      require(f.returns() instanceof Scalar, "call borrow cannot return a pointer");
       var params = new HashMap<String, Parameter>();
       f.parameters().forEach(p -> params.put(p.name(), p));
       var p = params.get(b.parameter());
@@ -137,6 +136,8 @@ final class OwnershipValidator {
       require(
           p != null && length != null && p != length,
           "borrow must identify distinct buffer and length parameters");
+      if (b.held()) held(m, b, f, p);
+      require(f.returns() instanceof Scalar, "call borrow cannot return a pointer");
       require(
           !lengths.contains(b.function() + " " + b.parameter()),
           "call buffer cannot be another borrow's length: " + b.function() + " " + b.parameter());
@@ -154,7 +155,9 @@ final class OwnershipValidator {
       require(
           Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(length.type()),
           "buffer length must be a 32/64-bit integer (bytes)");
-      require(approved(p.facts(), "nocapture"), "call buffer requires approved nocapture=true");
+      // A held buffer is captured by its create, which is the point of holding it.
+      if (!b.held())
+        require(approved(p.facts(), "nocapture"), "call buffer requires approved nocapture=true");
       if (p.access() == Access.READ)
         require(
             approved(p.facts(), "readonly"), "shared call buffer requires approved readonly=true");
@@ -173,6 +176,35 @@ final class OwnershipValidator {
                 + " "
                 + other.name());
     }
+  }
+
+  /**
+   * A borrow held by a resource: the create keeps the buffer until that resource is destroyed. Only
+   * a Truffle cell's owner can release a buffer then, so the create must be a cell, and one that
+   * reports a status and writes its resource through a parameter: a returned pointer is rejected
+   * beside any borrow. The callee keeps the buffer, so it must not be declared {@code nocapture},
+   * and it only reads it: nothing is written back once the call has returned.
+   */
+  private static void held(Module m, BufferBorrow b, Function f, Parameter p) {
+    String form = b.function() + " " + b.parameter() + " lifetime=resource:" + b.resource();
+    Resource r =
+        m.resources().stream().filter(x -> x.name().equals(b.resource())).findFirst().orElse(null);
+    require(r != null, "a held borrow names a declared resource: " + form);
+    require(
+        r.create().equals(b.function()),
+        "a held borrow belongs to its resource's create, " + r.create() + ": " + form);
+    require(
+        m.truffleConfig() != null && Seam.truffleCell(m, f),
+        "a held borrow is generated for Truffle cells only; " + f.name() + " needs one: " + form);
+    require(
+        r.handle() != null,
+        "a held borrow needs a create that reports a status and writes its resource through a"
+            + " parameter (handle=...): "
+            + form);
+    require(p.access() == Access.READ, "a held buffer is read-only (access=read): " + form);
+    require(
+        !Validator.enabled(p.facts(), "nocapture"),
+        "a held buffer is captured by its create and cannot be nocapture: " + form);
   }
 
   /**

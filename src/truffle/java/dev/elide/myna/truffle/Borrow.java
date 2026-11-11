@@ -13,6 +13,9 @@ import java.lang.foreign.ValueLayout;
 import java.nio.charset.StandardCharsets;
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.PinnedObject;
+import org.graalvm.nativeimage.UnmanagedMemory;
+import org.graalvm.word.PointerBase;
+import org.graalvm.word.WordFactory;
 
 /**
  * Native bytes lent to one call: the address and byte length a cell passes, plus whatever must be
@@ -33,6 +36,13 @@ import org.graalvm.nativeimage.PinnedObject;
  * ({@link Scratch}); larger copies, and copies that do not fit beside outstanding ones, get a
  * confined arena of their own. A pinned array does not move, so its address stays valid across any
  * safepoint between the pin and the call; an unpinned heap address is never handed to native code.
+ *
+ * <p>A borrow can also outlive its call: a {@code lifetime=resource:NAME} borrow lends a buffer to
+ * the create of a resource, which keeps it until that resource is destroyed. Such a borrow is never
+ * pinned and never on a scratch stack, both of which end with the call: native memory is lent in
+ * place and kept reachable, and everything else is copied into native memory of its own. A create
+ * that succeeds hands it to the new resource with {@link #keep()}, after which {@link #release()}
+ * leaves it alone and the resource ends it when it is destroyed.
  *
  * <p>A borrow that a compiled cell acquires and releases is not allocated: lending native memory
  * and scratch copies cost no Java heap, and a pin costs only the {@code PinnedObject} itself. That
@@ -84,7 +94,10 @@ public final class Borrow {
   private long address;
   private long length;
 
-  /** A {@code PinnedObject}, the thread's {@link Scratch}, or the {@link Copy} of a large copy. */
+  /**
+   * A {@code PinnedObject}, the thread's {@link Scratch}, the {@link Copy} of a large copy or of a
+   * held borrow, or the native memory a held borrow lends in place.
+   */
   private Object owner;
 
   /** The array a writable copy is written back to on release; {@code null} for read-only copies. */
@@ -161,6 +174,39 @@ public final class Borrow {
     this.owner = owner;
     this.address = address;
     this.length = length;
+  }
+
+  /**
+   * Keeps {@code source}, the native memory a held borrow lends in place, reachable for as long as
+   * the borrow lasts: an automatic arena's memory then stays allocated until the resource that
+   * holds the borrow is destroyed.
+   */
+  void retain(Object source) {
+    this.owner = source;
+  }
+
+  /**
+   * Lends a copy of {@code bytes} that lasts until {@link #release()} or, once kept, {@link
+   * #end()}: native memory of its own, never the scratch stack or a pin, which end with the call.
+   * An empty buffer lends the dummy address and copies nothing.
+   */
+  void lendHeld(byte[] bytes) {
+    if (bytes.length == 0) {
+      lend(emptyAddress(), 0);
+      return;
+    }
+    Copy copy = Copy.held(bytes);
+    own(COPIED, copy, copy.address, bytes.length);
+  }
+
+  /** Lends a held copy of {@code text} as UTF-8, without a terminator. */
+  void lendHeldText(String text) {
+    lendHeld(utf8(text));
+  }
+
+  /** Lends a held copy of any interop buffer, read through {@code interop}. */
+  void lendHeldBuffer(InteropLibrary interop, Object buffer) throws UnsupportedMessageException {
+    lendHeld(read(interop, buffer, false));
   }
 
   /**
@@ -259,7 +305,31 @@ public final class Borrow {
   }
 
   /**
-   * Ends the borrow: writes copies back, unpins, frees. Idempotent; never throws for direct.
+   * Hands this borrow to the resource a create made with it: {@link #release()} no longer ends it,
+   * and the resource calls {@link #end()} once it has been destroyed. Only a held borrow (one
+   * {@link HeldBytesCoercion} lent) may be kept; anything else ends with its call.
+   *
+   * @return this borrow, for the resource to hold
+   */
+  public Borrow keep() {
+    // A pin or a scratch copy ends with its call; holding one would leak it or break the stack.
+    if (released || this == NONE || kind == PINNED || kind == SCRATCH || array != null)
+      throw new IllegalStateException("only a held borrow can outlive its call");
+    released = true;
+    return this;
+  }
+
+  /** Ends a borrow that {@link #keep()} handed to a resource; called once, by that resource. */
+  void end() {
+    Object owner = this.owner;
+    this.owner = null;
+    if (kind == COPIED) Copy.release((Copy) owner, null, null);
+  }
+
+  /**
+   * Ends the borrow: writes copies back, unpins, frees. Idempotent; never throws for direct. A
+   * borrow that a resource {@linkplain #keep() keeps} is already released as far as this method is
+   * concerned: the resource ends it.
    *
    * @throws IllegalStateException if a scratch copy is released out of order or on another thread
    *     than the one that acquired it; the borrow and the stack are left as they were, so releasing
@@ -306,9 +376,14 @@ public final class Borrow {
     }
   }
 
-  /** A copy too large for the scratch stack, or one that did not fit: an arena of its own. */
+  /**
+   * A copy too large for the scratch stack, or one that did not fit: an arena of its own. A held
+   * borrow's copy is one too, made by {@link #held}.
+   */
   private static final class Copy {
+    /** The arena, or {@code null} for a held copy {@code malloc}ed in a Native Image. */
     final Arena arena;
+
     final MemorySegment segment;
     final long address;
 
@@ -327,13 +402,54 @@ public final class Borrow {
       return new Copy(arena, segment);
     }
 
+    /**
+     * The copy a held borrow lends: native memory that lasts until the resource holding the borrow
+     * is destroyed, which may happen on any thread (a shared resource's close or cleaner), so not a
+     * confined arena. In a Native Image it is {@code malloc}ed and freed explicitly; on HotSpot it
+     * is a shared arena of its own. A pin would also outlive the call, but for as long as the guest
+     * keeps the resource open the collector could neither move nor free the array's memory, and the
+     * guest's later writes to the array would reach the native side.
+     */
+    @TruffleBoundary
+    static Copy held(byte[] bytes) {
+      long size = bytes.length;
+      Copy copy;
+      if (ImageInfo.inImageRuntimeCode()) {
+        copy = new Copy(null, MemorySegment.ofAddress(Malloc.allocate(size)).reinterpret(size));
+      } else {
+        Arena arena = Arena.ofShared();
+        copy = new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+      }
+      MemorySegment.copy(bytes, 0, copy.segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
+      return copy;
+    }
+
     @TruffleBoundary
     static void release(Copy copy, byte[] array, Object source) {
       try {
         if (array != null) writeBack(copy.segment, 0, array, source);
       } finally {
-        copy.arena.close();
+        if (copy.arena != null) copy.arena.close();
+        else Malloc.free(copy.address);
       }
+    }
+  }
+
+  /**
+   * Native Image unmanaged memory, for held copies and {@link NativeStruct}s; loaded only inside an
+   * image.
+   */
+  static final class Malloc {
+    static long allocate(long size) {
+      return UnmanagedMemory.<PointerBase>malloc(WordFactory.unsigned(size)).rawValue();
+    }
+
+    static long zeroed(long size) {
+      return UnmanagedMemory.<PointerBase>calloc(WordFactory.unsigned(size)).rawValue();
+    }
+
+    static void free(long address) {
+      UnmanagedMemory.free(WordFactory.pointer(address));
     }
   }
 

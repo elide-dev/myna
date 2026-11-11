@@ -17,6 +17,7 @@ import dev.elide.myna.truffle.HeapBytes;
 import dev.elide.myna.truffle.NativeBytes;
 import dev.elide.myna.truffle.NativeCell;
 import dev.elide.myna.truffle.NativeFunction;
+import dev.elide.myna.truffle.NativeResource;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -112,6 +113,19 @@ public abstract class Bodies extends NativeCell {
   }
 
   public static Bodies create(String name) {
+    if (name.contains("-create-")) {
+      int size = Integer.parseInt(name.substring(name.lastIndexOf('-') + 1));
+      String kind = name.substring(0, name.lastIndexOf('-'));
+      return switch (kind) {
+        case "direct-create-adopt" -> new DirectCreate(name, size, true);
+        case "direct-create-scan" -> new DirectCreate(name, size, false);
+        case "glue-create-adopt-native" -> new GlueCreate(name, new CellsTruffle.adopt_Cell(), NativeBytes.of(nativePattern(size), false));
+        case "glue-create-adopt-copy" -> new GlueCreate(name, new CellsTruffle.adopt_Cell(), new HeapBytes(pattern(size), false));
+        case "glue-create-scan-native" -> new GlueCreate(name, new CellsTruffle.scan_Cell(), NativeBytes.of(nativePattern(size), false));
+        case "glue-create-scan-copy" -> new GlueCreate(name, new CellsTruffle.scan_Cell(), new HeapBytes(pattern(size), false));
+        default -> throw new IllegalArgumentException(name);
+      };
+    }
     if (name.contains("-sum-")) {
       int size = Integer.parseInt(name.substring(name.lastIndexOf('-') + 1));
       String kind = name.substring(0, name.lastIndexOf('-'));
@@ -274,6 +288,61 @@ public abstract class Bodies extends NativeCell {
     long run(int count, long x, Object extra) {
       for (int i = 0; i < count; i++) x = Cells.sum(WordFactory.pointer(address), size, x);
       return x;
+    }
+  }
+
+  /**
+   * A create and its release per iteration with raw addresses and the caller's own struct: the
+   * floor for a create cell, which also allocates the runtime's struct and an owner.
+   */
+  static final class DirectCreate extends Bodies {
+    private final long address;
+    private final long size;
+    private final long struct;
+    private final boolean adopt;
+
+    DirectCreate(String name, int size, boolean adopt) {
+      super(name);
+      this.address = nativePattern(size).address();
+      this.size = size;
+      this.struct = Arena.global().allocate(16, 8).address();
+      this.adopt = adopt;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) {
+        if (adopt) {
+          if (Cells.adopt(WordFactory.pointer(address), size, WordFactory.pointer(struct)) != 0) throw failure(null);
+          Cells.adoptedRelease(WordFactory.pointer(struct));
+        } else {
+          if (Cells.scan(WordFactory.pointer(address), size, WordFactory.pointer(struct)) != 0) throw failure(null);
+          Cells.scannedRelease(WordFactory.pointer(struct));
+        }
+      }
+      return x + Cells.createdTotal();
+    }
+  }
+
+  /** A create cell and its owner's close per iteration: the guest passes a buffer for the struct. */
+  static final class GlueCreate extends Bodies {
+    @Node.Child private NativeCell cell;
+
+    // Deliberately not final: guest values, which partial evaluation must not fold to constants.
+    private Object buffer;
+    private Object out;
+
+    GlueCreate(String name, NativeCell cell, Object buffer) {
+      super(name);
+      this.cell = cell;
+      this.buffer = buffer;
+      this.out = NativeBytes.of(Arena.global().allocate(16, 8), true);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      for (int i = 0; i < count; i++) ((NativeResource) cell.execute(new Object[] {buffer, out})).close();
+      return x + Cells.createdTotal();
     }
   }
 

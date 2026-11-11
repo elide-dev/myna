@@ -61,7 +61,12 @@ FFM_SUMS = [f'{kind}-{PIN_SIZE}' for kind in ('direct-ffm-sum', 'direct-ffm-sum-
 # native segment and the heap array copied through Myna's own borrow.
 FFM_SLAB = ['direct-ffm-slab', 'direct-ffm-slab-shared', 'direct-ffm-slab-mixed', 'glue-ffm-slab-native', 'glue-ffm-slab-shared',
             'glue-ffm-slab-heap', 'glue-ffm-slab-mixed', 'typed-ffm-slab-native', 'typed-ffm-slab-shared', 'typed-ffm-slab-mixed']
-CASES = SCALAR + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB
+# Creates that initialize the caller's struct, each created and closed per iteration: adopt holds
+# its input until release (a borrow held by the resource), scan reads it during the call. The direct
+# calls pass raw addresses; the cells lend native memory in place or copy a heap array.
+CREATES = [f'{kind}-{PIN_SIZE}' for kind in ('direct-create-adopt', 'glue-create-adopt-native', 'glue-create-adopt-copy',
+                                             'direct-create-scan', 'glue-create-scan-native', 'glue-create-scan-copy')]
+CASES = SCALAR + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB + CREATES
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',
            'jniutils', 'nativebridge', 'truffle-nfi', 'truffle-nfi-libffi')
 
@@ -70,13 +75,15 @@ def digest(p):
 
 def iterations_for(name, iterations):
     """Borrow cases scale the call count with the buffer so every sample sums a similar byte volume."""
+    if '-create-' in name:
+        return max(65536, iterations // 64) // 256 * 256
     if '-sum-' not in name:
         return iterations
     size = int(name.rsplit('-', 1)[1])
     return max(65536, iterations * 64 // max(size, 64)) // 256 * 256
 
 def expected(name, count, seed):
-    if '-sum-' in name:
+    if '-sum-' in name or '-create-' in name:
         size = int(name.rsplit('-', 1)[1])
         return (seed + count * sum((i * 31 + 7) & 0xff for i in range(size))) % (1 << 64)
     if '-slab' in name:

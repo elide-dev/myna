@@ -53,11 +53,15 @@ public final class NativeResource implements TruffleObject {
     /** What must stay reachable while the allocation lives; dropped when it is freed. */
     volatile Object kept;
 
-    State(long address, Destructor destructor, State[] parents, Object kept) {
+    /** Borrows the create made this resource with and the native side keeps; ended once freed. */
+    volatile Borrow[] borrows;
+
+    State(long address, Destructor destructor, State[] parents, Object kept, Borrow[] borrows) {
       this.address = address;
       this.destructor = destructor;
       this.parents = parents;
       this.kept = kept;
+      this.borrows = borrows;
     }
 
     boolean released() {
@@ -117,12 +121,33 @@ public final class NativeResource implements TruffleObject {
       }
     }
 
+    static void end(Borrow[] borrows) {
+      if (borrows != null) for (Borrow borrow : borrows) if (borrow != null) borrow.end();
+    }
+
+    /**
+     * Runs once, whichever of close, the cleaner or the last dependent gets here: the native side
+     * may use what it holds until its destroy returns, so the held borrows end only afterwards.
+     * Behind a boundary: releasing parents recurses through this method, which partial evaluation
+     * of a compiled close (a destroy cell, a guest {@code close}) would otherwise inline without
+     * end.
+     */
+    @TruffleBoundary
     private void destroy() {
       try {
         destructor.destroy(address);
       } finally {
+        // A struct the resource lived in is freed with it; anything else kept is just dropped.
+        Object memory = kept;
         kept = null;
-        for (State parent : parents) parent.unhold();
+        if (memory instanceof NativeStruct struct) struct.free();
+        Borrow[] held = borrows;
+        borrows = null;
+        try {
+          end(held);
+        } finally {
+          for (State parent : parents) parent.unhold();
+        }
       }
     }
   }
@@ -159,7 +184,7 @@ public final class NativeResource implements TruffleObject {
    * A resource that lives in memory the runtime owns: a struct initialized in place.
    *
    * @param kept what must stay reachable until the resource is released: the {@link NativeStruct}
-   *     the resource lives in
+   *     the resource lives in, which the resource frees once its destroy has returned
    */
   public NativeResource(
       String type,
@@ -168,10 +193,31 @@ public final class NativeResource implements TruffleObject {
       Thread requiredThread,
       Object hold,
       Object kept) {
-    if (address == 0) throw new IllegalArgumentException("null " + type);
-    if (destructor == null) throw new IllegalArgumentException("missing destructor");
+    this(type, address, destructor, requiredThread, hold, kept, (Borrow[]) null);
+  }
+
+  /**
+   * A resource whose create keeps buffers it was lent ({@code lifetime=resource:NAME} borrows).
+   *
+   * @param borrows the {@linkplain Borrow#keep() kept} borrows, which this resource ends exactly
+   *     once, after its destroy has returned; null or absent elements are allowed
+   */
+  public NativeResource(
+      String type,
+      long address,
+      Destructor destructor,
+      Thread requiredThread,
+      Object hold,
+      Object kept,
+      Borrow... borrows) {
+    if (address == 0 || destructor == null) {
+      // Nothing was adopted, so nothing keeps the borrows: they end here.
+      State.end(borrows);
+      throw new IllegalArgumentException(address == 0 ? "null " + type : "missing destructor");
+    }
     this.type = type;
-    this.state = new State(address, destructor, hold == null ? State.NONE : (State[]) hold, kept);
+    this.state =
+        new State(address, destructor, hold == null ? State.NONE : (State[]) hold, kept, borrows);
     this.requiredThread = requiredThread;
   }
 

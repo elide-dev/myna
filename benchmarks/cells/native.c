@@ -35,6 +35,33 @@ __attribute__((noinline,visibility("default"))) int64_t myna_bench_slab_bytes(co
                                                                               int32_t a, int32_t b, uint32_t c, int64_t d, int64_t salt) {
   return slab(data, count, aux, context, output, a, b, c, d, salt);
 }
+// Creates that initialize the caller's struct: adopt records where its input is and reads it on
+// release, after the call that lent it; scan sums its input during the call and keeps only the sum.
+// Each release adds its sum to a total that myna_bench_created_total returns and clears.
+typedef struct MynaBenchCreated { const uint8_t *data; uint64_t length; } MynaBenchCreated;
+static uint64_t created_total;
+__attribute__((noinline,visibility("default"))) int32_t myna_bench_adopt(const uint8_t *data, uint64_t length, MynaBenchCreated *adopted) {
+  adopted->data = data;
+  adopted->length = length;
+  return 0;
+}
+__attribute__((noinline,visibility("default"))) void myna_bench_adopted_release(MynaBenchCreated *adopted) {
+  created_total += (uint64_t)myna_bench_sum(adopted->data, adopted->length, 0);
+  adopted->data = 0;
+}
+__attribute__((noinline,visibility("default"))) int32_t myna_bench_scan(const uint8_t *data, uint64_t length, MynaBenchCreated *scanned) {
+  scanned->data = 0;
+  scanned->length = (uint64_t)myna_bench_sum(data, length, 0);
+  return 0;
+}
+__attribute__((noinline,visibility("default"))) void myna_bench_scanned_release(MynaBenchCreated *scanned) {
+  created_total += scanned->length;
+}
+__attribute__((noinline,visibility("default"))) int64_t myna_bench_created_total(void) {
+  uint64_t total = created_total;
+  created_total = 0;
+  return (int64_t)total;
+}
 #ifdef __linux__
 // The pinned toolchain's sysroot predates glibc 2.27, but the Native Image libffi used by Truffle
 // NFI calls memfd_create. Weak, so a newer libc's definition takes precedence at link time.

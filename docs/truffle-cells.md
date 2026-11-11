@@ -135,6 +135,7 @@ through it, and partial evaluation reduces a monomorphic site to a type check or
 | byte pointers declared `truffle_buffer` | strings (UTF-8, read access only), buffers, pointers; nothing is NUL-terminated and the count is a guest argument | — |
 | byte pointers with unspecified access | pointers only, like any other pointer | — |
 | `borrow` buffers (the count is derived) | strings for read access, `NativeBytes`, `HeapBytes`, any interop buffer; a bare pointer has no size and is rejected; `null` only when nullable, as an absent buffer of length zero | — |
+| `borrow … lifetime=resource:NAME` buffers | the same values; read access only, and kept until the resource is destroyed (see [below](#borrows-held-by-a-resource)) | — |
 | `void` | — | `NativeVoid.INSTANCE` (interop `null`) |
 
 A resource's owner is accepted only by a parameter typed as a pointer to that resource. Any other
@@ -220,7 +221,8 @@ declaration in the other wrappers.
 Scalars and addresses coerce first. Every borrow of the call (declared buffers, C strings and
 `truffle_buffer` bytes alike) is then acquired in parameter order, and a later one that fails
 releases the earlier ones. Each borrow lasts exactly the dynamic extent of the call, as the contract
-states, and is released in a `finally` of its own, in reverse acquisition order:
+states (a create's [held borrows](#borrows-held-by-a-resource) are the exception), and is released
+in a `finally` of its own, in reverse acquisition order:
 
 - native memory (`NativeBytes`, interop pointers) is lent in place;
 - heap arrays are pinned for the call in a Native Image when they reach `Borrow.pinThreshold()`
@@ -347,6 +349,14 @@ on failure too, since the struct may say why. It compares the result with the st
 resource lists as `success`, reads the resource pointer from the handle field of its own struct
 (or takes that struct's address, for a result initialized in place) and returns the owner.
 
+The struct is freed explicitly, exactly once, with no cleaner: by the cell once the create has
+returned for a handle written into a field, and for a resource initialized in place by the
+resource's destroy, after the native destroy has returned, on whichever thread destroys it (or by
+the cell, if the create fails). In a Native Image it is `calloc`ed and `free`d; on HotSpot it is an
+arena of its own, confined for a struct the cell frees and shared for one a resource frees. A
+resource the guest forgets is never destroyed, and the native side may still reach the struct it
+lives in, so that struct is kept with it rather than freed by the collector.
+
 Keeping the struct out of the guest's reach is what keeps ownership sound. The handle cannot be
 replaced between the create writing it and the cell adopting it. A buffer too small for the
 struct, a read-only one, a bare pointer, or another resource's owner is refused before the create
@@ -371,6 +381,63 @@ still open is freed when the last child is. A pointer parameter declared
 not held. Plain memory passed to a create (a `NativePointer`, a `NativeBytes`) has no owner the
 cell can hold; keeping it valid for as long as the created resource uses it stays with whoever
 handed it to the guest.
+
+### Borrows held by a resource
+
+A create declared with `borrow FUNCTION PARAMETER length=PARAMETER lifetime=resource:NAME` keeps
+that buffer until the resource it makes is destroyed (see
+[ownership](ownership.md#borrows-held-by-a-resource-truffle-cells-only) for the declaration). The
+cell lends it through a `HeldBytesCoercion` instead of a `BytesCoercion`, because nothing that ends
+with the call can be used for it: no pin and no scratch-stack copy.
+
+| Guest value | What the native side gets | What the borrow keeps until it ends |
+| --- | --- | --- |
+| `NativeBytes` | its memory, in place (an empty one: the empty-buffer dummy) | a reference to the `NativeBytes`, so an automatic arena's memory stays allocated |
+| `HeapBytes`, any other interop buffer | a copy | the copy: `malloc`ed in a Native Image, a shared arena of its own on HotSpot |
+| Java string, `TruffleString`, any other interop string | a copy of its UTF-8 bytes, unterminated | the copy |
+| interop `null`, `NativePointer.NULL`, host `null` (nullable buffer only) | the null address, length zero | nothing |
+
+A bare pointer has no size and is refused, as for any borrow. The guest sees the create as it
+always does: on a listed status the cell hands the borrow to the new owner, which ends it exactly
+once, **after** the resource's destroy has returned, however the resource is destroyed (the
+destroy cell, its `close` member, the cleaner of a shared resource, or the last child of a parent
+held open). A second close or destroy is a no-op and ends nothing again. On any other outcome (a
+status not listed, success without a handle, a guest buffer that stops taking the struct, a
+coercion or linkage failure) the borrow ends at once with the call, so nothing is held for a
+resource that does not exist. Call borrows on the same create still end with the call.
+
+Why each choice:
+
+- **Heap arrays are copied, never pinned.** A pin held until the guest closes the resource would
+  keep the collector from moving or freeing the array for as long as the guest chooses, forever for
+  a forgotten confined owner, which has no cleaner. The copy also means later guest writes to the
+  array do not reach the native side, which the read-only contract requires. It costs one copy of
+  the input per create; a create that adopts its input reads all of it at least once anyway.
+- **Copies are freed explicitly, on any thread.** A shared resource may be closed, or cleaned, on
+  another thread than the one that created it, so the copy cannot live in a confined arena or on
+  the creating thread's scratch stack. In a Native Image it is `UnmanagedMemory.malloc`ed and freed
+  when the borrow ends; a shared arena would need the image's shared-arena support, which is off
+  when the Vector API is enabled. HotSpot uses a shared arena per copy.
+- **Native memory is lent in place, and only kept reachable.** Adopting a native input without a
+  copy is the point of an adopting create. Keeping the `NativeBytes` reachable keeps an automatic
+  arena's memory allocated; memory its owner frees explicitly (a closed arena, a raw address passed
+  to `NativeBytes.of`) is the owner's to keep alive while the resource is open, exactly as
+  `NativeBytes` already requires for as long as guest code can reach it. No scope is acquired: the
+  FFM API exposes no acquire outside a downcall, and one held for as long as a guest keeps a
+  resource open would keep its arena from ever closing.
+- **Thread confinement is the resource's.** A confined resource closes only on its thread, so its
+  borrow ends there; a shared one ends wherever it is closed, which the copies above allow.
+
+The static `invoke` is unchanged: it takes the buffer's address and length and the struct's address
+and returns the status, exactly as the C function does, and its caller keeps the buffer alive until
+the release.
+
+A create allocates in any case (its owner and the runtime's struct); a held borrow adds the borrow
+itself, which escapes into the owner, and a one-element array holding it. Measured from compiled
+code in `tests/truffle_integration.py` on `aarch64-apple-darwin`, per create and close: 120 bytes
+for a create with a call borrow (the owner, its release state and the struct's holder), 184 bytes
+with a held borrow over native memory, and 272 bytes with a held copy of a heap array (the copy's
+holder and segment view; the copy itself is native memory of the buffer's length). See [Measurement](#creates) for the time.
 
 Generated array convenience methods pin with a plain `try`/`finally`, not try-with-resources:
 javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation
@@ -414,9 +481,10 @@ like any other FFM consumer; see [Measurement](#measurement) for their cost.
 
 - Leaves: bounded, nonblocking, non-reentrant, enforced by the `native_leaf` contract.
 - Transitioning calls may block, call back and take any time.
-- Borrows end with the call. A borrow used after the call is a consumer bug the runtime cannot
-  observe; heap copies are written back and freed on release, pins are released, so nothing dangles
-  on the Java side.
+- Borrows end with the call, except those a create keeps until its resource is destroyed, which
+  end exactly once after that destroy. A borrow used after it ends is a consumer bug the runtime
+  cannot observe; heap copies are written back and freed on release, pins are released, so nothing
+  dangles on the Java side.
 - Resources: exactly-once release, thread confinement, no retained referents from cleaners.
 - Isolates: every native target is resolved per isolate at run time; the runtime allocates its
   empty-buffer dummy lazily and bakes no address into an image heap.
@@ -534,6 +602,34 @@ the borrow held), so those cells keep their borrow. What a cell pays over the di
 scoped segment is the reads of the guest's buffer and its segment after each call, where the
 direct call's segment is a constant.
 
+### Creates
+
+`benchmarks/cells` runs `create` cases: a create and its release per iteration, initializing a
+16-byte struct in place from a 256-byte pattern buffer, all leaves. `adopt` keeps its input until the
+release, which sums it (a held borrow); `scan` sums it during the call and keeps the sum (a call
+borrow). `direct-*` calls the bindings with raw addresses and the caller's own struct; `glue-*` runs
+the create cell with native memory lent in place or a heap array (copied: below the pin threshold
+for `scan`, always for a held borrow) and closes the owner it returns. Measured on a shared Apple M5
+Max (`aarch64-apple-darwin`, five processes per case; advisory, not a checked-in baseline), in ns per
+iteration and Java heap bytes per iteration:
+
+| Case | Direct call | Cell, native memory | Cell, heap array |
+|---|---:|---:|---:|
+| `scan` (call borrow) | 12.4, 0 B | 26.7, 120 B | 37.3, 120 B |
+| `adopt` (held borrow) | 12.3, 0 B | 33.1, 184 B | 49.0, 240 B |
+
+These are the figures with the runtime's struct freed explicitly (times from a quiet run, heap
+bytes from the final build, which no longer makes a view of the struct in an image); while it came
+from an automatic arena the same cases cost 291–427 ns and 258–377 B, almost all of the time the
+cleaner registration, phantom-reference processing and collector work behind that arena. What remains over the direct call, by sampling: `calloc` and
+`free` of the struct (and `malloc` and `free` of a held copy), the boundary calls that allocate,
+copy to the guest and destroy, and the owner and its release state; the heap-array cases add the
+copy itself. `benchmarks/gate.py` pairs `glue-create-scan-native-256` and
+`glue-create-adopt-native-256` with their direct calls, with allowances that keep this gap from
+growing. On the controlled x86-64 host (unclemax, five processes per case, at `e9f004a`, before
+the rebase onto #116, which changed only FFM cells) the cells cost 41.3 and 45.3 ns against 21.5
+and 21.2 ns for the direct calls (+92.3% and +113.2%); the allowances are +100% and +125%.
+
 ### Follow-ups
 
 Findings that are tracked, not blocking:
@@ -551,7 +647,12 @@ Findings that are tracked, not blocking:
   buffer may be write-only or nullable (see [Borrows](#borrows)); a resource create may take
   pointers. Still rejected: a pointer result beside a borrow, one length shared by two buffers,
   and length-less buffers, for which `truffle_buffer` is the cells-side answer.
-- Not expressible yet: length-less buffers, and borrows that outlive the call.
+- Not expressible yet: length-less buffers. Borrows that outlive the call are expressible for a
+  create's read-only input (`lifetime=resource:NAME`); writable held buffers are not.
+- A create cell still costs about 2–3 times its direct call (see [Creates](#creates)). A struct
+  that holds a handle field lives only for the call, so it could take the per-thread scratch stack
+  instead of `calloc`, which would leave a resource initialized in place as the only create that
+  allocates native memory.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.

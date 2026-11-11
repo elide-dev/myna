@@ -86,7 +86,7 @@ public final class FfmCellsMain {
       bytes.fill((byte) 5);
       if (CellApiTruffle.checksum_Cell.invoke(bytes.address(), 4) != 20) throw new AssertionError("invoke checksum");
     }
-    if (CellApiTruffle.CELLS.length != 29) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
+    if (CellApiTruffle.CELLS.length != 33) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
     // Only an image compiles at run time here; on HotSpot the fixture runs without a compiler.
     if (ImageInfo.inImageRuntimeCode()) compiledAllocations();
     System.out.println("Truffle FFM cells passed");

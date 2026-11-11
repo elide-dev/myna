@@ -63,7 +63,7 @@ import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true
 end
 ```
 
-`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid.
+`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid. A create that keeps its input until the resource it makes is released declares a [borrow held by that resource](#borrows-held-by-a-resource-truffle-cells-only) instead.
 
 Each buffer is a borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. A buffer declared `nullable=false` is always present; any other buffer is a [nullable buffer](#nullable-buffers) that may be absent. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. Additional `align`, `dereferenceable`, or `noalias` requirements on a buffer are rejected.
 
@@ -188,20 +188,67 @@ passes a struct the runtime owns and copies the result to the buffer the guest s
 their raw bindings, and any call-buffer wrappers the create declares, are generated as for any
 other import. See [Truffle native cells](truffle-cells.md#ownership) for what the cell does.
 
+## Borrows held by a resource (Truffle cells only)
+
+Some creates keep their input. A decoder that adopts its input region records pointers into it in
+the result it initializes, and reads them until that result is released:
+
+```text
+struct Adopted size=24 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+  field sum type=i64 offset=16
+end
+resource Adopted representation=native threading=confined create=adopt destroy=adoptedRelease handle=adopted success=0
+borrow adopt data length=length lifetime=resource:Adopted
+borrow adopt key length=keyLength lifetime=call
+import adopt symbol=decode_adopted return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=true ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+  param key type=ptr<u8> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param keyLength type=u32
+  param adopted type=ptr<Adopted> nullable=false ownership=borrowed access=write
+end
+```
+
+`lifetime=resource:NAME` declares that the create of resource `NAME` keeps the buffer from the call
+until that resource is destroyed. The contract is the create's: on a listed status it may read the
+buffer's `length` bytes at any time until its `destroy` returns, and it never writes them, frees
+them, or uses them after that; on any other status it has kept nothing. The other rules of a
+`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, no alignment or
+extent preconditions), with three differences:
+
+- the function must be the create of `NAME`, a create that reports a status and writes its resource
+  through a parameter (`handle=…`), and it must have a Truffle cell, since only a cell's owner can
+  end a borrow after its call;
+- the buffer is read-only (`access=read`): nothing could be written back once the call has returned;
+- the buffer is captured, so it must not be declared `nocapture`.
+
+A held borrow may sit beside call borrows on the same create, as `key` does above: those still end
+with the call. The validator rejects a held borrow anywhere else with the rule it breaks.
+
+Only Truffle cells project the held lifetime. A Native Image, FFM, static JNI or Rust wrapper ends
+every borrow when its call returns, which would free or unpin a buffer the native side still reads,
+so those backends generate no call-buffer wrapper for a function with a held buffer, including its
+call borrows; its raw binding is generated as for any other import, and the caller of that binding
+keeps the buffer alive until the release. A function whose borrows all end with the call keeps its
+wrappers. See [Truffle native cells](truffle-cells.md#borrows-held-by-a-resource) for what the cell
+does with each kind of guest value.
+
 ## Truffle cells
 
-With `truffle_cells=true`, the same declarations project into guest-callable cells: each `borrow` drops its length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call, takes interop `null` for a nullable buffer that is absent, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
+With `truffle_cells=true`, the same declarations project into guest-callable cells: each `borrow` drops its length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call (or, for a borrow held by a resource, until that resource is destroyed), takes interop `null` for a nullable buffer that is absent, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 
 1. Native operations consuming owned resources, with explicit transfer-on-success/failure rules; typed element views; buffers without a length parameter of their own, and one length shared by several buffers.
 2. Returned buffer views tied to an owner, including mutation/invalidation rules and pooled-buffer retention.
 3. SVM-managed Java objects represented by isolate-bound rooted handles; release of a handle is distinct from destruction of its referent.
-4. Retained asynchronous buffer borrows and retain/release protocols. FFM upcall stubs already have explicit caller-owned arena lifetimes.
+4. Retained asynchronous buffer borrows and retain/release protocols beyond a create keeping its read-only input until its resource is destroyed; writable held buffers. FFM upcall stubs already have explicit caller-owned arena lifetimes.
 
 These future forms currently fail parsing/validation rather than receiving invented safe lifetimes. GC-rooted Java objects must not be declared as `representation=native`. Cross-isolate ownership and automatic lifetime inference are not implemented.
 

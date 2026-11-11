@@ -43,6 +43,36 @@ public final class CellsMain {
       return new Object[] {sum, CompilerDirectives.inCompiledCode()};
     }
   }
+  /** Creates and closes a resource many times inside one compiled root, to measure what a create allocates. */
+  static final class Creates extends NativeCell {
+    static final int CALLS = 1024;
+    @Node.Child private NativeCell inner;
+    Creates(NativeCell inner) { super("creates:" + inner.name(), inner.arity()); this.inner = inner; }
+    @Override public Object execute(Object[] arguments) {
+      long open = 0;
+      for (int i = 0; i < CALLS; i++) {
+        NativeResource created = (NativeResource) inner.execute(arguments);
+        if (!created.isClosed()) open++;
+        created.close();
+      }
+      return new Object[] {open, CompilerDirectives.inCompiledCode()};
+    }
+  }
+  /** Java heap bytes per create and close from compiled code; returns them for comparison. */
+  static long perCreate(String what, NativeCell cell, Object... arguments) {
+    var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+    long thread = Thread.currentThread().threadId();
+    NativeFunction repeat = new Creates(cell).function();
+    for (int warmup = 0; warmup < 20; warmup++) repeat.call(arguments);
+    long before = bean.getThreadAllocatedBytes(thread);
+    Object[] outcome = (Object[]) repeat.call(arguments);
+    long allocated = bean.getThreadAllocatedBytes(thread) - before;
+    if (!(Boolean) outcome[1]) throw new AssertionError(what + " did not run in compiled code");
+    if ((Long) outcome[0] != Creates.CALLS) throw new AssertionError(what + ": " + outcome[0]);
+    long perCall = allocated / Creates.CALLS;
+    System.out.println(what + " allocated " + perCall + " bytes per compiled create and close");
+    return perCall;
+  }
   /**
    * Java heap bytes one call allocates from compiled code must not exceed {@code perCall}: the
    * argument array, boxed carriers and the borrow are scalar-replaced, so only what a call must
@@ -275,6 +305,33 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment viewMemory = java.lang.foreign.Arena.global().allocate(16);
         created("viewInit", new Probe(new CellApiTruffle.viewInit_Cell()).function(), "View",
             new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
+        // A create whose borrow its resource holds: the bytes are read again on every release,
+        // after the call that lent them returned, from a copy or from native memory in place.
+        java.lang.foreign.MemorySegment adoptResult = java.lang.foreign.Arena.global().allocate(24);
+        created("adopt", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            new HeapBytes(new byte[] {4, 5}, false), "k", NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals(9L)) throw new AssertionError("compiled adopt released a held copy early");
+        created("adopt in place", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            NativeBytes.of(lent, false), null, NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals(64L * 3)) throw new AssertionError("compiled adopt in place");
+        created("adopt of a large array", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            pinned, null, NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals((long) large.length)) throw new AssertionError("compiled adopt of a large array");
+        // What a create allocates, held borrow or not: the owner, its state, the runtime's struct
+        // and, for a held borrow, the borrow itself, its array and its copy.
+        perCreate("layoutCompile (call borrow, copied)", new CellApiTruffle.layoutCompile_Cell(),
+            new HeapBytes(new byte[] {9}, false), NativeBytes.of(layoutResult, true));
+        long viewBytes = perCreate("viewInit (call borrow, in place)", new CellApiTruffle.viewInit_Cell(),
+            new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
+        long heldNative = perCreate("adopt (held borrow, native memory in place)", new CellApiTruffle.adopt_Cell(),
+            NativeBytes.of(lent, false), null, NativeBytes.of(adoptResult, true));
+        long heldCopy = perCreate("adopt (held borrow, heap array copied)", new CellApiTruffle.adopt_Cell(),
+            new HeapBytes(small, false), null, NativeBytes.of(adoptResult, true));
+        perCreate("adopt (held borrow, string copied)", new CellApiTruffle.adopt_Cell(),
+            "hello world", null, NativeBytes.of(adoptResult, true));
+        if (heldNative > viewBytes + 128 || heldCopy > heldNative + 128)
+          throw new AssertionError("a held borrow allocates more than its holder: " + heldNative + ", " + heldCopy + " against " + viewBytes);
+        if (!CellApiTruffle.counterLive().call().equals(0L)) throw new AssertionError("live adoptions after the create loops");
         // Several byte parameters on one cell share the host inliner's budget for that cell: each
         // coercion must still be inlined, or its borrow is allocated on every path.
         hostExecute(bean, "host execute: pair of strings", 0, new CellApiTruffle.pair_Cell(), "left", "right");

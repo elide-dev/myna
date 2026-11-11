@@ -130,3 +130,29 @@ int64_t cells_sleepy_add(int64_t left, int64_t right) { return left + right; }
 int64_t cells_pair(const char *left, const char *right) {
   return ((int64_t)strlen(left) << 32) | ((int64_t)strlen(right) << 16) | ((int64_t)(uint8_t)left[0] << 8) | (uint8_t)right[0];
 }
+// A create that keeps its input until release: the struct records where the adopted bytes are, and
+// the sum is recomputed from them on every read and once more on release, so bytes that were freed
+// or reused after the call show up as a wrong sum. A key, borrowed for the call only, is added to
+// the recorded sum. An empty input fails with status 3.
+typedef struct Adopted { const uint8_t *data; uint64_t length; int64_t sum; } Adopted;
+static int64_t adopted_last = -1;
+static int64_t adopted_sum(const uint8_t *data, uint64_t length) {
+  int64_t sum = 0;
+  for (uint64_t i = 0; i < length; i++) sum += data[i];
+  return sum;
+}
+int32_t cells_adopt(const uint8_t *data, uint64_t length, const uint8_t *key, uint32_t key_length, Adopted *adopted) {
+  if (length == 0) return 3;
+  adopted->data = data;
+  adopted->length = length;
+  adopted->sum = adopted_sum(data, length) + adopted_sum(key, key_length);
+  live++;
+  return 0;
+}
+int64_t cells_adopted_sum(const Adopted *adopted) { return adopted_sum(adopted->data, adopted->length); }
+void cells_adopted_release(Adopted *adopted) {
+  adopted_last = adopted_sum(adopted->data, adopted->length);
+  adopted->data = NULL;
+  live--;
+}
+int64_t cells_adopted_last(void) { return adopted_last; }
