@@ -1006,39 +1006,55 @@ class TruffleCellsTest {
             """),
         truffle);
     // Through a field: the guest's buffer is checked before the call and never written by it,
-    // every listed status is success, and the handle is read from the runtime's struct.
+    // every listed status is success, the handle is read from the runtime's struct, and that
+    // struct is freed once the cell is done with it, whatever the outcome.
     assertTrue(
         truffle.contains(
             """
                             NativeStruct out = NativeStruct.allocate(24L, arguments[1], "layoutCompile", "result", this);
-                            int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
-                            if (!(status == 0L || status == 2L)) {
-                                out.copyTo(arguments[1]);
-                                throw NativeCellException.status("layoutCompile", status, this);
+                            boolean adopted = false;
+                            try {
+                                int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
+                                if (!(status == 0L || status == 2L)) {
+                                    out.copyTo(arguments[1]);
+                                    throw NativeCellException.status("layoutCompile", status, this);
+                                }
+                                long created = out.pointerAt(8L);
+                                if (created == 0) {
+                                    out.copyTo(arguments[1]);
+                                    throw NativeCellException.noResource("layoutCompile", this);
+                                }
+                                NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
+                                adopted = true;
+                                out.copyTo(arguments[1], resource);
+                                return resource;
+                            } finally {
+                                out.free();
                             }
-                            long created = out.pointerAt(8L);
-                            if (created == 0) {
-                                out.copyTo(arguments[1]);
-                                throw NativeCellException.noResource("layoutCompile", this);
-                            }
-                            NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
-                            out.copyTo(arguments[1], resource);
-                            return resource;
             """),
         truffle);
     // The handle parameter has no coercion of its own: it is not passed to the native side.
     assertFalse(truffle.contains("coerce_result"), truffle);
     assertFalse(truffle.contains("coerce_view"), truffle);
-    // In place, with no status: the resource is the runtime's struct, kept until its destroy.
+    // In place, with no status: the resource is the runtime's struct, kept until its destroy,
+    // which frees it; the cell frees it only when no resource took it.
     assertTrue(
         truffle.contains(
             """
-                        NativeStruct out = NativeStruct.allocate(16L, arguments[1], "viewInit", "view", this);
-                        invoke(value_seed, out.address());
-                        long created = out.address();
-                        NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, null, out);
-                        out.copyTo(arguments[1], resource);
-                        return resource;
+                        NativeStruct out = NativeStruct.allocateInPlace(16L, arguments[1], "viewInit", "view", this);
+                        boolean adopted = false;
+                        try {
+                            invoke(value_seed, out.address());
+                            long created = out.address();
+                            NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, null, out);
+                            adopted = true;
+                            out.copyTo(arguments[1], resource);
+                            return resource;
+                        } finally {
+                            if (!adopted) {
+                                out.free();
+                            }
+                        }
             """),
         truffle);
     // A create that also takes another resource's handle holds it, around the same steps.
@@ -1052,10 +1068,11 @@ class TruffleCellsTest {
     assertTrue(
         held.contains(
             """
-                        NativeStruct out = NativeStruct.allocate(16L, arguments[2], "viewInit", "view", this);
-                        Object hold = NativeResource.hold(arguments[1]);
+                        NativeStruct out = NativeStruct.allocateInPlace(16L, arguments[2], "viewInit", "view", this);
+                        Object hold = null;
                         boolean adopted = false;
                         try {
+                            hold = NativeResource.hold(arguments[1]);
                             invoke(value_seed, address_parent, out.address());
                             long created = out.address();
                             NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, out);
@@ -1063,7 +1080,10 @@ class TruffleCellsTest {
                             out.copyTo(arguments[2], resource);
                             return resource;
                         } finally {
-                            if (!adopted) NativeResource.release(hold);
+                            if (!adopted) {
+                                out.free();
+                                if (hold != null) NativeResource.release(hold);
+                            }
                         }
             """),
         held);
@@ -1107,19 +1127,25 @@ class TruffleCellsTest {
                         Borrow borrow_schema = coerce_schema.execute(arguments[0]);
                         try {
                             NativeStruct out = NativeStruct.allocate(24L, arguments[1], "layoutCompile", "result", this);
-                            int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
-                            if (!(status == 0L || status == 2L)) {
-                                out.copyTo(arguments[1]);
-                                throw NativeCellException.status("layoutCompile", status, this);
+                            boolean adopted = false;
+                            try {
+                                int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
+                                if (!(status == 0L || status == 2L)) {
+                                    out.copyTo(arguments[1]);
+                                    throw NativeCellException.status("layoutCompile", status, this);
+                                }
+                                long created = out.pointerAt(8L);
+                                if (created == 0) {
+                                    out.copyTo(arguments[1]);
+                                    throw NativeCellException.noResource("layoutCompile", this);
+                                }
+                                NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
+                                adopted = true;
+                                out.copyTo(arguments[1], resource);
+                                return resource;
+                            } finally {
+                                out.free();
                             }
-                            long created = out.pointerAt(8L);
-                            if (created == 0) {
-                                out.copyTo(arguments[1]);
-                                throw NativeCellException.noResource("layoutCompile", this);
-                            }
-                            NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
-                            out.copyTo(arguments[1], resource);
-                            return resource;
                         } finally {
                             borrow_schema.release();
                         }
@@ -1146,9 +1172,10 @@ class TruffleCellsTest {
     assertTrue(
         inPlace.contains(
             """
-                            Object hold = NativeResource.hold(arguments[1]);
+                            Object hold = null;
                             boolean adopted = false;
                             try {
+                                hold = NativeResource.hold(arguments[1]);
                                 invoke(borrow_data.address(), length_data, address_parent, out.address());
                                 long created = out.address();
                                 NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, out, borrow_data.keep());

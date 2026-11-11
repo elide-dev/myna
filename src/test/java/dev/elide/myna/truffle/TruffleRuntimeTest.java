@@ -1040,6 +1040,68 @@ class TruffleRuntimeTest {
     }
   }
 
+  /** Whether a struct's memory is still allocated: its arena is alive on HotSpot. */
+  private static boolean structAlive(NativeStruct struct) throws ReflectiveOperationException {
+    var field = NativeStruct.class.getDeclaredField("arena");
+    field.setAccessible(true);
+    return ((Arena) field.get(struct)).scope().isAlive();
+  }
+
+  /**
+   * A create's struct is freed explicitly and exactly once, with no cleaner: by the cell for a
+   * handle field, and by the resource's destroy, on any thread, for a resource in place.
+   */
+  @Test
+  void createStructsAreFreedExplicitlyOnce() throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      NativeBytes guest = NativeBytes.of(arena.allocate(16), true);
+      NativeStruct call = NativeStruct.allocate(16, guest, "compile", "result", null);
+      assertTrue(structAlive(call));
+      call.free();
+      assertFalse(structAlive(call));
+      call.free();
+      // A resource in place frees its struct after its destroy, which still sees it.
+      NativeStruct inPlace = NativeStruct.allocateInPlace(16, guest, "init", "view", null);
+      MemorySegment.ofAddress(inPlace.address()).reinterpret(16).set(ValueLayout.JAVA_LONG, 0, 5);
+      List<Long> seen = new ArrayList<>();
+      NativeResource view =
+          new NativeResource(
+              "View",
+              inPlace.address(),
+              a ->
+                  seen.add(MemorySegment.ofAddress(a).reinterpret(8).get(ValueLayout.JAVA_LONG, 0)),
+              null,
+              null,
+              inPlace);
+      // Shared: another thread may destroy it, and the struct is freed there.
+      Thread other = new Thread(view::close);
+      other.start();
+      other.join();
+      assertEquals(List.of(5L), seen);
+      assertFalse(structAlive(inPlace));
+      view.close();
+      assertEquals(1, seen.size());
+    }
+    // A size that is not a whole number of words is copied to the last byte.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment target = arena.allocate(12);
+      NativeStruct odd = NativeStruct.allocate(12, NativeBytes.of(target, true), "f", "out", null);
+      MemorySegment.ofAddress(odd.address()).reinterpret(12).fill((byte) 3);
+      odd.copyTo(NativeBytes.of(target, true));
+      assertEquals(3, target.get(ValueLayout.JAVA_BYTE, 11));
+      odd.free();
+    }
+    // A guest buffer whose memory is gone cannot take the copy.
+    Arena closed = Arena.ofConfined();
+    NativeBytes gone = NativeBytes.of(closed.allocate(16), true);
+    NativeStruct struct = NativeStruct.allocate(16, gone, "compile", "result", null);
+    closed.close();
+    assertEquals(
+        "buffer stopped taking the struct a create wrote",
+        assertThrows(NativeCellException.class, () -> struct.copyTo(gone)).getMessage());
+    struct.free();
+  }
+
   /** A resource initialized in place keeps the struct it lives in until it is released. */
   @Test
   void inPlaceResourcesKeepTheirMemoryReachableUntilReleased() throws Exception {

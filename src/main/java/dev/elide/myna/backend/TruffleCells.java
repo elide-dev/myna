@@ -596,8 +596,11 @@ public final class TruffleCells implements Backend {
                 .findFirst()
                 .orElseThrow();
         String copy = "out.copyTo(" + guest.get(parameter.name());
+        // A struct the resource lives in is freed by the resource; any other struct, once the
+        // cell is done with it.
         before
-            .append("NativeStruct out = NativeStruct.allocate(")
+            .append("NativeStruct out = NativeStruct.")
+            .append(cell.creates().handleField() == null ? "allocateInPlace(" : "allocate(")
             .append(struct.size())
             .append("L, ")
             .append(guest.get(parameter.name()))
@@ -660,30 +663,65 @@ public final class TruffleCells implements Backend {
       String owner = "new NativeResource(" + type + ", created, DESTRUCTOR, " + thread + hold + ")";
       for (String line : before.toString().split("\n"))
         if (!line.isEmpty()) result.append("            ").append(line).append('\n');
-      String indent = retained.isEmpty() ? "            " : "                ";
-      if (!retained.isEmpty())
+      if (handle != null) {
+        // The runtime's struct is freed explicitly: after the call for a handle field, on failure
+        // or by the resource's destroy for a resource initialized in place. Parents are held
+        // inside the try, so a closed parent frees the struct too.
+        boolean resourceInPlace = cell.creates().handleField() == null;
+        String inner = "                ";
+        if (!retained.isEmpty()) result.append("            Object hold = null;\n");
+        result.append("            boolean adopted = false;\n").append("            try {\n");
+        if (!retained.isEmpty())
+          result
+              .append(inner)
+              .append("hold = NativeResource.hold(")
+              .append(String.join(", ", retained))
+              .append(");\n");
+        for (String line : body.toString().split("\n"))
+          result.append(inner).append(line).append('\n');
         result
-            .append("            Object hold = NativeResource.hold(")
-            .append(String.join(", ", retained))
-            .append(");\n")
-            .append("            boolean adopted = false;\n")
-            .append("            try {\n");
-      for (String line : body.toString().split("\n"))
-        result.append(indent).append(line).append('\n');
-      if (retained.isEmpty() && handle == null) {
-        result.append(indent).append("return ").append(owner).append(";\n");
-      } else {
-        result.append(indent).append("NativeResource resource = ").append(owner).append(";\n");
-        if (!retained.isEmpty()) result.append(indent).append("adopted = true;\n");
+            .append(inner)
+            .append("NativeResource resource = ")
+            .append(owner)
+            .append(";\n")
+            .append(inner)
+            .append("adopted = true;\n");
         for (String line : after.toString().split("\n"))
-          if (!line.isEmpty()) result.append(indent).append(line).append('\n');
-        result.append(indent).append("return resource;\n");
+          if (!line.isEmpty()) result.append(inner).append(line).append('\n');
+        result.append(inner).append("return resource;\n").append("            } finally {\n");
+        if (!resourceInPlace) result.append(inner).append("out.free();\n");
+        if (resourceInPlace || !retained.isEmpty()) {
+          result.append(inner).append("if (!adopted) {\n");
+          if (resourceInPlace) result.append(inner).append("    out.free();\n");
+          if (!retained.isEmpty())
+            result.append(inner).append("    if (hold != null) NativeResource.release(hold);\n");
+          result.append(inner).append("}\n");
+        }
+        result.append("            }\n");
+      } else {
+        String indent = retained.isEmpty() ? "            " : "                ";
+        if (!retained.isEmpty())
+          result
+              .append("            Object hold = NativeResource.hold(")
+              .append(String.join(", ", retained))
+              .append(");\n")
+              .append("            boolean adopted = false;\n")
+              .append("            try {\n");
+        for (String line : body.toString().split("\n"))
+          result.append(indent).append(line).append('\n');
+        if (retained.isEmpty()) {
+          result.append(indent).append("return ").append(owner).append(";\n");
+        } else {
+          result.append(indent).append("NativeResource resource = ").append(owner).append(";\n");
+          result.append(indent).append("adopted = true;\n");
+          result.append(indent).append("return resource;\n");
+        }
+        if (!retained.isEmpty())
+          result
+              .append("            } finally {\n")
+              .append("                if (!adopted) NativeResource.release(hold);\n")
+              .append("            }\n");
       }
-      if (!retained.isEmpty())
-        result
-            .append("            } finally {\n")
-            .append("                if (!adopted) NativeResource.release(hold);\n")
-            .append("            }\n");
     } else {
       Type r = f.returns();
       if (r == Scalar.VOID) {

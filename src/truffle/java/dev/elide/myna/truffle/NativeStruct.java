@@ -11,6 +11,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteOrder;
+import org.graalvm.nativeimage.ImageInfo;
 
 /**
  * The struct a resource create writes through, in memory the runtime owns. The guest passes a
@@ -23,36 +24,71 @@ import java.nio.ByteOrder;
  * instead of overrun; and a resource initialized in place lives in this memory, not the guest's, so
  * the guest can neither initialize one struct twice nor free or overwrite a live resource.
  *
- * <p>The memory is zeroed, and it is freed by the collector once nothing reaches it: after the call
- * for a create that writes a handle field, and after its destroy for a resource initialized in
- * place, whose owner keeps this object until then. Everything here is behind a boundary: a create
- * is not a path worth compiling.
+ * <p>The memory is zeroed and freed explicitly, exactly once: by the cell once the create has
+ * returned for a struct that holds a handle field ({@link #allocate}), and by the resource's
+ * destroy, or the cell when the create fails, for a resource initialized in place ({@link
+ * #allocateInPlace}). Nothing registers it with a cleaner: a resource the guest forgets is never
+ * destroyed, and the native side may still reach the struct it lives in, so its memory is kept with
+ * it. In a Native Image it is {@code calloc}ed; on HotSpot it is an arena of its own, confined to
+ * the creating thread for a struct the cell frees and shared for one a resource frees, since a
+ * shared resource may be destroyed on any thread.
  */
 public final class NativeStruct {
+  private static final boolean IMAGE = ImageInfo.inImageCode();
   private static final ValueLayout.OfLong WORD =
       ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
 
-  private final MemorySegment segment;
   private final long address;
+  private final long size;
 
-  private NativeStruct(MemorySegment segment) {
+  /** The arena on HotSpot; {@code null} in a Native Image. */
+  private final Arena arena;
+
+  /** The struct's bytes on HotSpot; {@code null} in a Native Image, which reads words directly. */
+  private final MemorySegment segment;
+
+  private boolean freed;
+
+  private NativeStruct(long address, long size, Arena arena, MemorySegment segment) {
+    this.address = address;
+    this.size = size;
+    this.arena = arena;
     this.segment = segment;
-    this.address = segment.address();
   }
 
   /**
-   * Allocates {@code size} zeroed bytes for the struct, after checking that {@code guest} can take
-   * a copy of it: a writable buffer of at least that many bytes.
+   * Allocates {@code size} zeroed bytes for a struct the cell frees with {@link #free()} once the
+   * create has returned, after checking that {@code guest} can take a copy of it: a writable buffer
+   * of at least that many bytes.
    *
    * @throws NativeCellException if {@code guest} is anything else, including a resource's owner
    */
   @TruffleBoundary
   public static NativeStruct allocate(
       long size, Object guest, String function, String parameter, Node node) {
+    return allocate(size, guest, function, parameter, node, false);
+  }
+
+  /**
+   * Allocates a struct that a resource is initialized in place in: the resource that keeps it frees
+   * it when it is destroyed, on whichever thread that happens, and the cell frees it if the create
+   * fails.
+   */
+  @TruffleBoundary
+  public static NativeStruct allocateInPlace(
+      long size, Object guest, String function, String parameter, Node node) {
+    return allocate(size, guest, function, parameter, node, true);
+  }
+
+  private static NativeStruct allocate(
+      long size, Object guest, String function, String parameter, Node node, boolean shared) {
     if (!takes(guest, size))
       throw NativeCellException.type(
           function, parameter, "writable buffer of at least " + size + " bytes", guest, node);
-    return new NativeStruct(Arena.ofAuto().allocate(size, 16));
+    if (IMAGE) return new NativeStruct(Borrow.Malloc.zeroed(size), size, null, null);
+    Arena arena = shared ? Arena.ofShared() : Arena.ofConfined();
+    MemorySegment segment = arena.allocate(size, 16);
+    return new NativeStruct(segment.address(), size, arena, segment);
   }
 
   private static boolean takes(Object guest, long size) {
@@ -74,9 +110,27 @@ public final class NativeStruct {
   }
 
   /** The pointer the create wrote at {@code offset}: the resource's handle. */
-  @TruffleBoundary
   public long pointerAt(long offset) {
-    return segment.get(WORD, offset);
+    return word(offset);
+  }
+
+  private long word(long offset) {
+    return IMAGE ? ImageMemory.getLong(address, offset) : segment.get(WORD, offset);
+  }
+
+  private byte byteAt(long offset) {
+    return IMAGE
+        ? ImageMemory.getByte(address, offset)
+        : segment.get(ValueLayout.JAVA_BYTE, offset);
+  }
+
+  /** Frees the struct; a second call does nothing. */
+  @TruffleBoundary
+  public void free() {
+    if (freed) return;
+    freed = true;
+    if (arena == null) Borrow.Malloc.free(address);
+    else arena.close();
   }
 
   /**
@@ -87,15 +141,21 @@ public final class NativeStruct {
    */
   @TruffleBoundary
   public void copyTo(Object guest) {
-    long size = segment.byteSize();
     if (guest instanceof NativeBytes bytes) {
-      MemorySegment.copy(segment, 0, bytes.segment(), 0, size);
+      // Its size was checked when the struct was allocated, and a NativeBytes does not change
+      // size; its memory must still be alive, as for any lent NativeBytes.
+      MemorySegment target = bytes.segment();
+      if (!target.scope().isAlive())
+        throw NativeCellException.of(null, "buffer stopped taking the struct a create wrote");
+      long to = bytes.address();
+      long i = 0;
+      for (; i + 8 <= size; i += 8) Memory.putLong(to, target, i, word(i));
+      for (; i < size; i++) Memory.putByte(to, target, i, byteAt(i));
       return;
     }
     InteropLibrary interop = InteropLibrary.getUncached(guest);
     try {
-      for (long i = 0; i < size; i++)
-        interop.writeBufferByte(guest, i, segment.get(ValueLayout.JAVA_BYTE, i));
+      for (long i = 0; i < size; i++) interop.writeBufferByte(guest, i, byteAt(i));
     } catch (InvalidBufferOffsetException | UnsupportedMessageException e) {
       throw NativeCellException.of(null, "buffer stopped taking the struct a create wrote");
     }

@@ -435,11 +435,17 @@ public final class Borrow {
     }
   }
 
-  /** Native Image unmanaged memory; loaded only inside an image. */
-  private static final class Malloc {
+  /**
+   * Native Image unmanaged memory, for held copies and {@link NativeStruct}s; loaded only inside an
+   * image.
+   */
+  static final class Malloc {
     static long allocate(long size) {
-      PointerBase memory = UnmanagedMemory.malloc(WordFactory.unsigned(size));
-      return memory.rawValue();
+      return UnmanagedMemory.<PointerBase>malloc(WordFactory.unsigned(size)).rawValue();
+    }
+
+    static long zeroed(long size) {
+      return UnmanagedMemory.<PointerBase>calloc(WordFactory.unsigned(size)).rawValue();
     }
 
     static void free(long address) {

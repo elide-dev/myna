@@ -137,7 +137,10 @@ public final class NativeResource implements TruffleObject {
       try {
         destructor.destroy(address);
       } finally {
+        // A struct the resource lived in is freed with it; anything else kept is just dropped.
+        Object memory = kept;
         kept = null;
+        if (memory instanceof NativeStruct struct) struct.free();
         Borrow[] held = borrows;
         borrows = null;
         try {
@@ -181,7 +184,7 @@ public final class NativeResource implements TruffleObject {
    * A resource that lives in memory the runtime owns: a struct initialized in place.
    *
    * @param kept what must stay reachable until the resource is released: the {@link NativeStruct}
-   *     the resource lives in
+   *     the resource lives in, which the resource frees once its destroy has returned
    */
   public NativeResource(
       String type,
