@@ -186,6 +186,8 @@ public final class BytesCoercion extends Coercion {
       pointer(0, value, borrow);
       return;
     }
+    // An owner is an interop pointer, but no byte pointer is a declared resource.
+    if (value instanceof NativeResource owner) throw unexpectedOwner(owner);
     InteropLibrary interop = interop();
     try {
       if (strings && interop.isString(value)) {
@@ -205,22 +207,12 @@ public final class BytesCoercion extends Coercion {
         return;
       }
     } catch (UnsupportedMessageException e) {
-      // A shared NativeResource can be closed by another thread between isPointer() and
-      // asPointer(), exactly as in PointerCoercion: a guest error, not an internal invariant.
-      if (value instanceof NativeResource resource) throw closed(resource);
       throw CompilerDirectives.shouldNotReachHere(e);
     } catch (IllegalArgumentException e) {
       CompilerDirectives.transferToInterpreter();
       throw NativeCellException.of(this, function, ": parameter ", parameter, ": ", e.getMessage());
     }
-    if (value instanceof NativeResource resource && resource.isClosed()) throw closed(resource);
     throw mismatch(expected(), value);
-  }
-
-  private NativeCellException closed(NativeResource resource) {
-    CompilerDirectives.transferToInterpreter();
-    return NativeCellException.of(
-        this, function, ": parameter ", parameter, " received a closed ", resource.type());
   }
 
   /** A bare pointer has no size, so it cannot supply a derived byte count. */

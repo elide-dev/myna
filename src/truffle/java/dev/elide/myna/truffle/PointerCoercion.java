@@ -7,10 +7,11 @@ import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 
 /**
- * Coerces an interop pointer ({@link NativePointer}, an open {@link NativeResource}, {@link
- * NativeBytes}, or any other object answering {@code isPointer}) to a raw address. Interop {@code
- * null} is accepted only where the seam declares the parameter nullable; plain numbers only where
- * the binding opted in with {@code truffle_raw_pointers}.
+ * Coerces an interop pointer ({@link NativePointer}, {@link NativeBytes}, or any other object
+ * answering {@code isPointer}) to a raw address. An open {@link NativeResource} is accepted only
+ * where the parameter points to that declared resource. Interop {@code null} is accepted only where
+ * the seam declares the parameter nullable; plain numbers only where the binding opted in with
+ * {@code truffle_raw_pointers}.
  */
 public final class PointerCoercion extends Coercion {
   private final boolean nullable;
@@ -23,8 +24,9 @@ public final class PointerCoercion extends Coercion {
 
   /**
    * @param resource the declared resource type the parameter points to, or {@code null} when it
-   *     points to anything else. A {@link NativeResource} of another type is then rejected: its
-   *     address is a different native object, and the callee would read it as this one.
+   *     points to anything else. A {@link NativeResource} of another type is rejected: its address
+   *     is a different native object, and the callee would read it as this one. Without a resource
+   *     every owner is rejected, so a live resource's state never reaches an unrelated function.
    */
   public PointerCoercion(
       String function, String parameter, boolean nullable, boolean rawNumbers, String resource) {
@@ -47,7 +49,8 @@ public final class PointerCoercion extends Coercion {
   private long slow(Object value) {
     if (value == null) return checked(0, value);
     if (value instanceof NativeResource owner) {
-      if (resource != null && !sameType(resource, owner.type())) throw wrongResource(owner);
+      if (resource == null) throw unexpectedOwner(owner);
+      if (!sameType(resource, owner.type())) throw wrongResource(owner);
       if (owner.isClosed()) throw closed(owner);
     }
     InteropLibrary interop = interop();

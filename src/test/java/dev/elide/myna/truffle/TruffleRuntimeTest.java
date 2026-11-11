@@ -127,8 +127,12 @@ class TruffleRuntimeTest {
     @Node.Child private PointerCoercion pointer;
 
     PointerCell(boolean nullable, boolean rawNumbers) {
+      this(nullable, rawNumbers, null);
+    }
+
+    PointerCell(boolean nullable, boolean rawNumbers, String resource) {
       super("f", 1);
-      pointer = new PointerCoercion("f", "p", nullable, rawNumbers);
+      pointer = new PointerCoercion("f", "p", nullable, rawNumbers, resource);
     }
 
     void useInterop(InteropLibrary library) throws ReflectiveOperationException {
@@ -509,9 +513,10 @@ class TruffleRuntimeTest {
       assertEquals(segment.address(), strict.execute(bytes));
     }
     var resource = new NativeResource("Ticket", 0x4000, address -> {}, null);
-    assertEquals(0x4000, strict.execute(resource));
+    var ticket = new PointerCoercion("f", "p", false, false, "Ticket");
+    assertEquals(0x4000, ticket.execute(resource));
     resource.close();
-    var closed = assertThrows(NativeCellException.class, () -> strict.execute(resource));
+    var closed = assertThrows(NativeCellException.class, () -> ticket.execute(resource));
     assertEquals("f: parameter p received a closed Ticket", closed.getMessage());
   }
 
@@ -557,7 +562,7 @@ class TruffleRuntimeTest {
   @Test
   void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
     var resource = new NativeResource("Ticket", 0x5000L, address -> {}, null);
-    var cell = new PointerCell(false, false);
+    var cell = new PointerCell(false, false, "Ticket");
     // Force a close after the real isPointer probe and before the real asPointer dispatch.
     // Inject only the scheduling library, keeping production free of test hooks.
     var interop =
@@ -1055,7 +1060,8 @@ class TruffleRuntimeTest {
 
   /**
    * A pointer to a declared resource takes an owner of that resource only: another resource's
-   * address is a different native object, which the callee would read as this one.
+   * address is a different native object, which the callee would read as this one. A pointer to
+   * anything else takes no owner at all.
    */
   @Test
   void resourcePointersRejectOwnersOfAnotherResource() {
@@ -1072,10 +1078,22 @@ class TruffleRuntimeTest {
       assertEquals(
           "next: parameter stream expects a Stream resource, got a Session",
           assertThrows(NativeCellException.class, () -> nullable.execute(session)).getMessage());
-      // A raw pointer carries no type to check, and an untyped parameter takes any owner.
+      // A raw pointer carries no type to check.
       assertEquals(0x30, typed.execute(NativePointer.of(0x30)));
-      assertEquals(0x10, untyped.execute(session));
+      assertEquals(0x30, untyped.execute(NativePointer.of(0x30)));
       assertEquals(0, nullable.execute(NativePointer.NULL));
+    }
+    // A live resource's address reaches only a parameter declared to take that resource.
+    for (int round = 0; round < 2; round++) {
+      assertEquals(
+          "peek: parameter cell takes no resource, got a Session",
+          assertThrows(NativeCellException.class, () -> untyped.execute(session)).getMessage());
+      assertEquals(
+          "peek: parameter cell takes no resource, got a Stream",
+          assertThrows(
+                  NativeCellException.class,
+                  () -> new PointerCoercion("peek", "cell", true, true).execute(stream))
+              .getMessage());
     }
     // The wrong type is reported before a close is; the right type reports its close.
     session.close();
@@ -1083,6 +1101,9 @@ class TruffleRuntimeTest {
         assertThrows(NativeCellException.class, () -> typed.execute(session))
             .getMessage()
             .contains("expects a Stream resource, got a Session"));
+    assertEquals(
+        "peek: parameter cell takes no resource, got a Session",
+        assertThrows(NativeCellException.class, () -> untyped.execute(session)).getMessage());
     stream.close();
     assertEquals(
         "next: parameter stream received a closed Stream",
@@ -3087,18 +3108,34 @@ class TruffleRuntimeTest {
     };
   }
 
+  /**
+   * No byte pointer is a declared resource, so an owner is refused before its address is read, open
+   * or closed, whatever the parameter's access or shape.
+   */
   @Test
-  void concurrentCloseOfAResourcePassedAsBytesOrPointerIsAGuestError() throws Exception {
+  void bytePointersRejectOwners() {
+    var owner = new NativeResource("Ticket", 0x6000L, address -> {}, null);
+    for (int round = 0; round < 2; round++) {
+      for (boolean writable : new boolean[] {false, true}) {
+        for (boolean buffer : new boolean[] {false, true}) {
+          var bytes = new BytesCoercion("f", "p", true, writable, buffer);
+          assertEquals(
+              "f: parameter p takes no resource, got a Ticket",
+              assertThrows(NativeCellException.class, () -> bytes.execute(owner)).getMessage());
+        }
+      }
+      var raw = new BytesCoercion("f", "p", false, false, false, false);
+      assertThrows(NativeCellException.class, () -> raw.execute(owner));
+      owner.close();
+    }
+  }
+
+  @Test
+  void concurrentCloseOfAResourcePassedAsAPointerIsAGuestError() throws Exception {
     // isPointer() true then close: asPointer() fails. isPointer() false after close: no type error.
     for (boolean answer : new boolean[] {true, false}) {
-      var bytesResource = new NativeResource("Ticket", 0x7000L, address -> {}, null);
-      var bytes = new BytesCoercion("f", "p", false, false, false);
-      inject(bytes, closingDuringIsPointer(bytesResource, answer));
-      assertEquals(
-          "f: parameter p received a closed Ticket",
-          assertThrows(NativeCellException.class, () -> bytes.execute(bytesResource)).getMessage());
       var pointerResource = new NativeResource("Ticket", 0x7000L, address -> {}, null);
-      var pointer = new PointerCoercion("f", "p", false, false);
+      var pointer = new PointerCoercion("f", "p", false, false, "Ticket");
       inject(pointer, closingDuringIsPointer(pointerResource, answer));
       assertEquals(
           "f: parameter p received a closed Ticket",
@@ -3113,7 +3150,7 @@ class TruffleRuntimeTest {
       long address = 0x8000L + round * 16;
       var destroyed = new java.util.concurrent.atomic.AtomicInteger();
       var resource = new NativeResource("Ticket", address, a -> destroyed.incrementAndGet(), null);
-      var function = new PointerCell(false, false).function();
+      var function = new PointerCell(false, false, "Ticket").function();
       var start = new java.util.concurrent.CountDownLatch(1);
       var unexpected = new AtomicReference<Throwable>();
       var threads = new ArrayList<Thread>();

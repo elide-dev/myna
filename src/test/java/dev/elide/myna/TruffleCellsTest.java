@@ -991,7 +991,7 @@ class TruffleCellsTest {
             """),
         truffle);
     // Another resource's handle is a pointer argument: PointerCoercion takes an open owner of
-    // that resource and no other, while a pointer to a plain record stays untyped.
+    // that resource and no other, while a pointer to a plain record takes no owner.
     assertTrue(
         truffle.contains(
             """

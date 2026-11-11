@@ -129,13 +129,20 @@ through it, and partial evaluation reduces a monomorphic site to a type check or
 | `i8`…`i64`, `u8`…`u64`, `usize`, `isize`, `char` | interop numbers that fit (integral doubles included); `u64` also takes big integers up to 2^64 | signed as is; `u8`/`u16`/`u32` as their numeric value; `u64` as raw bits (interop has no unsigned 64-bit primitive); `char` follows the target ABI — signed on x86-64 and Apple arm64 (sign-extended like `i8`), unsigned on AAPCS64 Linux (`aarch64-unknown-linux-gnu`, masked as `u8`) |
 | `bool` | interop booleans only; numbers are not truthy | boolean |
 | `f32`, `f64` | any interop number; rounding into `f32` is the call's C semantics | double |
-| `ptr<T>` (non-byte pointee), `ptr<void>`, `fn<…>` return | `NativePointer`, open `NativeResource`, `NativeBytes`, any interop pointer; `null` only when nullable. Where `T` is a declared resource, a `NativeResource` must be of that resource | `NativePointer` |
+| `ptr<T>` (non-byte pointee), `ptr<void>`, `fn<…>` return | `NativePointer`, `NativeBytes`, any interop pointer; `null` only when nullable. An open `NativeResource` only where `T` is that declared resource | `NativePointer` |
 | `ptr<u8>`, `ptr<i8>`, `ptr<char>` with `access=read` | strings (UTF-8, NUL-terminated), buffers, pointers | — |
 | `ptr<u8>`, `ptr<i8>`, `ptr<char>` with `access=write` or `read_write` | buffers and pointers; strings are rejected | — |
 | byte pointers declared `truffle_buffer` | strings (UTF-8, read access only), buffers, pointers; nothing is NUL-terminated and the count is a guest argument | — |
 | byte pointers with unspecified access | pointers only, like any other pointer | — |
 | `borrow` buffers (the count is derived) | strings for read access, `NativeBytes`, `HeapBytes`, any interop buffer; a bare pointer has no size and is rejected; `null` only when nullable, as an absent buffer of length zero | — |
 | `void` | — | `NativeVoid.INSTANCE` (interop `null`) |
+
+A resource's owner is accepted only by a parameter typed as a pointer to that resource. Any other
+pointer parameter, whether to a plain struct, a scalar, bytes or `void`, rejects an owner (open or
+closed) with a `NativeCellException` naming the parameter, so guest code cannot hand a live
+resource's internal state to a function not declared to take it. A function that really does take
+a resource as an opaque handle declares the parameter as `ptr<Resource>`. A `NativePointer` carries
+no type and is accepted as before; static `invoke` takes raw addresses and is unaffected.
 
 Failures raise `NativeCellException`, an `AbstractTruffleException` that guest languages see as an
 ordinary runtime error, with the function, parameter and expected carrier in the message. A failing

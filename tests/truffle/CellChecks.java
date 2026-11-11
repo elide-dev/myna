@@ -20,6 +20,14 @@ public final class CellChecks {
     try { call(cells, name, args); } catch (NativeCellException expected) { return; }
     throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
   }
+  /** Rejects an owner passed for a parameter that is not declared to take its resource. */
+  static void rejectsOwner(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
+    try { call(cells, name, args); } catch (NativeCellException expected) {
+      check(expected.getMessage().contains(" takes no resource, got a Counter"), name + ": " + expected.getMessage());
+      return;
+    }
+    throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
+  }
   interface Access { void run() throws Exception; }
   static void outOfBounds(Access access, String what) throws Exception {
     try { access.run(); } catch (com.oracle.truffle.api.interop.InvalidBufferOffsetException expected) { return; }
@@ -296,6 +304,16 @@ public final class CellChecks {
       rejects(cells, "counterNext", stepper);
       rejects(cells, "stepperNext", parent);
       rejects(cells, "stepperCreate", stepper, NativeBytes.of(step, false));
+      // A pointer to anything but a resource takes no owner: a live resource's state never reaches
+      // a function that is not declared to take it, as a struct, a scalar, bytes or an opaque word.
+      rejectsOwner(cells, "stepperCreate", parent, parent);
+      rejectsOwner(cells, "peek", parent);
+      rejectsOwner(cells, "poke", parent, 1L);
+      rejectsOwner(cells, "rawLength", parent);
+      rejectsOwner(cells, "strlen", parent);
+      rejectsOwner(cells, "checksum", parent);
+      rejectsOwner(cells, "sumBytes", parent, 0L, NativeVoid.INSTANCE);
+      rejectsOwner(cells, "sumBytes", NativeBytes.of(step, false), 8L, parent);
       // The stepper keeps its counter open: closing the counter under it would leave the stepper
       // pointing at freed memory, so that is refused until the stepper is gone.
       rejects(cells, "counterDestroy", parent);
