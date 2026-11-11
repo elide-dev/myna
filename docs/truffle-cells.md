@@ -510,6 +510,30 @@ call (3.66 ns for the ten-argument leaf, 4.47 ns for its transition) and allocat
 host code. What remains over the direct call in the ten-argument transition is the type checks on
 ten guest values.
 
+### FFM cells lending segments
+
+Measured on the controlled x86-64 host (unclemax, Linux, AMD Ryzen Threadripper PRO 9965WX) at
+`535f4d9`, five processes per case, through the typed `executeLong` against the static FFM entry
+given the same kind of segment; these are the pairs `benchmarks/gate.py cells` holds to 2%. Every
+case allocates 0 B per call. In ns per call:
+
+| Lent to the cell | Cell (`typed-ffm-*`) | Direct call | Difference |
+|---|---:|---:|---:|
+| 256 bytes, global segment (`sum-native-256`) | 23.695 | 23.696 | -0.0% |
+| 256 bytes, confined segment (`sum-confined-256`) | 23.924 | 23.705 | +0.9% |
+| 256 bytes, shared segment (`sum-shared-256`) | 29.071 | 28.707 | +1.3% |
+| Two global segments, ten arguments (`slab-native`) | 3.232 | 4.331 | -25.4% |
+| Two shared segments (`slab-shared`) | 12.037 | 12.034 | +0.0% |
+| A global segment and a copied heap array (`slab-mixed`) | 13.112 | 14.190 | -7.6% |
+
+Two shared segments cost 12.60 ns against 12.04 while the cell held both borrows across the call:
+the x86-64 loop then kept its result in a stack slot. Calling before borrowing (see
+[Borrows](#borrows)) removed that. For one lent buffer the same change measured no gain at this
+size (a confined 256-byte buffer: 24.24 to 24.27 ns in three builds, against 23.92 to 24.05 with
+the borrow held), so those cells keep their borrow. What a cell pays over the direct call for a
+scoped segment is the reads of the guest's buffer and its segment after each call, where the
+direct call's segment is a constant.
+
 ### Follow-ups
 
 Findings that are tracked, not blocking:
