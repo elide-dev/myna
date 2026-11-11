@@ -11,14 +11,14 @@ final class RustOwnership {
   private RustOwnership() {}
 
   static String generate(Module m) {
-    if (m.resources().isEmpty() && m.borrows().isEmpty()) return "";
+    if (m.returnedResources().isEmpty() && m.borrows().isEmpty()) return "";
     var out =
         new StringBuilder(
             "\n"
                 + "/// Ownership APIs. Native implementations must uphold the descriptor's"
                 + " lifecycle contracts.\n"
                 + "pub mod ownership {\n");
-    for (Resource r : m.resources()) {
+    for (Resource r : m.returnedResources()) {
       String n = r.name();
       Function create =
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();

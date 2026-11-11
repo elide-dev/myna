@@ -69,6 +69,40 @@ int64_t cells_stepper_next(Stepper *stepper) {
   return value;
 }
 int64_t cells_counter_live(void) { return live; }
+// A create that reports a status and writes its handle into a field of the caller's struct.
+// Statuses 0 and 2 mean the layout exists; 7 means it does not; a first byte of 0xff reports
+// success without writing a handle.
+typedef struct Layout { int64_t width; } Layout;
+typedef struct LayoutResult { uint64_t count; Layout *data; uint64_t capacity; } LayoutResult;
+int32_t cells_layout_compile(const uint8_t *schema, uint64_t length, LayoutResult *result) {
+  result->count = length;
+  result->data = NULL;
+  result->capacity = 0;
+  if (length == 0) return 7;
+  if (schema[0] == 0xff) return 0;
+  Layout *layout = malloc(sizeof *layout);
+  if (!layout) return 12;
+  layout->width = schema[0];
+  result->data = layout;
+  result->capacity = 2 * length;
+  live++;
+  return schema[0] == 2 ? 2 : 0;
+}
+void cells_layout_release(Layout *layout) { free(layout); live--; }
+int64_t cells_layout_width(const Layout *layout) { return layout->width; }
+// A result initialized in place: the caller's struct is the resource, and release takes it back.
+typedef struct View { int64_t sum; uint8_t *scratch; } View;
+int32_t cells_view_init(const uint8_t *data, uint64_t length, View *view) {
+  if (length == 0) return -1;
+  view->scratch = malloc(16);
+  if (!view->scratch) return -2;
+  view->sum = 0;
+  for (uint64_t i = 0; i < length; i++) view->sum += data[i];
+  live++;
+  return 0;
+}
+void cells_view_release(View *view) { free(view->scratch); view->scratch = NULL; live--; }
+int64_t cells_view_sum(const View *view) { return view->sum; }
 int64_t cells_sleepy_add(int64_t left, int64_t right) { return left + right; }
 /* Two C strings borrowed by one call: each length up to its terminator, plus each first byte
    (an empty string's first byte is its terminator, 0). */

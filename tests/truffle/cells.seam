@@ -89,3 +89,39 @@ end
 import stepperNext symbol=cells_stepper_next return=i64 error=no_failure
   param stepper type=ptr<Stepper> nullable=false ownership=borrowed access=read_write
 end
+opaque Layout
+struct LayoutResult size=24 align=8
+  field count type=u64 offset=0
+  field data type=ptr<Layout> offset=8
+  field capacity type=u64 offset=16
+end
+resource Layout representation=native threading=confined create=layoutCompile destroy=layoutRelease handle=result.data success=0,2
+borrow layoutCompile schema length=length lifetime=call
+import layoutCompile symbol=cells_layout_compile return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param schema type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param result type=ptr<LayoutResult> nullable=false ownership=borrowed access=write
+end
+import layoutRelease symbol=cells_layout_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param layout type=ptr<Layout> nullable=false ownership=transferred_to_callee access=read_write
+end
+import layoutWidth symbol=cells_layout_width return=i64 error=no_failure
+  param layout type=ptr<Layout> nullable=false ownership=borrowed access=read
+end
+struct View size=16 align=8
+  field sum type=i64 offset=0
+  field scratch type=ptr<u8> offset=8
+end
+resource View representation=native threading=confined create=viewInit destroy=viewRelease handle=view success=0
+borrow viewInit data length=length lifetime=call
+import viewInit symbol=cells_view_init return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param view type=ptr<View> nullable=false ownership=borrowed access=write
+end
+import viewRelease symbol=cells_view_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param view type=ptr<View> nullable=false ownership=transferred_to_callee access=read_write
+end
+import viewSum symbol=cells_view_sum return=i64 error=no_failure
+  param view type=ptr<View> nullable=false ownership=borrowed access=read
+end

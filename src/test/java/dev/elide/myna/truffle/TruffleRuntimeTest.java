@@ -4,9 +4,12 @@ package dev.elide.myna.truffle;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.oracle.truffle.api.interop.ExceptionType;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -927,6 +930,124 @@ class TruffleRuntimeTest {
   }
 
   /**
+   * A failed resource create is a guest error that carries the native result: a number for host
+   * code and a {@code status} member for guests, on an otherwise ordinary exception.
+   */
+  @Test
+  void statusErrorsCarryTheNativeResult() throws Exception {
+    NativeStatusException failed = NativeCellException.status("compile", -7, null);
+    assertEquals(-7, failed.status());
+    assertEquals("compile created no resource: status -7", failed.getMessage());
+    InteropLibrary interop = InteropLibrary.getUncached();
+    assertTrue(interop.isException(failed));
+    assertSame(
+        failed, assertThrows(NativeStatusException.class, () -> interop.throwException(failed)));
+    assertEquals(ExceptionType.RUNTIME_ERROR, interop.getExceptionType(failed));
+    assertTrue(interop.hasExceptionMessage(failed));
+    assertEquals(failed.getMessage(), interop.getExceptionMessage(failed));
+    assertTrue(interop.hasMembers(failed));
+    Object members = interop.getMembers(failed);
+    assertEquals(1, interop.getArraySize(members));
+    assertTrue(interop.isArrayElementReadable(members, 0));
+    assertFalse(interop.isArrayElementReadable(members, 1));
+    assertEquals("status", interop.readArrayElement(members, 0));
+    assertThrows(InvalidArrayIndexException.class, () -> interop.readArrayElement(members, 1));
+    assertTrue(interop.isMemberReadable(failed, "status"));
+    assertFalse(interop.isMemberReadable(failed, "other"));
+    assertEquals(-7L, interop.readMember(failed, "status"));
+    assertThrows(UnknownIdentifierException.class, () -> interop.readMember(failed, "other"));
+    // Success without a resource has no status to carry: it is a plain cell error.
+    NativeCellException missing = NativeCellException.noResource("compile", null);
+    assertFalse(missing instanceof NativeStatusException);
+    assertEquals("compile reported success but wrote no resource", missing.getMessage());
+  }
+
+  /**
+   * The struct a create writes through is the runtime's: zeroed, sized by the seam, allocated only
+   * when the guest's value can take a copy of it, and never the guest's own memory.
+   */
+  @Test
+  void createStructsLiveInRuntimeMemoryAndCopyToTheGuest() throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment guest = arena.allocate(24);
+      guest.fill((byte) 0x7f);
+      NativeBytes buffer = NativeBytes.of(guest, true);
+      NativeStruct out = NativeStruct.allocate(24, buffer, "compile", "result", null);
+      assertNotEquals(guest.address(), out.address());
+      MemorySegment struct = MemorySegment.ofAddress(out.address()).reinterpret(24);
+      for (long i = 0; i < 24; i++) assertEquals(0, struct.get(ValueLayout.JAVA_BYTE, i));
+      // What the create writes is read from the runtime's memory, whatever the guest's holds.
+      struct.set(ValueLayout.JAVA_LONG, 8, 0x1234_5678_9abcL);
+      struct.set(ValueLayout.JAVA_LONG, 16, 42);
+      assertEquals(0x1234_5678_9abcL, out.pointerAt(8));
+      assertEquals(0x7f, guest.get(ValueLayout.JAVA_BYTE, 8));
+      out.copyTo(buffer);
+      assertEquals(0x1234_5678_9abcL, guest.get(ValueLayout.JAVA_LONG, 8));
+      assertEquals(42, guest.get(ValueLayout.JAVA_LONG, 16));
+      // Any writable interop buffer of the right size takes the copy, a heap one included.
+      byte[] heap = new byte[32];
+      NativeStruct.allocate(24, new HeapBytes(heap, true), "compile", "result", null);
+      out.copyTo(new HeapBytes(heap, true));
+      assertEquals(42, heap[16]);
+      assertEquals(0, heap[24]);
+      // Everything else is refused before anything is allocated or called.
+      for (Object refused :
+          new Object[] {
+            NativeBytes.of(guest, false),
+            NativeBytes.of(guest.asSlice(0, 23), true),
+            new HeapBytes(new byte[24], false),
+            new HeapBytes(new byte[23], true),
+            NativePointer.of(guest.address()),
+            new NativeResource("Layout", 0x10, a -> {}, null),
+            new ForeignNull(),
+            new Liar(),
+            new SizelessBuffer(),
+            "text",
+            null
+          })
+        assertTrue(
+            assertThrows(
+                    NativeCellException.class,
+                    () -> NativeStruct.allocate(24, refused, "compile", "result", null))
+                .getMessage()
+                .startsWith(
+                    "compile: parameter result expects writable buffer of at least 24 bytes"));
+      // A buffer that stops taking the bytes after a successful create costs the new resource.
+      List<String> freed = new ArrayList<>();
+      NativeResource created = new NativeResource("Layout", 0x20, a -> freed.add("layout"), null);
+      ShrinkingBuffer shrinking = new ShrinkingBuffer(24);
+      NativeStruct checked = NativeStruct.allocate(24, shrinking, "compile", "result", null);
+      assertEquals(
+          "buffer stopped taking the struct a create wrote",
+          assertThrows(NativeCellException.class, () -> checked.copyTo(shrinking, created))
+              .getMessage());
+      assertTrue(created.isClosed());
+      assertEquals(List.of("layout"), freed);
+      NativeResource kept = new NativeResource("Layout", 0x30, a -> freed.add("kept"), null);
+      out.copyTo(buffer, kept);
+      assertFalse(kept.isClosed());
+    }
+  }
+
+  /** A resource initialized in place keeps the struct it lives in until it is released. */
+  @Test
+  void inPlaceResourcesKeepTheirMemoryReachableUntilReleased() throws Exception {
+    Object memory = new Object();
+    NativeResource view = new NativeResource("View", 0x10, a -> {}, null, null, memory);
+    var kept = stateOf(view).getClass().getDeclaredField("kept");
+    kept.setAccessible(true);
+    assertSame(memory, kept.get(stateOf(view)));
+    view.close();
+    assertNull(kept.get(stateOf(view)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("View", 0, a -> {}, null, null, memory));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("View", 0x10, null, null, null, memory));
+  }
+
+  /**
    * A pointer to a declared resource takes an owner of that resource only: another resource's
    * address is a different native object, which the callee would read as this one.
    */
@@ -1768,6 +1889,96 @@ class TruffleRuntimeTest {
 
     @ExportMessage
     String asString() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+  }
+
+  /** Claims to be a writable buffer and then cannot say how large it is. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class SizelessBuffer implements TruffleObject {
+    @ExportMessage
+    boolean hasBufferElements() {
+      return true;
+    }
+
+    @ExportMessage
+    boolean isBufferWritable() {
+      return true;
+    }
+
+    @ExportMessage
+    long getBufferSize() throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    byte readBufferByte(long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void readBuffer(long offset, byte[] destination, int destinationOffset, int length)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferByte(long offset, byte value) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short readBufferShort(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferShort(ByteOrder order, long offset, short value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int readBufferInt(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferInt(ByteOrder order, long offset, int value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long readBufferLong(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferLong(ByteOrder order, long offset, long value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    float readBufferFloat(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferFloat(ByteOrder order, long offset, float value)
+        throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double readBufferDouble(ByteOrder order, long offset) throws UnsupportedMessageException {
+      throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    void writeBufferDouble(ByteOrder order, long offset, double value)
+        throws UnsupportedMessageException {
       throw UnsupportedMessageException.create();
     }
   }

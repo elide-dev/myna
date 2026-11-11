@@ -179,6 +179,12 @@ public final class TruffleCells implements Backend {
         String field = "coerce_" + p.name();
         String argument = "arguments[" + index++ + "]";
         guest.put(p.name(), argument);
+        if (cell.creates() != null && p.name().equals(cell.creates().handleParameter())) {
+          // The create writes through this parameter into a struct the runtime owns; the guest's
+          // buffer is checked when that struct is allocated and receives a copy afterwards.
+          arguments.add(address(ffm, imports, "out.address()"));
+          continue;
+        }
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
         if (t instanceof Pointer || t instanceof FunctionPointer) {
@@ -375,7 +381,7 @@ public final class TruffleCells implements Backend {
         inner.add(word ? wrapper + name + ")" : name);
       }
       boolean address =
-          cell.creates() != null
+          (cell.creates() != null && cell.creates().handle() == null)
               || f.returns() instanceof Pointer
               || f.returns() instanceof FunctionPointer;
       String raw =
@@ -468,38 +474,114 @@ public final class TruffleCells implements Backend {
         Fact dropped = p.facts().get("nocapture");
         // The very expression the parameter was coerced from, never a recomputed position.
         if (p.type() instanceof Pointer
+            && !p.name().equals(cell.creates().handleParameter())
             && !(dropped != null && dropped.enabled() && dropped.approved()))
           retained.add(guest.get(p.name()));
       }
-      if (retained.isEmpty())
-        result
-            .append("            long created = ")
+      String hold = retained.isEmpty() ? "" : ", hold";
+      String handle = cell.creates().handle();
+      var before = new StringBuilder();
+      var body = new StringBuilder();
+      var after = new StringBuilder();
+      if (handle == null) {
+        body.append("long created = ")
             .append(call)
             .append(";\n")
-            .append("            if (created == 0) return Carriers.none();\n")
-            .append("            return new NativeResource(")
-            .append(type)
-            .append(", created, DESTRUCTOR, ")
-            .append(thread)
-            .append(");\n");
-      else
+            .append("if (created == 0) return Carriers.none();\n");
+      } else {
+        // The create reports through its result and writes the resource through a parameter.
+        // It writes into a struct the runtime owns, never into the guest's memory: the guest
+        // cannot then swap the handle before it is adopted, pass a buffer too small for the
+        // struct, initialize one struct twice, or free or overwrite a resource that lives in it.
+        // The guest's buffer receives a copy, on failure too, since the struct may say why.
+        imports.add(RUNTIME + "NativeStruct");
+        imports.add(RUNTIME + "NativeCellException");
+        Parameter parameter =
+            f.parameters().stream()
+                .filter(p -> p.name().equals(cell.creates().handleParameter()))
+                .findFirst()
+                .orElseThrow();
+        Struct struct =
+            m.structs().stream()
+                .filter(
+                    x -> x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
+                .findFirst()
+                .orElseThrow();
+        String copy = "out.copyTo(" + guest.get(parameter.name());
+        before
+            .append("NativeStruct out = NativeStruct.allocate(")
+            .append(struct.size())
+            .append("L, ")
+            .append(guest.get(parameter.name()))
+            .append(", ")
+            .append(quotedName)
+            .append(", ")
+            .append(SeamJson.quote(parameter.name()))
+            .append(", this);\n");
+        if (f.returns() == Scalar.VOID) {
+          body.append(call).append(";\n");
+        } else {
+          var succeeded = new ArrayList<String>();
+          for (long status : cell.creates().success()) succeeded.add("status == " + status + "L");
+          body.append(typed((Scalar) f.returns())[0])
+              .append(" status = ")
+              .append(call)
+              .append(";\n")
+              .append("if (!(")
+              .append(String.join(" || ", succeeded))
+              .append(")) {\n    ")
+              .append(copy)
+              .append(");\n    throw NativeCellException.status(")
+              .append(quotedName)
+              .append(", status, this);\n}\n");
+        }
+        String field = cell.creates().handleField();
+        if (field == null) {
+          // The struct is the resource: it lives in the runtime's memory until its destroy.
+          body.append("long created = out.address();\n");
+          hold = (retained.isEmpty() ? ", null" : ", hold") + ", out";
+        } else {
+          long offset =
+              struct.fields().stream()
+                  .filter(x -> x.name().equals(field))
+                  .findFirst()
+                  .orElseThrow()
+                  .offset();
+          body.append("long created = out.pointerAt(")
+              .append(offset)
+              .append("L);\n")
+              .append("if (created == 0) {\n    ")
+              .append(copy)
+              .append(");\n    throw NativeCellException.noResource(")
+              .append(quotedName)
+              .append(", this);\n}\n");
+        }
+        after.append(copy).append(", resource);\n");
+      }
+      String owner = "new NativeResource(" + type + ", created, DESTRUCTOR, " + thread + hold + ")";
+      for (String line : before.toString().split("\n"))
+        if (!line.isEmpty()) result.append("            ").append(line).append('\n');
+      String indent = retained.isEmpty() ? "            " : "                ";
+      if (!retained.isEmpty())
         result
             .append("            Object hold = NativeResource.hold(")
             .append(String.join(", ", retained))
             .append(");\n")
             .append("            boolean adopted = false;\n")
-            .append("            try {\n")
-            .append("                long created = ")
-            .append(call)
-            .append(";\n")
-            .append("                if (created == 0) return Carriers.none();\n")
-            .append("                NativeResource resource = new NativeResource(")
-            .append(type)
-            .append(", created, DESTRUCTOR, ")
-            .append(thread)
-            .append(", hold);\n")
-            .append("                adopted = true;\n")
-            .append("                return resource;\n")
+            .append("            try {\n");
+      for (String line : body.toString().split("\n"))
+        result.append(indent).append(line).append('\n');
+      if (retained.isEmpty() && handle == null) {
+        result.append(indent).append("return ").append(owner).append(";\n");
+      } else {
+        result.append(indent).append("NativeResource resource = ").append(owner).append(";\n");
+        if (!retained.isEmpty()) result.append(indent).append("adopted = true;\n");
+        for (String line : after.toString().split("\n"))
+          if (!line.isEmpty()) result.append(indent).append(line).append('\n');
+        result.append(indent).append("return resource;\n");
+      }
+      if (!retained.isEmpty())
+        result
             .append("            } finally {\n")
             .append("                if (!adopted) NativeResource.release(hold);\n")
             .append("            }\n");

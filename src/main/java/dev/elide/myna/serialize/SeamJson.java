@@ -126,6 +126,14 @@ public final class SeamJson {
                               + quote(r.create())
                               + ",\"destroy\":"
                               + quote(r.destroy())
+                              + (r.handle() == null
+                                  ? ""
+                                  : ",\"handle\":"
+                                      + quote(r.handle())
+                                      + ",\"success\":["
+                                      + String.join(
+                                          ",", r.success().stream().map(String::valueOf).toList())
+                                      + "]")
                               + "}")
                       .toList());
     if (!m.borrows().isEmpty())

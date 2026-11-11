@@ -27,7 +27,7 @@ public final class JavaFfm implements Backend {
                 1024L
                     + functions.size() * 2304L
                     + m.callbacks().size() * 1024L
-                    + m.resources().size() * 1024L
+                    + m.returnedResources().size() * 1024L
                     + m.borrows().size() * 2048L
                     + m.structs().size() * 512L);
     var out =
@@ -193,7 +193,7 @@ public final class JavaFfm implements Backend {
   }
 
   private static void ownership(Module m, StringBuilder out) {
-    if (m.resources().isEmpty()) return;
+    if (m.returnedResources().isEmpty()) return;
     out.append(
 """
         @FunctionalInterface
@@ -209,7 +209,7 @@ public final class JavaFfm implements Backend {
             T adopt(MemorySegment address, NativeDestructor destructor, Thread requiredThread) throws Throwable;
         }
 """);
-    for (Resource r : m.resources()) {
+    for (Resource r : m.returnedResources()) {
       Function create =
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
       var params = new ArrayList<String>();

@@ -256,8 +256,44 @@ public final class Seam {
     }
   }
 
-  /** Explicit lifecycle contract for a unique native allocation. Null creation means failure. */
-  public record Resource(String name, String create, String destroy, boolean shared) {}
+  /**
+   * Explicit lifecycle contract for a unique native allocation.
+   *
+   * <p>Without a {@code handle}, the create function returns the resource pointer and null means
+   * failure. With one, the create function reports through its result and writes the resource where
+   * the handle says: {@code PARAMETER.FIELD} names a pointer field of the struct that parameter
+   * points to, and a bare {@code PARAMETER} says the struct it points to is the resource itself,
+   * initialized in place. {@code success} lists the results that mean the resource exists. Only
+   * Truffle cells project the handle forms; the other ownership APIs leave those functions to their
+   * raw bindings.
+   */
+  public record Resource(
+      String name,
+      String create,
+      String destroy,
+      boolean shared,
+      String handle,
+      List<Long> success) {
+    public Resource {
+      success = List.copyOf(success);
+    }
+
+    /** The parameter the create function writes through, or null for a returned pointer. */
+    public String handleParameter() {
+      if (handle == null) return null;
+      int dot = handle.indexOf('.');
+      return dot < 0 ? handle : handle.substring(0, dot);
+    }
+
+    /**
+     * The field holding the resource pointer, or null when the pointed-to struct is the resource.
+     */
+    public String handleField() {
+      if (handle == null) return null;
+      int dot = handle.indexOf('.');
+      return dot < 0 ? null : handle.substring(dot + 1);
+    }
+  }
 
   /**
    * A byte-buffer borrow valid only for the dynamic extent of one call. A function may declare
@@ -472,6 +508,14 @@ public final class Seam {
     /** The Native Image class; FFM and Feature classes take it as a prefix when it is named. */
     public String nativeClass() {
       return javaClass == null ? "MynaNative" : javaClass;
+    }
+
+    /**
+     * The resources every ownership API wraps: those whose create returns the pointer. The handle
+     * forms are projected by Truffle cells only.
+     */
+    public List<Resource> returnedResources() {
+      return resources.stream().filter(r -> r.handle() == null).toList();
     }
 
     public String ownershipClass() {

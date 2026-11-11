@@ -634,6 +634,191 @@ class OwnershipTest {
     }
   }
 
+  /** Creates that report a status and write their resource through a parameter. */
+  static final String HANDLES =
+      "module handles target=aarch64-apple-darwin java_class=Api truffle_cells=true\n"
+          + "opaque Layout\n"
+          + "struct LayoutResult size=24 align=8\n"
+          + "  field count type=u64 offset=0\n"
+          + "  field data type=ptr<Layout> offset=8\n"
+          + "  field capacity type=u64 offset=16\n"
+          + "end\n"
+          + "resource Layout representation=native threading=confined create=layoutCompile"
+          + " destroy=layoutRelease handle=result.data success=0,2\n"
+          + "borrow layoutCompile schema length=length lifetime=call\n"
+          + "import layoutCompile return=i32 error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u64\n"
+          + "  param result type=ptr<LayoutResult> nullable=false ownership=borrowed access=write\n"
+          + "end\n"
+          + "import layoutRelease return=void error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param layout type=ptr<Layout> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n"
+          + "struct View size=16 align=8\n"
+          + "  field sum type=i64 offset=0\n"
+          + "  field scratch type=ptr<u8> offset=8\n"
+          + "end\n"
+          + "resource View representation=native threading=shared create=viewInit"
+          + " destroy=viewRelease handle=view\n"
+          + "import viewInit return=void error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param seed type=i64\n"
+          + "  param view type=ptr<View> nullable=false ownership=borrowed access=read_write\n"
+          + "end\n"
+          + "import viewRelease return=void error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param view type=ptr<View> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  /**
+   * The handle forms are a contract only Truffle cells project: the other ownership APIs leave
+   * those creates to their raw bindings, and the descriptor records the form.
+   */
+  @Test
+  void handleResourcesAreProjectedByCellsOnly() {
+    var output = Generator.generate(Dsl.parse(HANDLES), true);
+    assertTrue(output.get("ApiTruffle.java").contains("class layoutCompile_Cell"));
+    // The borrow on the create still gets its wrappers; the resource gets no owner type.
+    assertTrue(output.get("ApiOwnership.java").contains("layoutCompile(NativeBuffer arg0"));
+    for (String file : List.of("ApiOwnership.java", "ApiFFM.java", "seam.rs")) {
+      assertFalse(output.get(file).contains("class Layout "), file);
+      assertFalse(output.get(file).contains("ResourceFactory"), file);
+      assertFalse(output.get(file).contains("impl core::ops::Drop for"), file);
+    }
+    String json = output.get("seam.json");
+    assertTrue(json.contains("\"handle\":\"result.data\",\"success\":[0,2]"), json);
+    assertTrue(json.contains("\"handle\":\"view\",\"success\":[]"), json);
+    // The form is part of the contract, so it is part of the fingerprint.
+    assertNotEquals(
+        output.get("seam.abi"),
+        Generator.generate(Dsl.parse(HANDLES.replace("success=0,2", "success=0")), true)
+            .get("seam.abi"));
+    // A module with only handle resources has nothing for the ownership class to hold.
+    String bare = HANDLES.replace("borrow layoutCompile schema length=length lifetime=call\n", "");
+    assertFalse(Generator.generate(Dsl.parse(bare), true).containsKey("ApiOwnership.java"));
+  }
+
+  static Stream<Arguments> handleRejections() {
+    String cellsOnly =
+        "a resource handle is generated for Truffle cells only; layoutCompile needs one: Layout"
+            + " handle=result.data";
+    String pointer = "resource handle must name a non-null pointer parameter with write access: ";
+    String result =
+        "  param result type=ptr<LayoutResult> nullable=false ownership=borrowed access=write\n";
+    return Stream.of(
+        Arguments.of(" truffle_cells=true", "", cellsOnly),
+        Arguments.of(
+            "import layoutCompile return=i32 error=no_failure",
+            "import layoutCompile return=i32 error=no_failure truffle_cell=false@explicit_contract",
+            cellsOnly),
+        Arguments.of(
+            "handle=result.data",
+            "handle=result.data.more",
+            "resource handle is PARAMETER or PARAMETER.FIELD: Layout handle=result.data.more"),
+        Arguments.of(
+            "handle=result.data",
+            "handle=.data",
+            "resource handle is PARAMETER or PARAMETER.FIELD: Layout handle=.data"),
+        Arguments.of(
+            "handle=result.data",
+            "handle=result.",
+            "resource handle is PARAMETER or PARAMETER.FIELD: Layout handle=result."),
+        Arguments.of(
+            "handle=result.data", "handle=absent.data", pointer + "Layout handle=absent.data"),
+        Arguments.of(
+            "handle=result.data", "handle=length.data", pointer + "Layout handle=length.data"),
+        Arguments.of(
+            result,
+            result.replace("access=write", "access=read"),
+            pointer + "Layout handle=result.data"),
+        Arguments.of(
+            result,
+            result.replace("nullable=false", "nullable=true"),
+            pointer + "Layout handle=result.data"),
+        Arguments.of(
+            result,
+            result.replace("ptr<LayoutResult>", "ptr<u64>"),
+            "resource handle field requires a pointer to a struct: Layout handle=result.data"),
+        Arguments.of(
+            "handle=result.data",
+            "handle=result.count",
+            "resource handle field must be a ptr<resource> field of LayoutResult: Layout"
+                + " handle=result.count"),
+        Arguments.of(
+            "handle=result.data",
+            "handle=result.absent",
+            "resource handle field must be a ptr<resource> field of LayoutResult: Layout"
+                + " handle=result.absent"),
+        Arguments.of(
+            " success=0,2",
+            "",
+            "a resource create with a handle must list the results that mean success: Layout"
+                + " handle=result.data"),
+        Arguments.of(
+            "import layoutCompile return=i32",
+            "import layoutCompile return=f64",
+            "a resource create with a handle returns an integer status or void: Layout"
+                + " handle=result.data"),
+        Arguments.of(
+            "import layoutCompile return=i32",
+            "import layoutCompile return=bool",
+            "a resource create with a handle returns an integer status or void: Layout"
+                + " handle=result.data"),
+        Arguments.of(
+            "destroy=viewRelease handle=view",
+            "destroy=viewRelease handle=view success=0",
+            "a create that returns void has no result to compare with success: View handle=view"),
+        // In place, the resource is the struct the parameter points to.
+        Arguments.of(
+            "struct View size=16 align=8\n  field sum type=i64 offset=0\n"
+                + "  field scratch type=ptr<u8> offset=8\nend\n",
+            "opaque View\n",
+            "a resource initialized in place must name a struct: View"),
+        Arguments.of(
+            "  param view type=ptr<View> nullable=false ownership=borrowed access=read_write\n",
+            "  param view type=ptr<LayoutResult> nullable=false ownership=borrowed"
+                + " access=read_write\n",
+            "a resource initialized in place is what its handle parameter points to: View"
+                + " handle=view"),
+        // Through a field, the resource is still an opaque allocation.
+        Arguments.of(
+            "resource Layout representation",
+            "resource LayoutResult representation",
+            "resource must name an opaque type: LayoutResult"),
+        Arguments.of("success=0,2", "success=0,two", "success lists integer results: 0,two"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("handleRejections")
+  void rejectsHandleShapesWithTheirReason(String from, String to, String message) {
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(HANDLES), true));
+    assertTrue(HANDLES.contains(from), "mutation must affect fixture");
+    String changed = HANDLES.replace(from, to);
+    var error =
+        assertThrows(
+            IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), true), to);
+    assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
+  }
+
+  /** A returned-pointer resource has no result to list as success. */
+  @Test
+  void successBelongsToHandleCreates() {
+    String source =
+        CREATES.replace(
+            "create=sessionCreate destroy=sessionDestroy",
+            "create=sessionCreate destroy=sessionDestroy success=0");
+    assertEquals(
+        "success applies to a resource create with a handle",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true))
+            .getMessage());
+  }
+
   static Stream<Arguments> borrowRejections() {
     String output =
         "  param output type=ptr<u8> nullable=false ownership=borrowed access=read_write"

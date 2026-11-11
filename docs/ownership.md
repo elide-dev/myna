@@ -117,13 +117,53 @@ Negative lengths, lengths outside the ABI integer range, and null addresses with
 
 An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. There is no overload that mixes arrays with `NativeBuffer`s.
 
+## Creates that report a status (Truffle cells only)
+
+Many C creates do not return the resource. They return a status and write the resource through a
+parameter: into a field of a struct the caller allocates, or by initializing the caller's struct
+in place, which is then released by passing the same struct back.
+
+```text
+opaque Layout
+struct LayoutResult size=24 align=8
+  field count type=u64 offset=0
+  field data type=ptr<Layout> offset=8
+  field capacity type=u64 offset=16
+end
+resource Layout representation=native threading=confined create=layoutCompile destroy=layoutRelease handle=result.data success=0,2
+
+struct View size=16 align=8
+  field sum type=i64 offset=0
+  field scratch type=ptr<u8> offset=8
+end
+resource View representation=native threading=confined create=viewInit destroy=viewRelease handle=view success=0
+```
+
+- `handle=PARAMETER.FIELD`: the create writes the resource pointer into that field of the struct
+  the parameter points to. The field must be a `ptr<resource>`, and the resource an opaque type.
+- `handle=PARAMETER`: the struct the parameter points to is the resource, initialized in place.
+  The resource then names that struct, and `destroy` takes a pointer to it.
+- `success=N[,N…]` lists the results that mean the resource exists. It is required when the create
+  returns an integer and not allowed when it returns `void`. Any other result means nothing was
+  created and nothing is to be released.
+
+The parameter must be a non-null pointer with `write` or `read_write` access. The contract is the
+create's: on a listed status it has written a live resource and transferred sole ownership of it;
+on any other it has left nothing to release.
+
+Only Truffle cells generate an owner for these forms, so the module must set `truffle_cells=true`
+and the create must have a cell. A cell does not let the create write into guest memory: it
+passes a struct the runtime owns and copies the result to the buffer the guest supplied. The Native Image, FFM and Rust ownership APIs do not wrap them;
+their raw bindings, and any call-buffer wrappers the create declares, are generated as for any
+other import. See [Truffle native cells](truffle-cells.md#ownership) for what the cell does.
+
 ## Truffle cells
 
 With `truffle_cells=true`, the same declarations project into guest-callable cells: each `borrow` drops its length from the guest signature and lends native memory in place, pins or copies heap bytes for exactly the call, and a `resource` returns a guest-visible owner with exactly-once close and thread confinement. See [Truffle native cells](truffle-cells.md).
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function and beside pass-through pointers. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function and beside pass-through pointers. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

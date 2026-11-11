@@ -788,6 +788,100 @@ class TruffleCellsTest {
     assertTrue(generate(MODULE + TRANSFER).containsKey("MynaOwnership.java"));
   }
 
+  /**
+   * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
+   * create writes into a struct the runtime owns; the cell compares the result with the listed
+   * statuses, reads the resource from that struct and returns its owner, and the guest's buffer
+   * receives a copy. Anything else is a NativeStatusException.
+   */
+  @Test
+  void handleCreatesWriteIntoMemoryTheRuntimeOwns() {
+    String truffle = generate(OwnershipTest.HANDLES).get("ApiTruffle.java");
+    // invoke keeps the raw shape: the status comes back and the caller supplies the struct.
+    assertTrue(
+        truffle.contains(
+            """
+                    public static int invoke(long schema, long length, long result) {
+                        return Api.layoutCompile(WordFactory.pointer(schema), length, WordFactory.pointer(result));
+                    }
+            """),
+        truffle);
+    // Through a field: the guest's buffer is checked before the call and never written by it,
+    // every listed status is success, and the handle is read from the runtime's struct.
+    assertTrue(
+        truffle.contains(
+            """
+                            NativeStruct out = NativeStruct.allocate(24L, arguments[1], "layoutCompile", "result", this);
+                            int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
+                            if (!(status == 0L || status == 2L)) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.status("layoutCompile", status, this);
+                            }
+                            long created = out.pointerAt(8L);
+                            if (created == 0) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.noResource("layoutCompile", this);
+                            }
+                            NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
+                            out.copyTo(arguments[1], resource);
+                            return resource;
+            """),
+        truffle);
+    // The handle parameter has no coercion of its own: it is not passed to the native side.
+    assertFalse(truffle.contains("coerce_result"), truffle);
+    assertFalse(truffle.contains("coerce_view"), truffle);
+    // In place, with no status: the resource is the runtime's struct, kept until its destroy.
+    assertTrue(
+        truffle.contains(
+            """
+                        NativeStruct out = NativeStruct.allocate(16L, arguments[1], "viewInit", "view", this);
+                        invoke(value_seed, out.address());
+                        long created = out.address();
+                        NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, null, out);
+                        out.copyTo(arguments[1], resource);
+                        return resource;
+            """),
+        truffle);
+    // A create that also takes another resource's handle holds it, around the same steps.
+    String held =
+        generate(
+                OwnershipTest.HANDLES.replace(
+                    "  param seed type=i64\n",
+                    "  param seed type=i64\n  param parent type=ptr<Layout> nullable=false"
+                        + " ownership=borrowed access=read\n"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        held.contains(
+            """
+                        NativeStruct out = NativeStruct.allocate(16L, arguments[2], "viewInit", "view", this);
+                        Object hold = NativeResource.hold(arguments[1]);
+                        boolean adopted = false;
+                        try {
+                            invoke(value_seed, address_parent, out.address());
+                            long created = out.address();
+                            NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, out);
+                            adopted = true;
+                            out.copyTo(arguments[2], resource);
+                            return resource;
+                        } finally {
+                            if (!adopted) NativeResource.release(hold);
+                        }
+            """),
+        held);
+    // FFM cells: the same shape over the FFM binding.
+    String ffm =
+        generate(
+                OwnershipTest.HANDLES.replace(
+                    "truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        ffm.contains(
+            "                return ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"
+                + " MemorySegment.ofAddress(result));\n"),
+        ffm);
+    assertTrue(ffm.contains("long created = out.pointerAt(8L);"), ffm);
+  }
+
   @Test
   void createCellsCoercePointerArgumentsAndReturnOwners() {
     String source =

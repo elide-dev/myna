@@ -9,14 +9,31 @@ import com.oracle.truffle.api.nodes.Node;
 /**
  * A guest-visible error raised by a native cell: wrong arity, an argument that does not coerce to
  * the declared carrier, or misuse of a borrowed buffer or owned resource. Guest languages observe
- * it as an ordinary runtime error; it never carries a native failure, because cells only call
- * {@code error=no_failure} imports.
+ * it as an ordinary runtime error. The one native outcome a cell reports is a resource create that
+ * says no resource exists: that is a {@link NativeStatusException}, which carries the result.
  */
-public final class NativeCellException extends AbstractTruffleException {
+public sealed class NativeCellException extends AbstractTruffleException
+    permits NativeStatusException {
   private static final long serialVersionUID = 1L;
 
-  private NativeCellException(String message, Node location) {
+  NativeCellException(String message, Node location) {
     super(message, location);
+  }
+
+  /**
+   * A resource create returned a result that its seam does not list as success. Built behind a
+   * boundary and without leaving compiled code: a failed create is an ordinary outcome.
+   */
+  @TruffleBoundary
+  public static NativeStatusException status(String function, long status, Node location) {
+    return new NativeStatusException(
+        function + " created no resource: status " + status, location, status);
+  }
+
+  /** A resource create reported success and wrote no resource. */
+  @TruffleBoundary
+  public static NativeCellException noResource(String function, Node location) {
+    return create(function + " reported success but wrote no resource", location);
   }
 
   /**
