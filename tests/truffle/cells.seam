@@ -141,3 +141,28 @@ end
 import viewSum symbol=cells_view_sum return=i64 error=no_failure
   param view type=ptr<View> nullable=false ownership=borrowed access=read
 end
+# A create that keeps its input: the resource reads the adopted bytes after the call, until its
+# release. The borrow is held by the resource, not the call.
+struct Adopted size=24 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+  field sum type=i64 offset=16
+end
+resource Adopted representation=native threading=confined create=adopt destroy=adoptedRelease handle=adopted success=0
+borrow adopt data length=length lifetime=resource:Adopted
+borrow adopt key length=keyLength lifetime=call
+import adopt symbol=cells_adopt return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=true ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+  param key type=ptr<u8> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param keyLength type=u32
+  param adopted type=ptr<Adopted> nullable=false ownership=borrowed access=write
+end
+import adoptedRelease symbol=cells_adopted_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param adopted type=ptr<Adopted> nullable=false ownership=transferred_to_callee access=read_write
+end
+import adoptedSum symbol=cells_adopted_sum return=i64 error=no_failure
+  param adopted type=ptr<Adopted> nullable=false ownership=borrowed access=read
+end
+import adoptedLast symbol=cells_adopted_last return=i64 error=no_failure
+end

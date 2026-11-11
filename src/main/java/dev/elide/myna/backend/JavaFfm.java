@@ -28,7 +28,7 @@ public final class JavaFfm implements Backend {
                     + functions.size() * 2304L
                     + m.callbacks().size() * 1024L
                     + m.returnedResources().size() * 1024L
-                    + m.borrows().size() * 2048L
+                    + m.callBorrows().size() * 2048L
                     + m.structs().size() * 512L);
     var out =
         new StringBuilder(capacity)

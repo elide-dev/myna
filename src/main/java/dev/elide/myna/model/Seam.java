@@ -296,10 +296,19 @@ public final class Seam {
   }
 
   /**
-   * A byte-buffer borrow valid only for the dynamic extent of one call. A function may declare
-   * several, each with a buffer and a length parameter of its own.
+   * A byte-buffer borrow. A function may declare several, each with a buffer and a length parameter
+   * of its own.
+   *
+   * @param resource null for {@code lifetime=call}, a borrow valid only for the dynamic extent of
+   *     one call; otherwise the resource whose create the function is, for {@code
+   *     lifetime=resource:NAME}: the create keeps the buffer until that resource is destroyed
    */
-  public record BufferBorrow(String function, String parameter, String length) {}
+  public record BufferBorrow(String function, String parameter, String length, String resource) {
+    /** Whether the borrow outlives the call, held by the resource the function creates. */
+    public boolean held() {
+      return resource != null;
+    }
+  }
 
   /** Optional Native Image build integration, without dependencies on hosted SDK classes. */
   public record NativeConfig(String cContext, String cLibrary, boolean requireStatic) {}
@@ -516,6 +525,17 @@ public final class Seam {
      */
     public List<Resource> returnedResources() {
       return resources.stream().filter(r -> r.handle() == null).toList();
+    }
+
+    /**
+     * The borrows that call-scoped wrappers project: every borrow of a function none of whose
+     * buffers a resource holds. A held buffer outlives the call, which only a Truffle cell's owner
+     * can express, so the other backends leave such a function to its raw binding.
+     */
+    public List<BufferBorrow> callBorrows() {
+      var holding = new HashSet<String>();
+      for (BufferBorrow b : borrows) if (b.held()) holding.add(b.function());
+      return borrows.stream().filter(b -> !holding.contains(b.function())).toList();
     }
 
     public String ownershipClass() {

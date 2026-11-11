@@ -111,9 +111,15 @@ public final class Dsl {
                 name != null && header == null && words.length >= 3,
                 "borrow requires FUNCTION PARAMETER");
             var opts = options(words, 3);
+            // lifetime=call ends with the call; lifetime=resource:NAME lasts until the resource
+            // the function creates is destroyed.
+            String lifetime = takeRequired(opts, "lifetime");
+            String holder = null;
+            if (lifetime.startsWith("resource:")) holder = lifetime.substring("resource:".length());
             require(
-                takeRequired(opts, "lifetime").equals("call"), "only lifetime=call is supported");
-            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length")));
+                lifetime.equals("call") || (holder != null && !holder.isEmpty()),
+                "lifetime is call or resource:RESOURCE: " + lifetime);
+            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
             empty(opts);
           }
           case "opaque" -> {

@@ -1196,6 +1196,214 @@ class TruffleRuntimeTest {
     assertEquals(3, freed.size());
   }
 
+  /** What a borrow keeps: its copy's arena on HotSpot, or the native memory it lends in place. */
+  private static Object ownerOf(Borrow borrow) {
+    try {
+      var field = Borrow.class.getDeclaredField("owner");
+      field.setAccessible(true);
+      return field.get(borrow);
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  /** Whether the copy a held borrow lends is still allocated. */
+  private static boolean copyAlive(Object copy) {
+    try {
+      var field = copy.getClass().getDeclaredField("arena");
+      field.setAccessible(true);
+      return ((Arena) field.get(copy)).scope().isAlive();
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  /**
+   * A held borrow lends native memory in place and keeps it reachable, and copies everything else
+   * into memory of its own, never the scratch stack or a pin: the copy outlives the call and does
+   * not see the guest's later writes. Released before it is kept (a failed create), it ends at
+   * once; kept, release leaves it to its resource.
+   */
+  @Test
+  void heldBorrowsCopyIntoMemoryOfTheirOwnAndLendNativeMemoryInPlace() throws Exception {
+    var held = new HeldBytesCoercion("adopt", "data", false);
+    var nullable = new HeldBytesCoercion("adopt", "data", true);
+    byte[] array = {1, 2, 3};
+    Borrow heap = held.execute(new HeapBytes(array, false));
+    assertEquals(3, heap.length());
+    array[0] = 9;
+    assertEquals("\1\2\3", bytesAt(heap.address(), 3));
+    // Not the scratch stack: a call borrow copied now lands elsewhere, and both can end in any
+    // order.
+    Borrow scratch = new BytesCoercion("f", "bytes", false, false, true).execute("abc");
+    assertNotEquals(heap.address(), scratch.address());
+    Object copy = ownerOf(heap);
+    assertTrue(copyAlive(copy));
+    heap.release();
+    assertFalse(copyAlive(copy));
+    heap.release();
+    scratch.release();
+    // A scratch copy or a pin ends with its call; only a held borrow can be kept.
+    Borrow call = new BytesCoercion("f", "bytes", false, false, true).execute("abc");
+    assertThrows(IllegalStateException.class, call::keep);
+    call.release();
+    assertThrows(IllegalStateException.class, () -> Borrow.none().keep());
+    // Strings and other interop values are copied as UTF-8, without a terminator.
+    for (Object text :
+        new Object[] {
+          "h\u00e9llo",
+          TruffleString.fromJavaStringUncached("h\u00e9llo", Encoding.UTF_16),
+          new ForeignString()
+        }) {
+      Borrow borrow = held.execute(text);
+      assertEquals(6, borrow.length());
+      assertEquals("h\u00e9llo", bytesAt(borrow.address(), 6));
+      borrow.release();
+    }
+    byte[] foreign = {4, 5};
+    Borrow buffer = held.execute(new ForeignBuffer(foreign, false));
+    foreign[0] = 0;
+    assertEquals("\4\5", bytesAt(buffer.address(), 2));
+    buffer.release();
+    // Empty buffers lend the dummy address and copy nothing.
+    Borrow empty = held.execute(new HeapBytes(new byte[0], false));
+    assertNotEquals(0, empty.address());
+    assertEquals(0, empty.length());
+    assertNull(ownerOf(empty));
+    empty.release();
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment segment = arena.allocate(4);
+      NativeBytes bytes = NativeBytes.of(segment, false);
+      Borrow lent = held.execute(bytes);
+      assertEquals(segment.address(), lent.address());
+      assertEquals(4, lent.length());
+      assertSame(bytes, ownerOf(lent));
+      lent.release();
+      // A writable buffer is lent too; the borrow only reads it.
+      assertEquals(segment.address(), held.execute(NativeBytes.of(segment, true)).address());
+      assertNotEquals(0, held.execute(NativeBytes.of(0, 0, false)).address());
+      // Null is absent for a nullable buffer only; a bare pointer has no size.
+      for (Object absent :
+          new Object[] {null, NativeVoid.INSTANCE, NativePointer.NULL, new ForeignNull()}) {
+        Borrow none = nullable.execute(absent);
+        assertEquals(0, none.address());
+        assertEquals(0, none.length());
+        none.release();
+        assertTrue(
+            assertThrows(NativeCellException.class, () -> held.execute(absent))
+                .getMessage()
+                .contains("expects string, sized buffer"));
+      }
+      // An owner is not a buffer, open or closed.
+      NativeResource owner = new NativeResource("Layout", 0x10, a -> {}, null);
+      assertEquals(
+          "adopt: parameter data takes no resource, got a Layout",
+          assertThrows(NativeCellException.class, () -> nullable.execute(owner)).getMessage());
+      owner.close();
+      assertThrows(NativeCellException.class, () -> nullable.execute(owner));
+      for (Object refused : new Object[] {NativePointer.of(segment.address()), 7})
+        assertTrue(
+            assertThrows(NativeCellException.class, () -> nullable.execute(refused))
+                .getMessage()
+                .contains("expects string, sized buffer or null"),
+            String.valueOf(refused));
+    }
+    // A buffer that shrinks while it is read, or claims a size it cannot have, is a guest error.
+    assertThrows(NativeCellException.class, () -> held.execute(new ShrinkingBuffer(4)));
+    assertThrows(NativeCellException.class, () -> held.execute(new ShrinkingBuffer(1L << 40)));
+    assertThrows(NativeCellException.class, () -> held.execute(new SizelessBuffer()));
+  }
+
+  /**
+   * A kept borrow ends exactly once, after its resource's destroy has returned: on close, from the
+   * cleaner, and not again on a second close. A resource that cannot be adopted ends it at once.
+   */
+  @Test
+  void resourcesEndTheBorrowsTheyKeepAfterTheirDestroy() throws Exception {
+    var held = new HeldBytesCoercion("adopt", "data", false);
+    List<String> events = new ArrayList<>();
+    Borrow borrow = held.execute(new HeapBytes(new byte[] {7, 8}, false));
+    long address = borrow.address();
+    Object copy = ownerOf(borrow);
+    NativeResource resource =
+        new NativeResource(
+            "Adopted",
+            0x10,
+            a ->
+                events.add(
+                    "destroy reads "
+                        + bytesAt(address, 2).charAt(1)
+                        + ", alive "
+                        + copyAlive(copy)),
+            Thread.currentThread(),
+            null,
+            null,
+            borrow.keep());
+    // The call's finally releases every borrow; a kept one is left to its resource.
+    borrow.release();
+    assertTrue(copyAlive(copy));
+    resource.close();
+    assertEquals(List.of("destroy reads \b, alive true"), events);
+    assertFalse(copyAlive(copy));
+    resource.close();
+    assertEquals(1, events.size());
+    // The cleaner of a shared resource ends it the same way, once.
+    Borrow shared = held.execute("text");
+    Object sharedCopy = ownerOf(shared);
+    NativeResource cleaned =
+        new NativeResource(
+            "Adopted", 0x20, a -> events.add("cleaned"), null, null, null, shared.keep());
+    stateOf(cleaned).run();
+    assertFalse(copyAlive(sharedCopy));
+    stateOf(cleaned).run();
+    cleaned.close();
+    assertEquals(List.of("destroy reads \b, alive true", "cleaned"), events);
+    // A resource that holds a parent ends its borrow before giving the parent up.
+    NativeResource parent = new NativeResource("Layout", 0x30, a -> events.add("parent"), null);
+    Borrow child = held.execute(new HeapBytes(new byte[] {1}, false));
+    Object childCopy = ownerOf(child);
+    NativeResource dependent =
+        new NativeResource(
+            "Adopted",
+            0x40,
+            a -> events.add("child"),
+            null,
+            NativeResource.hold(parent),
+            null,
+            child.keep());
+    assertThrows(NativeCellException.class, parent::close);
+    assertTrue(copyAlive(childCopy));
+    dependent.close();
+    assertFalse(copyAlive(childCopy));
+    parent.close();
+    assertEquals(List.of("child", "parent"), events.subList(2, 4));
+    // In-place native memory is dropped, not freed.
+    try (Arena arena = Arena.ofConfined()) {
+      NativeBytes bytes = NativeBytes.of(arena.allocate(2), false);
+      Borrow lent = held.execute(bytes);
+      NativeResource inPlace =
+          new NativeResource("Adopted", 0x50, a -> {}, null, null, null, lent.keep());
+      assertSame(bytes, ownerOf(lent));
+      inPlace.close();
+      assertNull(ownerOf(lent));
+    }
+    // Nothing to adopt: the kept borrows end at once.
+    Borrow orphan = held.execute(new HeapBytes(new byte[] {1}, false));
+    Object orphanCopy = ownerOf(orphan);
+    Borrow kept = orphan.keep();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("Adopted", 0, a -> {}, null, null, null, kept));
+    assertFalse(copyAlive(orphanCopy));
+    Borrow undestroyed = held.execute(new HeapBytes(new byte[] {1}, false));
+    Object undestroyedCopy = ownerOf(undestroyed);
+    Borrow keptToo = undestroyed.keep();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeResource("Adopted", 0x60, null, null, null, null, keptToo, null));
+    assertFalse(copyAlive(undestroyedCopy));
+  }
+
   /** The release action a cleaner would run for {@code resource}. */
   private static Runnable stateOf(NativeResource resource) {
     try {

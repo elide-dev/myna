@@ -305,12 +305,33 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment viewMemory = java.lang.foreign.Arena.global().allocate(16);
         created("viewInit", new Probe(new CellApiTruffle.viewInit_Cell()).function(), "View",
             new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
-        // A create and the close of its owner, both from compiled code.
+        // A create whose borrow its resource holds: the bytes are read again on every release,
+        // after the call that lent them returned, from a copy or from native memory in place.
+        java.lang.foreign.MemorySegment adoptResult = java.lang.foreign.Arena.global().allocate(24);
+        created("adopt", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            new HeapBytes(new byte[] {4, 5}, false), "k", NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals(9L)) throw new AssertionError("compiled adopt released a held copy early");
+        created("adopt in place", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            NativeBytes.of(lent, false), null, NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals(64L * 3)) throw new AssertionError("compiled adopt in place");
+        created("adopt of a large array", new Probe(new CellApiTruffle.adopt_Cell()).function(), "Adopted",
+            pinned, null, NativeBytes.of(adoptResult, true));
+        if (!CellApiTruffle.adoptedLast().call().equals((long) large.length)) throw new AssertionError("compiled adopt of a large array");
+        // What a create allocates, held borrow or not: the owner, its state, the runtime's struct
+        // and, for a held borrow, the borrow itself, its array and its copy.
         perCreate("layoutCompile (call borrow, copied)", new CellApiTruffle.layoutCompile_Cell(),
             new HeapBytes(new byte[] {9}, false), NativeBytes.of(layoutResult, true));
-        perCreate("viewInit (call borrow, in place)", new CellApiTruffle.viewInit_Cell(),
+        long viewBytes = perCreate("viewInit (call borrow, in place)", new CellApiTruffle.viewInit_Cell(),
             new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
-        if (!CellApiTruffle.counterLive().call().equals(0L)) throw new AssertionError("live resources after the create loops");
+        long heldNative = perCreate("adopt (held borrow, native memory in place)", new CellApiTruffle.adopt_Cell(),
+            NativeBytes.of(lent, false), null, NativeBytes.of(adoptResult, true));
+        long heldCopy = perCreate("adopt (held borrow, heap array copied)", new CellApiTruffle.adopt_Cell(),
+            new HeapBytes(small, false), null, NativeBytes.of(adoptResult, true));
+        perCreate("adopt (held borrow, string copied)", new CellApiTruffle.adopt_Cell(),
+            "hello world", null, NativeBytes.of(adoptResult, true));
+        if (heldNative > viewBytes + 128 || heldCopy > heldNative + 128)
+          throw new AssertionError("a held borrow allocates more than its holder: " + heldNative + ", " + heldCopy + " against " + viewBytes);
+        if (!CellApiTruffle.counterLive().call().equals(0L)) throw new AssertionError("live adoptions after the create loops");
         // Several byte parameters on one cell share the host inliner's budget for that cell: each
         // coercion must still be inlined, or its borrow is allocated on every path.
         hostExecute(bean, "host execute: pair of strings", 0, new CellApiTruffle.pair_Cell(), "left", "right");

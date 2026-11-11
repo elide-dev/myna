@@ -1081,6 +1081,91 @@ class TruffleCellsTest {
     assertTrue(ffm.contains("long created = out.pointerAt(8L);"), ffm);
   }
 
+  /**
+   * A borrow held by the resource a create makes: lent by its own coercion (never pinned or on a
+   * scratch stack), handed to the new owner on success, and released by the call's finally on any
+   * failure. invoke keeps the raw C shape.
+   */
+  @Test
+  void heldBorrowsPassToTheResourceTheyOutlive() {
+    String truffle = generate(OwnershipTest.HELD).get("ApiTruffle.java");
+    assertTrue(
+        truffle.contains(
+            """
+                    public static int invoke(long schema, long length, long result) {
+                        return Api.layoutCompile(WordFactory.pointer(schema), length, WordFactory.pointer(result));
+                    }
+            """),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            "this.coerce_schema = new HeldBytesCoercion(\"layoutCompile\", \"schema\", false);"),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            """
+                        Borrow borrow_schema = coerce_schema.execute(arguments[0]);
+                        try {
+                            NativeStruct out = NativeStruct.allocate(24L, arguments[1], "layoutCompile", "result", this);
+                            int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
+                            if (!(status == 0L || status == 2L)) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.status("layoutCompile", status, this);
+                            }
+                            long created = out.pointerAt(8L);
+                            if (created == 0) {
+                                out.copyTo(arguments[1]);
+                                throw NativeCellException.noResource("layoutCompile", this);
+                            }
+                            NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
+                            out.copyTo(arguments[1], resource);
+                            return resource;
+                        } finally {
+                            borrow_schema.release();
+                        }
+            """),
+        truffle);
+    // In place, beside a parent the create also holds open: the parent is not the held buffer.
+    String inPlace =
+        generate(
+                OwnershipTest.HELD
+                    .replace(
+                        "resource View representation=native threading=shared create=viewInit"
+                            + " destroy=viewRelease handle=view\n",
+                        "resource View representation=native threading=shared create=viewInit"
+                            + " destroy=viewRelease handle=view\n"
+                            + "borrow viewInit data length=length lifetime=resource:View\n")
+                    .replace(
+                        "  param seed type=i64\n",
+                        "  param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+                            + " readonly=true@explicit_contract\n"
+                            + "  param length type=u32\n"
+                            + "  param parent type=ptr<Layout> nullable=false"
+                            + " ownership=borrowed access=read\n"))
+            .get("ApiTruffle.java");
+    assertTrue(
+        inPlace.contains(
+            """
+                            Object hold = NativeResource.hold(arguments[1]);
+                            boolean adopted = false;
+                            try {
+                                invoke(borrow_data.address(), length_data, address_parent, out.address());
+                                long created = out.address();
+                                NativeResource resource = new NativeResource("View", created, DESTRUCTOR, null, hold, out, borrow_data.keep());
+                                adopted = true;
+            """),
+        inPlace);
+    assertTrue(inPlace.contains("new HeldBytesCoercion(\"viewInit\", \"data\", true)"), inPlace);
+    // FFM cells: the same shape over the FFM binding.
+    String ffm =
+        generate(
+                OwnershipTest.HELD.replace(
+                    "truffle_cells=true", "truffle_cells=true truffle_backend=ffm"))
+            .get("ApiTruffle.java");
+    assertTrue(ffm.contains(", null, null, borrow_schema.keep());"), ffm);
+    assertTrue(ffm.contains("ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"), ffm);
+  }
+
   @Test
   void createCellsCoercePointerArgumentsAndReturnOwners() {
     String source =

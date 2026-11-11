@@ -98,7 +98,7 @@ public final class JniAbi {
       if (f.direction() != Direction.IMPORT) continue;
       result.add(lower(m, f, List.of()));
       // One buffer adapter per function, taking a ByteBuffer for each of its borrows.
-      var borrows = m.borrows().stream().filter(b -> b.function().equals(f.name())).toList();
+      var borrows = m.callBorrows().stream().filter(b -> b.function().equals(f.name())).toList();
       if (!borrows.isEmpty()) {
         if (m.functions().stream().anyMatch(other -> other.name().equals(f.name() + "Buffer")))
           throw new IllegalArgumentException(

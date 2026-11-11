@@ -70,6 +70,12 @@ public final class TruffleCells implements Backend {
       return borrows.buffer(p) != null;
     }
 
+    /** Whether the buffer outlives the call, kept by the resource the create makes. */
+    boolean isHeld(Parameter p) {
+      BufferBorrow b = borrows.buffer(p);
+      return b != null && b.held();
+    }
+
     int arity() {
       if (destroys != null) return 1;
       return (int) function.parameters().stream().filter(p -> !isLength(p)).count();
@@ -165,6 +171,8 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The borrows a successful create hands to its resource, which ends them once destroyed.
+    var held = new ArrayList<String>();
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
     // has none, so guest positions are not parameter positions.
     var guest = new HashMap<String, String>();
@@ -200,9 +208,32 @@ public final class TruffleCells implements Backend {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
             boolean writable = p.access() != Access.READ;
-            imports.add(RUNTIME + "BytesCoercion");
+            String coercion = cell.isHeld(p) ? "HeldBytesCoercion" : "BytesCoercion";
+            imports.add(RUNTIME + coercion);
             imports.add(RUNTIME + "Borrow");
-            fields.append("        @Node.Child private BytesCoercion ").append(field).append(";\n");
+            fields
+                .append("        @Node.Child private ")
+                .append(coercion)
+                .append(' ')
+                .append(field)
+                .append(";\n");
+            String local = "borrow_" + p.name();
+            borrows.add(local + " = " + field + ".execute(" + argument + ")");
+            arguments.add(address(ffm, imports, local + ".address()"));
+            if (cell.isHeld(p)) {
+              // Lent until the resource is destroyed: never pinned or on a scratch stack.
+              held.add(local);
+              init.append("            this.")
+                  .append(field)
+                  .append(" = new HeldBytesCoercion(")
+                  .append(quotedName)
+                  .append(", ")
+                  .append(declared)
+                  .append(", ")
+                  .append(p.nullable())
+                  .append(");\n");
+              continue;
+            }
             init.append("            this.")
                 .append(field)
                 .append(" = new BytesCoercion(")
@@ -219,9 +250,7 @@ public final class TruffleCells implements Backend {
                 // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either.
                 .append(rawBytes(p) ? ", false" : "")
                 .append(");\n");
-            String local = "borrow_" + p.name();
-            borrows.add(local + " = " + field + ".execute(" + argument + ")");
-            arguments.add(address(ffm, imports, local + ".address()"));
+            // Only a call borrow may lend the guest's own segment to the downcall.
             lent.add(p.name());
           } else {
             imports.add(RUNTIME + "PointerCoercion");
@@ -530,8 +559,10 @@ public final class TruffleCells implements Backend {
       for (Parameter p : f.parameters()) {
         Fact dropped = p.facts().get("nocapture");
         // The very expression the parameter was coerced from, never a recomputed position.
+        // A held buffer is kept by its borrow, not by holding a resource open.
         if (p.type() instanceof Pointer
             && !p.name().equals(cell.creates().handleParameter())
+            && !cell.isHeld(p)
             && !(dropped != null && dropped.enabled() && dropped.approved()))
           retained.add(guest.get(p.name()));
       }
@@ -614,6 +645,17 @@ public final class TruffleCells implements Backend {
               .append(", this);\n}\n");
         }
         after.append(copy).append(", resource);\n");
+      }
+      if (!held.isEmpty()) {
+        // Spelled out in full: the parents held open, what must stay reachable, and the borrows.
+        String parents = retained.isEmpty() ? "null" : "hold";
+        String kept = handle != null && cell.creates().handleField() == null ? "out" : "null";
+        hold =
+            ", "
+                + parents
+                + ", "
+                + kept
+                + held.stream().map(b -> ", " + b + ".keep()").reduce("", String::concat);
       }
       String owner = "new NativeResource(" + type + ", created, DESTRUCTOR, " + thread + hold + ")";
       for (String line : before.toString().split("\n"))

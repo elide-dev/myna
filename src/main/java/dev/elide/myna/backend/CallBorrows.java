@@ -15,10 +15,10 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
     borrows = List.copyOf(borrows);
   }
 
-  /** Every function with a borrow, in the module's borrow order (by function name). */
+  /** Every function with call borrows only, in the module's borrow order (by function name). */
   static List<CallBorrows> of(Module m) {
     var names = new LinkedHashSet<String>();
-    m.borrows().forEach(b -> names.add(b.function()));
+    m.callBorrows().forEach(b -> names.add(b.function()));
     var result = new ArrayList<CallBorrows>();
     for (String name : names)
       result.add(
