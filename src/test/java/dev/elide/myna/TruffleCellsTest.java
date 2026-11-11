@@ -1183,6 +1183,33 @@ class TruffleCellsTest {
             """),
         inPlace);
     assertTrue(inPlace.contains("new HeldBytesCoercion(\"viewInit\", \"data\", true)"), inPlace);
+    // A handle in a field, beside a parent: the struct is freed after the call either way, and the
+    // parent is given up again only if nothing was created.
+    String parented =
+        generate(
+                OwnershipTest.HELD.replace(
+                    "  param length type=u64\n",
+                    "  param length type=u64\n"
+                        + "  param parent type=ptr<View> nullable=false"
+                        + " ownership=borrowed access=read\n"))
+            .get("ApiTruffle.java");
+    assertTrue(parented.contains("hold = NativeResource.hold(arguments[1]);"), parented);
+    assertTrue(
+        parented.contains(
+            "new NativeResource(\"Layout\", created, DESTRUCTOR, Thread.currentThread(), hold,"
+                + " null, borrow_schema.keep());"),
+        parented);
+    assertTrue(
+        parented.contains(
+            """
+                            } finally {
+                                out.free();
+                                if (!adopted) {
+                                    if (hold != null) NativeResource.release(hold);
+                                }
+                            }
+            """),
+        parented);
     // FFM cells: the same shape over the FFM binding.
     String ffm =
         generate(

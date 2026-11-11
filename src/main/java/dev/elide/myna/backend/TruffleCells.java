@@ -652,7 +652,8 @@ public final class TruffleCells implements Backend {
       if (!held.isEmpty()) {
         // Spelled out in full: the parents held open, what must stay reachable, and the borrows.
         String parents = retained.isEmpty() ? "null" : "hold";
-        String kept = handle != null && cell.creates().handleField() == null ? "out" : "null";
+        // A held borrow needs handle= (OwnershipValidator), so the runtime's struct exists.
+        String kept = cell.creates().handleField() == null ? "out" : "null";
         hold =
             ", "
                 + parents

@@ -1003,6 +1003,19 @@ class OwnershipTest {
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
             .getMessage());
+    // A module that generates cells, but not for this create.
+    String noCell =
+        cells.replace(
+            " native_leaf=false@explicit_contract\n  param data",
+            " native_leaf=false@explicit_contract truffle_cell=false@explicit_contract\n"
+                + "  param data");
+    assertNotEquals(cells, noCell);
+    assertEquals(
+        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
+            + " lifetime=resource:Doc",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(noCell), true))
+            .getMessage());
     String optedOut =
         HELD.replace(
             "import layoutCompile return=i32 error=no_failure",
