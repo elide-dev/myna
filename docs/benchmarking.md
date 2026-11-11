@@ -273,8 +273,9 @@ object holding the segment in a final field (`manual-instance-library-ffm`,
 handle. The generated static entries are gated against static handwritten handles.
 
 A pair with a known, explained gap carries its own allowance and reason in `gate.py`. The
-allowance keeps that gap from growing; lower it when the gap is fixed. No pair currently needs
-one.
+allowance keeps that gap from growing; lower it when the gap is fixed. Only the two create-cell
+pairs in the cells gate carry one: a create cell allocates an owner and the runtime's struct that
+the direct call does not.
 
 The gate exists because the generated typed critical AOT FFM call was 15% slower than the
 handwritten one, and nothing failed. The generated library binding held each symbol address in an

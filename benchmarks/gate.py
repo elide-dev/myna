@@ -61,11 +61,12 @@ PAIRS = {
         # A create cell against the same create and destroy called directly, over the same native
         # memory. The direct pair writes the caller's own struct; the cell also allocates its owner
         # and the runtime's struct (calloc and free), checks and copies the guest's buffer, and, for
-        # the held borrow, keeps the borrow on the owner. Measured on aarch64-apple-darwin at
-        # 2.2x and 2.7x; these allowances stop the gap growing until the controlled host sets them.
-        (None, 'glue-create-scan-native-256', 'direct-create-scan-256', 1.6,
+        # the held borrow, keeps the borrow on the owner. Measured on the controlled x86-64 host at
+        # e9f004a (before rebasing onto #116, which changed only FFM cells): +92.3% and +113.2%;
+        # the allowances leave about 5% of headroom over that.
+        (None, 'glue-create-scan-native-256', 'direct-create-scan-256', 1.0,
          'the cell allocates an owner and a runtime struct the direct call does not'),
-        (None, 'glue-create-adopt-native-256', 'direct-create-adopt-256', 2.0,
+        (None, 'glue-create-adopt-native-256', 'direct-create-adopt-256', 1.25,
          'as scan, and the owner keeps the held borrow until its release'),
     ],
 }

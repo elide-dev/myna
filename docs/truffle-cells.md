@@ -625,8 +625,10 @@ cleaner registration, phantom-reference processing and collector work behind tha
 `free` of the struct (and `malloc` and `free` of a held copy), the boundary calls that allocate,
 copy to the guest and destroy, and the owner and its release state; the heap-array cases add the
 copy itself. `benchmarks/gate.py` pairs `glue-create-scan-native-256` and
-`glue-create-adopt-native-256` with their direct calls, with allowances that record this gap until
-the controlled host sets them.
+`glue-create-adopt-native-256` with their direct calls, with allowances that keep this gap from
+growing. On the controlled x86-64 host (unclemax, five processes per case, at `e9f004a`, before
+the rebase onto #116, which changed only FFM cells) the cells cost 41.3 and 45.3 ns against 21.5
+and 21.2 ns for the direct calls (+92.3% and +113.2%); the allowances are +100% and +125%.
 
 ### Follow-ups
 
