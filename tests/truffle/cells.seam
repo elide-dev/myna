@@ -70,6 +70,12 @@ import sumBytes symbol=cells_sum_bytes return=u64 error=no_failure nounwind=true
   param count type=u64
   param bias type=ptr<i64> nullable=true ownership=borrowed access=read
 end
+borrow hold bytes length=count lifetime=call
+import hold symbol=cells_hold return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param gate type=ptr<i32> nullable=false ownership=borrowed access=read_write
+end
 import counterCreate symbol=cells_counter_create return=ptr<Counter> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param start type=i64
 end

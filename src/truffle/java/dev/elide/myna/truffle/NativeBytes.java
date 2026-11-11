@@ -9,6 +9,7 @@ import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
+import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteOrder;
@@ -32,14 +33,25 @@ public final class NativeBytes implements TruffleObject {
   private final long address;
   private final long size;
 
+  /**
+   * The segment whose scope a call must check and hold while native code reads this memory, or
+   * {@code null} when there is nothing to check: an empty buffer, or the global scope, which is
+   * never closed and is confined to no thread. FFM cells pass it to their downcall.
+   */
+  final MemorySegment scoped;
+
   private NativeBytes(MemorySegment segment, boolean writable) {
     this.segment = segment;
     this.writable = writable;
     this.address = segment.address();
     this.size = segment.byteSize();
+    this.scoped = size != 0 && !segment.scope().equals(Arena.global().scope()) ? segment : null;
   }
 
-  /** Views {@code size} bytes at {@code address}; the caller vouches for the extent. */
+  /**
+   * Views {@code size} bytes at {@code address}; the caller vouches for the extent and for the
+   * memory staying valid, so no call checks a scope for it.
+   */
   public static NativeBytes of(long address, long size, boolean writable) {
     if (address == 0 && size != 0) throw new IllegalArgumentException("null buffer address");
     if (size < 0) throw new IllegalArgumentException("negative buffer size");

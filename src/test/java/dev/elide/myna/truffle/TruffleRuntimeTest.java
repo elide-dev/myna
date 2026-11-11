@@ -1606,6 +1606,7 @@ class TruffleRuntimeTest {
           assertEquals(expected.length - 1, borrow.length(), () -> hex(java));
           assertArrayEquals(expected, lent(borrow), () -> hex(java));
           assertEquals(base, borrow.address());
+          assertNull(site.segment(string));
           borrow.release();
         }
       }
@@ -1719,6 +1720,90 @@ class TruffleRuntimeTest {
         }
       }
     });
+  }
+
+  /**
+   * A coercion that lent native memory in place gives back the segment it came from when its scope
+   * has something to check, so an FFM cell can pass that scope to its downcall: never for the
+   * global scope, an empty buffer, or anything else a borrow lends, and the borrow itself never
+   * holds one. A call site gives back nothing until it has seen such a segment, and checks every
+   * value from then on.
+   */
+  @Test
+  void coercionsGiveBackTheSegmentsWhoseScopeACallMustCheck() throws Exception {
+    onFreshThread(() -> {
+      var buffer = new BytesCoercion("f", "bytes", false, false, true);
+      var cString = new BytesCoercion("f", "text", true, false, false);
+      try (Arena confined = Arena.ofConfined();
+          Arena shared = Arena.ofShared()) {
+        NativeBytes global = NativeBytes.of(Arena.global().allocate(8), false);
+        NativeBytes raw = NativeBytes.of(shared.allocate(8).address(), 8, false);
+        NativeBytes owned = NativeBytes.of(shared.allocate(8), false);
+        MemorySegment segment = confined.allocate(8);
+        NativeBytes bytes = NativeBytes.of(segment, false);
+        for (BytesCoercion site : new BytesCoercion[] {buffer, cString}) {
+          // Before the site has lent native memory it has nothing to give back.
+          assertNull(site.segment(bytes));
+          // Global memory, and a view made from an address (whose caller vouches for it), have no
+          // scope to check.
+          site.execute(global).release();
+          assertNull(site.segment(global));
+          site.execute(raw).release();
+          assertNull(site.segment(raw));
+          // The first segment with a scope flips the site; global memory still has none.
+          Borrow lent = site.execute(owned);
+          assertSame(owned.segment(), site.segment(owned));
+          lent.release();
+          lent = site.execute(bytes);
+          assertSame(segment, site.segment(bytes));
+          assertEquals(segment.address(), lent.address());
+          assertEquals(8, lent.length());
+          lent.release();
+          site.execute(global).release();
+          assertNull(site.segment(global));
+        }
+        // The empty buffer lends the dummy address, which no scope governs.
+        NativeBytes none = NativeBytes.of(confined.allocate(0), false);
+        assertEquals(0, buffer.execute(none).length());
+        assertNull(buffer.segment(none));
+        // A bare pointer, a copy and null have no segment.
+        NativePointer pointer = NativePointer.of(segment.address());
+        cString.execute(pointer).release();
+        assertNull(cString.segment(pointer));
+        cString.execute(NativePointer.NULL).release();
+        assertNull(cString.segment(NativePointer.NULL));
+        assertNull(cString.segment(null));
+        HeapBytes heap = new HeapBytes(new byte[] {1, 2}, false);
+        buffer.execute(heap).release();
+        assertNull(buffer.segment(heap));
+        buffer.execute("text").release();
+        assertNull(buffer.segment("text"));
+      }
+    });
+  }
+
+  /** A mapped file's segment has its arena's scope, which a call must check like any other. */
+  @Test
+  void mappedSegmentsHaveAScopeToCheck() throws Exception {
+    java.nio.file.Path file = java.nio.file.Files.createTempFile("myna-mapped", ".bin");
+    try (var channel =
+            java.nio.channels.FileChannel.open(
+                file,
+                java.nio.file.StandardOpenOption.READ,
+                java.nio.file.StandardOpenOption.WRITE);
+        Arena arena = Arena.ofConfined()) {
+      channel.write(java.nio.ByteBuffer.wrap(new byte[] {1, 2, 3, 4}));
+      MemorySegment mapped =
+          channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, 4, arena);
+      var site = new BytesCoercion("f", "bytes", false, false, true);
+      NativeBytes bytes = NativeBytes.of(mapped, false);
+      Borrow lent = site.execute(bytes);
+      assertEquals(mapped.address(), lent.address());
+      assertSame(mapped, site.segment(bytes));
+      lent.release();
+    } finally {
+      java.nio.file.Files.delete(file);
+    }
   }
 
   /** One call site lends every kind of value in turn and keeps lending each correctly. */

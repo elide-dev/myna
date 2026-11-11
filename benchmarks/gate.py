@@ -48,6 +48,16 @@ PAIRS = {
         (None, 'typed-step', 'direct-step', None, ''),
         (None, 'typed-ffm-leaf', 'direct-ffm-leaf', None, ''),
         (None, 'typed-ffm-step', 'direct-ffm-step', None, ''),
+        # FFM cells lending native memory against the static FFM entry given the same segments: a
+        # global one (nothing to check), a confined and a shared one (the scope is checked on both
+        # sides), two global and two shared buffers, and a global buffer beside a heap array
+        # copied for the call through the same borrow.
+        (None, 'typed-ffm-sum-native-256', 'direct-ffm-sum-256', None, ''),
+        (None, 'typed-ffm-sum-confined-256', 'direct-ffm-sum-confined-256', None, ''),
+        (None, 'typed-ffm-sum-shared-256', 'direct-ffm-sum-shared-256', None, ''),
+        (None, 'typed-ffm-slab-native', 'direct-ffm-slab', None, ''),
+        (None, 'typed-ffm-slab-shared', 'direct-ffm-slab-shared', None, ''),
+        (None, 'typed-ffm-slab-mixed', 'direct-ffm-slab-mixed', None, ''),
     ],
 }
 

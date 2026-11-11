@@ -168,6 +168,10 @@ public final class TruffleCells implements Backend {
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
     // has none, so guest positions are not parameter positions.
     var guest = new HashMap<String, String>();
+    // The parameters whose argument is a borrow's address. An FFM cell passes such a parameter
+    // the guest's own segment when the borrow lent its memory in place, so the downcall checks and
+    // holds that segment's scope.
+    var lent = new HashSet<String>();
     var prelude = new StringBuilder();
     if (cell.destroys() == null) {
       int index = 0;
@@ -213,6 +217,7 @@ public final class TruffleCells implements Backend {
             String local = "borrow_" + p.name();
             borrows.add(local + " = " + field + ".execute(" + argument + ")");
             arguments.add(address(ffm, imports, local + ".address()"));
+            lent.add(p.name());
           } else {
             imports.add(RUNTIME + "PointerCoercion");
             fields
@@ -356,6 +361,8 @@ public final class TruffleCells implements Backend {
     }
     // Every cell but a destroy has a static invoke: the binding call with native carriers and raw
     // addresses, which the cell body calls after coercing and which host code may call directly.
+    // An FFM cell that lends bytes calls a private scoped twin instead, which takes the guest's own
+    // segment beside each lent address.
     // A transitioning call in boundary mode, and every FFM call, puts it behind a Truffle
     // boundary. FFM bindings initialize at run time and invoke a method handle, which runtime
     // compilation cannot inline: called from the cell body, they would keep the whole cell out of
@@ -372,6 +379,15 @@ public final class TruffleCells implements Backend {
       var parameters = new ArrayList<String>();
       var forwarded = new ArrayList<String>();
       var inner = new ArrayList<String>();
+      // The same three for the scoped call of an FFM cell: each lent parameter is preceded by
+      // the guest's segment when the borrow lent its memory in place and its scope has something
+      // to check, and null otherwise; see patterns and sliced.
+      boolean scoped = ffm && !lent.isEmpty();
+      var scopedParameters = new ArrayList<String>();
+      var scopedForwarded = new ArrayList<String>();
+      var scopedInner = new ArrayList<String>();
+      var segments = new ArrayList<String>();
+      var names = new ArrayList<String>();
       for (int n = 0; n < arguments.size(); n++) {
         String argument = arguments.get(n);
         String name = f.parameters().get(n).name();
@@ -380,32 +396,30 @@ public final class TruffleCells implements Backend {
         forwarded.add(
             word ? argument.substring(wrapper.length(), argument.length() - 1) : argument);
         inner.add(word ? wrapper + name + ")" : name);
+        names.add(name);
+        if (scoped && lent.contains(name)) {
+          // Seam identifiers have no '$', so the segment's name cannot collide with a parameter.
+          String segment = name + "$segment";
+          segments.add(segment);
+          scopedParameters.add("MemorySegment " + segment);
+          scopedForwarded.add("coerce_" + name + ".segment(" + guest.get(name) + ")");
+          // For sliced: a slice shares the segment's scope, which the downcall acquires for the
+          // call. It is also the same kind of object as the address's segment, unlike the
+          // guest's segment itself: escape analysis then merges the two arms instead of
+          // allocating the address's segment whenever the guest lent anything else.
+          scopedInner.add(segment + " != null ? " + segment + ".asSlice(0) : " + inner.getLast());
+        } else {
+          scopedInner.add(inner.getLast());
+        }
+        scopedParameters.add(parameters.getLast());
+        scopedForwarded.add(forwarded.getLast());
       }
       boolean address =
           (cell.creates() != null && cell.creates().handle() == null)
               || f.returns() instanceof Pointer
               || f.returns() instanceof FunctionPointer;
-      String raw =
-          bindings
-              + "."
-              + f.name()
-              + "("
-              + String.join(", ", inner)
-              + ")"
-              + (address ? (ffm ? ".address()" : ".rawValue()") : "");
-      String returns;
-      String value;
-      if (address) {
-        returns = "long";
-        value = raw;
-      } else if (f.returns() == Scalar.VOID) {
-        returns = "void";
-        value = raw;
-      } else {
-        returns = typed((Scalar) f.returns())[0];
-        value = converted((Scalar) f.returns(), raw, charUnsigned);
-      }
-      String statement = (returns.equals("void") ? "" : "return ") + value + ";\n";
+      String returns =
+          address ? "long" : f.returns() == Scalar.VOID ? "void" : typed((Scalar) f.returns())[0];
       invokeMethod
           .append(
               "        /**\n"
@@ -433,17 +447,45 @@ public final class TruffleCells implements Backend {
           .append(" invoke(")
           .append(String.join(", ", parameters))
           .append(") {\n");
-      if (ffm)
-        // FFM bindings throw Throwable; the handler wraps only the call.
-        invokeMethod
-            .append("            try {\n                ")
-            .append(statement)
-            .append("            } catch (Throwable $failure) {\n")
-            .append("                throw failed($failure);\n")
-            .append("            }\n");
+      String statement = statement(bindings, f, inner, address, ffm, charUnsigned);
+      if (ffm) invokeMethod.append(guarded(statement));
       else invokeMethod.append("            ").append(statement);
       invokeMethod.append("        }\n");
       call = "invoke(" + String.join(", ", forwarded) + ")";
+      if (scoped) {
+        // The cell's own call. invoke takes addresses only, so a segment lent by the guest would
+        // reach the downcall as a bare address: neither its confinement nor its liveness would be
+        // checked, and a shared arena could be closed while native code still reads its memory.
+        boolean value = !returns.equals("void");
+        if (segments.size() <= MAX_PATTERN_BUFFERS)
+          patterns(
+              bindings,
+              f,
+              lent,
+              names,
+              parameters,
+              inner,
+              scopedParameters,
+              returns,
+              value,
+              address,
+              charUnsigned,
+              invokeMethod);
+        else
+          sliced(
+              bindings,
+              f,
+              names,
+              segments,
+              scopedParameters,
+              scopedInner,
+              returns,
+              value,
+              address,
+              charUnsigned,
+              invokeMethod);
+        call = "scoped(" + String.join(", ", scopedForwarded) + ")";
+      }
     }
     var result = new StringBuilder(prelude);
     if (cell.destroys() != null) {
@@ -706,6 +748,201 @@ public final class TruffleCells implements Backend {
                 return NativeCellException.of(null, "native call failed: ", failure);
             }
         """);
+  }
+
+  /** Lent buffers up to which an FFM cell has a call of its own for each pattern of segments. */
+  static final int MAX_PATTERN_BUFFERS = 3;
+
+  /**
+   * The scoped calls of an FFM cell with up to {@link #MAX_PATTERN_BUFFERS} lent buffers: {@code
+   * scoped}, which partial evaluation inlines into the cell, switches on which lent buffers came
+   * with a segment whose scope the call must check; no segment is {@code invoke}, and every other
+   * pattern has a boundary method of its own with one binding call, which passes each such segment
+   * itself and every other pointer as its address. Until a call site has seen such a segment, each
+   * segment is a constant null and the switch folds to {@code invoke}.
+   *
+   * <p>The cell profiles the patterns it has called, and a pattern it has not deoptimizes: compiled
+   * code holds the binding calls this call site makes and no others. Every call compiled in is a
+   * call the register allocator must keep values live across, whether or not it runs.
+   */
+  private static void patterns(
+      String bindings,
+      Function f,
+      Set<String> lent,
+      List<String> names,
+      List<String> parameters,
+      List<String> inner,
+      List<String> scopedParameters,
+      String returns,
+      boolean value,
+      boolean address,
+      boolean charUnsigned,
+      StringBuilder out) {
+    var order = names.stream().filter(lent::contains).toList();
+    out.append(
+            "        /**\n"
+                + "         * The call execute makes: a buffer lent in place from a guest's"
+                + " segment that has a\n"
+                + "         * scope to check passes that segment, so the downcall checks its"
+                + " confinement and\n"
+                + "         * liveness and keeps its arena open for the call; with none, the"
+                + " call is invoke. Only\n"
+                + "         * the patterns this cell has called are compiled.\n"
+                + "         */\n"
+                + "        private ")
+        .append(returns)
+        .append(" scoped(")
+        .append(String.join(", ", scopedParameters))
+        .append(") {\n");
+    branch(order, 0, "", names, lent, value, "            ", out);
+    out.append("        }\n")
+        .append(
+            "        /** The patterns of lent segments this cell has called, one bit each. */\n")
+        .append("        @CompilerDirectives.CompilationFinal private int scoped$called;\n")
+        .append("        private void scoped$learn(int pattern) {\n")
+        .append("            CompilerDirectives.transferToInterpreterAndInvalidate();\n")
+        .append("            scoped$called |= pattern;\n")
+        .append("        }\n");
+    for (int pattern = 1; pattern < 1 << order.size(); pattern++) {
+      String bits = bits(pattern, order.size());
+      var patternParameters = new ArrayList<String>();
+      var patternInner = new ArrayList<String>();
+      for (int n = 0; n < names.size(); n++) {
+        String name = names.get(n);
+        boolean segment = lent.contains(name) && bits.charAt(order.indexOf(name)) == '1';
+        patternParameters.add(segment ? "MemorySegment " + name : parameters.get(n));
+        patternInner.add(segment ? name : inner.get(n));
+      }
+      out.append("        @CompilerDirectives.TruffleBoundary\n        private static ")
+          .append(returns)
+          .append(" scoped$")
+          .append(bits)
+          .append('(')
+          .append(String.join(", ", patternParameters))
+          .append(") {\n")
+          .append(guarded(statement(bindings, f, patternInner, address, true, charUnsigned)))
+          .append("        }\n");
+    }
+  }
+
+  /** The switch of {@code scoped} from the lent buffer at {@code index} on. */
+  private static void branch(
+      List<String> order,
+      int index,
+      String bits,
+      List<String> names,
+      Set<String> lent,
+      boolean value,
+      String indent,
+      StringBuilder out) {
+    if (index == order.size()) {
+      var arguments = new ArrayList<String>();
+      for (String name : names) {
+        boolean segment = lent.contains(name) && bits.charAt(order.indexOf(name)) == '1';
+        arguments.add(segment ? name + "$segment" : name);
+      }
+      String target = bits.contains("1") ? "scoped$" + bits : "invoke";
+      String call = target + "(" + String.join(", ", arguments) + ")";
+      int bit = 1 << Integer.parseInt(bits, 2);
+      out.append(indent)
+          .append("if ((scoped$called & ")
+          .append(bit)
+          .append(") == 0) scoped$learn(")
+          .append(bit)
+          .append(");\n");
+      out.append(indent).append(value ? "return " + call + ";\n" : call + ";\n");
+      if (!value && index > 0 && bits.chars().anyMatch(c -> c == '0'))
+        out.append(indent).append("return;\n");
+      return;
+    }
+    out.append(indent).append("if (").append(order.get(index)).append("$segment == null) {\n");
+    branch(order, index + 1, bits + "0", names, lent, value, indent + "    ", out);
+    out.append(indent).append("}\n");
+    branch(order, index + 1, bits + "1", names, lent, value, indent, out);
+  }
+
+  private static String bits(int pattern, int width) {
+    var bits = new StringBuilder();
+    for (int i = width - 1; i >= 0; i--) bits.append((pattern >> i & 1) == 1 ? '1' : '0');
+    return bits.toString();
+  }
+
+  /**
+   * The scoped call of an FFM cell with more lent buffers than have a call per pattern: one
+   * boundary method, invoke's call when no buffer has a segment, and otherwise a slice of each
+   * segment (which shares its scope) or the address. A slice is the same kind of object as an
+   * address's segment, so escape analysis merges the two instead of allocating either, as long as
+   * the binding call is the method's only one.
+   */
+  private static void sliced(
+      String bindings,
+      Function f,
+      List<String> names,
+      List<String> segments,
+      List<String> scopedParameters,
+      List<String> scopedInner,
+      String returns,
+      boolean value,
+      boolean address,
+      boolean charUnsigned,
+      StringBuilder out) {
+    String invokeCall = "invoke(" + String.join(", ", names) + ")";
+    out.append(
+            "        /**\n"
+                + "         * The call execute makes: a buffer lent in place from a guest's"
+                + " segment that has a\n"
+                + "         * scope to check passes a slice of it, so the downcall checks its"
+                + " confinement and\n"
+                + "         * liveness and keeps its arena open for the call. Every other"
+                + " pointer is its address,\n"
+                + "         * as in invoke.\n"
+                + "         */\n"
+                + "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static ")
+        .append(returns)
+        .append(" scoped(")
+        .append(String.join(", ", scopedParameters))
+        .append(") {\n            if (")
+        .append(String.join(" && ", segments.stream().map(x -> x + " == null").toList()))
+        .append(") ")
+        .append(
+            value
+                ? "return " + invokeCall + ";\n"
+                : "{\n                "
+                    + invokeCall
+                    + ";\n                return;\n            }\n")
+        .append(guarded(statement(bindings, f, scopedInner, address, true, charUnsigned)))
+        .append("        }\n");
+  }
+
+  /** The binding call of {@code f} over {@code arguments}, as the statement of a static entry. */
+  private static String statement(
+      String bindings,
+      Function f,
+      List<String> arguments,
+      boolean address,
+      boolean ffm,
+      boolean charUnsigned) {
+    String raw =
+        bindings
+            + "."
+            + f.name()
+            + "("
+            + String.join(", ", arguments)
+            + ")"
+            + (address ? (ffm ? ".address()" : ".rawValue()") : "");
+    if (address) return "return " + raw + ";\n";
+    if (f.returns() == Scalar.VOID) return raw + ";\n";
+    return "return " + converted((Scalar) f.returns(), raw, charUnsigned) + ";\n";
+  }
+
+  /** FFM bindings throw {@code Throwable}; the handler wraps only the call. */
+  private static String guarded(String statement) {
+    return "            try {\n                "
+        + statement
+        + "            } catch (Throwable $failure) {\n"
+        + "                throw failed($failure);\n"
+        + "            }\n";
   }
 
   /** The Java carrier of the native parameter at {@code position}, for boundary signatures. */

@@ -65,6 +65,87 @@ public final class CellChecks {
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
   }
   /**
+   * What only FFM cells do: a buffer lent from a caller's segment reaches the downcall as that
+   * segment, so the linker refuses a closed one and one confined to another thread, and keeps a
+   * shared arena open while native code reads it. Native Image cells pass addresses.
+   */
+  public static void scopes(Function<String, NativeFunction> cells) throws Exception {
+    // One call site: global memory has no scope to check, a shared segment flips the site to
+    // checking, global memory still passes, and a closed segment is refused from then on.
+    NativeFunction site = cells.apply("checksum");
+    MemorySegment everywhere = Arena.global().allocate(4);
+    everywhere.fill((byte) 1);
+    check(INTEROP.execute(site, NativeBytes.of(everywhere, false)).equals(4L), "checksum of global memory");
+    Arena flip = Arena.ofShared();
+    MemorySegment flipped = flip.allocate(4);
+    flipped.fill((byte) 2);
+    check(INTEROP.execute(site, NativeBytes.of(flipped, false)).equals(8L), "checksum of a shared segment");
+    check(INTEROP.execute(site, NativeBytes.of(everywhere, false)).equals(4L), "checksum of global memory after a scope");
+    flip.close();
+    try {
+      INTEROP.execute(site, NativeBytes.of(flipped, false));
+      throw new AssertionError("a closed shared segment was accepted after the site flipped");
+    } catch (NativeCellException expected) {
+      // refused by the downcall's scope check
+    }
+    // Every pattern of two lent buffers, one call site: neither, either, both with a scope.
+    NativeFunction transfer = cells.apply("transfer");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment in = arena.allocate(4), out = arena.allocate(4);
+      in.fill((byte) 3);
+      MemorySegment gin = Arena.global().allocate(4), gout = Arena.global().allocate(4);
+      gin.fill((byte) 3);
+      Object[][] patterns = {
+        {NativeBytes.of(gin, false), NativeBytes.of(gout, true)},
+        {NativeBytes.of(gin, false), NativeBytes.of(out, true)},
+        {NativeBytes.of(in, false), NativeBytes.of(gout, true)},
+        {NativeBytes.of(in, false), NativeBytes.of(out, true)},
+      };
+      for (Object[] pattern : patterns)
+        check(INTEROP.execute(transfer, pattern[0], pattern[1], NativePointer.NULL).equals(12L), "transfer pattern");
+    }
+    Arena closed = Arena.ofConfined();
+    NativeBytes stale = NativeBytes.of(closed.allocate(4), true);
+    check(call(cells, "checksum", stale).equals(0L), "checksum of a live confined segment");
+    closed.close();
+    rejects(cells, "checksum", stale);
+    rejects(cells, "strlen", stale);
+    rejects(cells, "transfer", new HeapBytes(new byte[4], false), stale, NativePointer.NULL);
+    // The scratch stack is balanced after a refused call: the next copies still work.
+    check(call(cells, "pair", "ab", "c").equals(pair("ab", "c")), "pair after a refused segment");
+    try (Arena confined = Arena.ofConfined()) {
+      NativeBytes bytes = NativeBytes.of(confined.allocate(4), false);
+      var outcome = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread other = new Thread(() -> {
+        try { outcome.set(call(cells, "checksum", bytes)); } catch (Throwable failure) { outcome.set(failure); }
+      });
+      other.start();
+      other.join();
+      check(outcome.get() instanceof NativeCellException, "a segment confined to another thread was accepted: " + outcome.get());
+      check(call(cells, "checksum", bytes).equals(0L), "the owner thread still lends its segment");
+    }
+    // A shared arena cannot be closed while a call that was lent its memory is in native code.
+    Arena shared = Arena.ofShared();
+    MemorySegment data = shared.allocate(8);
+    data.fill((byte) 2);
+    MemorySegment gate = Arena.global().allocate(8, 4);
+    var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+    Thread caller = new Thread(() -> {
+      try { result.set(call(cells, "hold", NativeBytes.of(data, false), NativePointer.of(gate.address()))); } catch (Throwable failure) { result.set(failure); }
+    });
+    caller.start();
+    while (gate.get(ValueLayout.JAVA_INT, 0) == 0 && caller.isAlive()) Thread.sleep(1);
+    check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "hold never reached native code: " + result.get());
+    boolean refused = false;
+    try { shared.close(); } catch (IllegalStateException expected) { refused = true; }
+    gate.set(ValueLayout.JAVA_INT, 4, 1);
+    caller.join();
+    check(refused, "a shared arena was closed under a native call reading its memory");
+    check(Long.valueOf(16).equals(result.get()), "hold read its buffer: " + result.get());
+    shared.close();
+    rejects(cells, "hold", NativeBytes.of(data, false), NativePointer.of(gate.address()));
+  }
+  /**
    * Two borrows with lengths of their own beside a pointer that passes through: the guest gives
    * the two buffers and the pointer, and the cell derives both lengths. {@code large} holds ones.
    */
@@ -263,6 +344,16 @@ public final class CellChecks {
     transfers(cells, large);
     decodes(cells);
     guestStrings(cells);
+    // A call that blocks until its gate opens; here the gate is open before the call.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment held = arena.allocate(4);
+      held.fill((byte) 3);
+      MemorySegment gate = arena.allocate(8, 4);
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      check(call(cells, "hold", NativeBytes.of(held, false), NativePointer.of(gate.address())).equals(12L), "hold");
+      check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "hold marked its entry");
+      check(call(cells, "hold", new HeapBytes(new byte[] {1, 2}, false), NativeBytes.of(gate, true)).equals(3L), "hold of a heap array");
+    }
     check(call(cells, "fill", new HeapBytes(large, true), 7) == NativeVoid.INSTANCE, "fill heap");
     check(large[0] == 7 && large[large.length - 1] == 7, "fill wrote back");
     rejects(cells, "fill", new HeapBytes(large, false), 1);

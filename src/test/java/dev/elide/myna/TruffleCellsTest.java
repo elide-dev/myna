@@ -29,6 +29,13 @@ class TruffleCellsTest {
     return Files.readString(Path.of("examples/truffle.seam"));
   }
 
+  /** How often {@code part} occurs in {@code text}. */
+  private static int count(String text, String part) {
+    int count = 0;
+    for (int at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + part.length())) count++;
+    return count;
+  }
+
   @Test
   void cellsAreOptInAndFingerprinted() throws Exception {
     var plain = generate(MODULE.replace(" truffle_cells=true", "") + ADD);
@@ -336,6 +343,52 @@ class TruffleCellsTest {
         truffle.contains(
             "return NativeCellException.of(null, \"native call failed: \", failure);"));
     assertFalse(truffle.contains("WordFactory"));
+    // Only a cell that lends bytes has a scoped twin, and invoke keeps raw addresses either way:
+    // the cell calls the twin, host code holding addresses keeps calling invoke.
+    assertEquals(
+        count(truffle, "Borrow borrow_"),
+        count(truffle, ".segment(arguments["),
+        "every borrow offers the guest's segment");
+    assertTrue(count(truffle, "private long scoped(") > 0, truffle);
+    assertTrue(
+        truffle.contains(
+            "        public static long invoke(long bytes, long count) {\n"
+                + "            try {\n"
+                + "                return CellApiFFM.checksum(MemorySegment.ofAddress(bytes),"
+                + " count);\n"),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            "        private long scoped(MemorySegment bytes$segment, long bytes, long count) {\n"
+                + "            if (bytes$segment == null) {\n"
+                + "                if ((scoped$called & 1) == 0) scoped$learn(1);\n"
+                + "                return invoke(bytes, count);\n"
+                + "            }\n"
+                + "            if ((scoped$called & 2) == 0) scoped$learn(2);\n"
+                + "            return scoped$1(bytes$segment, count);\n"
+                + "        }\n"
+                + "        /** The patterns of lent segments this cell has called, one bit each."
+                + " */\n"
+                + "        @CompilerDirectives.CompilationFinal private int scoped$called;\n"
+                + "        private void scoped$learn(int pattern) {\n"
+                + "            CompilerDirectives.transferToInterpreterAndInvalidate();\n"
+                + "            scoped$called |= pattern;\n"
+                + "        }\n"
+                + "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static long scoped$1(MemorySegment bytes, long count) {\n"
+                + "            try {\n"
+                + "                return CellApiFFM.checksum(bytes, count);\n"),
+        truffle);
+    // The switch is not a boundary: partial evaluation inlines it, folds it to invoke until the
+    // call site has seen a segment with a scope to check, and compiles only the patterns called.
+    assertFalse(
+        truffle.contains("@CompilerDirectives.TruffleBoundary\n        private long scoped("),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            "return scoped(coerce_bytes.segment(arguments[0]), borrow_bytes.address(),"
+                + " borrow_bytes.length());"),
+        truffle);
     // Every FFM call is behind a boundary, leaf or not, whatever the transition mode.
     assertTrue(
         truffle.contains(
@@ -748,14 +801,63 @@ class TruffleCellsTest {
                 + " MemorySegment.ofAddress(name), flags);\n"
                 + "            } catch (Throwable $failure) {\n"),
         ffm);
+    // The cell itself calls the scoped switch: the guest's segment travels beside each lent
+    // address when its scope has something to check, and the switch calls invoke when none does
+    // or the boundary method for that pattern, which passes each such segment itself. A pointer
+    // that is not a borrow (the session, the count written back) stays an address.
+    assertTrue(
+        ffm.contains(
+            "        private int scoped(long session, MemorySegment input$segment, long input,"
+                + " long count, int capacity, MemorySegment output$segment, long output, long"
+                + " written, MemorySegment name$segment, long name, byte flags) {\n"
+                + "            if (input$segment == null) {\n"
+                + "                if (output$segment == null) {\n"
+                + "                    if (name$segment == null) {\n"
+                + "                        if ((scoped$called & 1) == 0) scoped$learn(1);\n"
+                + "                        return invoke(session, input, count, capacity, output,"
+                + " written, name, flags);\n"
+                + "                    }\n"
+                + "                    if ((scoped$called & 2) == 0) scoped$learn(2);\n"
+                + "                    return scoped$001(session, input, count, capacity, output,"
+                + " written, name$segment, flags);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "            if ((scoped$called & 128) == 0) scoped$learn(128);\n"
+                + "            return scoped$111(session, input$segment, count, capacity,"
+                + " output$segment, written, name$segment, flags);\n"
+                + "        }\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static int scoped$101(long session, MemorySegment input, long"
+                + " count, int capacity, long output, long written, MemorySegment name, byte"
+                + " flags) {\n"
+                + "            try {\n"
+                + "                return MynaFFM.transfer(MemorySegment.ofAddress(session), input,"
+                + " count, capacity, MemorySegment.ofAddress(output),"
+                + " MemorySegment.ofAddress(written), name, flags);\n"
+                + "            } catch (Throwable $failure) {\n"
+                + "                throw failed($failure);\n"
+                + "            }\n"
+                + "        }\n"),
+        ffm);
+    assertEquals(7, count(ffm, "private static int scoped$"), ffm);
+    assertFalse(ffm.contains("asSlice"), ffm);
     assertTrue(
         ffm.contains(
             "                        int length_output = Carriers.length32(borrow_output.length(),"
                 + " true, this);\n"
-                + "                        return invoke(address_session, borrow_input.address(),"
-                + " borrow_input.length(), length_output, borrow_output.address(),"
-                + " address_written, borrow_name.address(), value_flags);\n"),
+                + "                        return scoped(address_session,"
+                + " coerce_input.segment(arguments[1]), borrow_input.address(),"
+                + " borrow_input.length(), length_output, coerce_output.segment(arguments[2]),"
+                + " borrow_output.address(), address_written, coerce_name.segment(arguments[4]),"
+                + " borrow_name.address(), value_flags);\n"),
         ffm);
+    // Native Image cells pass addresses only: nothing about them changes.
+    assertFalse(truffle.contains("scoped("), truffle);
+    assertFalse(truffle.contains("segment"), truffle);
     // A transitioning import in boundary mode keeps its call behind the boundary too.
     String boundary =
         generate(
@@ -1059,7 +1161,15 @@ class TruffleCellsTest {
         ffm);
     assertTrue(
         ffm.contains(
-            "                    long created = invoke(address_limits, borrow_name.address());\n"
+            "        private static long scoped$1(long limits, MemorySegment name) {\n"
+                + "            try {\n"
+                + "                return ApiFFM.sessionCreate(MemorySegment.ofAddress(limits),"
+                + " name).address();\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "                    long created = scoped(address_limits,"
+                + " coerce_name.segment(arguments[1]), borrow_name.address());\n"
                 + "                    if (created == 0) return Carriers.none();\n"
                 + "                    NativeResource resource = new NativeResource(\"Session\","
                 + " created, DESTRUCTOR, null, hold);\n"),
@@ -1241,12 +1351,87 @@ class TruffleCellsTest {
     assertTrue(
         fill.contains(
             "int length_bytes = Carriers.length32(borrow_bytes.length(), true, this);\n"
-                + "                invoke(borrow_bytes.address(), length_bytes);"));
+                + "                scoped(coerce_bytes.segment(arguments[0]),"
+                + " borrow_bytes.address(), length_bytes);"));
     assertTrue(
         fill.contains(
             "            try {\n"
                 + "                MynaFFM.fill(MemorySegment.ofAddress(bytes), count);\n"
                 + "            } catch (Throwable $failure) {"));
+    assertTrue(
+        fill.contains(
+            "        private void scoped(MemorySegment bytes$segment, long bytes, int count) {\n"
+                + "            if (bytes$segment == null) {\n"
+                + "                if ((scoped$called & 1) == 0) scoped$learn(1);\n"
+                + "                invoke(bytes, count);\n"
+                + "                return;\n"
+                + "            }\n"
+                + "            if ((scoped$called & 2) == 0) scoped$learn(2);\n"
+                + "            scoped$1(bytes$segment, count);\n"
+                + "        }\n"
+                + "        /** The patterns of lent segments this cell has called, one bit each."
+                + " */\n"
+                + "        @CompilerDirectives.CompilationFinal private int scoped$called;\n"
+                + "        private void scoped$learn(int pattern) {\n"
+                + "            CompilerDirectives.transferToInterpreterAndInvalidate();\n"
+                + "            scoped$called |= pattern;\n"
+                + "        }\n"
+                + "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static void scoped$1(MemorySegment bytes, int count) {\n"
+                + "            try {\n"
+                + "                MynaFFM.fill(bytes, count);\n"
+                + "            } catch (Throwable $failure) {"));
+  }
+
+  @Test
+  void ffmCellsWithManyLentBuffersPassSlices() throws Exception {
+    // Beyond three lent buffers there is no call per pattern: one boundary method passes a slice
+    // of each segment (same scope) or the address, and invoke's call when no buffer has one.
+    var params = new StringBuilder();
+    for (String name : new String[] {"a", "b", "c", "d"})
+      params
+          .append("  param ")
+          .append(name)
+          .append(" type=ptr<char> nullable=false ownership=borrowed access=read")
+          .append(" nocapture=true@explicit_contract\n");
+    String four =
+        generate(
+                MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
+                    + "import four return=i64 error=no_failure nounwind=true@explicit_contract\n"
+                    + params
+                    + "end\n")
+            .get("MynaTruffle.java");
+    assertFalse(four.contains("scoped$"), four);
+    assertTrue(
+        four.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static long scoped(MemorySegment a$segment, long a,"
+                + " MemorySegment b$segment, long b, MemorySegment c$segment, long c, MemorySegment"
+                + " d$segment, long d) {\n"
+                + "            if (a$segment == null && b$segment == null && c$segment == null &&"
+                + " d$segment == null) return invoke(a, b, c, d);\n"
+                + "            try {\n"
+                + "                return MynaFFM.four(a$segment != null ? a$segment.asSlice(0) :"
+                + " MemorySegment.ofAddress(a), b$segment != null ? b$segment.asSlice(0) :"
+                + " MemorySegment.ofAddress(b), c$segment != null ? c$segment.asSlice(0) :"
+                + " MemorySegment.ofAddress(c), d$segment != null ? d$segment.asSlice(0) :"
+                + " MemorySegment.ofAddress(d));\n"),
+        four);
+    // The same for a call that returns nothing.
+    String none =
+        generate(
+                MODULE.replace("truffle_cells=true", "truffle_cells=true truffle_backend=ffm")
+                    + "import four return=void error=no_failure nounwind=true@explicit_contract\n"
+                    + params
+                    + "end\n")
+            .get("MynaTruffle.java");
+    assertTrue(
+        none.contains(
+            " d$segment == null) {\n"
+                + "                invoke(a, b, c, d);\n"
+                + "                return;\n"
+                + "            }\n"),
+        none);
   }
 
   @Test
