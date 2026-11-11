@@ -256,6 +256,45 @@ UTF-16 unit (two for Latin-1) and the terminator; text whose worst case exceeds 
 copy may take, or that does not fit beside outstanding copies, is encoded into an array first, a
 guest string through its Java string.
 
+FFM cells lend through the same borrows but pass the downcall more than an address. Where a borrow
+lent a guest's `NativeBytes` in place and its segment has a scope to check, the cell passes that
+segment: the linker acquires the scope for the call, so a closed segment and one confined to
+another thread are refused before native code runs, and a shared arena cannot be closed while
+native code still reads its memory. The global scope has nothing to check, being never closed and
+confined to no thread, so global memory, and a `NativeBytes.of(address, size, writable)` view,
+whose caller vouches for the memory, pass their address like copies, pins, bare pointers and the
+empty buffer. A `NativeBytes` never views heap memory, which a critical downcall over a native leaf
+would refuse.
+
+The check costs nothing where there is nothing to check. Each byte parameter profiles whether it
+has seen a segment with a scope; until it has, compiled code loads one field, tests it and calls
+`invoke` exactly as before. Once it has, the cell switches on which lent buffers came with such a
+segment and calls a boundary method of its own for that pattern, with one binding call that passes
+each such segment itself and every other pointer as its address, so nothing is allocated and the
+call is the static FFM entry's own. The cell also profiles which patterns it has called, and
+compiles only those: a pattern it has not called deoptimizes. Every call compiled into a guest's
+loop is one the register allocator keeps values live across whether it runs or not, which would put
+the loop's own values in memory; for the same reason a byte parameter deoptimizes on its first empty
+native buffer rather than compiling in the call that fetches the empty buffer's address. With more than three lent
+buffers, one boundary method passes a slice of each such segment (which shares its scope) or the
+address; a slice is the same kind of object as an address's segment, so escape analysis merges
+the two.
+
+Borrows held across the call cost the same way without being allocated. Compiled code can
+deoptimize when the call returns, and what it would rebuild then, each borrow's address and length
+included, stays in the frame for the whole call; with two borrows there, the register allocator
+keeps the calling loop's own result in memory too. A call whose every lent buffer is a segment
+passed in place has nothing to release, so a cell that lends more than one buffer makes that call
+before borrowing anything, once its call site has made it: each coercion hands back the guest's
+buffer itself (after the one check its borrow would make, that a buffer the native side writes is
+writable), and the cell passes its segment and takes any derived length from it. Nothing is live
+across the call but the caller's own values, as in a hand-written node. Any other value leaves
+through the borrows as before, and a call site compiles that path only once it has lent something
+other than segments in place; call sites that never lend every buffer that way compile exactly
+what they did. A cell that lends one buffer keeps its borrow: its loop's result stays in a
+register either way, and the call measured no faster without it (see
+[Measurement](#measurement)).
+
 The same holds for a cell's `execute` called from host code in a Native Image, which is compiled
 ahead of time without partial evaluation: `tests/truffle_integration.py` measures 0 bytes per call
 there for native memory, raw pointers, scratch copies, Java strings (ASCII or not) and absent
@@ -471,6 +510,30 @@ call (3.66 ns for the ten-argument leaf, 4.47 ns for its transition) and allocat
 host code. What remains over the direct call in the ten-argument transition is the type checks on
 ten guest values.
 
+### FFM cells lending segments
+
+Measured on the controlled x86-64 host (unclemax, Linux, AMD Ryzen Threadripper PRO 9965WX) at
+`535f4d9`, five processes per case, through the typed `executeLong` against the static FFM entry
+given the same kind of segment; these are the pairs `benchmarks/gate.py cells` holds to 2%. Every
+case allocates 0 B per call. In ns per call:
+
+| Lent to the cell | Cell (`typed-ffm-*`) | Direct call | Difference |
+|---|---:|---:|---:|
+| 256 bytes, global segment (`sum-native-256`) | 23.695 | 23.696 | -0.0% |
+| 256 bytes, confined segment (`sum-confined-256`) | 23.924 | 23.705 | +0.9% |
+| 256 bytes, shared segment (`sum-shared-256`) | 29.071 | 28.707 | +1.3% |
+| Two global segments, ten arguments (`slab-native`) | 3.232 | 4.331 | -25.4% |
+| Two shared segments (`slab-shared`) | 12.037 | 12.034 | +0.0% |
+| A global segment and a copied heap array (`slab-mixed`) | 13.112 | 14.190 | -7.6% |
+
+Two shared segments cost 12.60 ns against 12.04 while the cell held both borrows across the call:
+the x86-64 loop then kept its result in a stack slot. Calling before borrowing (see
+[Borrows](#borrows)) removed that. For one lent buffer the same change measured no gain at this
+size (a confined 256-byte buffer: 24.24 to 24.27 ns in three builds, against 23.92 to 24.05 with
+the borrow held), so those cells keep their borrow. What a cell pays over the direct call for a
+scoped segment is the reads of the guest's buffer and its segment after each call, where the
+direct call's segment is a constant.
+
 ### Follow-ups
 
 Findings that are tracked, not blocking:
@@ -492,8 +555,9 @@ Findings that are tracked, not blocking:
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
-- FFM cells pass `MemorySegment.ofAddress(address)` to the downcall, so the liveness and
-  confinement checks of the caller's own segment do not apply during the call.
+- FFM cells pass the scope of a guest's own segment to the downcall when they lend its memory in
+  place (see [Borrows](#borrows)). Host code calling `invoke` still passes raw addresses, whose
+  validity is its own to keep.
 - FFM cells over leaf imports are critical: they call the module's static FFM entry, which for a
   native leaf is a critical downcall over the build-time typed adapter. See
   [Measurement](#measurement) for their cost against the direct and handwritten calls.

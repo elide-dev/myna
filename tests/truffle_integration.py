@@ -63,7 +63,8 @@ def build_truffle_fixture():
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"
     compile_native(classes_ffm, generated_ffm, generated_ffm / "CellApiFFM.java", generated_ffm / "CellApiTruffle.java",
-                   FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java", classpath=classpath)
+                   generated_ffm / "CellApiForeignFeature.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
+                   classpath=classpath)
     return work, classes, classes_ffm, library, jars
 
 
@@ -78,11 +79,29 @@ class TruffleIntegrationTests(unittest.TestCase):
         result = run(java, "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
         self.assertIn("Truffle FFM cells passed", result.stdout)
 
+    def test_ffm_cells_in_native_image(self):
+        """FFM cells in an image: the same checks, including the scopes of lent segments, and what
+        each pattern of lent segments allocates from runtime-compiled code."""
+        app = self.work / "ffm-cells-app"
+        # -O3, as the cell benchmark builds: at -O2 the host inliner does not inline the static FFM
+        # entry into a cell's boundary method, so even invoke allocates the address's segment.
+        build = native_image("-O3", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
+                             # The probe is the consumer's own node class.
+                             "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat",
+                             "--module-path", self.module_path(), "-cp", os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR])),
+                             "--features=fixture.cells.CellApiForeignFeature", "fixture.cells.FfmCellsMain", "-o", app)
+        self.assertIn("ffm-cells-app", build.stdout)
+        result = run(app, self.library)
+        self.assertIn("Truffle FFM cells passed", result.stdout)
+
+    def module_path(self):
+        return os.pathsep.join(str(self.jars[name]) for name in
+                               ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections",
+                                "nativeimage", "word", "jniutils", "nativebridge"))
+
     def test_native_image_cells_run_from_compiled_code(self):
         app = self.work / "cells-app"
-        module_path = os.pathsep.join(str(self.jars[name]) for name in
-                                      ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections",
-                                       "nativeimage", "word", "jniutils", "nativebridge"))
+        module_path = self.module_path()
         # Direct stub calls (elide-dev/graal#196) and isolate-compiled code installation (#197) both
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
@@ -116,6 +135,7 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
             "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release", "GuestText.push",
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
+            "BytesCoercion.emptyAddress",
             "NativeCellRootNode.execute")]
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")

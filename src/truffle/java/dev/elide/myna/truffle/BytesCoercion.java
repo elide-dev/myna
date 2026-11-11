@@ -9,6 +9,7 @@ import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.strings.AbstractTruffleString;
+import java.lang.foreign.MemorySegment;
 
 /**
  * Coerces a guest value to borrowed bytes for a byte-pointer parameter: a {@code ptr<u8>}, {@code
@@ -26,6 +27,12 @@ public final class BytesCoercion extends Coercion {
   private static final int POINTER = 8;
   private static final int OTHER = 16;
   private static final int GUEST_TEXT = 32;
+
+  /** Not a kind: whether this call site has lent native memory whose scope a call must check. */
+  private static final int SCOPED = 64;
+
+  /** Not a kind: whether this call site has lent an empty native buffer. */
+  private static final int EMPTY = 128;
 
   private final boolean nullable;
   private final boolean writable;
@@ -92,9 +99,7 @@ public final class BytesCoercion extends Coercion {
       if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
         long size = bytes.size();
-        // The segment travels with its memory, so an FFM cell can hold its scope for the call.
-        // An empty buffer lends the dummy address, which no scope governs.
-        borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
+        borrow.lend(size == 0 ? emptyAddress() : bytes.address(), size);
         return borrow;
       }
       if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
@@ -138,6 +143,62 @@ public final class BytesCoercion extends Coercion {
   private int learn(Object value) {
     CompilerDirectives.transferToInterpreterAndInvalidate();
     return this.seen |= kind(value);
+  }
+
+  /**
+   * The segment whose scope a call must check for the memory {@link #execute} lent in place for
+   * {@code value}, or {@code null} when there is nothing to check: anything but native memory lent
+   * in place (a copy, a pin, a bare pointer, the empty buffer), or native memory of the global
+   * scope. Only FFM cells ask, to pass the guest's own segment to their downcall, which then checks
+   * its confinement and liveness and keeps its arena open for the call. A {@link NativeBytes} views
+   * native memory only, so the segment is never a heap segment, which a critical downcall would
+   * refuse.
+   *
+   * <p>Until this call site has lent a segment with a scope to check, compiled code tests for one
+   * and returns {@code null}; the first such segment deoptimizes and is checked from then on.
+   */
+  public MemorySegment segment(Object value) {
+    if ((seen & NATIVE) == 0 || !(value instanceof NativeBytes bytes)) return null;
+    MemorySegment scoped = bytes.scoped;
+    if ((seen & SCOPED) == 0) {
+      if (scoped == null) return null;
+      learnScoped();
+    }
+    return scoped;
+  }
+
+  /**
+   * The guest's buffer when a call can pass its own segment and so needs no borrow of it: {@code
+   * value} when {@link #segment} has a segment for it, after the one check {@link #execute} makes
+   * of native memory lent in place, and {@code null} for everything else. An FFM cell asks before
+   * it borrows; a call whose every buffer comes back from here holds nothing across the call.
+   */
+  public NativeBytes scoped(Object value) {
+    if (segment(value) == null) return null;
+    NativeBytes bytes = (NativeBytes) value;
+    if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+    return bytes;
+  }
+
+  /** Records that this call site lends segments with a scope to check; see {@link #learn}. */
+  @HostCompilerDirectives.InliningCutoff
+  private void learnScoped() {
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    seen |= SCOPED;
+  }
+
+  /**
+   * The dummy address an empty buffer lends. Fetching it is a call, and a call on any path makes
+   * compiled code keep every value live across it in memory, a loop's own result included, so a
+   * call site that has not lent an empty buffer deoptimizes on its first one instead.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private long emptyAddress() {
+    if ((seen & EMPTY) == 0) {
+      CompilerDirectives.transferToInterpreterAndInvalidate();
+      seen |= EMPTY;
+    }
+    return Borrow.emptyAddress();
   }
 
   private int kind(Object value) {

@@ -61,6 +61,15 @@ class GateTest(unittest.TestCase):
                     self.assertNotEqual(generated, reference)
                     self.assertEqual(allowance is None, not reason, 'an allowance must state its reason')
 
+    def test_cell_pairs_name_benchmarked_cases(self):
+        # Every case a cells pair names is one the cell benchmark runs, with or without its size.
+        source = (Path(__file__).parents[1] / 'benchmarks/cells/run.py').read_text()
+        for mode, generated, reference, allowance, reason in gate.PAIRS['cells']:
+            for case in (generated, reference):
+                with self.subTest(case=case):
+                    kind = case.rsplit('-', 1)[0] if case.rsplit('-', 1)[-1].isdigit() else case
+                    self.assertIn(f"'{kind}'", source)
+
 
 if __name__ == '__main__':
     unittest.main()

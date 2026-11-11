@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 int32_t cells_add(int32_t left, int32_t right) { return left + right; }
 int64_t cells_widen(uint8_t small, uint16_t medium, uint32_t wide, bool flag) {
@@ -44,6 +45,16 @@ uint64_t cells_decode(const uint8_t *data, uint64_t length, uint8_t *text, uint3
 // A byte buffer whose count stays an explicit argument, beside a second pointer.
 uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bias) {
   uint64_t sum = bias ? (uint64_t)*bias : 0;
+  for (uint64_t i = 0; i < count; i++) sum += bytes[i];
+  return sum;
+}
+// Sums a buffer for as long as the caller wants the call to last: gate[0] is set once the call
+// is in native code, and the sum starts when the caller sets gate[1].
+uint64_t cells_hold(const uint8_t *bytes, uint64_t count, int32_t *gate) {
+  struct timespec pause = {0, 1000000};
+  __atomic_store_n(&gate[0], 1, __ATOMIC_SEQ_CST);
+  while (!__atomic_load_n(&gate[1], __ATOMIC_SEQ_CST)) nanosleep(&pause, NULL);
+  uint64_t sum = 0;
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];
   return sum;
 }
