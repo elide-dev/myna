@@ -25,7 +25,8 @@ import org.graalvm.nativeimage.PinnedObject;
  *       writable borrows, copied back on release. HotSpot always copies.
  *   <li>Other interop buffers are read through {@link InteropLibrary} into a copy and written back
  *       element by element when writable.
- *   <li>Strings are encoded as UTF-8, NUL-terminated when the parameter is a C string.
+ *   <li>Strings are encoded as UTF-8, NUL-terminated when the parameter is a C string. Java strings
+ *       and guest strings ({@link GuestText}) are encoded straight onto the scratch stack.
  * </ul>
  *
  * <p>Copies of up to {@link Scratch#LARGEST} bytes come from the current thread's scratch stack
@@ -65,6 +66,12 @@ public final class Borrow {
   private static final int PINNED = 1;
   private static final int SCRATCH = 2;
   private static final int COPIED = 3;
+
+  /** Guest text of one byte per UTF-16 code unit: Latin-1, of which ASCII is copied as it is. */
+  static final int LATIN_1 = 1;
+
+  /** Guest text of two bytes per UTF-16 code unit, little-endian like every Myna target. */
+  static final int UTF_16 = 2;
 
   private static final Borrow NONE = new Borrow();
 
@@ -167,21 +174,28 @@ public final class Borrow {
   }
 
   /**
-   * ASCII text is written straight onto the scratch stack, with no intermediate array; it is always
-   * followed by a NUL there, which a buffer parameter simply does not read. Other text is encoded
-   * into an array first.
+   * Text is encoded straight onto the scratch stack, with no intermediate array; it is always
+   * followed by a NUL there, which a buffer parameter simply does not read. Text too long for the
+   * stack, or that does not fit beside outstanding copies, is encoded into an array first.
    */
   void lendString(String text, boolean nulTerminated) {
     Scratch scratch = Scratch.pushText(text);
-    if (scratch != null) {
-      int length = scratch.pushed;
-      int start = (int) (scratch.top - Scratch.reservation(length + 1L));
-      own(SCRATCH, scratch, scratch.base + start, length);
-      this.offset = start;
-      this.terminated = true;
-    } else {
-      lendCopy(utf8(text), null, false, nulTerminated);
-    }
+    if (scratch != null) lendPushed(scratch);
+    else lendCopy(utf8(text), null, false, nulTerminated);
+  }
+
+  /**
+   * Owns the terminated text that {@code scratch} has just pushed ({@link Scratch#pushText} or
+   * {@link Scratch#pushUnits}). The push happens outside the borrow, which only records it: the
+   * code that encodes never sees the borrow, so it need not be inlined for the borrow to stay out
+   * of the heap.
+   */
+  void lendPushed(Scratch scratch) {
+    int length = scratch.pushed;
+    int start = (int) (scratch.top - Scratch.reservation(length + 1L));
+    own(SCRATCH, scratch, scratch.base + start, length);
+    this.offset = start;
+    this.terminated = true;
   }
 
   void lendBuffer(InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
@@ -382,10 +396,14 @@ public final class Borrow {
     /** The address of {@link #block}, read by compiled code after a push. */
     long base;
 
-    /** The byte length of the text most recently pushed by {@link #pushText}. */
+    /**
+     * The byte length of the text most recently pushed by {@link #pushText} or {@link #pushUnits}.
+     */
     int pushed;
 
-    /** Where {@link #pushText} copies short text out of its string before packing it. */
+    /**
+     * Where text is copied out of its string, a chunk at a time, before it is packed or encoded.
+     */
     private final char[] chars = new char[SHORT_TEXT];
 
     /** The end of the innermost copy: zero when the stack is empty. */
@@ -432,9 +450,9 @@ public final class Borrow {
     }
 
     /**
-     * Writes ASCII {@code text} and a NUL onto the current thread's stack and returns that stack,
-     * with {@link #pushed} set to the text's length, or returns {@code null} when the text has a
-     * character outside ASCII, is too long, or does not fit. Nothing is pushed in that case.
+     * Writes {@code text} as UTF-8 and a NUL onto the current thread's stack and returns that
+     * stack, with {@link #pushed} set to the byte length, or returns {@code null} when the text is
+     * too long or does not fit. Nothing is pushed in that case.
      */
     @TruffleBoundary
     static Scratch pushText(String text) {
@@ -447,7 +465,7 @@ public final class Borrow {
       if (length <= SHORT_TEXT) {
         // Short text: copy the characters out in bulk, then pack eight to a word and write the
         // word. Whether every character was ASCII is checked once at the end; nothing is pushed
-        // until the top moves, so abandoning then leaves the stack as it was.
+        // until the top moves, so starting over as UTF-8 then leaves the stack as it was.
         char[] chars = scratch.chars;
         text.getChars(0, length, chars, 0);
         long base = scratch.base;
@@ -467,16 +485,132 @@ public final class Borrow {
           bits |= c;
           Memory.putByte(base, block, start + i, (byte) c);
         }
-        if (bits >= 0x80) return null;
+        if (bits >= 0x80) return scratch.encode(null, 0, length, LOADED);
         Memory.putByte(base, block, start + length, (byte) 0);
       } else {
         // Longer text: one byte per character for ASCII, then the terminator, copied in bulk.
-        for (int i = 0; i < length; i++) if (text.charAt(i) >= 0x80) return null;
+        for (int i = 0; i < length; i++)
+          if (text.charAt(i) >= 0x80) return scratch.encode(text, 0, length, STRING);
         block.setString(start, text);
       }
       scratch.pushed = length;
       scratch.top = start + reservation(length + 1L);
       return scratch;
+    }
+
+    /**
+     * {@link #pushText} for guest text given as its UTF-16 code units: {@code length} bytes of
+     * {@code units} from {@code offset}, in the form {@link Borrow#LATIN_1} or {@link
+     * Borrow#UTF_16}. Latin-1 text is copied as it is when it turns out to be ASCII, whatever the
+     * string knew about itself; a string made from a Java string does not know until asked.
+     */
+    @TruffleBoundary
+    static Scratch pushUnits(byte[] units, int offset, int length, int form) {
+      Scratch scratch = Scratches.CURRENT.get();
+      if (form == UTF_16) return scratch.encode(units, offset, length >> 1, UTF_16);
+      MemorySegment block = length < LARGEST ? scratch.reserve(length + 1L) : null;
+      if (block != null) {
+        int start = (int) scratch.top;
+        int bits = 0;
+        if (length <= SHORT_TEXT) {
+          // Short text: write each byte, and check once at the end that all were ASCII.
+          long base = scratch.base;
+          for (int i = 0; i < length; i++) {
+            byte unit = units[offset + i];
+            bits |= unit;
+            Memory.putByte(base, block, start + i, unit);
+          }
+          if (bits >= 0) Memory.putByte(base, block, start + length, (byte) 0);
+        } else {
+          // Longer text: check first, then copy in bulk.
+          for (int i = 0; i < length; i++) bits |= units[offset + i];
+          if (bits >= 0) {
+            MemorySegment.copy(units, offset, block, ValueLayout.JAVA_BYTE, start, length);
+            block.set(ValueLayout.JAVA_BYTE, start + length, (byte) 0);
+          }
+        }
+        if (bits >= 0) {
+          scratch.pushed = length;
+          scratch.top = start + reservation(length + 1L);
+          return scratch;
+        }
+      }
+      return scratch.encode(units, offset, length, LATIN_1);
+    }
+
+    /** {@link #encode} sources besides the guest forms: a Java string, and {@link #chars} as is. */
+    private static final int STRING = 3;
+
+    private static final int LOADED = 4;
+
+    /**
+     * Encodes {@code count} UTF-16 code units as UTF-8 onto this stack, followed by a NUL, exactly
+     * as {@code String.getBytes(UTF_8)} does: an unpaired surrogate becomes {@code ?}. The units
+     * come from {@code source} starting at {@code offset}, as {@code form} says: the characters of
+     * a string, the bytes of an array (one per unit, or two little-endian), or the units already in
+     * {@link #chars}, which then hold all of them.
+     *
+     * <p>The worst case is reserved (three bytes per unit, two for Latin-1, and the terminator),
+     * but only what was written is pushed, so a release computes the same extent from the byte
+     * length. Returns {@code null}, pushing nothing, when the worst case exceeds {@link #LARGEST}
+     * or does not fit beside outstanding copies.
+     */
+    private Scratch encode(Object source, int offset, int count, int form) {
+      long worst = (form == LATIN_1 ? 2L : 3L) * count + 1;
+      MemorySegment block = worst <= LARGEST ? reserve(worst) : null;
+      if (block == null) return null;
+      int start = (int) top;
+      long base = this.base;
+      char[] chars = this.chars;
+      int at = start;
+      for (int done = 0; done < count; ) {
+        int chunk = Math.min(count - done, SHORT_TEXT);
+        int from = offset + done;
+        switch (form) {
+          case STRING -> ((String) source).getChars(from, from + chunk, chars, 0);
+          case LATIN_1 -> {
+            byte[] bytes = (byte[]) source;
+            for (int i = 0; i < chunk; i++) chars[i] = (char) (bytes[from + i] & 0xff);
+          }
+          case UTF_16 -> {
+            byte[] bytes = (byte[]) source;
+            from = offset + 2 * done;
+            for (int i = 0; i < chunk; i++, from += 2)
+              chars[i] = (char) (bytes[from] & 0xff | bytes[from + 1] << 8);
+          }
+          default -> {}
+        }
+        // A surrogate pair is never split: a chunk's last high half waits for the next chunk.
+        if (done + chunk < count && Character.isHighSurrogate(chars[chunk - 1])) chunk--;
+        for (int i = 0; i < chunk; i++) {
+          char c = chars[i];
+          if (c < 0x80) {
+            Memory.putByte(base, block, at++, (byte) c);
+          } else if (c < 0x800) {
+            Memory.putByte(base, block, at++, (byte) (0xc0 | c >> 6));
+            Memory.putByte(base, block, at++, (byte) (0x80 | c & 0x3f));
+          } else if (!Character.isSurrogate(c)) {
+            Memory.putByte(base, block, at++, (byte) (0xe0 | c >> 12));
+            Memory.putByte(base, block, at++, (byte) (0x80 | c >> 6 & 0x3f));
+            Memory.putByte(base, block, at++, (byte) (0x80 | c & 0x3f));
+          } else if (i + 1 < chunk
+              && Character.isHighSurrogate(c)
+              && Character.isLowSurrogate(chars[i + 1])) {
+            int point = Character.toCodePoint(c, chars[++i]);
+            Memory.putByte(base, block, at++, (byte) (0xf0 | point >> 18));
+            Memory.putByte(base, block, at++, (byte) (0x80 | point >> 12 & 0x3f));
+            Memory.putByte(base, block, at++, (byte) (0x80 | point >> 6 & 0x3f));
+            Memory.putByte(base, block, at++, (byte) (0x80 | point & 0x3f));
+          } else {
+            Memory.putByte(base, block, at++, (byte) '?');
+          }
+        }
+        done += chunk;
+      }
+      Memory.putByte(base, block, at, (byte) 0);
+      pushed = at - start;
+      top = start + reservation(pushed + 1L);
+      return this;
     }
 
     /** Writes the copy at {@code start} back, then pops it whether or not that succeeded. */

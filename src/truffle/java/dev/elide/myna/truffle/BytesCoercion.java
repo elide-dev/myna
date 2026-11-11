@@ -4,13 +4,18 @@ package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.strings.AbstractTruffleString;
 
 /**
  * Coerces a guest value to borrowed bytes for a byte-pointer parameter: a {@code ptr<u8>}, {@code
  * ptr<i8>} or {@code ptr<char>} import parameter, or the buffer of a {@code borrow} declaration.
- * Strings are accepted only for read access, since the native side may not write into them.
+ * Strings are accepted only for read access, since the native side may not write into them: Java
+ * strings, guest strings that are {@code TruffleString}s (read through {@link GuestText}, with no
+ * Java string made of them), and any other interop string through {@code asString}.
  */
 public final class BytesCoercion extends Coercion {
   /** The kinds of value this call site has lent; only their paths are compiled. */
@@ -20,6 +25,7 @@ public final class BytesCoercion extends Coercion {
   private static final int TEXT = 4;
   private static final int POINTER = 8;
   private static final int OTHER = 16;
+  private static final int GUEST_TEXT = 32;
 
   private final boolean nullable;
   private final boolean writable;
@@ -30,6 +36,9 @@ public final class BytesCoercion extends Coercion {
 
   /** {@link Borrow#pinThreshold()}, read on the first heap array; negative until then. */
   @CompilationFinal private int pinThreshold = -1;
+
+  /** Inserted on the first guest string, like the interop library on the first interop value. */
+  @Child private GuestText guestText;
 
   /**
    * @param nullable whether interop {@code null} lends the null address
@@ -83,6 +92,8 @@ public final class BytesCoercion extends Coercion {
       if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
         long size = bytes.size();
+        // The segment travels with its memory, so an FFM cell can hold its scope for the call.
+        // An empty buffer lends the dummy address, which no scope governs.
         borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
         return borrow;
       }
@@ -90,6 +101,16 @@ public final class BytesCoercion extends Coercion {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
         borrow.lendArray(bytes.array(), writable, terminated, pinThreshold());
         return borrow;
+      }
+      if ((seen & GUEST_TEXT) != 0 && value instanceof AbstractTruffleString text) {
+        Object pushed = pushGuestText(text);
+        if (pushed instanceof Borrow.Scratch scratch) {
+          borrow.lendPushed(scratch);
+          return borrow;
+        }
+        // Too long for the scratch stack: lent as its Java string, by the same code below.
+        value = pushed;
+        seen |= TEXT;
       }
       if ((seen & TEXT) != 0 && value instanceof String text) {
         borrow.lendString(text, terminated);
@@ -103,26 +124,61 @@ public final class BytesCoercion extends Coercion {
         slow(value, borrow);
         return borrow;
       }
-      CompilerDirectives.transferToInterpreterAndInvalidate();
-      this.seen = seen |= kind(value);
+      seen = learn(value);
     }
+  }
+
+  /**
+   * Records the kind of {@code value} and returns the kinds seen so far. In runtime-compiled code
+   * this deoptimizes; in code compiled ahead of time it is an ordinary call, kept out of {@link
+   * #execute} so that the host compiler still inlines {@code execute}, which keeps the borrow out
+   * of the heap there too.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private int learn(Object value) {
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    return this.seen |= kind(value);
   }
 
   private int kind(Object value) {
     if (value instanceof NativeBytes) return NATIVE;
     if (value instanceof HeapBytes) return HEAP;
     if (strings && value instanceof String) return TEXT;
+    if (strings && value instanceof AbstractTruffleString) return GUEST_TEXT;
     if (value instanceof NativePointer) return POINTER;
     return OTHER;
   }
 
   private int pinThreshold() {
     int threshold = pinThreshold;
-    if (threshold < 0) {
+    return threshold >= 0 ? threshold : learnPinThreshold();
+  }
+
+  @HostCompilerDirectives.InliningCutoff
+  private int learnPinThreshold() {
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    return pinThreshold = Math.max(Borrow.pinThreshold(), 0);
+  }
+
+  /**
+   * Pushes a guest string onto the scratch stack and returns the stack, or returns the string as a
+   * Java string when it does not fit there. Out of line in code compiled ahead of time, where a
+   * larger {@link #execute} would no longer be inlined into the cell.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private Object pushGuestText(AbstractTruffleString text) {
+    GuestText node = guestText;
+    if (node == null) {
       CompilerDirectives.transferToInterpreterAndInvalidate();
-      pinThreshold = threshold = Math.max(Borrow.pinThreshold(), 0);
+      guestText = node = insert(new GuestText());
     }
-    return threshold;
+    Borrow.Scratch pushed = node.push(text);
+    return pushed != null ? pushed : javaString(text);
+  }
+
+  @TruffleBoundary
+  private static String javaString(AbstractTruffleString text) {
+    return text.toJavaStringUncached();
   }
 
   private void slow(Object value, Borrow borrow) {
@@ -177,7 +233,7 @@ public final class BytesCoercion extends Coercion {
     borrow.lend(address, 0);
   }
 
-  @CompilerDirectives.TruffleBoundary
+  @TruffleBoundary
   private String expected() {
     return (strings ? "string, " : "")
         + (buffer ? "sized buffer" : "buffer or pointer")

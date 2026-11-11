@@ -66,12 +66,27 @@ array at one call site.
 
 `--cases REGEX` runs a subset; a partial run is marked as a smoke run.
 
-String cases call `myna_bench_text(text, salt)` with an 11-byte string: `direct-text` passes a
-native C string, `glue-text` lends a Java string (ASCII, written straight onto the scratch stack with its terminator), `nfi-text`
-passes the string through NFI's `STRING` conversion.
+String cases call `myna_bench_text(text, salt)`: `direct-text` passes a native C string,
+`glue-text` lends an 11-character ASCII Java string, `nfi-text` passes the same string through
+NFI's `STRING` conversion. The other cases vary the text and how it is held:
 
-Runtime-compiled code is not part of the image, so the image disassembly cannot show it; the
-retained evidence for inlining is the compilation trace plus the measured parity with the direct
-call and the zero allocation count. On Linux the benchmark's C file carries a weak `memfd_create`
-syscall shim because the pinned toolchain's sysroot predates glibc 2.27 while the distribution's
-static libffi (used by NFI) references it; a newer libc wins at link time.
+- `glue-text-utf8` and `glue-text-wide` lend Java strings with two two-byte characters (13 UTF-8
+  bytes) and seven three-byte characters (21 bytes).
+- `glue-text-truffle`, `-truffle-utf8` and `-truffle-wide` lend the same three texts as UTF-16
+  `TruffleString`s, as JavaScript passes its strings, read through the TruffleString API.
+- `glue-text-truffle-fresh` builds a new ASCII `TruffleString` from bytes on every call, so nothing
+  cached on an earlier call can be reused.
+- `glue-ffm-text` lends the ASCII Java string to the FFM cell.
+
+FFM cases lend bytes to `myna_bench_sum` (256 bytes) and the slab entry through the FFM cells.
+`direct-ffm-sum-256`, `-sum-shared-256` and `-sum-confined-256` call the static FFM entry with a
+segment of the global arena, of a shared arena and of an arena confined to the measuring thread;
+`glue-ffm-sum-native-256`, `-shared-256` and `-confined-256` lend `NativeBytes` over the same three
+kinds of segment, and `glue-ffm-sum-copy-256` a copied heap array, which has no segment;
+`typed-ffm-sum-*` repeat the native, shared and confined cases through the cell's `executeLong`.
+`direct-ffm-slab` calls the static slab entry with two global segments, `direct-ffm-slab-shared`
+with two segments of one shared arena, and `direct-ffm-slab-mixed` with a global segment and a
+heap array copied for each call through `Borrow.ofArray`, as the cell copies it;
+`glue-ffm-slab-native`, `-shared`, `-heap` and `-mixed` lend both byte buffers as global segments,
+as segments of one shared arena, as copied heap arrays, and one global segment and one heap array,
+and `typed-ffm-slab-native`, `-shared` and `-mixed` repeat three of them through `executeLong`.
