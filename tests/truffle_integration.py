@@ -114,7 +114,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         expected += [f"dev.elide.myna.truffle.{method}" for method in (
             "BytesCoercion.execute", "BytesCoercion.slow", "IntegerCoercion.execute", "PointerCoercion.execute",
             "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
-            "Borrow.lendString", "Borrow.lendBuffer", "Borrow.release", "NativeCellRootNode.execute")]
+            "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release",
+            "NativeCellRootNode.execute")]
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
 

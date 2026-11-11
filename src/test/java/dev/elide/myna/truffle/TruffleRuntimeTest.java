@@ -15,6 +15,8 @@ import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
+import com.oracle.truffle.api.strings.TruffleString;
+import com.oracle.truffle.api.strings.TruffleString.Encoding;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -24,6 +26,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -1212,12 +1215,12 @@ class TruffleRuntimeTest {
   }
 
   /**
-   * ASCII text goes straight onto the scratch stack. Text with other characters, text too long for
-   * the stack, and text that does not fit beside outstanding copies is encoded into an array first,
-   * and all of them read back the same bytes.
+   * Text goes straight onto the scratch stack, ASCII or not. Text too long for the stack, and text
+   * that does not fit beside outstanding copies, is encoded into an array first, and all of them
+   * read back the same bytes.
    */
   @Test
-  void textIsPushedDirectlyWhenAsciiAndEncodedOtherwise() throws Exception {
+  void textIsPushedDirectlyAndEncodedIntoAnArrayOnlyWhenItDoesNotFit() throws Exception {
     onFreshThread(() -> {
       Borrow ascii = Borrow.ofString("plain", true);
       MemorySegment view = MemorySegment.ofAddress(ascii.address()).reinterpret(6);
@@ -1243,7 +1246,7 @@ class TruffleRuntimeTest {
       assertEquals(
           0, MemorySegment.ofAddress(empty.address()).reinterpret(1).get(ValueLayout.JAVA_BYTE, 0));
       empty.release();
-      // Longer text takes the bulk copy; a late non-ASCII character still falls back cleanly.
+      // Longer text takes the bulk copy; a late non-ASCII character starts over as UTF-8.
       String longer = "c".repeat(200);
       Borrow bulk = Borrow.ofString(longer, true);
       assertEquals(200, bulk.length());
@@ -1335,6 +1338,161 @@ class TruffleRuntimeTest {
     }
   }
 
+  /** The bytes a terminated borrow lends, terminator included, as native code reads them. */
+  private static byte[] lent(Borrow borrow) {
+    return MemorySegment.ofAddress(borrow.address())
+        .reinterpret(borrow.length() + 1)
+        .toArray(ValueLayout.JAVA_BYTE);
+  }
+
+  /** What {@code String.getBytes} makes of {@code text}, and the terminator. */
+  private static byte[] utf8z(String text) {
+    byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+    return java.util.Arrays.copyOf(bytes, bytes.length + 1);
+  }
+
+  private static String hex(String text) {
+    var out = new StringBuilder();
+    for (char c : text.toCharArray()) out.append(String.format("%04x ", (int) c));
+    return out.toString();
+  }
+
+  /** Text that exercises every UTF-8 length, both surrogate halves, and the chunk boundaries. */
+  private static List<String> awkwardText() {
+    String chunk = "x".repeat(Borrow.Scratch.SHORT_TEXT - 1);
+    return List.of(
+        "",
+        "é",
+        "héllo wörld",
+        "こんにちは世界",
+        // The first and last character of each encoded length.
+        "\u007f\u0080߿ࠀ퟿￿",
+        "a😀b",
+        "􏿿𐀀",
+        // Unpaired halves: alone, at either end, reversed, doubled, before a pair.
+        "\ud83d",
+        "\ude00",
+        "\ud83dx",
+        "x\ude00",
+        "\ude00\ud83d",
+        "\ud83d\ud83d",
+        "\ud83d😀",
+        // One chunk exactly, with and without ASCII; then a second chunk, and several.
+        "é".repeat(Borrow.Scratch.SHORT_TEXT),
+        "é".repeat(Borrow.Scratch.SHORT_TEXT + 1),
+        "x".repeat(Borrow.Scratch.SHORT_TEXT) + "é",
+        "€".repeat(200),
+        // A pair across the chunk boundary must stay a pair; a high half there that is not
+        // followed by a low one is unpaired, whether or not anything follows it.
+        chunk + "😀tail",
+        chunk + "\ud83dx",
+        chunk + "\ud83d",
+        chunk + "é" + chunk + "\ud83d",
+        chunk + "é" + chunk + "😀");
+  }
+
+  /**
+   * Text is encoded straight onto the scratch stack exactly as {@code String.getBytes} encodes it:
+   * an unpaired surrogate becomes {@code ?}, and a pair is one four-byte character even when a
+   * chunk boundary falls between its halves. Only the bytes written are pushed, so the next copy
+   * starts right behind them however much was reserved.
+   */
+  @Test
+  void textIsEncodedExactlyAsJavaEncodesIt() throws Exception {
+    onFreshThread(() -> {
+      Borrow anchor = Borrow.ofString("anchor", true);
+      long base = anchor.address();
+      anchor.release();
+      var samples = new ArrayList<>(awkwardText());
+      // Arbitrary UTF-16, weighted towards surrogates and the boundaries between lengths.
+      Random random = new Random(103);
+      char[] alphabet = {'a', 'z', '\u007f', '\u0080', 'é', '߿', 'ࠀ', '€', '￿'};
+      for (int round = 0; round < 2000; round++) {
+        char[] text = new char[random.nextInt(150)];
+        for (int i = 0; i < text.length; i++) {
+          int pick = random.nextInt(16);
+          text[i] =
+              pick < 9
+                  ? alphabet[pick]
+                  : pick < 12
+                      ? (char) (0xd800 + random.nextInt(0x400))
+                      : pick < 15
+                          ? (char) (0xdc00 + random.nextInt(0x400))
+                          : (char) random.nextInt(0x10000);
+        }
+        samples.add(new String(text));
+      }
+      for (String text : samples) {
+        byte[] expected = utf8z(text);
+        Borrow borrow = Borrow.ofString(text, true);
+        assertEquals(expected.length - 1, borrow.length(), () -> hex(text));
+        assertArrayEquals(expected, lent(borrow), () -> hex(text));
+        assertEquals(base, borrow.address());
+        // What a release pops is what was pushed: the next copy starts behind these bytes.
+        Borrow next = Borrow.ofString("next", true);
+        assertEquals(base + Borrow.Scratch.reservation(expected.length), next.address());
+        next.release();
+        borrow.release();
+        // A buffer parameter lends the same bytes and simply leaves the terminator unread.
+        Borrow buffer = Borrow.ofString(text, false);
+        assertEquals(expected.length - 1, buffer.length());
+        assertArrayEquals(expected, lent(buffer));
+        buffer.release();
+      }
+    });
+  }
+
+  /**
+   * The encoder reserves its worst case, so text whose worst case does not fit takes the array
+   * path, which reserves what the bytes need: too long for any scratch copy, or too long for what
+   * is left of the block. Either way the bytes are the same and the stack stays balanced.
+   */
+  @Test
+  void textWhoseWorstCaseDoesNotFitIsEncodedIntoAnArray() throws Exception {
+    onFreshThread(() -> {
+      int largest = (int) Borrow.Scratch.LARGEST;
+      // Three bytes a character would exceed the largest copy; the two it needs do not.
+      String wide = "é".repeat(largest / 3 + 1);
+      Borrow fits = Borrow.ofString(wide, true);
+      assertArrayEquals(utf8z(wide), lent(fits));
+      fits.release();
+      // The largest text the encoder takes directly: its worst case is the largest copy.
+      String widest = "€".repeat((largest - 1) / 3);
+      Borrow direct = Borrow.ofString(widest, true);
+      assertEquals(largest - 1, direct.length());
+      assertArrayEquals(utf8z(widest), lent(direct));
+      direct.release();
+      // Too long for the stack as bytes, though not as characters: an arena of its own.
+      String huge = "é".repeat(largest - 1);
+      Borrow outside = Borrow.ofString(huge, true);
+      assertArrayEquals(utf8z(huge), lent(outside));
+      outside.release();
+      // Whichever way each went, the stack is where it was: copies keep landing at its start.
+      Borrow one = Borrow.ofString("one", true);
+      long start = one.address();
+      one.release();
+      Borrow two = Borrow.ofString("two", true);
+      assertEquals(start, two.address());
+      two.release();
+    });
+    onFreshThread(() -> {
+      // A first block with 64 bytes left: thirty accented characters fit as bytes (61 with the
+      // terminator) but not as the worst case the encoder would reserve (91).
+      int room = 64;
+      Borrow filler = Borrow.ofArray(new byte[(int) Borrow.Scratch.INITIAL - room], false, false);
+      String text = "é".repeat(30);
+      Borrow tight = Borrow.ofString(text, true);
+      assertEquals(filler.address() + Borrow.Scratch.INITIAL - room, tight.address());
+      assertArrayEquals(utf8z(text), lent(tight));
+      // The block is full now: the same text lends from an arena, off the stack.
+      Borrow beside = Borrow.ofString(text, true);
+      assertArrayEquals(utf8z(text), lent(beside));
+      beside.release();
+      tight.release();
+      filler.release();
+    });
+  }
+
   /** One call site lends every kind of value in turn and keeps lending each correctly. */
   @Test
   void bytesCoercionProfilesTheKindsItHasSeen() {
@@ -1344,9 +1502,10 @@ class TruffleRuntimeTest {
       NativeBytes.of(memory, false),
       new HeapBytes(new byte[] {1, 2}, false),
       "abc",
-      new ForeignNull()
+      new ForeignNull(),
+      TruffleString.fromJavaStringUncached("guést", Encoding.UTF_16)
     };
-    long[] lengths = {4, 2, 3, 0};
+    long[] lengths = {4, 2, 3, 0, 6};
     for (int round = 0; round < 3; round++) {
       for (int i = 0; i < values.length; i++) {
         Borrow borrow = site.execute(values[i]);

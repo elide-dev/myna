@@ -238,13 +238,16 @@ An absent nullable buffer costs nothing either: 0 bytes per compiled `decode` ca
 `null`, the null pointer and host `null` alike, and a call site that sees absent and present
 buffers in turn stays in compiled code.
 
-ASCII text is written straight onto the scratch stack, so a string argument allocates nothing
-either; text with other characters is encoded into a UTF-8 array first.
+Text is encoded as UTF-8 straight onto the scratch stack, so a string argument allocates nothing
+either, ASCII or not. The bytes are exactly those of `String.getBytes(UTF_8)`, an unpaired
+surrogate included (it becomes `?`). Room is reserved for the worst case, three bytes per UTF-16
+unit and the terminator; text whose worst case exceeds the 16 KiB a stack copy may take, or that
+does not fit beside outstanding copies, is encoded into an array first.
 
 The same holds for a cell's `execute` called from host code in a Native Image, which is compiled
 ahead of time without partial evaluation: `tests/truffle_integration.py` measures 0 bytes per call
-there for native memory, raw pointers, scratch copies, ASCII strings and absent nullable buffers,
-and the pin alone for a pinned array. On HotSpot the host JIT decides: scalar replacement depends on its inlining and on
+there for native memory, raw pointers, scratch copies, Java strings (ASCII or not) and absent
+nullable buffers, one borrow or several, and the pin alone for a pinned array. On HotSpot the host JIT decides: scalar replacement depends on its inlining and on
 type profiles shared by every call site in the process. With the Graal JIT the borrow is
 scalar-replaced as long as no call site lends through the generic interop path; C2 allocates it
 (56 bytes per byte parameter) once the coercion has been compiled on its own. Host code that must
@@ -457,9 +460,9 @@ Findings that are tracked, not blocking:
 
 - An ASCII Java string lent to a C string parameter is written straight onto the scratch stack:
   `glue-text` went from 17.6 ns and 24 B to 15.4 ns and 0 B (same host and method as the table
-  above). Text with other characters still allocates its UTF-8 array, and a guest `TruffleString`
-  still becomes a Java `String` through interop first; taking its bytes through the TruffleString
-  API is not implemented.
+  above). Other text now takes the same route (see [Borrows](#borrows)), but a guest
+  `TruffleString` still becomes a Java `String` through interop first; taking its bytes through the
+  TruffleString API is not implemented.
 - A byte-pointer parameter without a `borrow` declaration is a C string parameter unless it is
   declared `truffle_buffer`. Pinning is not a win at small sizes: the ten-argument entry with a
   256-byte and a 16-byte heap buffer costs 21.9 ns and 0 B as two terminated copies and 24.4 ns

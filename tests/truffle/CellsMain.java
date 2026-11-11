@@ -127,6 +127,11 @@ public final class CellsMain {
         HeapBytes pinned = new HeapBytes(large, false);
         compiled("checksum", new Probe(new CellApiTruffle.checksum_Cell()).function(), i -> new Object[] {pinned}, i -> (long) large.length);
         compiled("strlen", new Probe(new CellApiTruffle.strlen_Cell()).function(), i -> new Object[] {"héllo"}, i -> 6L);
+        // Text of every UTF-8 length, encoded onto the scratch stack by compiled code; an unpaired
+        // surrogate is one "?".
+        java.util.function.LongFunction<String> text = i -> "h\u00e9llo \u20ac" + i + (i % 3 == 0 ? "\ud83d\ude00" : "\ud83d");
+        compiled("strlen of text", new Probe(new CellApiTruffle.strlen_Cell()).function(),
+            i -> new Object[] {text.apply(i)}, i -> (long) text.apply(i).getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
         // Two scratch copies per call from compiled code, released in reverse order: the thread's
         // stack is empty again afterwards, so the next copy lands where the first one did.
         Borrow before = Borrow.ofString("probe", true);
@@ -166,8 +171,11 @@ public final class CellsMain {
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
-        // ASCII text goes straight onto the scratch stack: no UTF-8 array.
+        // Text goes straight onto the scratch stack, ASCII or not: no UTF-8 array.
         allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 0, 11, "hello world");
+        allocates("strlen of a Latin-1 string", new CellApiTruffle.strlen_Cell(), 0, 13, "h\u00e9llo w\u00f6rld");
+        allocates("strlen of a wide string", new CellApiTruffle.strlen_Cell(), 0, 21, "\u3053\u3093\u306b\u3061\u306f\u4e16\u754c");
+        allocates("checksum of a wide string", new CellApiTruffle.checksum_Cell(), 0, 3 * 0xe2 + 3 * 0x82 + 3 * 0xac, "\u20ac\u20ac\u20ac");
         // A truffle_buffer parameter pins a large heap array (the pin is the only allocation) and
         // copies a small one without a terminator.
         allocates("sumBytes of a pinned heap array", new CellApiTruffle.sumBytes_Cell(), 32, large.length, pinned, (long) large.length, NativePointer.NULL);
@@ -229,6 +237,8 @@ public final class CellsMain {
         hostExecute(bean, "host execute: checksum of a copied heap array", 0, new CellApiTruffle.checksum_Cell(), new HeapBytes(small, false));
         hostExecute(bean, "host execute: checksum of a pinned heap array", 32, new CellApiTruffle.checksum_Cell(), pinned);
         hostExecute(bean, "host execute: strlen of a string", 0, new CellApiTruffle.strlen_Cell(), "hello world");
+        hostExecute(bean, "host execute: strlen of a Latin-1 string", 0, new CellApiTruffle.strlen_Cell(), "h\u00e9llo w\u00f6rld");
+        hostExecute(bean, "host execute: strlen of a wide string", 0, new CellApiTruffle.strlen_Cell(), "\u3053\u3093\u306b\u3061\u306f\u4e16\u754c");
         java.lang.foreign.MemorySegment cText = java.lang.foreign.Arena.global().allocateFrom("hello world");
         hostExecute(bean, "host execute: strlen of native bytes", 0, new CellApiTruffle.strlen_Cell(), NativeBytes.of(cText, false));
         hostExecute(bean, "host execute: strlen of a raw pointer", 0, new CellApiTruffle.strlen_Cell(), NativePointer.of(cText.address()));
@@ -244,6 +254,13 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment viewMemory = java.lang.foreign.Arena.global().allocate(16);
         created("viewInit", new Probe(new CellApiTruffle.viewInit_Cell()).function(), "View",
             new HeapBytes(new byte[] {4, 5}, false), NativeBytes.of(viewMemory, true));
+        // Several byte parameters on one cell share the host inliner's budget for that cell: each
+        // coercion must still be inlined, or its borrow is allocated on every path.
+        hostExecute(bean, "host execute: pair of strings", 0, new CellApiTruffle.pair_Cell(), "left", "right");
+        hostExecute(bean, "host execute: transfer between native buffers", 0, new CellApiTruffle.transfer_Cell(),
+            NativeBytes.of(lent, false), NativeBytes.of(written, true), NativePointer.of(copied.address()));
+        hostExecute(bean, "host execute: transfer between copied heap arrays", 0, new CellApiTruffle.transfer_Cell(),
+            new HeapBytes(small, false), new HeapBytes(new byte[64], true), NativePointer.NULL);
         Object counter = CellApiTruffle.counterCreate().call(0L);
         compiled("counterNext", new Probe(new CellApiTruffle.counterNext_Cell()).function(), i -> new Object[] {counter}, i -> null);
         ((NativeResource) counter).close();
