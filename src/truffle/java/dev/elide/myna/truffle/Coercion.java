@@ -40,6 +40,16 @@ public abstract class Coercion extends Node {
     return NativeCellException.type(function, parameter, expected, actual, this);
   }
 
+  /**
+   * An owner passed where no resource is declared. Its address is a live resource's internal state,
+   * which only a parameter typed as a pointer to that resource may receive.
+   */
+  protected final NativeCellException unexpectedOwner(NativeResource owner) {
+    CompilerDirectives.transferToInterpreter();
+    return NativeCellException.of(
+        this, function, ": parameter ", parameter, " takes no resource, got a ", owner.type());
+  }
+
   public final String parameterName() {
     return parameter;
   }
