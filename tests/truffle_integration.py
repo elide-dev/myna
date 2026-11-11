@@ -116,6 +116,7 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
             "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release", "GuestText.push",
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
+            "BytesCoercion.emptyAddress",
             "NativeCellRootNode.execute")]
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")

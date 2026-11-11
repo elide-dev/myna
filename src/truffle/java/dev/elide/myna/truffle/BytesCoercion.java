@@ -27,6 +27,9 @@ public final class BytesCoercion extends Coercion {
   private static final int OTHER = 16;
   private static final int GUEST_TEXT = 32;
 
+  /** Not a kind: whether this call site has lent an empty native buffer. */
+  private static final int EMPTY = 128;
+
   private final boolean nullable;
   private final boolean writable;
   private final boolean strings;
@@ -92,9 +95,7 @@ public final class BytesCoercion extends Coercion {
       if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
         long size = bytes.size();
-        // The segment travels with its memory, so an FFM cell can hold its scope for the call.
-        // An empty buffer lends the dummy address, which no scope governs.
-        borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
+        borrow.lend(size == 0 ? emptyAddress() : bytes.address(), size);
         return borrow;
       }
       if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
@@ -138,6 +139,20 @@ public final class BytesCoercion extends Coercion {
   private int learn(Object value) {
     CompilerDirectives.transferToInterpreterAndInvalidate();
     return this.seen |= kind(value);
+  }
+
+  /**
+   * The dummy address an empty buffer lends. Fetching it is a call, and a call on any path makes
+   * compiled code keep every value live across it in memory, a loop's own result included, so a
+   * call site that has not lent an empty buffer deoptimizes on its first one instead.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private long emptyAddress() {
+    if ((seen & EMPTY) == 0) {
+      CompilerDirectives.transferToInterpreterAndInvalidate();
+      seen |= EMPTY;
+    }
+    return Borrow.emptyAddress();
   }
 
   private int kind(Object value) {
