@@ -280,6 +280,21 @@ buffers, one boundary method passes a slice of each such segment (which shares i
 address; a slice is the same kind of object as an address's segment, so escape analysis merges
 the two.
 
+Borrows held across the call cost the same way without being allocated. Compiled code can
+deoptimize when the call returns, and what it would rebuild then, each borrow's address and length
+included, stays in the frame for the whole call; with two borrows there, the register allocator
+keeps the calling loop's own result in memory too. A call whose every lent buffer is a segment
+passed in place has nothing to release, so a cell that lends more than one buffer makes that call
+before borrowing anything, once its call site has made it: each coercion hands back the guest's
+buffer itself (after the one check its borrow would make, that a buffer the native side writes is
+writable), and the cell passes its segment and takes any derived length from it. Nothing is live
+across the call but the caller's own values, as in a hand-written node. Any other value leaves
+through the borrows as before, and a call site compiles that path only once it has lent something
+other than segments in place; call sites that never lend every buffer that way compile exactly
+what they did. A cell that lends one buffer keeps its borrow: its loop's result stays in a
+register either way, and the call measured no faster without it (see
+[Measurement](#measurement)).
+
 The same holds for a cell's `execute` called from host code in a Native Image, which is compiled
 ahead of time without partial evaluation: `tests/truffle_integration.py` measures 0 bytes per call
 there for native memory, raw pointers, scratch copies, Java strings (ASCII or not) and absent

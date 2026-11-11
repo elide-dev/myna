@@ -167,6 +167,19 @@ public final class BytesCoercion extends Coercion {
     return scoped;
   }
 
+  /**
+   * The guest's buffer when a call can pass its own segment and so needs no borrow of it: {@code
+   * value} when {@link #segment} has a segment for it, after the one check {@link #execute} makes
+   * of native memory lent in place, and {@code null} for everything else. An FFM cell asks before
+   * it borrows; a call whose every buffer comes back from here holds nothing across the call.
+   */
+  public NativeBytes scoped(Object value) {
+    if (segment(value) == null) return null;
+    NativeBytes bytes = (NativeBytes) value;
+    if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+    return bytes;
+  }
+
   /** Records that this call site lends segments with a scope to check; see {@link #learn}. */
   @HostCompilerDirectives.InliningCutoff
   private void learnScoped() {

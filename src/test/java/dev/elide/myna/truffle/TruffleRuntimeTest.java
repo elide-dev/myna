@@ -1744,12 +1744,14 @@ class TruffleRuntimeTest {
         for (BytesCoercion site : new BytesCoercion[] {buffer, cString}) {
           // Before the site has lent native memory it has nothing to give back.
           assertNull(site.segment(bytes));
+          assertNull(site.scoped(bytes));
           // Global memory, and a view made from an address (whose caller vouches for it), have no
           // scope to check.
           site.execute(global).release();
           assertNull(site.segment(global));
           site.execute(raw).release();
           assertNull(site.segment(raw));
+          assertNull(site.scoped(raw));
           // The first segment with a scope flips the site; global memory still has none.
           Borrow lent = site.execute(owned);
           assertSame(owned.segment(), site.segment(owned));
@@ -1761,6 +1763,10 @@ class TruffleRuntimeTest {
           lent.release();
           site.execute(global).release();
           assertNull(site.segment(global));
+          // A buffer with a segment to pass is the call's argument itself, with no borrow.
+          assertSame(owned, site.scoped(owned));
+          assertSame(bytes, site.scoped(bytes));
+          assertNull(site.scoped(global));
         }
         // The empty buffer lends the dummy address, which no scope governs.
         NativeBytes none = NativeBytes.of(confined.allocate(0), false);
@@ -1778,6 +1784,19 @@ class TruffleRuntimeTest {
         assertNull(buffer.segment(heap));
         buffer.execute("text").release();
         assertNull(buffer.segment("text"));
+        for (Object other : new Object[] {none, pointer, NativePointer.NULL, heap, "text"})
+          assertNull(buffer.scoped(other));
+        assertNull(cString.scoped(null));
+        // A read-only buffer is refused where the native side writes, as its borrow is.
+        var written = new BytesCoercion("f", "out", false, true, true);
+        NativeBytes writable = NativeBytes.of(confined.allocate(8), true);
+        written.execute(writable).release();
+        assertSame(writable, written.scoped(writable));
+        NativeCellException borrowed =
+            assertThrows(NativeCellException.class, () -> written.execute(bytes));
+        NativeCellException unborrowed =
+            assertThrows(NativeCellException.class, () -> written.scoped(bytes));
+        assertEquals(borrowed.getMessage(), unborrowed.getMessage());
       }
     });
   }

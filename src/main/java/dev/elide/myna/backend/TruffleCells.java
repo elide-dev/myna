@@ -173,6 +173,11 @@ public final class TruffleCells implements Backend {
     // holds that segment's scope.
     var lent = new HashSet<String>();
     var prelude = new StringBuilder();
+    // The same without a borrow, for an FFM cell's call when the guest lent every buffer as a
+    // segment to pass in place: each derived length by parameter position, from the guest's
+    // buffer itself, and the prelude that narrows them.
+    var unborrowedLengths = new HashMap<Integer, String>();
+    var unborrowedPrelude = new StringBuilder();
     if (cell.destroys() == null) {
       int index = 0;
       for (Parameter p : f.parameters()) {
@@ -343,20 +348,17 @@ public final class TruffleCells implements Backend {
         BufferBorrow borrow = cell.borrows().length(p);
         if (borrow == null) continue;
         String length = "borrow_" + borrow.parameter() + ".length()";
+        String unborrowed = "lent_" + borrow.parameter() + ".size()";
         if (cell.borrows().narrow(borrow)) {
           // Range-checked before the call, outside any FFM failure handler.
           String local = "length_" + borrow.parameter();
-          prelude
-              .append("            int ")
-              .append(local)
-              .append(" = Carriers.length32(")
-              .append(length)
-              .append(", ")
-              .append(p.type() == Scalar.U32)
-              .append(", this);\n");
-          length = local;
+          boolean u32 = p.type() == Scalar.U32;
+          prelude.append(narrowed(local, length, u32));
+          unborrowedPrelude.append(narrowed(local, unborrowed, u32));
+          length = unborrowed = local;
         }
         arguments.set(n, length);
+        unborrowedLengths.put(n, unborrowed);
       }
     }
     // Every cell but a destroy has a static invoke: the binding call with native carriers and raw
@@ -372,6 +374,9 @@ public final class TruffleCells implements Backend {
             && (ffm
                 || (!Seam.nativeLeaf(f) && config.transitions() == TruffleTransitions.BOUNDARY));
     String call = null;
+    // An FFM cell's call without a borrow, and the buffers it takes in place; see inPlace.
+    String unborrowedCall = null;
+    var inPlace = new ArrayList<String>();
     var invokeMethod = new StringBuilder();
     if (cell.destroys() == null) {
       // Pointers cross as addresses; invoke rebuilds the words or segments.
@@ -388,6 +393,7 @@ public final class TruffleCells implements Backend {
       var scopedInner = new ArrayList<String>();
       var segments = new ArrayList<String>();
       var names = new ArrayList<String>();
+      var unborrowed = new ArrayList<String>();
       for (int n = 0; n < arguments.size(); n++) {
         String argument = arguments.get(n);
         String name = f.parameters().get(n).name();
@@ -408,8 +414,11 @@ public final class TruffleCells implements Backend {
           // guest's segment itself: escape analysis then merges the two arms instead of
           // allocating the address's segment whenever the guest lent anything else.
           scopedInner.add(segment + " != null ? " + segment + ".asSlice(0) : " + inner.getLast());
+          unborrowed.add("lent_" + name + ".segment()");
+          inPlace.add(name);
         } else {
           scopedInner.add(inner.getLast());
+          unborrowed.add(unborrowedLengths.getOrDefault(n, forwarded.getLast()));
         }
         scopedParameters.add(parameters.getLast());
         scopedForwarded.add(forwarded.getLast());
@@ -485,6 +494,11 @@ public final class TruffleCells implements Backend {
               charUnsigned,
               invokeMethod);
         call = "scoped(" + String.join(", ", scopedForwarded) + ")";
+        // With one borrow held the compiled loop still keeps its result in a register, and at the
+        // sizes measured the call is no faster for dropping it; from two borrows on it is.
+        if (segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
+          unborrowedCall =
+              "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
       }
     }
     var result = new StringBuilder(prelude);
@@ -644,6 +658,12 @@ public final class TruffleCells implements Backend {
     // Scalars coerce first; each borrow then opens its own try, so a later failure releases every
     // earlier borrow, and borrows end when the call returns, in reverse acquisition order.
     var callBlock = new StringBuilder();
+    if (unborrowedCall != null) {
+      imports.add(RUNTIME + "NativeBytes");
+      String body =
+          unborrowedPrelude + result.substring(prelude.length()).replace(call, unborrowedCall);
+      callBlock.append(inPlace(inPlace, guest, body));
+    }
     String indent = "            ";
     for (String borrow : borrows) {
       callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
@@ -825,6 +845,51 @@ public final class TruffleCells implements Backend {
     }
   }
 
+  /**
+   * The call an FFM cell that lends several buffers makes before it borrows anything, once it has
+   * made the call whose every lent buffer is a segment passed in place: the same call, and what
+   * follows it, from the guest's buffers themselves. A borrow held across the call is state that
+   * compiled code keeps for the call's deoptimization: its address and length stay in the frame for
+   * the whole call, and with several of them the loop that makes the call keeps its own result in
+   * memory too. This call holds nothing: the guest's values are read again after it. Anything else
+   * the guest lends leaves through {@code scoped}; a call site that has only ever lent segments in
+   * place does not compile that path.
+   */
+  private static String inPlace(List<String> lent, Map<String, String> guest, String body) {
+    int every = 1 << ((1 << lent.size()) - 1);
+    int borrowed = every << 1;
+    var out = new StringBuilder("            if ((scoped$called & " + every + ") != 0) {\n");
+    String indent = "                ";
+    for (String name : lent) {
+      out.append(indent)
+          .append("NativeBytes lent_")
+          .append(name)
+          .append(" = coerce_")
+          .append(name)
+          .append(".scoped(")
+          .append(guest.get(name))
+          .append(");\n")
+          .append(indent)
+          .append("if (lent_")
+          .append(name)
+          .append(" != null) {\n");
+      indent += "    ";
+    }
+    for (String line : body.split("\n"))
+      out.append(indent, 12, indent.length()).append(line).append('\n');
+    for (int n = 0; n < lent.size(); n++) {
+      indent = indent.substring(4);
+      out.append(indent).append("}\n");
+    }
+    return out.append(indent)
+        .append("if ((scoped$called & ")
+        .append(borrowed)
+        .append(") == 0) scoped$learn(")
+        .append(borrowed)
+        .append(");\n            }\n")
+        .toString();
+  }
+
   /** The switch of {@code scoped} from the lent buffer at {@code index} on. */
   private static void branch(
       List<String> order,
@@ -913,6 +978,17 @@ public final class TruffleCells implements Backend {
                     + ";\n                return;\n            }\n")
         .append(guarded(statement(bindings, f, scopedInner, address, true, charUnsigned)))
         .append("        }\n");
+  }
+
+  /** A borrowed length narrowed to the binding's 32-bit carrier, range-checked. */
+  private static String narrowed(String local, String length, boolean unsigned) {
+    return "            int "
+        + local
+        + " = Carriers.length32("
+        + length
+        + ", "
+        + unsigned
+        + ", this);\n";
   }
 
   /** The binding call of {@code f} over {@code arguments}, as the statement of a static entry. */

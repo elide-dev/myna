@@ -103,6 +103,19 @@ public final class CellChecks {
       };
       for (Object[] pattern : patterns)
         check(INTEROP.execute(transfer, pattern[0], pattern[1], NativePointer.NULL).equals(12L), "transfer pattern");
+      // Having lent two segments in place, the site makes that call before it borrows anything:
+      // the same result, the same refusal of a read-only output, and every other pattern still
+      // leaves through its borrows.
+      check(INTEROP.execute(transfer, patterns[3][0], patterns[3][1], NativePointer.NULL).equals(12L), "transfer without a borrow");
+      try {
+        INTEROP.execute(transfer, patterns[3][0], NativeBytes.of(out, false), NativePointer.NULL);
+        throw new AssertionError("a read-only output segment was accepted without a borrow");
+      } catch (NativeCellException expected) {
+        // refused by the coercion, as its borrow would be
+      }
+      for (Object[] pattern : patterns)
+        check(INTEROP.execute(transfer, pattern[0], pattern[1], NativePointer.NULL).equals(12L), "transfer pattern after a call without a borrow");
+      check(INTEROP.execute(transfer, patterns[3][0], new HeapBytes(new byte[4], true), NativePointer.NULL).equals(12L), "transfer into a heap array after a call without a borrow");
     }
     Arena closed = Arena.ofConfined();
     NativeBytes stale = NativeBytes.of(closed.allocate(4), true);

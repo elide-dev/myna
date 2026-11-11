@@ -389,6 +389,9 @@ class TruffleCellsTest {
             "return scoped(coerce_bytes.segment(arguments[0]), borrow_bytes.address(),"
                 + " borrow_bytes.length());"),
         truffle);
+    // One borrow is held across the call: only a cell that lends several buffers calls before it
+    // borrows.
+    assertFalse(truffle.contains("lent_"), truffle);
     // Every FFM call is behind a boundary, leaf or not, whatever the transition mode.
     assertTrue(
         truffle.contains(
@@ -855,9 +858,38 @@ class TruffleCellsTest {
                 + " borrow_output.address(), address_written, coerce_name.segment(arguments[4]),"
                 + " borrow_name.address(), value_flags);\n"),
         ffm);
+    // A cell that lends several buffers, each a segment to pass in place, calls before any borrow:
+    // each
+    // buffer is asked for in turn, as the borrows are acquired, and a narrowed length is checked
+    // from the guest's buffer. The bit after the patterns records that the call site has lent
+    // anything else, and only then is the borrowing path compiled beside this one.
+    assertTrue(
+        ffm.contains(
+            "            if ((scoped$called & 128) != 0) {\n"
+                + "                NativeBytes lent_input = coerce_input.scoped(arguments[1]);\n"
+                + "                if (lent_input != null) {\n"
+                + "                    NativeBytes lent_output ="
+                + " coerce_output.scoped(arguments[2]);\n"
+                + "                    if (lent_output != null) {\n"
+                + "                        NativeBytes lent_name ="
+                + " coerce_name.scoped(arguments[4]);\n"
+                + "                        if (lent_name != null) {\n"
+                + "                            int length_output ="
+                + " Carriers.length32(lent_output.size(), true, this);\n"
+                + "                            return scoped$111(address_session,"
+                + " lent_input.segment(), lent_input.size(), length_output, lent_output.segment(),"
+                + " address_written, lent_name.segment(), value_flags);\n"
+                + "                        }\n"
+                + "                    }\n"
+                + "                }\n"
+                + "                if ((scoped$called & 256) == 0) scoped$learn(256);\n"
+                + "            }\n"
+                + "            Borrow borrow_input = coerce_input.execute(arguments[1]);\n"),
+        ffm);
     // Native Image cells pass addresses only: nothing about them changes.
     assertFalse(truffle.contains("scoped("), truffle);
     assertFalse(truffle.contains("segment"), truffle);
+    assertFalse(truffle.contains("lent_"), truffle);
     // A transitioning import in boundary mode keeps its call behind the boundary too.
     String boundary =
         generate(
@@ -1402,6 +1434,7 @@ class TruffleCellsTest {
                     + "end\n")
             .get("MynaTruffle.java");
     assertFalse(four.contains("scoped$"), four);
+    assertFalse(four.contains("lent_"), four);
     assertTrue(
         four.contains(
             "        @CompilerDirectives.TruffleBoundary\n"
