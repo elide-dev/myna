@@ -429,7 +429,7 @@ itself, which escapes into the owner, and a one-element array holding it. Measur
 code in `tests/truffle_integration.py` on `aarch64-apple-darwin`, per create and close: 256 bytes
 for a create with a call borrow, 336 bytes with a held borrow over native memory, and 424 bytes
 with a held copy of a heap array (the copy's holder and segment view; the copy itself is native
-memory of the buffer's length).
+memory of the buffer's length). See [Measurement](#creates) for the time.
 
 Generated array convenience methods pin with a plain `try`/`finally`, not try-with-resources:
 javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation
@@ -594,6 +594,30 @@ the borrow held), so those cells keep their borrow. What a cell pays over the di
 scoped segment is the reads of the guest's buffer and its segment after each call, where the
 direct call's segment is a constant.
 
+### Creates
+
+`benchmarks/cells` runs `create` cases: a create and its release per iteration, initializing a
+16-byte struct in place from a 256-byte pattern buffer, all leaves. `adopt` keeps its input until the
+release, which sums it (a held borrow); `scan` sums it during the call and keeps the sum (a call
+borrow). `direct-*` calls the bindings with raw addresses and the caller's own struct; `glue-*` runs
+the create cell with native memory lent in place or a heap array (copied: below the pin threshold
+for `scan`, always for a held borrow) and closes the owner it returns. Measured on a shared Apple M5
+Max (`aarch64-apple-darwin`, five processes per case; advisory, not a checked-in baseline), in ns per
+iteration and Java heap bytes per iteration:
+
+| Case | Direct call | Cell, native memory | Cell, heap array |
+|---|---:|---:|---:|
+| `scan` (call borrow) | 12.4, 0 B | 325, 258 B | 291, 259 B |
+| `adopt` (held borrow) | 12.4, 0 B | 427, 321 B | 412, 377 B |
+
+A create cell costs far more than its direct call whatever its borrows. Sampling either loop shows
+the time in the runtime's struct, not in the borrow: `NativeStruct` takes its memory from an
+automatic arena, and the cleaner registration, phantom-reference processing and collector work
+behind that arena dominate. The held borrow adds about 100 ns, most of it in that same cleaner and
+collector work under the extra allocation, and little in its own code (`Borrow.end` and the
+destroy). Replacing the automatic arena with memory the owner frees explicitly is the lever for
+creates, tracked below.
+
 ### Follow-ups
 
 Findings that are tracked, not blocking:
@@ -613,6 +637,9 @@ Findings that are tracked, not blocking:
   and length-less buffers, for which `truffle_buffer` is the cells-side answer.
 - Not expressible yet: length-less buffers. Borrows that outlive the call are expressible for a
   create's read-only input (`lifetime=resource:NAME`); writable held buffers are not.
+- A create cell's runtime struct comes from an automatic arena, which costs most of a create (see
+  [Creates](#creates)); memory the owner frees explicitly, after the call for a handle field and on
+  destroy for a resource initialized in place, would remove the cleaner from the path.
 - Heap arrays below the pin threshold are copied where a hand-written call would pin in place; at
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.

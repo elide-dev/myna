@@ -58,3 +58,35 @@ import slabBytes symbol=myna_bench_slab_bytes return=i64 error=no_failure nounwi
   param d type=i64
   param salt type=i64
 end
+# Creates that report a status and initialize the caller's struct in place: adopt keeps its input
+# until release (a borrow held by the resource), scan reads it during the call only.
+struct Adopted size=16 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+end
+resource Adopted representation=native threading=confined create=adopt destroy=adoptedRelease handle=adopted success=0
+borrow adopt data length=length lifetime=resource:Adopted
+import adopt symbol=myna_bench_adopt return=i32 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+  param adopted type=ptr<Adopted> nullable=false ownership=borrowed access=write
+end
+import adoptedRelease symbol=myna_bench_adopted_release return=void error=no_failure nounwind=true@explicit_contract
+  param adopted type=ptr<Adopted> nullable=false ownership=transferred_to_callee access=read_write
+end
+struct Scanned size=16 align=8
+  field data type=ptr<u8> offset=0
+  field length type=u64 offset=8
+end
+resource Scanned representation=native threading=confined create=scan destroy=scannedRelease handle=scanned success=0
+borrow scan data length=length lifetime=call
+import scan symbol=myna_bench_scan return=i32 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param scanned type=ptr<Scanned> nullable=false ownership=borrowed access=write
+end
+import scannedRelease symbol=myna_bench_scanned_release return=void error=no_failure nounwind=true@explicit_contract
+  param scanned type=ptr<Scanned> nullable=false ownership=transferred_to_callee access=read_write
+end
+import createdTotal symbol=myna_bench_created_total return=i64 error=no_failure
+end

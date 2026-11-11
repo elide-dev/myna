@@ -64,6 +64,18 @@ and visible to partial evaluation (`inline-sum-pin`), against the cell; `*-sum-s
 across a transitioning import, and `glue-sum-mixed` alternates native memory and a pinned heap
 array at one call site.
 
+Create cases run a create and its release per iteration over a 256-byte pattern buffer, each
+initializing a 16-byte struct in place (all leaves): `adopt` keeps its input until the release,
+which sums it (`borrow … lifetime=resource:Adopted`), and `scan` sums it during the call and keeps
+the sum (`lifetime=call`). Each release adds its sum to a total the body reads once per sample.
+
+- `direct-create-adopt-256`, `direct-create-scan-256`: the bindings with raw addresses and the
+  caller's own struct.
+- `glue-create-*-native-256`: the create cell lending `NativeBytes` in place, then `close()` on the
+  owner it returns.
+- `glue-create-*-copy-256`: the same with `HeapBytes`, which `scan` copies onto the scratch stack and
+  `adopt` copies into native memory its resource holds until the release.
+
 `--cases REGEX` runs a subset; a partial run is marked as a smoke run.
 
 String cases call `myna_bench_text(text, salt)`: `direct-text` passes a native C string,

@@ -17,7 +17,7 @@ public final class CellBench {
   static volatile Object canary;
 
   static long expected(String name, int count, long seed) {
-    if (name.contains("-sum-")) {
+    if (name.contains("-sum-") || name.contains("-create-")) {
       int size = Integer.parseInt(name.substring(name.lastIndexOf('-') + 1));
       long sum = 0;
       for (byte b : Bodies.pattern(size)) sum += b & 0xff;
