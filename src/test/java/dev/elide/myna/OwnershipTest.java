@@ -805,6 +805,96 @@ class OwnershipTest {
     assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
   }
 
+  /** A {@code success} value the declared return scalar's guest carrier can never represent. */
+  static String handlesReturn(String returnType, String success) {
+    return HANDLES
+        .replace(
+            "import layoutCompile return=i32 error=no_failure",
+            "import layoutCompile return=" + returnType + " error=no_failure")
+        .replace("handle=result.data success=0,2", "handle=result.data success=" + success);
+  }
+
+  static Stream<Arguments> successRangeChecks() {
+    String range =
+        "a resource create's success status is outside its return scalar's carrier range: Layout"
+            + " handle=result.data";
+    return Stream.of(
+        // In range for the declared carrier: accepted on aarch64-apple-darwin (signed char).
+        Arguments.of("i8", "-1", null),
+        Arguments.of("i8", "127", null),
+        Arguments.of("i8", "-128", null),
+        Arguments.of("i8", "0,2,127", null),
+        Arguments.of("u8", "0", null),
+        Arguments.of("u8", "255", null),
+        Arguments.of("u16", "65535", null),
+        Arguments.of("u32", "0", null),
+        Arguments.of("u32", "4294967295", null),
+        Arguments.of("i32", "0,2", null),
+        Arguments.of("i64", "-1", null),
+        Arguments.of("i64", "9223372036854775807", null),
+        Arguments.of("u64", "0", null),
+        Arguments.of("u64", "9223372036854775807", null),
+        Arguments.of("char", "0", null),
+        Arguments.of("char", "127", null),
+        Arguments.of("char", "-128", null),
+        // Out of range: the carrier can never take the value, so the guard always fails.
+        Arguments.of("i8", "128", range),
+        Arguments.of("i8", "-129", range),
+        Arguments.of("i8", "300", range),
+        Arguments.of("u8", "-1", range),
+        Arguments.of("u8", "256", range),
+        Arguments.of("u16", "65536", range),
+        Arguments.of("u16", "-1", range),
+        Arguments.of("u32", "-1", range),
+        Arguments.of("u32", "4294967296", range),
+        Arguments.of("i16", "32768", range),
+        Arguments.of("i16", "-32769", range),
+        Arguments.of("char", "128", range),
+        Arguments.of("char", "-129", range),
+        Arguments.of("char", "256", range));
+  }
+
+  @ParameterizedTest
+  @MethodSource("successRangeChecks")
+  void checksSuccessStatusesAgainstTheReturnScalarCarrier(
+      String returnType, String success, String message) {
+    String source = handlesReturn(returnType, success);
+    if (message == null) {
+      assertDoesNotThrow(
+          () -> Generator.generate(Dsl.parse(source), true), returnType + " success=" + success);
+    } else {
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(Dsl.parse(source), true),
+              returnType + " success=" + success);
+      assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
+    }
+  }
+
+  /** The range check follows the target's {@code char} signedness, not a fixed rule. */
+  @ParameterizedTest
+  @CsvSource({"200, true", "-1, false", "255, true", "256, false", "-128, false"})
+  void successRangeCheckFollowsTargetCharSignedness(String success, boolean accepted) {
+    String source =
+        handlesReturn("char", success)
+            .replace("target=aarch64-apple-darwin", "target=aarch64-unknown-linux-gnu");
+    if (accepted) {
+      assertDoesNotThrow(
+          () -> Generator.generate(Dsl.parse(source), true), "char success=" + success);
+    } else {
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(Dsl.parse(source), true),
+              "char success=" + success);
+      assertEquals(
+          "a resource create's success status is outside its return scalar's carrier range: Layout"
+              + " handle=result.data",
+          error.getMessage().replaceFirst("^line \\d+: ", ""));
+    }
+  }
+
   /** A resource whose create returns it has no handle parameter or field. */
   @Test
   void returnedResourcesHaveNoHandle() {
