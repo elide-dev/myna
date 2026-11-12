@@ -834,6 +834,8 @@ class OwnershipTest {
         Arguments.of("i64", "9223372036854775807", null),
         Arguments.of("u64", "0", null),
         Arguments.of("u64", "9223372036854775807", null),
+        Arguments.of("usize", "0", null),
+        Arguments.of("usize", "9223372036854775807", null),
         Arguments.of("char", "0", null),
         Arguments.of("char", "127", null),
         Arguments.of("char", "-128", null),
@@ -849,6 +851,7 @@ class OwnershipTest {
         Arguments.of("u32", "4294967296", range),
         Arguments.of("i16", "32768", range),
         Arguments.of("i16", "-32769", range),
+        Arguments.of("usize", "-1", range),
         Arguments.of("char", "128", range),
         Arguments.of("char", "-129", range),
         Arguments.of("char", "256", range));
