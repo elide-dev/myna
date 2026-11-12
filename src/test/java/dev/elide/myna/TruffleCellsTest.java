@@ -1220,6 +1220,99 @@ class TruffleCellsTest {
     assertTrue(ffm.contains("ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"), ffm);
   }
 
+  /**
+   * A create that holds one borrow while lending two or more call borrows in place must not emit
+   * the in-place fast path: the held borrow's {@code borrow_<held>}/ {@code lent_<held>} locals are
+   * not in scope at the in-place point, and {@code borrow_<held>.keep()} is folded into the
+   * create's owner construction. The fast path is gated on call-borrow segments, so the suite's
+   * sole held-borrow fixture (1 held + 1 call borrow) skipped it; a create the validator accepts
+   * with two call borrows beside the held one used to generate a class that {@code javac} rejected.
+   */
+  @Test
+  void heldBorrowBesideTwoCallBorrowsSkipsTheInPlaceFastPath() {
+    // A create with one held borrow (data, kept by Adopted) and two call borrows (key, key2):
+    // OwnershipValidator accepts this shape, and the in-place fast path would otherwise be
+    // emitted (two lent segments) referencing locals that do not exist there.
+    String source =
+        MODULE.replace(
+                "module cells target=aarch64-apple-darwin truffle_cells=true",
+                "module cells target=aarch64-apple-darwin truffle_cells=true"
+                    + " truffle_backend=ffm")
+            + "struct Adopted size=24 align=8\n"
+            + "  field data type=ptr<u8> offset=0\n"
+            + "  field length type=u64 offset=8\n"
+            + "  field sum type=i64 offset=16\n"
+            + "end\n"
+            + "resource Adopted representation=native threading=confined create=adopt"
+            + " destroy=adoptedRelease handle=adopted success=0\n"
+            + "borrow adopt data length=length lifetime=resource:Adopted\n"
+            + "borrow adopt key length=keyLength lifetime=call\n"
+            + "borrow adopt key2 length=keyLength2 lifetime=call\n"
+            + "import adopt return=i32 error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " readonly=true@explicit_contract\n"
+            + "  param length type=u64\n"
+            + "  param key type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+            + "  param keyLength type=u32\n"
+            + "  param key2 type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+            + "  param keyLength2 type=u32\n"
+            + "  param adopted type=ptr<Adopted> nullable=false ownership=borrowed"
+            + " access=write\n"
+            + "end\n"
+            + "import adoptedRelease return=void error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param adopted type=ptr<Adopted> nullable=false ownership=transferred_to_callee"
+            + " access=read_write\n"
+            + "end\n";
+    String truffle = generate(source).get("MynaTruffle.java");
+    // The held borrow is acquired through its HeldBytesCoercion and kept by the resource.
+    assertTrue(truffle.contains("new HeldBytesCoercion(\"adopt\", \"data\", true)"), truffle);
+    assertTrue(truffle.contains("borrow_data.keep()"), truffle);
+    // The two call borrows still lend their segments in the slow path.
+    assertTrue(truffle.contains("coerce_key.segment(arguments["), truffle);
+    assertTrue(truffle.contains("coerce_key2.segment(arguments["), truffle);
+    // The held buffer is never lent in place: no lent_data local is ever declared.
+    assertFalse(truffle.contains("lent_data"), truffle);
+    // The in-place fast path (which would reference borrow_data/lent_data before they are
+    // declared) is not emitted when a create holds a borrow: the cell falls back to the
+    // regular borrowed scoped call, acquired inside the borrow wrappers. Its markers are the
+    // NativeBytes lent_ declarations and the coerce_<name>.scoped(arguments[...]) calls, which
+    // only the in-place block emits (the slow path uses coerce_<name>.segment(...) instead).
+    assertFalse(truffle.contains("NativeBytes lent_"), truffle);
+    assertFalse(truffle.contains("coerce_key.scoped(arguments["), truffle);
+    assertFalse(truffle.contains("coerce_key2.scoped(arguments["), truffle);
+    // The slow path is intact: the held borrow is acquired and released in a wrapper, and
+    // the scoped call passes each lent segment beside its address.
+    assertTrue(
+        truffle.contains("Borrow borrow_data = coerce_data.execute(arguments[0]);"), truffle);
+    assertTrue(truffle.contains("borrow_data.release();"), truffle);
+    assertTrue(truffle.contains("int status = scoped("), truffle);
+    assertTrue(
+        truffle.contains("borrow_data.address()"),
+        "the held buffer's address reaches the scoped call from inside its wrapper");
+    // The same create without the held borrow (three call borrows, none held) still emits the
+    // in-place fast path, confirming the skip is specific to held borrows.
+    String noHeld =
+        generate(
+                source
+                    .replace(
+                        "borrow adopt data length=length lifetime=resource:Adopted\n",
+                        "borrow adopt data length=length lifetime=call\n")
+                    .replace(
+                        "param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+                            + " readonly=true@explicit_contract\n",
+                        "param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+                            + " nocapture=true@explicit_contract"
+                            + " readonly=true@explicit_contract\n"))
+            .get("MynaTruffle.java");
+    assertFalse(noHeld.contains("HeldBytesCoercion"), noHeld);
+    assertTrue(noHeld.contains("NativeBytes lent_data"), noHeld);
+    assertTrue(noHeld.contains("coerce_data.scoped(arguments["), noHeld);
+  }
+
   @Test
   void createCellsCoercePointerArgumentsAndReturnOwners() {
     String source =
