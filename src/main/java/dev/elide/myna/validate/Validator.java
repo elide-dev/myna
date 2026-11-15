@@ -47,7 +47,7 @@ public final class Validator {
    * that class imports or uses unqualified. (Its own name, and the {@code <function>_Leaf} and
    * {@code <function>_Binding} classes it declares, are checked where they are known.)
    */
-  public static final Set<String> NATIVE_IMAGE_NAMES =
+  static final Set<String> NATIVE_IMAGE_NAMES =
       Set.of(
           ("AlwaysInline Uninterruptible CGlobalData CGlobalDataFactory CFunction CFunctionPointer"
                + " InvokeCFunctionPointer CEntryPoint CEntryPointLiteral CContext CLibrary CConst"

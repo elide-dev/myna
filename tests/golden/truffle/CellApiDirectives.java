@@ -162,6 +162,9 @@ public final class CellApiDirectives
         if (bindings == null || !isInConfiguration()) return;
         String header = org.graalvm.nativeimage.c.constant.CConstant.ValueAccess.get(
                 bindings, "seamHeaderAbi", String.class);
+        // Read from the loaded class, not a constant javac inlined here, so separately compiled
+        // generations are caught too. This initializes it in the builder, where SVM always
+        // initializes a @CContext class anyway; it has no static initializer of its own.
         String generated;
         try {
             generated = (String) bindings.getField("ABI_FINGERPRINT").get(null);
