@@ -81,7 +81,7 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
 
   static long align(Parameter p) {
     Fact fact = p.facts().get("align");
-    return fact != null && fact.enabled() && fact.approved() ? Long.parseLong(fact.value()) : 0;
+    return fact != null && fact.approved() ? Long.parseLong(fact.value()) : 0;
   }
 
   /**

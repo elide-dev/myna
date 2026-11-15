@@ -1780,4 +1780,18 @@ class OwnershipTest {
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), false), "relaxed: " + name);
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), true), "strict: " + name);
   }
+
+  @ParameterizedTest
+  @CsvSource({"align,false", "align,abc", "align,0", "dereferenceable,x", "dereferenceable,false"})
+  void rejectsNonNumericAlignmentFacts(String fact, String value) throws Exception {
+    String anchor = "readonly=true@explicit_contract";
+    String original = source();
+    assertTrue(original.contains(anchor), "mutation must affect fixture");
+    String changed =
+        original.replace(anchor, anchor + " " + fact + "=" + value + "@explicit_contract");
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), false));
+    assertEquals(fact + " requires a positive integer: " + value, e.getMessage());
+  }
 }

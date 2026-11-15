@@ -449,12 +449,12 @@ public final class Validator {
             "ownership transfer to caller must be modeled on a return; unsupported in v1");
         Fact align = parameter.facts().get("align");
         if (align != null) {
-          long n = positive(align.value());
+          long n = positive("align", align.value());
           require(n <= (1L << 29) && (n & (n - 1)) == 0, "align must be a power of two <= 2^29");
         }
         Fact deref = parameter.facts().get("dereferenceable");
         if (deref != null) {
-          positive(deref.value());
+          positive("dereferenceable", deref.value());
           require(!parameter.nullable(), "dereferenceable implies non-null on supported targets");
         }
         Fact alias = parameter.facts().get("noalias");
@@ -634,9 +634,14 @@ public final class Validator {
     return (value + align - 1) / align * align;
   }
 
-  private static long positive(String text) {
-    long value = Long.parseLong(text);
-    require(value > 0, "expected positive integer");
+  private static long positive(String name, String text) {
+    long value;
+    try {
+      value = Long.parseLong(text);
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException(name + " requires a positive integer: " + text, e);
+    }
+    require(value > 0, name + " requires a positive integer: " + text);
     return value;
   }
 
