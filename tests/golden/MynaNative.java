@@ -6,6 +6,8 @@ import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.Uninterruptible;
 import org.graalvm.nativeimage.IsolateThread;
+import org.graalvm.nativeimage.c.CContext;
+import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunction;
@@ -21,10 +23,13 @@ import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.word.PointerBase;
 
+@CContext(MynaNativeDirectives.class)
 public final class MynaNative {
     private MynaNative() {}
     public static final String ABI_FINGERPRINT = "9e33817b743fbb450bd61ab362d1d891db5ba16ab29f8dccf7b0b1740ffd4d18";
     public static final int BINDING_ABI_VERSION = 2;
+    /** Read by the image build's header check in MynaNativeDirectives; never called at run time. */
+    @CConstant("BUFFER_SEAM_ABI") static native String seamHeaderAbi();
     public interface inspect_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)

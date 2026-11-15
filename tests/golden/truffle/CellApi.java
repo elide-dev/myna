@@ -5,6 +5,8 @@ import com.oracle.svm.guest.staging.c.CGlobalData;
 import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.Uninterruptible;
+import org.graalvm.nativeimage.c.CContext;
+import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
@@ -16,10 +18,13 @@ import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.nativeimage.c.type.VoidPointer;
 import org.graalvm.word.PointerBase;
 
+@CContext(CellApiDirectives.class)
 public final class CellApi {
     private CellApi() {}
     public static final String ABI_FINGERPRINT = "b0542c4c6f8cef9b1c522e705eff5edfaf92e35ce3c12df27587421382a0602d";
     public static final int BINDING_ABI_VERSION = 2;
+    /** Read by the image build's header check in CellApiDirectives; never called at run time. */
+    @CConstant("TRUFFLE_DEMO_SEAM_ABI") static native String seamHeaderAbi();
     public interface add_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)

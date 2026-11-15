@@ -131,9 +131,10 @@ def build():
     library = WORK / ('libcellsbench.dylib' if sys.platform == 'darwin' else 'libcellsbench.so')
     execute(cc, '-dynamiclib' if sys.platform == 'darwin' else '-shared', WORK / 'kernel.o', WORK / 'cells.o', '-o', library)
     java_sources = [SOURCE / 'CellBench.java', SOURCE / 'Bodies.java', SOURCE / 'BenchLanguage.java',
-                    *(generated / 'native' / n for n in ('Cells.java', 'CellsTruffle.java')),
-                    *(generated / 'boundary' / n for n in ('BoundaryCells.java', 'BoundaryCellsTruffle.java')),
-                    *(generated / 'ffm' / n for n in ('FfmCells.java', 'FfmCellsFFM.java', 'FfmCellsTruffle.java', 'FfmCellsForeignFeature.java'))]
+                    *(generated / 'native' / n for n in ('Cells.java', 'CellsTruffle.java', 'CellsDirectives.java')),
+                    *(generated / 'boundary' / n for n in ('BoundaryCells.java', 'BoundaryCellsTruffle.java', 'BoundaryCellsDirectives.java')),
+                    *(generated / 'ffm' / n for n in ('FfmCells.java', 'FfmCellsFFM.java', 'FfmCellsTruffle.java', 'FfmCellsForeignFeature.java',
+                                                      'FfmCellsDirectives.java'))]
     sdk = [home / 'lib/svm' / name for name in ('svm-shared.jar', 'svm-guest-staging.jar', 'svm-guest.jar')]
     # The benchmark language (NFI loader) is the one DSL-processed source; generated cells stay DSL-free.
     execute('javac', '-processorpath', jars['truffle-dsl-processor'],

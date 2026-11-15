@@ -1,5 +1,5 @@
 # Native Image records are @CStruct interfaces: every scalar carrier, typed struct and opaque pointers.
-module records_fixture target=aarch64-apple-darwin java_package=fixture.records java_class=RecordsApi c_context=fixture.directives.SeamHeaderDirectives
+module records_fixture target=aarch64-apple-darwin java_package=fixture.records java_class=RecordsApi
 opaque Handle
 struct Rec size=80 align=8
   field signed64 type=i64 offset=0

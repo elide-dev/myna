@@ -22,6 +22,7 @@ public final class Generator {
             new RustFfi(),
             new JavaFfm(),
             new NativeImage(),
+            new NativeImageDirectives(),
             new NativeImageProperties(),
             new NativeImageForeign(),
             new Llvm())) outputs.put(backend.filename(module), backend.generate(module));

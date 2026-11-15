@@ -232,13 +232,14 @@ class TruffleCellsTest {
                 "META-INF/native-image/dev.elide.myna/dev.elide.myna.generated.MynaNative/native-image.properties");
     assertTrue(
         transitionsOnly.endsWith(
-            "Args ="
+            "Args = --features=dev.elide.myna.generated.MynaNativeDirectives"
                 + " --initialize-at-build-time=dev.elide.myna.generated.MynaTruffle,dev.elide.myna.generated.MynaTruffle$slow_Cell\n"),
         transitionsOnly);
     assertEquals(
         Set.of(
             "META-INF/native-image/dev.elide.myna/fixture.cells.CellApi/native-image.properties",
             "CellApi.java",
+            "CellApiDirectives.java",
             "CellApiFFM.java",
             "CellApiForeignFeature.java",
             "CellApiOwnership.java",

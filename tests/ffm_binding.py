@@ -24,8 +24,9 @@ def build_binding_fixture():
     run("cc", "-dynamiclib" if sys.platform == "darwin" else "-shared", obj, "-o", library)
     classes = work / "classes"
     compile_native(classes, generated, generated / "NativeApiFFM.java",
-                   generated / "NativeApiForeignFeature.java", confined / "ConfinedApiFFM.java",
-                   confined / "ConfinedApiForeignFeature.java", ROOT / "tests/ownership/ConfinedOwner.java",
+                   generated / "NativeApiForeignFeature.java", generated / "NativeApiDirectives.java",
+                   confined / "ConfinedApiFFM.java", confined / "ConfinedApiForeignFeature.java",
+                   confined / "ConfinedApiDirectives.java", ROOT / "tests/ownership/ConfinedOwner.java",
                    ROOT / "tests/ownership/FfmBindingMain.java")
     shutil.copytree(confined / "META-INF", classes / "META-INF", dirs_exist_ok=True)
     return work, classes, library

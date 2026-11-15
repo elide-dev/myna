@@ -87,6 +87,7 @@ class GeneratorTest {
         Set.of(
             "META-INF/native-image/dev.elide.myna/dev.example.io.IoNatives/native-image.properties",
             "IoNatives.java",
+            "IoNativesDirectives.java",
             "IoNativesFFM.java",
             "IoNativesForeignFeature.java",
             "seam.abi",
@@ -98,6 +99,11 @@ class GeneratorTest {
     String nativeImage = output.get("IoNatives.java");
     assertTrue(nativeImage.contains("package dev.example.io;"));
     assertTrue(nativeImage.contains("public final class IoNatives {"));
+    assertTrue(nativeImage.contains("@CContext(IoNativesDirectives.class)"));
+    assertTrue(
+        output
+            .get("IoNativesDirectives.java")
+            .contains("findClassByName(\"dev.example.io.IoNatives\")"));
     assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Downcall.HANDLE"));
     assertTrue(
         output
@@ -1169,7 +1175,7 @@ class GeneratorTest {
   void scalarFunctionCarriers() {
     for (String type : List.of("i32", "u32", "i64", "u64", "f32", "f64")) {
       assertEquals(
-          9,
+          10,
           generate(
                   MODULE
                       + "import identity return="
@@ -1436,5 +1442,286 @@ class GeneratorTest {
   void relaxedNeverPermitsUnprovenNoAlias() {
     var module = Dsl.parse(VALID.replace("access=read", "access=read noalias=true@heuristic"));
     assertThrows(IllegalArgumentException.class, () -> Generator.generate(module, false));
+  }
+
+  static final String PROPERTIES =
+      "META-INF/native-image/dev.elide.myna/dev.elide.myna.generated.MynaNative/"
+          + "native-image.properties";
+
+  @Test
+  void nativeImageClassAlwaysHasTheGeneratedContextAndConstantAccessors() {
+    String constants =
+        MODULE
+            + "const ANALYSIS_MAGIC type=u32 value=0x3141514b\n"
+            + "const LEVEL type=u8 value=200\n"
+            + "const DEPTH type=i16 value=-2\n"
+            + "const LIMIT type=u64 value=0xffffffffffffffff\n"
+            + "const FLOOR type=i64 value=-9223372036854775808\n"
+            + "const SPAN type=usize value=4096\n"
+            + FUNCTION
+            + PARAM
+            + "end\n";
+    String java = generate(constants).get("MynaNative.java");
+    assertTrue(java.contains("import org.graalvm.nativeimage.c.CContext;\n"), java);
+    assertTrue(java.contains("import org.graalvm.nativeimage.c.constant.CConstant;\n"), java);
+    assertTrue(
+        java.contains("import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;\n"), java);
+    assertTrue(java.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), java);
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_SEAM_ABI\") static native String seamHeaderAbi();\n"),
+        java);
+    // Each const reads its macro from seam.h; SVM replaces the call with the value at parse time.
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_ANALYSIS_MAGIC\") public static native int"
+                + " analysisMagic();\n"),
+        java);
+    // A narrow const's macro has type int in C (UINT8_C(200) is 200), so SVM must narrow it.
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_LEVEL\") @AllowNarrowingCast public static native byte"
+                + " level();\n"),
+        java);
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_DEPTH\") @AllowNarrowingCast public static native short"
+                + " depth();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_LIMIT\") public static native long limit();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_FLOOR\") public static native long floor();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_SPAN\") public static native long span();\n"), java);
+    // Without constants or a consumer context the class still names the generated context and
+    // reads the header fingerprint; nothing needs narrowing.
+    String plain = generate(VALID).get("MynaNative.java");
+    assertTrue(
+        plain.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), plain);
+    assertTrue(plain.contains("static native String seamHeaderAbi();"), plain);
+    assertFalse(plain.contains("AllowNarrowingCast"), plain);
+    // A consumer context is delegated to, never the annotation value.
+    String bemo =
+        generate(MODULE.replace("\n", " java_package=a.b c_context=a.b.Ctx\n") + FUNCTION + "end\n")
+            .get("MynaNative.java");
+    assertTrue(bemo.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), bemo);
+    assertFalse(bemo.contains("a.b.Ctx"), bemo);
+  }
+
+  /** The string constants of a generated directives class, decoded, in declaration order. */
+  static List<String> headerPieces(String directives) {
+    var pieces = new ArrayList<String>();
+    var declaration =
+        java.util.regex.Pattern.compile(
+            "private static final String HEADER_(\\d+) =(.*?);\n", java.util.regex.Pattern.DOTALL);
+    var literal = java.util.regex.Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
+    var matcher = declaration.matcher(directives);
+    while (matcher.find()) {
+      assertEquals(String.valueOf(pieces.size()), matcher.group(1));
+      var piece = new StringBuilder();
+      var parts = literal.matcher(matcher.group(2));
+      while (parts.find()) piece.append(unescape(parts.group(1)));
+      pieces.add(piece.toString());
+    }
+    return pieces;
+  }
+
+  static String unescape(String body) {
+    var out = new StringBuilder();
+    for (int i = 0; i < body.length(); i++) {
+      char c = body.charAt(i);
+      if (c != '\\') {
+        out.append(c);
+        continue;
+      }
+      char e = body.charAt(++i);
+      switch (e) {
+        case 'n' -> out.append('\n');
+        case 'r' -> out.append('\r');
+        case 't' -> out.append('\t');
+        case '"', '\\' -> out.append(e);
+        case 'u' -> {
+          out.append((char) Integer.parseInt(body.substring(i + 1, i + 5), 16));
+          i += 4;
+        }
+        default -> {
+          int end = i;
+          while (end < body.length()
+              && end < i + 3
+              && body.charAt(end) >= '0'
+              && body.charAt(end) <= '7') end++;
+          assertTrue(end > i, "unknown escape \\" + e);
+          out.append((char) Integer.parseInt(body.substring(i, end), 8));
+          i = end - 1;
+        }
+      }
+    }
+    return out.toString();
+  }
+
+  @Test
+  void directivesSupplyTheHeaderAndCheckItsFingerprintAtImageBuild() {
+    var output = generate(VALID);
+    String directives = output.get("MynaNativeDirectives.java");
+    assertNotNull(directives, output.keySet().toString());
+    // Everything qualified, so no declared or consumer name can shadow an import.
+    assertFalse(directives.contains("\nimport "), directives);
+    assertTrue(
+        directives.contains(
+            "public final class MynaNativeDirectives\n"
+                + "    implements org.graalvm.nativeimage.c.CContext.Directives,"
+                + " org.graalvm.nativeimage.hosted.Feature {\n"),
+        directives);
+    assertTrue(directives.contains("    public MynaNativeDirectives() {}\n"), directives);
+    assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
+    // Written once per builder JVM into a directory the builder removes when it exits.
+    assertTrue(directives.contains("createTempDirectory(\"myna-seam\")"), directives);
+    assertTrue(directives.contains("Runtime.getRuntime().addShutdownHook("), directives);
+    assertTrue(
+        directives.contains("        return java.util.List.of(Header.INCLUDE);\n"), directives);
+    // The check reads the loaded bindings, so mixed generations of class files are caught too, and
+    // an image without the Native Image class (FFM or Truffle only) has nothing to check.
+    assertTrue(
+        directives.contains("access.findClassByName(\"dev.elide.myna.generated.MynaNative\")"),
+        directives);
+    assertTrue(
+        directives.contains(
+            "org.graalvm.nativeimage.c.constant.CConstant.ValueAccess.get(\n"
+                + "                bindings, \"seamHeaderAbi\", String.class)"),
+        directives);
+    assertTrue(directives.contains("bindings.getField(\"ABI_FINGERPRINT\").get(null)"), directives);
+    assertTrue(
+        directives.contains(
+            "throw new IllegalStateException(\n"
+                + "                \"seam.h fingerprint \" + header + \" differs from generated"
+                + " bindings \" + generated);"),
+        directives);
+    // Without a consumer context nothing is delegated.
+    assertFalse(directives.contains("Directives context ="), directives);
+    assertFalse(directives.contains("return context."), directives);
+    // The generated properties register the check, so every image build with the bindings runs it.
+    assertTrue(
+        output
+            .get(PROPERTIES)
+            .contains("Args = --features=dev.elide.myna.generated.MynaNativeDirectives"),
+        output.get(PROPERTIES));
+  }
+
+  @Test
+  void directivesDelegateToTheConsumerContext() throws Exception {
+    var output = generate(Files.readString(Path.of("tests/bemo/bemo.seam")));
+    String directives = output.get("BemoImportsDirectives.java");
+    assertTrue(
+        directives.contains(
+            "    private final org.graalvm.nativeimage.c.CContext.Directives context =\n"
+                + "        new fixture.bemo.BemoDirectives();\n"),
+        directives);
+    for (String method :
+        List.of(
+            "isInConfiguration",
+            "getMacroDefinitions",
+            "getOptions",
+            "getLibraries",
+            "getLibraryPaths"))
+      assertTrue(directives.contains("        return context." + method + "();\n"), method);
+    // The consumer's headers first, then seam.h.
+    assertTrue(
+        directives.contains(
+            "        var headers = new java.util.ArrayList<String>(context.getHeaderFiles());\n"
+                + "        headers.add(Header.INCLUDE);\n"
+                + "        return headers;\n"),
+        directives);
+    assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
+    assertTrue(
+        output
+            .get(
+                "META-INF/native-image/dev.elide.myna/fixture.bemo.BemoImports/"
+                    + "native-image.properties")
+            .contains("--features=fixture.bemo.BemoImportsDirectives"));
+  }
+
+  @Test
+  void directivesSplitLargeHeaders() {
+    var source = new StringBuilder(MODULE);
+    for (int i = 0; i < 160; i++) {
+      source.append("struct Record").append(i).append(" size=64 align=8\n");
+      for (int f = 0; f < 8; f++)
+        source
+            .append("field value")
+            .append(f)
+            .append(" type=i64 offset=")
+            .append(f * 8)
+            .append('\n');
+      source.append("end\n");
+    }
+    var output = generate(source.toString());
+    String header = output.get("seam.h");
+    assertTrue(header.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 64 * 1024);
+    var pieces = headerPieces(output.get("MynaNativeDirectives.java"));
+    assertTrue(pieces.size() >= 4, String.valueOf(pieces.size()));
+    for (String piece : pieces)
+      assertTrue(
+          piece.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 16 * 1024,
+          String.valueOf(piece.length()));
+    assertEquals(header, String.join("", pieces));
+  }
+
+  @Test
+  void headerPiecesKeepCharactersWholeAndLiteralsSafe() {
+    String smile = new String(Character.toChars(0x1F600));
+    String line = smile.repeat(5000) + "\n"; // 20000 UTF-8 bytes in one line
+    String text = "a\"b\\c\\u000a\r\t\u0001\u007fé\n" + line + "tail";
+    var pieces = dev.elide.myna.backend.NativeImageDirectives.pieces(text, 16 * 1024);
+    assertEquals(text, String.join("", pieces));
+    for (String piece : pieces) {
+      assertTrue(piece.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 16 * 1024);
+      assertFalse(Character.isLowSurrogate(piece.charAt(0)), "split inside a surrogate pair");
+      assertFalse(Character.isHighSurrogate(piece.charAt(piece.length() - 1)));
+    }
+    String literal = dev.elide.myna.backend.NativeImageDirectives.literal(text);
+    assertTrue(literal.chars().allMatch(c -> c >= 0x20 && c < 0x7f), literal);
+    assertEquals(text, unescape(literal.substring(1, literal.length() - 1)));
+    // javac translates unicode escapes (a `u` after an odd run of backslashes) before lexing; none
+    // may spell a quote, a backslash or a line terminator.
+    var escapes = new ArrayList<String>();
+    for (int i = 0, run = 0; i < literal.length(); i++) {
+      char c = literal.charAt(i);
+      if (c == 'u' && run % 2 == 1) escapes.add(literal.substring(i + 1, i + 5));
+      run = c == '\\' ? run + 1 : 0;
+    }
+    assertEquals(List.of("00e9", "d83d", "de00"), escapes.subList(0, 3));
+    for (String unsafe : List.of("000a", "000d", "0022", "005c"))
+      assertFalse(escapes.contains(unsafe), unsafe);
+    assertEquals(List.of(""), dev.elide.myna.backend.NativeImageDirectives.pieces("", 16));
+  }
+
+  /**
+   * Every simple name the Native Image class imports is a reserved type name, so a declared type
+   * nested in that class can never shadow it.
+   */
+  @Test
+  void nativeImageImportsAreReservedTypeNames() throws Exception {
+    var seams = new ArrayList<Path>();
+    for (String root : List.of("examples", "tests", "benchmarks"))
+      try (var walk = Files.walk(Path.of(root))) {
+        walk.filter(p -> p.toString().endsWith(".seam")).sorted().forEach(seams::add);
+      }
+    assertTrue(seams.size() > 10, seams.toString());
+    var imported = new TreeSet<String>();
+    var pattern = java.util.regex.Pattern.compile("(?m)^import ([\\w.]+)\\.(\\w+);$");
+    for (Path seam : seams) {
+      var module = Dsl.parse(Files.readString(seam));
+      var matcher =
+          pattern.matcher(Generator.generate(module, true).get(module.nativeClass() + ".java"));
+      while (matcher.find()) imported.add(matcher.group(2));
+    }
+    for (String name : List.of("CConstant", "CContext", "AllowNarrowingCast", "CStruct"))
+      assertTrue(imported.contains(name), name + " is not covered by a fixture");
+    var missing = new TreeSet<>(imported);
+    missing.removeAll(Validator.NATIVE_IMAGE_NAMES);
+    assertEquals(Set.of(), missing);
   }
 }

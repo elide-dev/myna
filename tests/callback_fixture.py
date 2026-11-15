@@ -26,5 +26,6 @@ def build_callback_fixture():
     shutil.copyfile(generated / "libcallbacks_jni.a.symbols", work / "libcallbacks_jni.a.symbols")
     classes = work / "classes"
     compile_native(classes, generated, generated / "CallbackApiFFM.java", generated / "CallbackApiJNI.java",
-                   generated / "CallbackApiForeignFeature.java", *sorted(fixture.glob("*.java")))
+                   generated / "CallbackApiForeignFeature.java", generated / "CallbackApiDirectives.java",
+                   *sorted(fixture.glob("*.java")))
     return work, classes, library

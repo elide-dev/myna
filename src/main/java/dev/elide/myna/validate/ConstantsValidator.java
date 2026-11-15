@@ -42,6 +42,7 @@ final class ConstantsValidator {
           Ranges.fits(c.type(), c.value(), abi),
           where + ": value " + c.value() + " does not fit " + c.type().text());
     }
+    accessors(m);
     for (EnumGroup e : m.enums()) enumValues(e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
 
@@ -100,6 +101,40 @@ final class ConstantsValidator {
       require(!e.values().isEmpty(), "enum " + e.name() + ": declares no values");
     for (FlagSet f : m.flagSets())
       require(!f.bits().isEmpty(), "flags " + f.name() + ": declares no bits");
+  }
+
+  /**
+   * Java keywords and literals, the instance methods of {@code Object} (a static method may not
+   * hide one), and the header-fingerprint accessor: names a const accessor cannot take.
+   */
+  private static final Set<String> RESERVED_ACCESSORS =
+      Set.of(
+          ("abstract assert boolean break byte case catch char class const continue default do"
+                  + " double else enum extends final finally float for goto if implements import"
+                  + " instanceof int interface long native new package private protected public"
+                  + " return short static strictfp super switch synchronized this throw throws"
+                  + " transient try void volatile while true false null getClass hashCode equals"
+                  + " toString clone finalize notify notifyAll wait seamHeaderAbi")
+              .split(" "));
+
+  /**
+   * Each const is a static {@code @CConstant} accessor of the Native Image class, named {@code
+   * lowerCamel(NAME)}: it must be a legal method name and the class's only method of that name.
+   */
+  private static void accessors(Module m) {
+    var methods = new HashMap<String, String>();
+    for (Function f : m.functions()) {
+      methods.putIfAbsent(f.name(), "function " + f.name());
+      methods.putIfAbsent(f.name() + "Native", "function " + f.name());
+      if (Seam.nativeLeaf(f)) methods.putIfAbsent(f.name() + "LeafPointer", "function " + f.name());
+    }
+    for (Constant c : m.constants()) {
+      String accessor = Names.lowerCamel(c.name());
+      String where = "const " + c.name() + ": Native Image accessor " + accessor;
+      require(!RESERVED_ACCESSORS.contains(accessor), where + " is a reserved Java name");
+      String other = methods.putIfAbsent(accessor, "const " + c.name());
+      require(other == null, where + " collides with " + other);
+    }
   }
 
   private static void enumValues(EnumGroup e, TargetAbi abi) {

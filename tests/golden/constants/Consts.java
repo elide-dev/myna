@@ -6,6 +6,8 @@ import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.Uninterruptible;
 import org.graalvm.nativeimage.IsolateThread;
+import org.graalvm.nativeimage.c.CContext;
+import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
@@ -16,10 +18,19 @@ import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.word.PointerBase;
 
+@CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
     public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
     public static final int BINDING_ABI_VERSION = 2;
+    /** Read by the image build's header check in ConstsDirectives; never called at run time. */
+    @CConstant("CONSTANTS_SEAM_ABI") static native String seamHeaderAbi();
+    /** const FLOOR: i64, from seam.h. */
+    @CConstant("CONSTANTS_FLOOR") public static native long floor();
+    /** const LIMIT: u64, from seam.h. */
+    @CConstant("CONSTANTS_LIMIT") public static native long limit();
+    /** const MAGIC: u32, from seam.h. */
+    @CConstant("CONSTANTS_MAGIC") public static native int magic();
     public interface setLevel_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)

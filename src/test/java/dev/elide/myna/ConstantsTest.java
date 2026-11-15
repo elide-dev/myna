@@ -266,6 +266,26 @@ class ConstantsTest {
         Arguments.of("opaque Status\n" + ST, "duplicate type: Status"),
         Arguments.of(ST + "flags Status type=u32\n bit a = 0\nend\n", "duplicate type: Status"),
         Arguments.of("enum u32 type=i32\n value ok = 0\nend\n", "type shadows scalar: u32"),
+        // Each const is also a @CConstant accessor method of the Native Image class.
+        Arguments.of(
+            "const CLASS type=u32 value=1\n",
+            "const CLASS: Native Image accessor class is a reserved Java name"),
+        Arguments.of(
+            "const HASH_CODE type=u32 value=1\n",
+            "const HASH_CODE: Native Image accessor hashCode is a reserved Java name"),
+        Arguments.of(
+            "const SEAM_HEADER_ABI type=u32 value=1\n",
+            "const SEAM_HEADER_ABI: Native Image accessor seamHeaderAbi is a reserved Java name"),
+        Arguments.of(
+            "const A_B type=u32 value=1\nconst A__B type=u32 value=2\n",
+            "const A__B: Native Image accessor aB collides with const A_B"),
+        Arguments.of(
+            "const STATUS type=u32 value=1\n" + IMP + "\nend\n",
+            "const STATUS: Native Image accessor status collides with function status"),
+        Arguments.of(
+            "const STATUS_LEAF_POINTER type=u32 value=1\n" + IMP + "\nend\n",
+            "const STATUS_LEAF_POINTER: Native Image accessor statusLeafPointer collides with"
+                + " function status"),
         Arguments.of(
             "enum core type=i32\n value ok = 0\nend\n", "type shadows generated name: core"),
         Arguments.of(

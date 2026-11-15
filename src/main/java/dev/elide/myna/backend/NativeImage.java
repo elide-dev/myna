@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
@@ -96,11 +97,12 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.CFunction");
     }
-    if (m.nativeConfig() != null) {
-      if (m.nativeConfig().cContext() != null) imports.add("org.graalvm.nativeimage.c.CContext");
-      if (m.nativeConfig().cLibrary() != null)
-        imports.add("org.graalvm.nativeimage.c.function.CLibrary");
-    }
+    imports.add("org.graalvm.nativeimage.c.CContext");
+    imports.add("org.graalvm.nativeimage.c.constant.CConstant");
+    if (m.constants().stream().anyMatch(c -> narrow(c.type())))
+      imports.add("org.graalvm.nativeimage.c.struct.AllowNarrowingCast");
+    if (m.nativeConfig() != null && m.nativeConfig().cLibrary() != null)
+      imports.add("org.graalvm.nativeimage.c.function.CLibrary");
     if (m.callbacks().stream().anyMatch(c -> c.javaType() == null)) {
       imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
@@ -245,10 +247,10 @@ public final class NativeImage implements Backend {
                 + ";\n\n");
     for (String i : imports(m)) out.append("import ").append(i).append(";\n");
     out.append('\n');
+    // The generated context supplies seam.h and delegates to the consumer's c_context, if any.
+    out.append("@CContext(").append(m.directivesClass()).append(".class)\n");
     if (m.nativeConfig() != null) {
       NativeConfig config = m.nativeConfig();
-      if (config.cContext() != null)
-        out.append("@CContext(").append(config.cContext()).append(".class)\n");
       if (config.cLibrary() != null)
         out.append("@CLibrary(value = ")
             .append(SeamJson.quote(config.cLibrary()))
@@ -267,6 +269,7 @@ public final class NativeImage implements Backend {
     out.append("    public static final int BINDING_ABI_VERSION = ")
         .append(Seam.BINDING_ABI_VERSION)
         .append(";\n");
+    constants(m, out);
     leafBindings(m, out);
     for (String opaque : m.opaqueTypes())
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
@@ -385,6 +388,41 @@ public final class NativeImage implements Backend {
       out.append("    }\n");
     }
     return out.append("}\n").toString();
+  }
+
+  /** A carrier narrower than C's {@code int}, the type of a narrow {@code INTn_C} macro. */
+  private static boolean narrow(Scalar type) {
+    return type.bytes < 4;
+  }
+
+  /**
+   * The header's fingerprint and one accessor per const, each read from {@code seam.h} at image
+   * build. SVM replaces a {@code @CConstant} call with the value while parsing bytecode, so an
+   * accessor compiles to the same immediate as the literal (tests/native_image_integration.py
+   * compares the code). Narrow macros have type {@code int} in C and need {@code
+   * AllowNarrowingCast}; the value keeps its raw bits, as the literal {@code (byte) 0xc8} does.
+   */
+  private static void constants(Module m, StringBuilder out) {
+    out.append(
+            "    /** Read by the image build's header check in "
+                + m.directivesClass()
+                + "; never called at run time. */\n")
+        .append("    @CConstant(")
+        .append(SeamJson.quote(m.name().toUpperCase(Locale.ROOT) + "_SEAM_ABI"))
+        .append(") static native String seamHeaderAbi();\n");
+    for (Constant c : m.constants())
+      out.append("    /** const ")
+          .append(c.name())
+          .append(": ")
+          .append(c.type().text())
+          .append(", from seam.h. */\n    @CConstant(")
+          .append(SeamJson.quote(Names.cMacro(m, null, c.name())))
+          .append(narrow(c.type()) ? ") @AllowNarrowingCast" : ")")
+          .append(" public static native ")
+          .append(Types.java(c.type()))
+          .append(' ')
+          .append(Names.lowerCamel(c.name()))
+          .append("();\n");
   }
 
   /**

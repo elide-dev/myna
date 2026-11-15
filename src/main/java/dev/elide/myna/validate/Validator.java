@@ -47,13 +47,14 @@ public final class Validator {
    * that class imports or uses unqualified. (Its own name, and the {@code <function>_Leaf} and
    * {@code <function>_Binding} classes it declares, are checked where they are known.)
    */
-  static final Set<String> NATIVE_IMAGE_NAMES =
+  public static final Set<String> NATIVE_IMAGE_NAMES =
       Set.of(
           ("AlwaysInline Uninterruptible CGlobalData CGlobalDataFactory CFunction CFunctionPointer"
                + " InvokeCFunctionPointer CEntryPoint CEntryPointLiteral CContext CLibrary CConst"
-               + " CStruct CField CFieldAddress PointerBase WordFactory IsolateThread VoidPointer"
-               + " WordPointer CCharPointer CCharPointerPointer CShortPointer CIntPointer"
-               + " CLongPointer CFloatPointer CDoublePointer String Throwable")
+               + " CStruct CField CFieldAddress CConstant AllowNarrowingCast PointerBase"
+               + " WordFactory IsolateThread VoidPointer WordPointer CCharPointer"
+               + " CCharPointerPointer CShortPointer CIntPointer CLongPointer CFloatPointer"
+               + " CDoublePointer String Throwable")
               .split(" "));
 
   private static final Set<String> KEYWORDS =
@@ -88,10 +89,23 @@ public final class Validator {
     identifier(module.name());
     if (module.javaPackage() != null)
       for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
-    if (module.javaClass() != null) identifier(module.javaClass());
+    if (module.javaClass() != null) {
+      identifier(module.javaClass());
+      // The class imports these names, so it cannot itself take one.
+      require(
+          !NATIVE_IMAGE_NAMES.contains(module.javaClass()),
+          "java_class shadows generated name: " + module.javaClass());
+    }
     if (module.nativeConfig() != null) {
       var config = module.nativeConfig();
-      if (config.cContext() != null) qualifiedType(config.cContext());
+      if (config.cContext() != null) {
+        qualifiedType(config.cContext());
+        // The generated context delegates to this one; naming itself would recurse.
+        String generated = module.javaPackageName() + "." + module.directivesClass();
+        require(
+            !config.cContext().equals(generated),
+            "c_context names the generated directives class " + generated);
+      }
       if (config.cLibrary() != null)
         require(
             config.cLibrary().matches("[A-Za-z0-9_][A-Za-z0-9_.+-]*"), "invalid C library name");

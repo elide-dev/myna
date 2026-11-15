@@ -59,11 +59,14 @@ def build_truffle_fixture():
     classpath = [TRUFFLE_JAR, *jars.values()]
     classes = work / "classes"
     compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java",
-                   FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
+                   generated / "CellApiDirectives.java", FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"
+    # The generated properties register the context's header check (with nothing to check in an
+    # image without the Native Image class), so the FFM build compiles the context and its delegate.
     compile_native(classes_ffm, generated_ffm, generated_ffm / "CellApiFFM.java", generated_ffm / "CellApiTruffle.java",
-                   generated_ffm / "CellApiForeignFeature.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
+                   generated_ffm / "CellApiForeignFeature.java", generated_ffm / "CellApiDirectives.java",
+                   FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
                    classpath=classpath)
     return work, classes, classes_ffm, library, jars
 
@@ -109,7 +112,7 @@ class TruffleIntegrationTests(unittest.TestCase):
                              "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
-                             f"-Dmyna.cells.libraryPath={self.work}", f"-Dmyna.seam.header={self.work / 'generated/seam.h'}",
+                             f"-Dmyna.cells.libraryPath={self.work}",
                              "fixture.cells.CellsMain", "-o", app)
         self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)

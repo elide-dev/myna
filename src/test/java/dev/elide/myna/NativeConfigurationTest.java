@@ -20,7 +20,10 @@ class NativeConfigurationTest {
     var m = Dsl.parse(source());
     var outputs = Generator.generate(m, true);
     String java = outputs.get("BemoImports.java");
-    assertTrue(java.contains("@CContext(fixture.bemo.BemoDirectives.class)"));
+    // The consumer's context is delegated to by the generated one, which is the annotation value.
+    assertTrue(java.contains("@CContext(BemoImportsDirectives.class)"));
+    assertTrue(
+        outputs.get("BemoImportsDirectives.java").contains("new fixture.bemo.BemoDirectives()"));
     assertTrue(java.contains("@CLibrary(value = \"bemofixture\", requireStatic = true)"));
     assertTrue(java.contains("fixture.bemo.HandwrittenSink callback"));
     assertFalse(java.contains("interface Sink"));
@@ -59,7 +62,7 @@ class NativeConfigurationTest {
   void contextAndLibraryCanBeIndependent() throws Exception {
     String contextOnly = source().replace(" c_library=bemofixture c_library_static=true", "");
     String java = Generator.generate(Dsl.parse(contextOnly), true).get("BemoImports.java");
-    assertTrue(java.contains("@CContext"));
+    assertTrue(java.contains("@CContext(BemoImportsDirectives.class)"));
     assertFalse(java.contains("@CLibrary"));
     java =
         Generator.generate(
@@ -69,8 +72,28 @@ class NativeConfigurationTest {
                         .replace(" c_library_static=true", "")),
                 true)
             .get("BemoImports.java");
-    assertFalse(java.contains("@CContext"));
+    assertTrue(java.contains("@CContext(BemoImportsDirectives.class)"));
     assertTrue(java.contains("requireStatic = false"));
+  }
+
+  @Test
+  void contextIsNeverTheGeneratedDirectivesAndTheClassShadowsNoImport() throws Exception {
+    String self =
+        source()
+            .replace(
+                "c_context=fixture.bemo.BemoDirectives",
+                "c_context=fixture.bemo.BemoImportsDirectives");
+    assertEquals(
+        "c_context names the generated directives class fixture.bemo.BemoImportsDirectives",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(self), true))
+            .getMessage());
+    String shadow = source().replace("java_class=BemoImports", "java_class=CContext");
+    assertEquals(
+        "java_class shadows generated name: CContext",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(shadow), true))
+            .getMessage());
   }
 
   @Test
