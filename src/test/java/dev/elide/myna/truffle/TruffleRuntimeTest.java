@@ -2604,6 +2604,68 @@ class TruffleRuntimeTest {
   }
 
   /**
+   * A misaligned writable slice is lent as a copy and written back after the call. Guest code can
+   * close the slice's arena while the call runs, from another thread or from a callback on this
+   * one; the write-back then fails with a {@link NativeCellException} and writes nothing. The
+   * slice's scope is an arena of its own over memory that stays allocated, so the test can see that
+   * nothing reached it after the scope closed.
+   */
+  @Test
+  void writeBackOfMisalignedCopyFailsOnceItsArenaIsClosed() throws Exception {
+    onFreshThread(() -> {
+      try (Arena backing = Arena.ofConfined()) {
+        MemorySegment memory = backing.allocate(64, 64);
+        var aligned = new AlignedBytesCoercion("f", "data", false, true, true, false, 8);
+        var wide = new OverAlignedBytesCoercion("f", "data", false, true, true, false, 64);
+        for (boolean otherThread : new boolean[] {true, false}) {
+          for (Coercion coercion : new Coercion[] {aligned, wide}) {
+            memory.fill((byte) 0);
+            Arena guest = otherThread ? Arena.ofShared() : Arena.ofConfined();
+            NativeBytes target =
+                NativeBytes.of(memory.reinterpret(64, guest, null).asSlice(3, 8), true);
+            Borrow out = coercion == aligned ? aligned.execute(target) : wide.execute(target);
+            assertNotEquals(target.address(), out.address(), "the slice is copied");
+            // The call writes its copy, and the guest closes the slice's arena meanwhile.
+            MemorySegment.ofAddress(out.address()).reinterpret(8).fill((byte) 99);
+            if (otherThread) {
+              var closing = new java.util.concurrent.CountDownLatch(1);
+              Thread closer =
+                  new Thread(() -> {
+                    guest.close();
+                    closing.countDown();
+                  });
+              closer.start();
+              closing.await();
+              closer.join();
+            } else {
+              guest.close();
+            }
+            var failure = assertThrows(NativeCellException.class, out::release);
+            assertTrue(
+                failure.getMessage().contains("closed before write-back"), failure.getMessage());
+            for (int i = 0; i < 64; i++)
+              assertEquals(0, memory.get(ValueLayout.JAVA_BYTE, i), "byte " + i + " written");
+            // The borrow is released all the same: a second release does nothing.
+            out.release();
+          }
+        }
+        // While the arena is open, the copy is written back as before.
+        try (Arena guest = Arena.ofShared()) {
+          memory.fill((byte) 0);
+          NativeBytes target =
+              NativeBytes.of(memory.reinterpret(64, guest, null).asSlice(3, 8), true);
+          Borrow out = wide.execute(target);
+          MemorySegment.ofAddress(out.address()).reinterpret(8).fill((byte) 7);
+          out.release();
+          assertEquals(7, memory.get(ValueLayout.JAVA_BYTE, 3));
+          assertEquals(7, memory.get(ValueLayout.JAVA_BYTE, 10));
+          assertEquals(0, memory.get(ValueLayout.JAVA_BYTE, 11));
+        }
+      }
+    });
+  }
+
+  /**
    * An {@code align} fact is a requirement on the address native code receives: copies honor it
    * beyond the default 16, and memory that is lent in place at a lesser alignment is copied.
    */

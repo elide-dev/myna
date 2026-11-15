@@ -396,6 +396,10 @@ public final class Borrow {
    * not an internal one.
    */
   private static void writeBackInterop(byte[] array, Object source) {
+    if (source instanceof NativeBytes bytes) {
+      writeBackNative(array, bytes);
+      return;
+    }
     InteropLibrary interop = InteropLibrary.getUncached(source);
     try {
       for (int i = 0; i < array.length; i++) interop.writeBufferByte(source, i, array[i]);
@@ -405,6 +409,30 @@ public final class Borrow {
     } catch (UnsupportedMessageException e) {
       throw NativeCellException.of(
           null, "borrowed buffer stopped accepting writes before write-back");
+    }
+  }
+
+  /**
+   * Writes a copy back into the native memory it was taken from (memory lent at a lesser alignment
+   * than an {@code align} fact). Guest code can close that memory's arena while the call runs, from
+   * a callback or another thread, so the write-back goes through the segment, a scope-checked
+   * access in both runtimes, and never through the buffer's write messages, which a Native Image
+   * compiles to raw word stores. The check and the stores cannot race the free: a confined arena is
+   * closed only by its owner thread, which is either this one (and not inside this copy) or another
+   * one (and the copy fails as on the wrong thread); closing a shared arena handshakes every
+   * thread, so no thread is left inside a scoped access of it when its memory is freed; an
+   * automatic arena is not freed while this borrow reaches the segment; the global scope never
+   * closes. A closed or foreign scope writes nothing and fails as a {@link NativeCellException}.
+   */
+  private static void writeBackNative(byte[] array, NativeBytes bytes) {
+    try {
+      MemorySegment.copy(array, 0, bytes.segment(), ValueLayout.JAVA_BYTE, 0, array.length);
+    } catch (IllegalStateException e) {
+      throw NativeCellException.of(
+          null, "borrowed native buffer's arena was closed before write-back");
+    } catch (WrongThreadException e) {
+      throw NativeCellException.of(
+          null, "borrowed native buffer is confined to another thread at write-back");
     }
   }
 
