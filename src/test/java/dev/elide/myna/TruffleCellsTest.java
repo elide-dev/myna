@@ -623,27 +623,17 @@ class TruffleCellsTest {
             + "end\n";
     String truffle = generate(MODULE + decode).get("MynaTruffle.java");
     assertTrue(
-        truffle.contains("new AlignedBytesCoercion(\"decode\", \"data\", false, false, false, false, 8);"),
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"data\", false, false, false, false, 8);"),
         truffle);
     assertTrue(
-        truffle.contains("new AlignedBytesCoercion(\"decode\", \"text\", false, false, false, true, 2);"),
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"text\", false, false, false, true, 2);"),
         truffle);
     // Only an approved fact is a requirement; validation refuses the rest.
     assertThrows(
         IllegalArgumentException.class,
         () -> generate(MODULE + decode.replace("align=8@explicit_contract", "align=8@heuristic")));
-    // A borrow's buffer keeps rejecting align: the wrappers and seam.ll would promise it to every
-    // caller, and only cells check it.
-    String borrow =
-        "borrow sum bytes length=count lifetime=call\n"
-            + "import sum return=i64 error=no_failure nounwind=true@explicit_contract\n"
-            + "  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read"
-            + " nocapture=true@explicit_contract readonly=true@explicit_contract"
-            + " align=16@explicit_contract\n"
-            + "  param count type=u64\n"
-            + "end\n";
-    var refused = assertThrows(IllegalArgumentException.class, () -> generate(MODULE + borrow));
-    assertTrue(refused.getMessage().contains("cannot impose alignment"));
   }
 
   /**

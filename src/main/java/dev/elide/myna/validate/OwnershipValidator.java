@@ -162,11 +162,11 @@ final class OwnershipValidator {
       if (p.access() == Access.READ)
         require(
             approved(p.facts(), "readonly"), "shared call buffer requires approved readonly=true");
+      // An align fact is a caller contract: seam.ll promises it, debug builds of the wrappers check
+      // it, and Truffle cells copy a buffer that violates it. Extent and noalias stay rejected.
       require(
-          !p.facts().containsKey("align")
-              && !p.facts().containsKey("dereferenceable")
-              && !p.facts().containsKey("noalias"),
-          "call buffer cannot impose alignment, extent, or noalias preconditions");
+          !p.facts().containsKey("dereferenceable") && !p.facts().containsKey("noalias"),
+          "call buffer cannot impose extent or noalias preconditions");
       // Other pointers pass through each wrapper under their own declared contracts. Callbacks,
       // by-value records and isolate threads have no pass-through carrier in every backend.
       for (Parameter other : f.parameters())

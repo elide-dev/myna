@@ -12,41 +12,58 @@ import com.oracle.truffle.api.strings.AbstractTruffleString;
 import java.lang.foreign.MemorySegment;
 
 /**
- * {@link BytesCoercion} for a byte-pointer parameter with an {@code align=N@explicit_contract}
- * fact: no address that native code receives is lent at a lesser alignment. Aligned native memory
- * is lent in place; memory that is not is copied through its own buffer messages (and written back
- * by them when the parameter is writable); a bare pointer that is not aligned has no size to copy
- * and is refused; every other value is copied at an alignment of at least {@code N}, which for the
- * scratch stack and every other copy is already 16.
+ * {@link BytesCoercion} for a byte-pointer parameter with an {@code align=N@explicit_contract} fact
+ * of at most 16 (see {@link OverAlignedBytesCoercion} for more): no address that native code
+ * receives is lent at a lesser alignment. It costs nothing beyond checks that fold on the final
+ * {@code align} field.
+ *
+ * <p>Every copy starts on a 16-byte boundary, so copies, text pushed onto the scratch stack and
+ * held copies already satisfy the fact, and keep the paths and the allocation behavior of {@link
+ * BytesCoercion}. What can violate it is memory the guest lends in place: native memory at a
+ * misaligned address is copied through its own buffer messages (written back by them when writable)
+ * and not handed to an FFM downcall as the guest's segment, and a bare pointer that is misaligned
+ * has no size to copy and is refused. A heap array is pinned in a Native Image only when the fact
+ * is at most 8, since a pinned array's data starts on an 8-byte boundary; for a fact of 16 it is
+ * copied.
  *
  * <p>It is a class of its own so that {@link BytesCoercion#execute}, which a compiled call inlines
- * to keep its borrow out of the heap, carries nothing for parameters without the fact. This one
- * does not promise that: its borrow is a heap object, which is the price of a stricter address.
+ * to keep its borrow out of the heap, carries nothing for parameters without the fact.
  */
 public final class AlignedBytesCoercion extends Coercion {
-  /** The kinds of value this call site has lent, as {@link BytesCoercion} records them. */
+  /** The kinds of value this call site has lent; only their paths are compiled. */
   private static final int NATIVE = 1;
 
   private static final int HEAP = 2;
   private static final int TEXT = 4;
-  private static final int GUEST_TEXT = 32;
   private static final int POINTER = 8;
   private static final int OTHER = 16;
+  private static final int GUEST_TEXT = 32;
 
   /** Not a kind: whether this call site has lent native memory whose scope a call must check. */
   private static final int SCOPED = 64;
+
+  /** Not a kind: whether this call site has lent an empty native buffer. */
+  private static final int EMPTY = 128;
 
   private final boolean nullable;
   private final boolean writable;
   private final boolean strings;
   private final boolean buffer;
   private final boolean terminated;
+
+  /** The parameter's alignment requirement in bytes: a power of two from 2 to 16. */
   private final long align;
+
   @CompilationFinal private int seen;
+
+  /** {@link Borrow#pinThreshold()}, read on the first heap array; negative until then. */
   @CompilationFinal private int pinThreshold = -1;
 
+  /** Inserted on the first guest string, like the interop library on the first interop value. */
+  @Child private GuestText guestText;
+
   /**
-   * @param align the parameter's alignment requirement in bytes, a power of two
+   * @param align the parameter's {@code align} fact: a power of two from 2 to 16
    * @see BytesCoercion#BytesCoercion(String, String, boolean, boolean, boolean, boolean)
    */
   public AlignedBytesCoercion(
@@ -58,8 +75,8 @@ public final class AlignedBytesCoercion extends Coercion {
       boolean terminated,
       long align) {
     super(function, parameter);
-    if (align < 1 || (align & (align - 1)) != 0)
-      throw new IllegalArgumentException("align must be a power of two: " + align);
+    if (align < 2 || align > Borrow.Scratch.ALIGNMENT || (align & (align - 1)) != 0)
+      throw new IllegalArgumentException("align must be a power of two from 2 to 16: " + align);
     if (buffer && terminated) throw new IllegalArgumentException("a borrow is not terminated");
     this.nullable = nullable;
     this.writable = writable;
@@ -69,40 +86,88 @@ public final class AlignedBytesCoercion extends Coercion {
     this.align = align;
   }
 
-  /** Lends {@code value} for one call, at an address divisible by {@link #align}. */
-  @HostCompilerDirectives.InliningCutoff
+  /**
+   * Lends {@code value} for one call. The borrow is created here and filled in place, and nothing
+   * on this path hands it to code that partial evaluation does not inline, so a compiled cell that
+   * releases it keeps it out of the heap.
+   *
+   * <p>A kind this call site has not seen yet is recorded and the dispatch repeated with the same
+   * borrow. In runtime-compiled code that branch is a deoptimization. A host JIT (cells called from
+   * Java on HotSpot) compiles it, because this method is shared by every call site and each new
+   * site takes it once; were it to produce a second borrow, or pass this one on, the JIT could no
+   * longer scalar-replace the borrow on any path.
+   */
   public Borrow execute(Object value) {
     Borrow borrow = new Borrow();
-    if ((seen & kind(value)) == 0) learn(value);
-    if (value instanceof NativeBytes bytes) {
-      if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
-      long size = bytes.size();
-      if (size == 0) borrow.lend(Borrow.emptyAddress(), 0);
-      else if (misaligned(bytes.address())) slow(value, borrow);
-      else borrow.lend(bytes.address(), size);
-    } else if (value instanceof HeapBytes bytes) {
-      if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
-      borrow.lendAlignedArray(bytes.array(), writable, terminated, pinThreshold(), align);
-    } else if (strings && value instanceof String text) {
-      borrow.lendAlignedString(text, terminated, align);
-    } else if (strings && value instanceof AbstractTruffleString text) {
-      borrow.lendAlignedString(javaString(text), terminated, align);
-    } else if (value instanceof NativePointer pointer) {
-      pointer(pointer.address(), value, borrow);
-    } else {
-      slow(value, borrow);
+    int seen = this.seen;
+    while (true) {
+      if ((seen & NATIVE) != 0
+          && value instanceof NativeBytes bytes
+          && !misaligned(bytes.address(), bytes.size())) {
+        if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+        long size = bytes.size();
+        borrow.lend(size == 0 ? emptyAddress() : bytes.address(), size);
+        return borrow;
+      }
+      if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {
+        if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
+        borrow.lendArray(bytes.array(), writable, terminated, pinThreshold());
+        return borrow;
+      }
+      if ((seen & GUEST_TEXT) != 0 && value instanceof AbstractTruffleString text) {
+        Object pushed = pushGuestText(text);
+        if (pushed instanceof Borrow.Scratch scratch) {
+          borrow.lendPushed(scratch);
+          return borrow;
+        }
+        // Too long for the scratch stack: lent as its Java string, by the same code below.
+        value = pushed;
+        seen |= TEXT;
+      }
+      if ((seen & TEXT) != 0 && value instanceof String text) {
+        borrow.lendString(text, terminated);
+        return borrow;
+      }
+      if ((seen & POINTER) != 0 && value instanceof NativePointer pointer) {
+        pointer(pointer.address(), value, borrow);
+        return borrow;
+      }
+      if ((seen & OTHER) != 0 && kind(value) == OTHER) {
+        slow(value, borrow);
+        return borrow;
+      }
+      seen = learn(value);
     }
-    return borrow;
   }
 
   /**
-   * The segment whose scope a call must check for the memory {@link #execute} lent in place, as for
-   * {@link BytesCoercion#segment}; {@code null} for a copy, so memory that violates the fact is
-   * never passed to a downcall as the guest's own segment.
+   * Records the kind of {@code value} and returns the kinds seen so far. In runtime-compiled code
+   * this deoptimizes; in code compiled ahead of time it is an ordinary call, kept out of {@link
+   * #execute} so that the host compiler still inlines {@code execute}, which keeps the borrow out
+   * of the heap there too.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private int learn(Object value) {
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    return this.seen |= kind(value);
+  }
+
+  /**
+   * The segment whose scope a call must check for the memory {@link #execute} lent in place for
+   * {@code value}, or {@code null} when there is nothing to check: anything but native memory lent
+   * in place (a copy, a pin, a bare pointer, the empty buffer), or native memory of the global
+   * scope. Only FFM cells ask, to pass the guest's own segment to their downcall, which then checks
+   * its confinement and liveness and keeps its arena open for the call. A {@link NativeBytes} views
+   * native memory only, so the segment is never a heap segment, which a critical downcall would
+   * refuse.
+   *
+   * <p>Until this call site has lent a segment with a scope to check, compiled code tests for one
+   * and returns {@code null}; the first such segment deoptimizes and is checked from then on.
    */
   public MemorySegment segment(Object value) {
     if ((seen & NATIVE) == 0 || !(value instanceof NativeBytes bytes)) return null;
-    if (bytes.size() != 0 && misaligned(bytes.address())) return null;
+    // Memory that violates the align fact was copied: nothing of the guest's is passed in place.
+    if (misaligned(bytes.address(), bytes.size())) return null;
     MemorySegment scoped = bytes.scoped;
     if ((seen & SCOPED) == 0) {
       if (scoped == null) return null;
@@ -111,7 +176,12 @@ public final class AlignedBytesCoercion extends Coercion {
     return scoped;
   }
 
-  /** As {@link BytesCoercion#scoped}. */
+  /**
+   * The guest's buffer when a call can pass its own segment and so needs no borrow of it: {@code
+   * value} when {@link #segment} has a segment for it, after the one check {@link #execute} makes
+   * of native memory lent in place, and {@code null} for everything else. An FFM cell asks before
+   * it borrows; a call whose every buffer comes back from here holds nothing across the call.
+   */
   public NativeBytes scoped(Object value) {
     if (segment(value) == null) return null;
     NativeBytes bytes = (NativeBytes) value;
@@ -119,24 +189,41 @@ public final class AlignedBytesCoercion extends Coercion {
     return bytes;
   }
 
-  private boolean misaligned(long address) {
-    return (address & (align - 1)) != 0;
-  }
-
-  @HostCompilerDirectives.InliningCutoff
-  private void learn(Object value) {
-    CompilerDirectives.transferToInterpreterAndInvalidate();
-    seen |= kind(value);
-  }
-
+  /** Records that this call site lends segments with a scope to check; see {@link #learn}. */
   @HostCompilerDirectives.InliningCutoff
   private void learnScoped() {
     CompilerDirectives.transferToInterpreterAndInvalidate();
     seen |= SCOPED;
   }
 
+  /**
+   * The dummy address an empty buffer lends. Fetching it is a call, and a call on any path makes
+   * compiled code keep every value live across it in memory, a loop's own result included, so a
+   * call site that has not lent an empty buffer deoptimizes on its first one instead.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private long emptyAddress() {
+    if ((seen & EMPTY) == 0) {
+      CompilerDirectives.transferToInterpreterAndInvalidate();
+      seen |= EMPTY;
+    }
+    return Borrow.emptyAddress();
+  }
+
+  /** Whether native memory is lent at a lesser alignment than the fact; empty has no address. */
+  private boolean misaligned(long address, long size) {
+    return size != 0 && misaligned(address);
+  }
+
+  private boolean misaligned(long address) {
+    return (address & (align - 1)) != 0;
+  }
+
   private int kind(Object value) {
-    if (value instanceof NativeBytes) return NATIVE;
+    // Misaligned native memory is copied through its own buffer messages, as an interop buffer
+    // is: it takes the one path that does, so that path has a single call site.
+    if (value instanceof NativeBytes bytes)
+      return misaligned(bytes.address(), bytes.size()) ? OTHER : NATIVE;
     if (value instanceof HeapBytes) return HEAP;
     if (strings && value instanceof String) return TEXT;
     if (strings && value instanceof AbstractTruffleString) return GUEST_TEXT;
@@ -146,11 +233,30 @@ public final class AlignedBytesCoercion extends Coercion {
 
   private int pinThreshold() {
     int threshold = pinThreshold;
-    if (threshold < 0) {
+    return threshold >= 0 ? threshold : learnPinThreshold();
+  }
+
+  @HostCompilerDirectives.InliningCutoff
+  private int learnPinThreshold() {
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    // A pinned array's data starts on an 8-byte boundary, no more: a stricter fact never pins.
+    return pinThreshold = align > 8 ? Integer.MAX_VALUE : Math.max(Borrow.pinThreshold(), 0);
+  }
+
+  /**
+   * Pushes a guest string onto the scratch stack and returns the stack, or returns the string as a
+   * Java string when it does not fit there. Out of line in code compiled ahead of time, where a
+   * larger {@link #execute} would no longer be inlined into the cell.
+   */
+  @HostCompilerDirectives.InliningCutoff
+  private Object pushGuestText(AbstractTruffleString text) {
+    GuestText node = guestText;
+    if (node == null) {
       CompilerDirectives.transferToInterpreterAndInvalidate();
-      pinThreshold = threshold = Math.max(Borrow.pinThreshold(), 0);
+      guestText = node = insert(new GuestText());
     }
-    return threshold;
+    Borrow.Scratch pushed = node.push(text);
+    return pushed != null ? pushed : javaString(text);
   }
 
   @TruffleBoundary
@@ -158,7 +264,6 @@ public final class AlignedBytesCoercion extends Coercion {
     return text.toJavaStringUncached();
   }
 
-  /** Whatever is not native memory, a heap array or text: an interop buffer, string or pointer. */
   private void slow(Object value, Borrow borrow) {
     if (value == null) {
       pointer(0, value, borrow);
@@ -169,11 +274,11 @@ public final class AlignedBytesCoercion extends Coercion {
     InteropLibrary interop = interop();
     try {
       if (strings && interop.isString(value)) {
-        borrow.lendAlignedString(interop.asString(value), terminated, align);
+        borrow.lendString(interop.asString(value), terminated);
         return;
       }
       if (interop.hasBufferElements(value)) {
-        borrow.lendBuffer(interop, value, writable, terminated, align);
+        borrow.lendBuffer(interop, value, writable, terminated);
         return;
       }
       if (interop.isPointer(value)) {
@@ -185,7 +290,9 @@ public final class AlignedBytesCoercion extends Coercion {
         return;
       }
     } catch (UnsupportedMessageException e) {
-      throw CompilerDirectives.shouldNotReachHere(e);
+      // A value that stops answering what it claimed (a pointer without an address) is a bug.
+      CompilerDirectives.transferToInterpreter();
+      throw new AssertionError(e);
     } catch (IllegalArgumentException e) {
       CompilerDirectives.transferToInterpreter();
       throw NativeCellException.of(this, function, ": parameter ", parameter, ": ", e.getMessage());
@@ -193,7 +300,7 @@ public final class AlignedBytesCoercion extends Coercion {
     throw mismatch(expected(), value);
   }
 
-  /** A bare pointer has no size to copy: one that violates the fact is refused. */
+  /** A bare pointer has no size, so it cannot supply a derived byte count. */
   private void pointer(long address, Object value, Borrow borrow) {
     if (address == 0) {
       if (!nullable) throw mismatch(expected(), value);
@@ -204,6 +311,7 @@ public final class AlignedBytesCoercion extends Coercion {
     borrow.lend(address, 0);
   }
 
+  /** A bare pointer has no size to copy, so one that violates the align fact is refused. */
   private NativeCellException unaligned(long address) {
     CompilerDirectives.transferToInterpreter();
     return NativeCellException.of(

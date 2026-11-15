@@ -117,6 +117,9 @@ final class RustOwnership {
       // A nullable buffer is an Option of the slice. It is consumed once, into the pointer and
       // byte count the call passes, under the parameter's own name: no other name is introduced.
       var absent = new StringBuilder();
+      // Caller contracts of align facts, checked in debug builds only; an empty slice has no
+      // address of its own, so it is not checked.
+      var alignments = new StringBuilder();
       for (Parameter p : f.parameters()) {
         BufferBorrow buffer = call.buffer(p);
         BufferBorrow length = call.length(p);
@@ -124,6 +127,25 @@ final class RustOwnership {
           boolean shared = p.access() == Access.READ;
           String slice = shared ? "&[u8]" : "&mut [u8]";
           String pointer = shared ? ".as_ptr()" : ".as_mut_ptr()";
+          long align = CallBorrows.align(p);
+          if (align > 1) {
+            String at = call.nullable(buffer) ? p.name() + ".0" : p.name() + pointer;
+            String len = call.nullable(buffer) ? p.name() + ".1" : p.name() + ".len()";
+            alignments
+                .append("        debug_assert!(")
+                .append(len)
+                .append(" == 0 || (")
+                .append(at)
+                .append(" as usize) & ")
+                .append(align - 1)
+                .append(" == 0, \"")
+                .append(f.name())
+                .append('.')
+                .append(p.name())
+                .append(" requires ")
+                .append(align)
+                .append("-byte alignment\");\n");
+          }
           if (call.nullable(buffer)) {
             params.add(p.name() + ": Option<" + slice + ">");
             args.add(p.name() + ".0");
@@ -173,6 +195,7 @@ final class RustOwnership {
       if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
       out.append(" {\n")
           .append(absent)
+          .append(alignments)
           .append("        unsafe { super::")
           .append(f.name())
           .append('(')

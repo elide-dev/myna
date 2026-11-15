@@ -245,14 +245,19 @@ in a `finally` of its own, in reverse acquisition order:
   and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
   bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
   buffer lends a page-aligned dummy address.
-  The fact is accepted on a byte-pointer import parameter (C string or `truffle_buffer`); a `borrow`
-  declaration's buffer still rejects `align`, which `seam.ll` and the direct wrappers would promise to
-  every caller while only cells check it.
+  The fact is accepted on any byte-pointer parameter: a C string, a `truffle_buffer`, a call `borrow`
+  or a held one (a held copy and a held native buffer follow the same rules). On a `borrow` it is
+  also a caller contract for the other wrappers, which assert it in debug builds only; a cell is
+  the one caller that cannot be trusted, so it copies. A parameter with the fact takes
+  `AlignedBytesCoercion`: for a fact up to 16 it is `BytesCoercion` with checks that fold on the
+  fact, the borrow stays out of the heap in compiled code, and text keeps its scratch-stack paths; a
+  stricter fact encodes text into an array and copies it into an arena of its own.
 
 A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
-hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
+hand-written pin does. A parameter with an `align` fact up to 16 costs the same (its checks fold on the fact); a stricter
+fact copies into an arena of its own, which allocates. Each byte parameter profiles the kinds of value it has been given (native
 buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
 those paths. Several borrows on one call cost what each costs alone:
 `tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native

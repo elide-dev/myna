@@ -208,12 +208,16 @@ public final class TruffleCells implements Backend {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
             boolean writable = p.access() != Access.READ;
-            // A parameter with an align fact takes the coercion that honors it; the others keep the
-            // smaller one, which a compiled call inlines to keep its borrow out of the heap.
+            // A parameter with an align fact takes the coercion that honors it (one that costs more
+            // above 16, where no scratch copy satisfies it); the others keep the smaller one, which
+            // a
+            // compiled call inlines to keep its borrow out of the heap.
             String coercion =
                 cell.isHeld(p)
                     ? "HeldBytesCoercion"
-                    : align(p) > 1 ? "AlignedBytesCoercion" : "BytesCoercion";
+                    : align(p) > 16
+                        ? "OverAlignedBytesCoercion"
+                        : align(p) > 1 ? "AlignedBytesCoercion" : "BytesCoercion";
             imports.add(RUNTIME + coercion);
             imports.add(RUNTIME + "Borrow");
             fields
@@ -1178,8 +1182,8 @@ public final class TruffleCells implements Backend {
   }
 
   /**
-   * The {@code align} fact a byte parameter's coercion honors, or zero: only an approved
-   * ({@code explicit_contract} or compiler-proven) fact is a requirement.
+   * The {@code align} fact a byte parameter's coercion honors, or zero: only an approved ({@code
+   * explicit_contract} or compiler-proven) fact is a requirement.
    */
   private static long align(Parameter p) {
     Fact fact = p.facts().get("align");

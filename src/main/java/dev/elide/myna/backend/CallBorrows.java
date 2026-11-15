@@ -70,6 +70,45 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
     return parameter(b.parameter()).nullable();
   }
 
+  /**
+   * The alignment the buffer's parameter promises its callee ({@code align=N@explicit_contract}),
+   * or zero for none. A caller contract: cells copy a buffer that violates it, and the other
+   * wrappers assert it in debug builds only.
+   */
+  long align(BufferBorrow b) {
+    return align(parameter(b.parameter()));
+  }
+
+  static long align(Parameter p) {
+    Fact fact = p.facts().get("align");
+    return fact != null && fact.enabled() && fact.approved() ? Long.parseLong(fact.value()) : 0;
+  }
+
+  /**
+   * A Java {@code assert} statement for a buffer at {@code address} of {@code length} bytes, or
+   * nothing without an {@code align} fact. A single AND of the address: it costs nothing where
+   * assertions are off, which is HotSpot without {@code -ea} and any Native Image built without
+   * assertions. An empty buffer has no address of its own to check.
+   */
+  String alignmentAssertion(BufferBorrow b, String address, String length, String pad) {
+    long align = align(b);
+    if (align <= 1) return "";
+    return pad
+        + "assert "
+        + length
+        + " == 0 || ("
+        + address
+        + " & "
+        + (align - 1)
+        + "L) == 0 : \""
+        + function.name()
+        + "."
+        + b.parameter()
+        + " requires "
+        + align
+        + "-byte alignment\";\n";
+  }
+
   /** Whether the length travels in a 32-bit carrier, so the byte count needs a range check. */
   boolean narrow(BufferBorrow b) {
     Type type = parameter(b.length()).type();

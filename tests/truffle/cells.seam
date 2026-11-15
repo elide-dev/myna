@@ -70,8 +70,25 @@ import sumBytes symbol=cells_sum_bytes return=u64 error=no_failure nounwind=true
   param count type=u64
   param bias type=ptr<i64> nullable=true ownership=borrowed access=read
 end
+# TruffleData's UTF-16 session decode (#120): an input and a writable text_out, lent as ordinary
+# byte pointers, which the native side refuses unless each is 2-byte aligned. The align facts make a
+# cell copy native memory that is not.
+import utf16Probe symbol=cells_utf16_probe return=i32 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read align=2@explicit_contract
+  param length type=u64
+  param flags type=u32
+  param text_out type=ptr<u8> nullable=true ownership=borrowed access=read_write align=2@explicit_contract
+  param text_capacity type=u64
+end
 # The address native code receives, for parameters with align facts (#120): a large heap array
 # that a Native Image would pin at 8 bytes is copied for 16, and 64 asks for more than any copy.
+# A call borrow with an align fact: its cell copies a misaligned buffer, and the FFM wrapper asserts
+# the caller's contract in debug builds.
+borrow addressOfBorrow bytes length=count lifetime=call
+import addressOfBorrow symbol=cells_address_of_borrow return=u64 error=no_failure nounwind=true@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract align=16@explicit_contract
+  param count type=u64
+end
 import addressOf symbol=cells_address_of return=u64 error=no_failure nounwind=true@explicit_contract
   param bytes type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract align=16@explicit_contract truffle_buffer=true@explicit_contract
   param count type=u64

@@ -222,6 +222,7 @@ public final class NativeOwnership implements Backend {
           .append(" == 0 && length")
           .append(s)
           .append(" != 0)) throw new IllegalArgumentException(\"invalid buffer extent\");\n")
+          .append(call.alignmentAssertion(b.borrow(), "address" + s, "length" + s, pad + "    "))
           .append(pad)
           .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
           .append(s)
@@ -300,8 +301,11 @@ public final class NativeOwnership implements Backend {
           .append(");\n        try {\n")
           .append(
               "            org.graalvm.nativeimage.c.type.CCharPointer pointer ="
-                  + " pin.addressOfArrayElement(0);\n"
-                  + "            ")
+                  + " pin.addressOfArrayElement(0);\n")
+          .append(
+              call.alignmentAssertion(
+                  buffers.getFirst().borrow(), "pointer.rawValue()", "length", "            "))
+          .append("            ")
           .append(invoke)
           .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
       return;
@@ -340,7 +344,10 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("        ? org.graalvm.nativeimage.StackValue.get(1) : pin")
           .append(s)
-          .append(".addressOfArrayElement(0);\n");
+          .append(".addressOfArrayElement(0);\n")
+          .append(
+              call.alignmentAssertion(
+                  b.borrow(), "pointer" + s + ".rawValue()", "length" + s, pad + "    "));
       pad += "    ";
     }
     out.append(pad).append(invoke).append('\n');

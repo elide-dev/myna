@@ -424,6 +424,7 @@ public final class JavaFfm implements Backend {
           .append(arg)
           .append(
               ".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
+      checks.append(call.alignmentAssertion(buffer, arg + ".address()", "length" + s, pad));
       if (call.narrow(buffer))
         checks
             .append(pad)

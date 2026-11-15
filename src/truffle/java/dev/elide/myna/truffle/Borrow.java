@@ -129,17 +129,6 @@ public final class Borrow {
     return borrow;
   }
 
-  /**
-   * Takes the {@code pin} of an array at {@code address} for the call, or undoes it when the
-   * address is not divisible by {@code align} (at least one); whether it was taken.
-   */
-  boolean pinned(Object pin, long address, long length, long align) {
-    boolean fits = (address & (align - 1)) == 0;
-    if (fits) own(PINNED, pin, address, length);
-    else Pins.unpin(pin);
-    return fits;
-  }
-
   /** Lends a heap array: pinned when large and in a Native Image, otherwise copied. */
   public static Borrow ofArray(byte[] array, boolean writable, boolean nulTerminated) {
     Borrow borrow = new Borrow();
@@ -227,19 +216,8 @@ public final class Borrow {
    */
   void lendArray(byte[] array, boolean writable, boolean nulTerminated, int threshold) {
     if (!nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode())
-      Pins.pin(this, array, 1);
+      Pins.pin(this, array);
     else lendCopy(array, null, writable, nulTerminated);
-  }
-
-  /**
-   * {@link #lendArray} for a parameter with an {@code align} fact: a pin whose address is not
-   * divisible by {@code align} is undone and the array copied instead.
-   */
-  void lendAlignedArray(
-      byte[] array, boolean writable, boolean nulTerminated, int threshold, long align) {
-    boolean pin = !nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode();
-    if (pin && Pins.pin(this, array, align)) return;
-    lendAlignedCopy(array, null, writable, nulTerminated, align);
   }
 
   /**
@@ -253,7 +231,7 @@ public final class Borrow {
     else lendCopy(utf8(text), null, false, nulTerminated);
   }
 
-  /** Lends UTF-8 text at an address divisible by {@code align}, which may exceed 16. */
+  /** Lends UTF-8 text at an address divisible by {@code align}, which exceeds 16. */
   void lendAlignedString(String text, boolean nulTerminated, long align) {
     lendAlignedCopy(utf8(text), null, false, nulTerminated, align);
   }
@@ -330,16 +308,17 @@ public final class Borrow {
     }
   }
 
+  /** Lends a copy of {@code array} at an address divisible by {@code align}, above 16. */
+  void lendAlignedArray(byte[] array, boolean writable, boolean nulTerminated, long align) {
+    lendAlignedCopy(array, null, writable, nulTerminated, align);
+  }
+
   /**
-   * {@link #lendCopy} at an address divisible by {@code align}: scratch copies are 16-byte aligned,
-   * so only a stricter fact takes an arena of its own.
+   * {@link #lendCopy} at an address divisible by {@code align}, which exceeds 16: scratch copies
+   * are 16-byte aligned, so only a stricter fact takes an arena of its own.
    */
   private void lendAlignedCopy(
       byte[] bytes, Object source, boolean writable, boolean nulTerminated, long align) {
-    if (align <= Scratch.ALIGNMENT) {
-      lendCopy(bytes, source, writable, nulTerminated);
-      return;
-    }
     Copy copy = Copy.of(bytes, nulTerminated, align);
     own(COPIED, copy, copy.address, bytes.length);
     if (writable) {
@@ -440,7 +419,9 @@ public final class Borrow {
     final MemorySegment segment;
     final long address;
 
-    /** What {@code free} takes when {@link #arena} is {@code null}; it precedes {@link #address}. */
+    /**
+     * What {@code free} takes when {@link #arena} is {@code null}; it precedes {@link #address}.
+     */
     private final long raw;
 
     private Copy(Arena arena, MemorySegment segment) {
@@ -463,8 +444,7 @@ public final class Borrow {
     static Copy of(byte[] bytes, boolean nulTerminated, long align) {
       Arena arena = Arena.ofConfined();
       MemorySegment segment =
-          arena.allocate(
-              Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1), alignment(align));
+          arena.allocate(Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1), alignment(align));
       MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
       if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
       return new Copy(arena, segment);
@@ -527,10 +507,9 @@ public final class Borrow {
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
   private static final class Pins {
-    /** Pins {@code array} unless its address violates {@code align}; whether it did. */
-    static boolean pin(Borrow borrow, byte[] array, long align) {
+    static void pin(Borrow borrow, byte[] array) {
       PinnedObject pin = PinnedObject.create(array);
-      return borrow.pinned(pin, pin.addressOfArrayElement(0).rawValue(), array.length, align);
+      borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
     }
 
     static void unpin(Object pin) {

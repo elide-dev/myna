@@ -936,6 +936,89 @@ class OwnershipTest {
                   + " readonly=true@explicit_contract\n");
 
   /**
+   * An align fact on a borrow buffer is a caller contract. seam.ll promises it, Truffle cells copy
+   * a buffer that violates it, and every other wrapper asserts it in debug builds only: a Java
+   * {@code assert} or a Rust {@code debug_assert!}, a single AND of the address.
+   */
+  @Test
+  void alignOnCallBorrowsIsACallerContractCheckedInDebugBuilds() {
+    String aligned =
+        HANDLES.replace(
+            " readonly=true@explicit_contract\n  param length",
+            " readonly=true@explicit_contract align=8@explicit_contract\n  param length");
+    assertNotEquals(HANDLES, aligned);
+    var output = Generator.generate(Dsl.parse(aligned), true);
+    assertTrue(output.get("seam.ll").contains("align 8"), output.get("seam.ll"));
+    assertTrue(
+        output
+            .get("ApiTruffle.java")
+            .contains(
+                "new AlignedBytesCoercion(\"layoutCompile\", \"schema\", false, false, true,"
+                    + " false, 8)"),
+        output.get("ApiTruffle.java"));
+    // Every non-cell wrapper, on a function with no resource around it.
+    String plain =
+        TRANSFER.replace(
+            " readonly=true@explicit_contract\n",
+            " readonly=true@explicit_contract align=16@explicit_contract\n");
+    assertNotEquals(TRANSFER, plain);
+    var all = Generator.generate(Dsl.parse(plain), true);
+    var jniPlain = StaticJni.generate(Dsl.parse(plain));
+    assertTrue(
+        all.get("ApiFFM.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte alignment\";"),
+        all.get("ApiFFM.java"));
+    assertTrue(
+        all.get("ApiOwnership.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte" + " alignment\";"),
+        all.get("ApiOwnership.java"));
+    assertTrue(
+        jniPlain
+            .get("ApiJNI.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte" + " alignment\";"),
+        jniPlain.get("ApiJNI.java"));
+    assertTrue(
+        all.get("seam.rs")
+            .contains(
+                "debug_assert!(input.len() == 0 || (input.as_ptr() as usize) & 15 == 0,"
+                    + " \"transfer.input requires 16-byte alignment\");"),
+        all.get("seam.rs"));
+    // Without the fact nothing is asserted anywhere.
+    var none = Generator.generate(Dsl.parse(TRANSFER), true);
+    for (String file : List.of("ApiFFM.java", "ApiOwnership.java", "seam.rs"))
+      assertFalse(none.get(file).contains("requires 16-byte"), file);
+    // Only align: an extent or noalias requirement on a buffer is still rejected.
+    var refused =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Generator.generate(
+                    Dsl.parse(
+                        aligned.replace(
+                            "align=8@explicit_contract",
+                            "align=8@explicit_contract dereferenceable=8@explicit_contract")),
+                    true));
+    assertTrue(refused.getMessage().contains("cannot impose extent or noalias"));
+  }
+
+  /** A held borrow takes the same fact; its cell copies a buffer that violates it. */
+  @Test
+  void alignOnHeldBorrowsReachesTheirCoercion() {
+    String aligned =
+        HELD.replace(
+            " readonly=true@explicit_contract\n  param length",
+            " readonly=true@explicit_contract align=32@explicit_contract\n  param length");
+    assertNotEquals(HELD, aligned);
+    var output = Generator.generate(Dsl.parse(aligned), true);
+    assertTrue(output.get("seam.ll").contains("align 32"));
+    assertTrue(
+        output
+            .get("ApiTruffle.java")
+            .contains("new HeldBytesCoercion(\"layoutCompile\", \"schema\", false, 32)"),
+        output.get("ApiTruffle.java"));
+  }
+
+  /**
    * Only a Truffle cell's owner can end a borrow after its call, so the other backends leave a
    * create with a held buffer to its raw binding: no call-scoped wrapper, which would end it early.
    */
@@ -1191,7 +1274,7 @@ class OwnershipTest {
         Arguments.of(
             output,
             output.replace("\n", " noalias=true@explicit_contract\n"),
-            "call buffer cannot impose alignment, extent, or noalias preconditions"),
+            "call buffer cannot impose extent or noalias preconditions"),
         Arguments.of(
             "param capacity type=u32",
             "param capacity type=u16",

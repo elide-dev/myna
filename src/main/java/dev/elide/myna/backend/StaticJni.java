@@ -214,6 +214,24 @@ public final class StaticJni {
           .append("if (!")
           .append(segment)
           .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n");
+      long align = CallBorrows.align(p);
+      // A debug-only check of the caller's contract: an AND of the address, off without -ea.
+      if (align > 1)
+        checks
+            .append(pad)
+            .append("assert ")
+            .append(segment)
+            .append(".byteSize() == 0 || (")
+            .append(segment)
+            .append(".address() & ")
+            .append(align - 1)
+            .append("L) == 0 : \"")
+            .append(method.implementation().name())
+            .append('.')
+            .append(p.name())
+            .append(" requires ")
+            .append(align)
+            .append("-byte alignment\";\n");
       if (nullable) checks.append("        }\n");
     }
     out.append(

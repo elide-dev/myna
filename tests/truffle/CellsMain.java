@@ -209,6 +209,12 @@ public final class CellsMain {
         allocates("checksum of native bytes", new CellApiTruffle.checksum_Cell(), 0, 64 * 3, NativeBytes.of(lent, false));
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
+        // A parameter with an align fact costs what one without it does: native memory, a copy
+        // on the scratch stack, and text pushed there, with the alignment checks folded away.
+        allocates("utf16Probe of aligned native bytes", new CellApiTruffle.utf16Probe_Cell(), 0, 0, NativeBytes.of(lent, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a copied heap array", new CellApiTruffle.utf16Probe_Cell(), 0, 0, new HeapBytes(small, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, "hello world", 11L, 0, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a guest string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, CellChecks.guest("hello world"), 11L, 0, NativePointer.NULL, 0L);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
         // Text goes straight onto the scratch stack, ASCII or not: no UTF-8 array.
         allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 0, 11, "hello world");
@@ -279,6 +285,9 @@ public final class CellsMain {
         // A cell's typed execute from host code, which is compiled ahead of time and has no
         // partial evaluation: the borrow must still stay out of the heap.
         hostExecute(bean, "host execute: checksum of native bytes", 0, new CellApiTruffle.checksum_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of aligned native bytes", 0, new CellApiTruffle.addressOfBorrow_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of a copied heap array", 0, new CellApiTruffle.addressOfBorrow_Cell(), new HeapBytes(small, false));
+        hostExecute(bean, "host execute: addressOf of a copied heap array", 0, new CellApiTruffle.addressOf_Cell(), new HeapBytes(small, false), 64L);
         hostExecute(bean, "host execute: checksum of a copied heap array", 0, new CellApiTruffle.checksum_Cell(), new HeapBytes(small, false));
         hostExecute(bean, "host execute: checksum of a pinned heap array", 32, new CellApiTruffle.checksum_Cell(), pinned);
         hostExecute(bean, "host execute: strlen of a string", 0, new CellApiTruffle.strlen_Cell(), "hello world");

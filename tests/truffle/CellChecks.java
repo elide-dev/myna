@@ -64,13 +64,45 @@ public final class CellChecks {
     check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
   }
+  /**
+   * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,
+   * lent together (the second copy stacks on the first) at every length and odd output size.
+   */
+  static void utf16Inputs(Function<String, NativeFunction> cells) throws Exception {
+    for (int length : new int[] {0, 2, 6, 254, 256, 258, 4096, 20_000, 40_000}) {
+      for (int extra : new int[] {0, 1, 3}) {
+        for (boolean writable : new boolean[] {false, true}) {
+          byte[] data = new byte[length], out = new byte[length + extra];
+          check(call(cells, "utf16Probe", new HeapBytes(data, writable), (long) length, 1, new HeapBytes(out, true), (long) out.length).equals(0),
+              "utf16Probe: input of " + length + " bytes, output of " + out.length);
+        }
+      }
+    }
+  }
+  /** Native buffers at odd offsets reach the same decode: the align facts make the cell copy them. */
+  static void utf16NativeInputs(Function<String, NativeFunction> cells) throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 16);
+      for (int offset = 0; offset < 4; offset++) {
+        for (int outOffset = 0; outOffset < 4; outOffset++) {
+          NativeBytes data = NativeBytes.of(base.asSlice(offset, 64), false);
+          NativeBytes out = NativeBytes.of(base.asSlice(128 + outOffset, 64), true);
+          check(call(cells, "utf16Probe", data, 64L, 1, out, 64L).equals(0), "utf16Probe: native input at offset " + offset + ", output at " + outOffset);
+        }
+      }
+    }
+  }
+  /** A borrow derives its byte count; the other cells take it as an argument. */
+  static Object addressOf(Function<String, NativeFunction> cells, String name, Object buffer, long length) throws Exception {
+    return name.equals("addressOfBorrow") ? call(cells, name, buffer) : call(cells, name, buffer, length);
+  }
   /** The address a call received: every lent copy is 16-byte aligned and align facts are honored. */
   static void alignment(Function<String, NativeFunction> cells, byte[] large) throws Exception {
     byte[][] arrays = {new byte[1], new byte[3], new byte[255], new byte[4097], large, new byte[40_000]};
     for (byte[] array : arrays) {
-      for (String name : new String[] {"addressOf", "addressOfWide"}) {
-        long want = name.equals("addressOf") ? 16 : 64;
-        long at = (Long) call(cells, name, new HeapBytes(array, false), (long) array.length);
+      for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+        long want = name.equals("addressOfWide") ? 64 : 16;
+        long at = (Long) addressOf(cells, name, new HeapBytes(array, false), array.length);
         check(at % want == 0, name + " of " + array.length + " heap bytes at " + Long.toHexString(at));
       }
       long text = (Long) call(cells, "addressOf", "x".repeat(Math.min(array.length, 1000)), 1L);
@@ -80,9 +112,9 @@ public final class CellChecks {
       MemorySegment base = arena.allocate(256, 64);
       for (int offset : new int[] {0, 1, 8, 16, 33}) {
         NativeBytes slice = NativeBytes.of(base.asSlice(offset, 32), false);
-        for (String name : new String[] {"addressOf", "addressOfWide"}) {
-          long want = name.equals("addressOf") ? 16 : 64;
-          long at = (Long) call(cells, name, slice, 32L);
+        for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+          long want = name.equals("addressOfWide") ? 64 : 16;
+          long at = (Long) addressOf(cells, name, slice, 32);
           check(at % want == 0, name + " of native memory at offset " + offset + ": " + Long.toHexString(at));
           check(((base.address() + offset) % want == 0) == (at == slice.address()), name + " lends aligned memory in place and copies the rest, offset " + offset);
         }
@@ -524,6 +556,8 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
+    utf16Inputs(cells);
+    utf16NativeInputs(cells);
     alignment(cells, large);
     transfers(cells, large);
     decodes(cells);
