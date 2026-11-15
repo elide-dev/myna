@@ -237,9 +237,28 @@ final class ConstantsValidator {
         where + "c_bitfields requires an unsigned carrier, found " + f.type().text());
   }
 
-  /** Methods of every Rust flag newtype, which a range's getter may not take. */
+  /**
+   * Methods of every Rust flag newtype, which a range's getter may not take: its inherent methods,
+   * and those of its derives ({@code Clone}, {@code PartialEq}, {@code Eq}, {@code Hash}, {@code
+   * Debug}) and operator impls ({@code BitOr}, {@code BitAnd}). An inherent method of the same name
+   * would shadow the trait method in method-call syntax.
+   */
   private static final Set<String> RUST_FLAG_METHODS =
-      Set.of("contains", "intersects", "union", "when");
+      Set.of(
+          "contains",
+          "intersects",
+          "union",
+          "when",
+          "clone",
+          "clone_from",
+          "eq",
+          "ne",
+          "assert_receiver_is_total_eq",
+          "hash",
+          "hash_slice",
+          "fmt",
+          "bitor",
+          "bitand");
 
   /**
    * Bit ranges: inside the carrier, disjoint from every bit and other range, with an enum whose
@@ -276,8 +295,8 @@ final class ConstantsValidator {
             other == null,
             where + other + " and range " + r.name() + " both use the name " + member);
       }
-      String getter = Names.lowerCamel(r.name());
-      String setter = "with" + Character.toUpperCase(getter.charAt(0)) + getter.substring(1);
+      String getter = Names.javaRangeGetter(r.name());
+      String setter = Names.javaRangeSetter(r.name());
       require(
           !RESERVED_ACCESSORS.contains(getter),
           where + "range " + r.name() + ": getter " + getter + " is a reserved Java name");

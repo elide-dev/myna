@@ -37,6 +37,11 @@ const _: () = assert!(Packed::KIND_SHIFT == 8 && Packed::KIND_MASK == 0xff00);
 const _: () = assert!(Packed::DEPTH_SHIFT == 16 && Packed::DEPTH_MASK == 0xf_0000);
 const _: () = assert!(Packed::ALL.0 == 0xf_ff05);
 const _: () = assert!(Packed(0x0005_2a01).kind().0 == 0x2a);
+// A whole u8 word as one range: the getter is the word, the setter replaces it.
+const _: () = assert!(seam::Octet::CODE_SHIFT == 0 && seam::Octet::CODE_MASK == 0xff);
+const _: () = assert!(seam::Octet::ALL.0 == 0xff);
+const _: () = assert!(seam::Octet(0xa5).code() == 0xa5);
+const _: () = assert!(seam::Octet(0x12).with_code(0xa5).0 == 0xa5);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn consts_status(view: *const Record) -> Status {

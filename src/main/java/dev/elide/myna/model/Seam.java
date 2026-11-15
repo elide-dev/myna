@@ -323,7 +323,12 @@ public final class Seam {
     public Field withCase(FieldCase c) {
       var all = new ArrayList<>(cases);
       all.add(c);
-      return new Field(name, type, offset, group, all);
+      return withCases(all);
+    }
+
+    /** This field with {@code cases} in place of its own. */
+    public Field withCases(List<FieldCase> cases) {
+      return new Field(name, type, offset, group, cases);
     }
   }
 
@@ -681,6 +686,42 @@ public final class Seam {
       constants = constants.stream().sorted(Comparator.comparing(Constant::name)).toList();
       enums = enums.stream().sorted(Comparator.comparing(EnumGroup::name)).toList();
       flagSets = flagSets.stream().sorted(Comparator.comparing(FlagSet::name)).toList();
+      structs = canonicalCases(structs, enums);
+    }
+
+    /**
+     * Each tagged field's cases in canonical order: by tag field, then by the tag enum's value
+     * number, so the order of {@code when} lines never changes the fingerprint. Values the enum
+     * does not declare (rejected by validation) sort last, by name.
+     */
+    private static List<Struct> canonicalCases(List<Struct> structs, List<EnumGroup> enums) {
+      if (structs.stream().flatMap(s -> s.fields().stream()).allMatch(f -> f.cases().size() < 2))
+        return structs;
+      var result = new ArrayList<Struct>();
+      for (Struct s : structs) {
+        var fields = new ArrayList<Field>();
+        for (Field f : s.fields()) {
+          Comparator<FieldCase> order =
+              Comparator.comparing(FieldCase::tagField)
+                  .thenComparing(
+                      c -> caseValue(s, enums, c), Comparator.nullsLast(Comparator.naturalOrder()))
+                  .thenComparing(FieldCase::value);
+          fields.add(f.withCases(f.cases().stream().sorted(order).toList()));
+        }
+        result.add(new Struct(s.name(), s.size(), s.alignment(), fields));
+      }
+      return List.copyOf(result);
+    }
+
+    private static BigInteger caseValue(Struct s, List<EnumGroup> enums, FieldCase c) {
+      for (Field tag : s.fields())
+        if (tag.name().equals(c.tagField())
+            && tag.group() != null
+            && tag.group().kind() == GroupKind.ENUM)
+          for (EnumGroup e : enums)
+            if (e.name().equals(tag.group().name()))
+              for (EnumValue v : e.values()) if (v.name().equals(c.value())) return v.value();
+      return null;
     }
 
     public Module withTarget(String target) {

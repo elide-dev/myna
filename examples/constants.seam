@@ -35,6 +35,10 @@ flags Packed type=u32 c_bitfields=true
   range kind = 8..15 enum=Kind
   range depth = 16..19
 end
+# One range over a whole u8 word, reaching its top bit.
+flags Octet type=u8
+  range code = 0..7
+end
 # A tagged record: the tag says how to read the operand.
 enum NodeTag type=u32
   value read = 0

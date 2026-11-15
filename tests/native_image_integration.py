@@ -538,6 +538,17 @@ class ConstantsTests(unittest.TestCase):
         self.assertFalse([i for i in passed if "CEnumRuntimeData" in i or "ordinal" in i], passed)
         # Evidence for the @CBitfield cost (spec 7a.9): one shift more than the mask test.
         body("bitfieldLast"), body("maskLast")
+        # Range getter and setter, the enum range's @CBitfield read, and an enum-case compare against a
+        # constant: no call (x86-64 call, AArch64 bl/blr) other than to the stack-overflow and
+        # safepoint stubs every interruptible method branches to, no CEnumRuntimeData and no allocation.
+        call = re.compile(r"^(callq?|blr?)\b")
+        stubs = ("StackOverflow", "SafepointSlowpath", "<self")
+        allocation = re.compile(r"Allocat|NewInstance|NewArray|newInstance|TLAB|ThreadLocalAllocation")
+        for method in ("rangeGet", "rangeSet", "bitfieldRange", "caseIsSub"):
+            code = body(method)
+            calls = [i for i in code if call.match(i) and not any(s in i for s in stubs)]
+            self.assertEqual(calls, [], code)
+            self.assertFalse([i for i in code if "CEnumRuntimeData" in i or allocation.search(i)], code)
         # The constants have nothing to initialize and nothing reaches them: javac inlined every
         # field. At most the flag sets whose static predicates and range accessors the fixture calls
         # are reached classes; the builder usually inlines those methods too, so none is reached.

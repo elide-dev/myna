@@ -629,6 +629,7 @@ CHECK(CONSTANTS_PACKED_KIND_SHIFT == 8 && CONSTANTS_PACKED_KIND_MASK == 0xff00u,
 CHECK(CONSTANTS_PACKED_DEPTH_SHIFT == 16 && CONSTANTS_PACKED_DEPTH_MASK == 0xf0000u, "depth range");
 CHECK(CONSTANTS_PACKED_ALL == 0xfff05u && sizeof(CONSTANTS_PACKED_KIND_MASK) == 4, "packed all");
 CHECK(sizeof(struct constants_packed_bits) == 4, "packed bits size");
+CHECK(CONSTANTS_OCTET_CODE_MASK == 0xffu && CONSTANTS_OCTET_ALL == 0xffu, "whole-word range");
 #if CONSTANTS_STATUS_OK != 0
 #error "macros must work in #if"
 #endif
@@ -665,6 +666,7 @@ int main(void) {
   n.packed = constants_packed_with_kind(constants_packed_with_depth(n.packed, 0x13), CONSTANTS_KIND_LAST);
   if (n.packed != 0x3ff01u || (n.packed & ~CONSTANTS_PACKED_ALL) != 0) return 11;
   if (((n.packed | 0x2u) & ~CONSTANTS_PACKED_ALL) == 0) return 12;
+  if (constants_octet_code(constants_octet_with_code(0x12, 0xa5)) != 0xa5) return 13;
   return 0;
 }
 ''')

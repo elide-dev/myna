@@ -93,20 +93,20 @@ class ConstantsTest {
             new EnumValue("syntax_error", BigInteger.valueOf(16))),
         status.values());
     assertEquals(
-        java.util.List.of("Packed", "Perms", "Wide", "WriteFlags"),
+        java.util.List.of("Octet", "Packed", "Perms", "Wide", "WriteFlags"),
         m.flagSets().stream().map(FlagSet::name).toList());
     assertEquals(
         java.util.List.of(
             new FlagRange("kind", 8, 15, "Kind"), new FlagRange("depth", 16, 19, null)),
-        m.flagSets().get(0).ranges());
-    assertFalse(m.flagSets().get(1).cBitfields());
+        m.flagSets().get(1).ranges());
+    assertFalse(m.flagSets().get(2).cBitfields());
     assertEquals(
         java.util.List.of(
             new FlagBit("read", 0), new FlagBit("write", 1), new FlagBit("sticky", 31)),
-        m.flagSets().get(1).bits());
-    assertTrue(m.flagSets().get(1).ranges().isEmpty());
-    assertTrue(m.flagSets().get(2).cBitfields());
-    assertEquals(63, m.flagSets().get(2).bits().get(1).bit());
+        m.flagSets().get(2).bits());
+    assertTrue(m.flagSets().get(2).ranges().isEmpty());
+    assertTrue(m.flagSets().get(3).cBitfields());
+    assertEquals(63, m.flagSets().get(3).bits().get(1).bit());
 
     var record = m.structs().stream().filter(s -> s.name().equals("Record")).findFirst().get();
     assertEquals(new GroupRef(GroupKind.ENUM, "Status"), record.fields().get(0).group());
@@ -651,6 +651,9 @@ class ConstantsTest {
             "flags F type=u32\n range contains = 0..1\nend\n",
             "flags F: range contains: Rust method contains collides with the flag method contains"),
         Arguments.of(
+            "flags F type=u32\n range hash = 0..1\nend\n",
+            "flags F: range hash: Rust method hash collides with the flag method hash"),
+        Arguments.of(
             "flags F type=u32\n range has_unknown = 0..1\nend\n",
             "flags F: range has_unknown: Java method hasUnknown collides with hasUnknown"),
         Arguments.of(
@@ -677,8 +680,8 @@ class ConstantsTest {
             TAGGED + " when operand=binary enum=BinaryOp\nend\n",
             "field Node.operand when operand=binary: tag field operand carries no enum="),
         Arguments.of(
-            TAGGED + " when tag=binary enum=BinaryOp\n when raw=unary enum=UnaryOp\nend\n",
-            "field Node.operand: when lines name tag fields tag and raw; use one"),
+            TAGGED + " when tag=binary enum=BinaryOp\n when zeta=unary enum=UnaryOp\nend\n",
+            "field Node.operand: when lines name tag fields tag and zeta; use one"),
         Arguments.of(
             TAGGED + " when tag=binary enum=Narrow\nend\n",
             "field Node.operand when tag=binary: enum=Narrow has carrier u8, but the field's type"
@@ -743,6 +746,16 @@ class ConstantsTest {
                 + "\"enum\":\"UnaryOp\"}]}"),
         json);
     assertEquals(1, json.split("\"cases\"", -1).length - 1);
+    // Cases are canonical: by the tag enum's value, whatever the order of the when lines.
+    var reordered =
+        Dsl.parse(
+            HEAD
+                + TAGGED
+                + " when tag=unary enum=UnaryOp\n"
+                + " when tag=binary enum=BinaryOp\n"
+                + " field after type=u64 offset=16\nend\n");
+    assertEquals(fields.get(2).cases(), reordered.structs().get(0).fields().get(2).cases());
+    assertEquals(SeamJson.fingerprint(m), SeamJson.fingerprint(reordered));
     assertNotEquals(
         SeamJson.fingerprint(m),
         SeamJson.fingerprint(Dsl.parse(HEAD + TAGGED + " field after type=u64 offset=16\nend\n")));
@@ -972,7 +985,8 @@ class ConstantsTest {
         json);
     assertTrue(
         json.contains(
-            "\"flagSets\": [{\"name\":\"Packed\",\"type\":\"u32\",\"cBitfields\":true,\"bits\":"
+            "\"flagSets\":"
+                + " [{\"name\":\"Octet\",\"type\":\"u8\",\"bits\":[],\"ranges\":[{\"name\":\"code\",\"low\":0,\"high\":7}]},{\"name\":\"Packed\",\"type\":\"u32\",\"cBitfields\":true,\"bits\":"
                 + "[{\"name\":\"open\",\"bit\":0},{\"name\":\"external\",\"bit\":2}],\"ranges\":"
                 + "[{\"name\":\"kind\",\"low\":8,\"high\":15,\"enum\":\"Kind\"},"
                 + "{\"name\":\"depth\",\"low\":16,\"high\":19}]},"
@@ -981,7 +995,7 @@ class ConstantsTest {
                 + "{\"name\":\"Wide\",\"type\":\"u64\",\"cBitfields\":true,\"bits\":"),
         json);
     assertEquals(2, json.split("\"cBitfields\"", -1).length - 1);
-    assertEquals(1, json.split("\"ranges\"", -1).length - 1);
+    assertEquals(2, json.split("\"ranges\"", -1).length - 1);
     assertTrue(
         json.contains("{\"name\":\"perms\",\"type\":\"u32\",\"offset\":4,\"flags\":\"Perms\"}"));
     assertTrue(
@@ -1198,10 +1212,83 @@ class ConstantsTest {
             out.append(' ').append(Integer.toHexString(packed)).append(Kind.name(Packed.kind(packed)))
                 .append(Packed.hasUnknown(packed)).append(Packed.hasUnknown(packed | 0x2))
                 .append(Packed.hasUnknown(packed | 0x100000));
+            byte octet = Octet.withCode((byte) 0x12, (byte) 0xa5);
+            out.append(' ').append(octet).append(Octet.code(octet)).append(Octet.hasUnknown(octet));
             return out.toString();
           }
         }
         """;
+    assertEquals(
+        "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
+            + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
+            + " -9223372036854775808 90501 59boxed 3ff01lastfalsetruetrue -91-91false",
+        runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * Range edges the fixture does not reach: a {@code u64} range above bit 32 written from a
+   * narrower enum (the setter widens before it shifts), a signed carrier's range over its sign bit
+   * (a negative mask in every backend), and a {@code u8} range reaching bit 7 beside a bit.
+   */
+  @Test
+  void rangeEdgesRunOnHotSpot() throws Exception {
+    var module =
+        Dsl.parse(
+            "module edge target=x86_64-unknown-linux-gnu java_package=fixture.edge"
+                + " java_class=Edge truffle_cells=true\n"
+                + "enum Small type=u8\n value a = 0\n value b = 200\nend\n"
+                + "flags Big type=u64\n range hi = 40..47 enum=Small\n range mid = 4..9\nend\n"
+                + "flags Neg type=i32\n bit low = 0\n range top = 24..31 enum=Small\nend\n"
+                + "flags Nibble type=u8\n bit low = 0\n range high = 4..7\nend\n");
+    Validator.validate(module, true);
+    var out = Generator.generate(module, true);
+    String constants = out.get("EdgeConstants.java");
+    assertTrue(
+        constants.contains(
+            "public static long withHi(long flags, byte value) { return (flags & ~HI_MASK) |"
+                + " (((long) value << HI_SHIFT) & HI_MASK); }"),
+        constants);
+    assertTrue(constants.contains("public static final int TOP_MASK = 0xff000000;"), constants);
+    assertTrue(
+        out.get("seam.h").contains("#define EDGE_NEG_TOP_MASK (INT32_C(-16777216))"),
+        out.get("seam.h"));
+    assertTrue(out.get("seam.rs").contains("pub const TOP_MASK: i32 = -16777216;"));
+    assertTrue(
+        out.get("EdgeTruffle.java").contains("new String[] {\"low\", \"top_shift\", \"top_mask\"}"),
+        out.get("EdgeTruffle.java"));
+    assertTrue(out.get("EdgeTruffle.java").contains("-16777216"), out.get("EdgeTruffle.java"));
+    String consumer =
+        """
+        package fixture.edge;
+        import static fixture.edge.EdgeConstants.*;
+        public final class Consumer {
+          public static String run() {
+            StringBuilder out = new StringBuilder();
+            long big = Big.withMid(Big.withHi(-1L, Small.A), 0x3c5);
+            out.append(Long.toHexString(big)).append(' ');
+            big = Big.withHi(0, Small.B);
+            out.append(Long.toHexString(big)).append(Big.hi(big) == Small.B).append(Big.mid(big)).append(' ');
+            int neg = Neg.withTop(Neg.LOW, Small.B);
+            out.append(neg).append(Neg.top(neg) == Small.B).append(Neg.hasUnknown(neg))
+                .append(Neg.hasUnknown(neg | 2)).append(Neg.top(Neg.withTop(neg, Small.A))).append(' ');
+            byte nibble = Nibble.withHigh((byte) 1, (byte) 0xff);
+            out.append(nibble).append(Nibble.high(nibble)).append(Nibble.hasUnknown(nibble))
+                .append(Nibble.hasUnknown((byte) (nibble | 2)));
+            return out.toString();
+          }
+        }
+        """;
+    assertEquals(
+        "ffff00fffffffc5f c80000000000true0 -939524095truefalsetrue0 -1515falsetrue",
+        runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * Compiles {@code <Class>Constants} and a {@code Consumer} in the module's package with every
+   * warning fatal, and returns what {@code Consumer.run()} returns on HotSpot.
+   */
+  static Object runOnHotSpot(Module module, String constants, String consumer) throws Exception {
+    String pkg = module.javaPackageName();
     Path out = Files.createTempDirectory("myna-constants");
     try {
       var compiler = ToolProvider.getSystemJavaCompiler();
@@ -1217,7 +1304,7 @@ class ConstantsTest {
                   List.of(
                       source(module, constants),
                       new SimpleJavaFileObject(
-                          URI.create("string:///fixture/constants/Consumer.java"),
+                          URI.create("string:///" + pkg.replace('.', '/') + "/Consumer.java"),
                           JavaFileObject.Kind.SOURCE) {
                         @Override
                         public CharSequence getCharContent(boolean ignoreEncodingErrors) {
@@ -1227,13 +1314,7 @@ class ConstantsTest {
               .call();
       assertTrue(ok, diagnostics.getDiagnostics().toString());
       try (var loader = new URLClassLoader(new URL[] {out.toUri().toURL()}, null)) {
-        Object result =
-            loader.loadClass("fixture.constants.Consumer").getMethod("run").invoke(null);
-        assertEquals(
-            "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
-                + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
-                + " -9223372036854775808 90501 59boxed 3ff01lastfalsetruetrue",
-            result);
+        return loader.loadClass(pkg + ".Consumer").getMethod("run").invoke(null);
       }
     } finally {
       try (var walk = Files.walk(out)) {

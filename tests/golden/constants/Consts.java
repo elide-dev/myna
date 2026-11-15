@@ -26,14 +26,14 @@ import org.graalvm.word.PointerBase;
 @CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
-    public static final String ABI_FINGERPRINT = "7b304aed893204e51678b962cd63aaafc0f1d4cd3e5891ee11ead4c253ed6bb3";
+    public static final String ABI_FINGERPRINT = "952c39f25cc60a83dd16fe23049a9780cf6eedf4b57457a0dab1af8672276083";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_SEAM_ABI_7b304aed893204e51678b962cd63aaafc0f1d4cd3e5891ee11ead4c253ed6bb3") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_SEAM_ABI_952c39f25cc60a83dd16fe23049a9780cf6eedf4b57457a0dab1af8672276083") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */
@@ -219,8 +219,8 @@ public final class Consts {
         @CBitfield("packedBits.open") void packedOpen(boolean value);
         @CBitfield("packedBits.external") boolean packedExternal();
         @CBitfield("packedBits.external") void packedExternal(boolean value);
-        @CBitfield("packedBits.kind") int packedKind();
-        @CBitfield("packedBits.kind") void packedKind(int value);
+        @CBitfield("packedBits.kind") byte packedKind();
+        @CBitfield("packedBits.kind") void packedKind(byte value);
         @CBitfield("packedBits.depth") int packedDepth();
         @CBitfield("packedBits.depth") void packedDepth(int value);
         /** when tag=binary enum=BinaryOp; when tag=unary enum=UnaryOp; when tag=write flags=WriteFlags */

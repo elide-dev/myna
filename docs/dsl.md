@@ -182,7 +182,12 @@ end
 - C: `static inline` getter `<module>_<group>_<name>(flags)` and setter
   `<module>_<group>_with_<name>(flags, value)`, which returns the new word. With `enum=` they use the enum's
   typedef. With `c_bitfields=true` the bits struct gains a member of the range's width, and Native Image a
-  `@CBitfield` accessor of the carrier's Java type that reads the range zero-extended.
+  `@CBitfield` getter and setter typed as `<Class>Constants` types the range: the enum's Java carrier with
+  `enum=`, otherwise the flag carrier's Java type (`byte`, `short`, `int` or `long`, the same signed
+  primitive for signed and unsigned carriers). The read takes the unsigned bit-field's value and narrows it to
+  that type, so a value with the type's top bit set reads negative, exactly as the `<Class>Constants` literal
+  of an unsigned carrier does (`u8` 255 is `(byte) -1`), and the two compare equal with `==`. A write stores
+  the value's low bits.
 - Rust: `fn <name>(self)` returns the enum newtype (built directly, every value is valid) or the carrier, and
   `fn with_<name>(self, value) -> Self`. Java `<Class>Constants.<Flags>`: `<name>(flags)` and
   `with<Name>(flags, value)`, with the enum's carrier as the value type.
@@ -216,6 +221,10 @@ end
   (`operandAsBinaryOp(node)`), returning the `@CEnum` or `null` for an unlisted value, like `<name>Enum`.
   Flag cases keep the raw `@CField`, tested with `<Class>Constants`. The `@CField` and the FFM offset name
   each case in a comment. C and Truffle cells are unchanged.
+- The `@CEnum` accessor is a convenience with the cost of `<name>Enum`: an `==` against a constant folds
+  once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
+  paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
+  which compiles to immediate compares.
 - The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
   so they are part of the fingerprint.
 

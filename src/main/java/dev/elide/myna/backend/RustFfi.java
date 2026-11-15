@@ -292,7 +292,14 @@ public final class RustFfi implements Backend {
           e.name() + "(" + (enumCarrier.equals(carrier) ? raw : bits + " as " + enumCarrier) + ")";
       write = enumCarrier.equals(carrier) ? "value.0" : "(value.0 as " + carrier + ")";
     }
-    out.append("    #[inline(always)] pub const fn ")
+    out.append("    /// Range `")
+        .append(r.name())
+        .append("`, bits ")
+        .append(r.low())
+        .append("..=")
+        .append(r.high())
+        .append(r.enumName() == null ? "" : ", as `" + r.enumName() + "`")
+        .append(".\n    #[inline(always)] pub const fn ")
         .append(r.name())
         .append("(self) -> ")
         .append(valueType)

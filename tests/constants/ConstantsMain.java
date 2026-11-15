@@ -56,6 +56,29 @@ public final class ConstantsMain {
     return ConstsConstants.Wide.last(view.wide());
   }
 
+  // Measured: a range getter, a range setter, the @CBitfield range read and an enum-case compare.
+  // Expected: shifts and masks or one narrow load, compares with an immediate; no call, no
+  // CEnumRuntimeData, no allocation.
+  @NeverInline("measured")
+  static byte rangeGet(int flags) {
+    return ConstsConstants.Packed.kind(flags);
+  }
+
+  @NeverInline("measured")
+  static int rangeSet(int flags, byte kind) {
+    return ConstsConstants.Packed.withKind(flags, kind);
+  }
+
+  @NeverInline("measured")
+  static byte bitfieldRange(Consts.Node node) {
+    return node.packedKind();
+  }
+
+  @NeverInline("measured")
+  static boolean caseIsSub(Consts.Node node) {
+    return Consts.operandAsBinaryOp(node) == Consts.BinaryOp.SUB;
+  }
+
   public static void main(String[] args) {
     Consts.Record view = StackValue.get(Consts.Record.class);
     Consts.Session session = StackValue.get(8);
@@ -100,8 +123,15 @@ public final class ConstantsMain {
             ConstsConstants.Packed.withKind(ConstsConstants.Packed.OPEN, ConstsConstants.Kind.LAST),
             9));
     check(node.packed() == 0x9ff01, "range setters");
-    check(node.packedKind() == 0xff && node.packedDepth() == 9, "range bitfields read zero-extended");
+    // Typed like ConstsConstants: Kind.LAST is (byte) 255, and so is the enum range's bit-field read.
+    check(node.packedKind() == ConstsConstants.Kind.LAST, "range bitfield read is the Kind carrier");
+    check(bitfieldRange(node) == ConstsConstants.Kind.LAST, "measured bitfield read");
+    check(node.packedDepth() == 9, "raw range bitfield read");
     check(ConstsConstants.Packed.kind(node.packed()) == ConstsConstants.Kind.LAST, "range getter");
+    check(rangeGet(node.packed()) == ConstsConstants.Kind.LAST, "measured range getter");
+    // Two kinds, so the builder cannot specialize the measured setter to one constant argument.
+    check(rangeSet(node.packed(), ConstsConstants.Kind.BOXED) == 0x90501, "measured range setter");
+    check(rangeSet(node.packed(), ConstsConstants.Kind.PLAIN) == 0x90001, "measured range setter");
     node.packedKind(ConstsConstants.Kind.BOXED);
     check(ConstsConstants.Packed.kind(node.packed()) == ConstsConstants.Kind.BOXED, "range bitfield write");
     check(node.packedOpen() && !ConstsConstants.Packed.hasUnknown(node.packed()), "no unknown bits");
@@ -111,9 +141,11 @@ public final class ConstantsMain {
     node.tag(ConstsConstants.NodeTag.BINARY);
     node.operand(ConstsConstants.BinaryOp.SUB);
     check(Consts.operandAsBinaryOp(node) == Consts.BinaryOp.SUB, "operand as BinaryOp");
+    check(caseIsSub(node), "measured enum case compare");
     check(Consts.operandAsUnaryOp(node) == Consts.UnaryOp.INVERT, "operand as UnaryOp");
     node.operand(7);
     check(Consts.operandAsBinaryOp(node) == null, "an unlisted operand is null");
+    check(!caseIsSub(node), "measured enum case compare of an unlisted value");
 
     System.out.println("Native Image constants, @CEnum enums and @CBitfield passed");
   }

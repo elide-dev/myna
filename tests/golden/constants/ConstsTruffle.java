@@ -14,7 +14,7 @@ import org.graalvm.word.WordFactory;
 
 public final class ConstsTruffle {
     private ConstsTruffle() {}
-    public static final String ABI_FINGERPRINT = "7b304aed893204e51678b962cd63aaafc0f1d4cd3e5891ee11ead4c253ed6bb3";
+    public static final String ABI_FINGERPRINT = "952c39f25cc60a83dd16fe23049a9780cf6eedf4b57457a0dab1af8672276083";
     /** Logical names of every generated cell, in symbol order. */
     public static final String[] CELLS = {"blockingStatus", "setLevel", "status"};
     /** A fresh executable per call: a cell holds call-site profiles and is adopted once. */
@@ -37,7 +37,7 @@ public final class ConstsTruffle {
     }
     private static final NativeConstants CONSTANTS =
             new NativeConstants(
-                new String[] {"FLOOR", "LIMIT", "MAGIC", "BinaryOp", "Kind", "Level", "NodeTag", "Status", "UnaryOp", "Packed", "Perms", "Wide", "WriteFlags"},
+                new String[] {"FLOOR", "LIMIT", "MAGIC", "BinaryOp", "Kind", "Level", "NodeTag", "Status", "UnaryOp", "Octet", "Packed", "Perms", "Wide", "WriteFlags"},
                 new Object[] {
                     -9223372036854775808L,
                     -1L,
@@ -82,6 +82,12 @@ public final class ConstsTruffle {
                             new Object[] {
                                 0L,
                                 1L
+                            }),
+                    new NativeConstants(
+                            new String[] {"code_shift", "code_mask"},
+                            new Object[] {
+                                0,
+                                255
                             }),
                     new NativeConstants(
                             new String[] {"open", "external", "kind_shift", "kind_mask", "depth_shift", "depth_mask"},

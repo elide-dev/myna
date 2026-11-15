@@ -107,6 +107,20 @@ public final class ConstsConstants {
         }
     }
 
+    /** flags Octet: u8 */
+    public static final class Octet {
+        private Octet() {}
+        public static final byte CODE_SHIFT = (byte) 0;
+        public static final byte CODE_MASK = (byte) 0xff;
+        public static final byte ALL = (byte) 0xff;
+        /** Range code (bits 0..7) of {@code flags}. */
+        public static byte code(byte flags) { return (byte) ((flags >>> CODE_SHIFT) & 0xff); }
+        /** {@code flags} with range code set to the low 8 bits of {@code value}. */
+        public static byte withCode(byte flags, byte value) { return (byte) ((flags & ~CODE_MASK) | ((value << CODE_SHIFT) & CODE_MASK)); }
+        /** True when {@code flags} has a bit no declared flag names. */
+        public static boolean hasUnknown(byte flags) { return (flags & ~ALL) != 0; }
+    }
+
     /** flags Packed: u32 */
     public static final class Packed {
         private Packed() {}

@@ -163,8 +163,8 @@ public final class JavaConstants implements Backend {
    */
   private static void range(Module m, FlagSet f, FlagRange r, String carrier, StringBuilder out) {
     String upper = r.name().toUpperCase(Locale.ROOT);
-    String getter = Names.lowerCamel(r.name());
-    String setter = "with" + Character.toUpperCase(getter.charAt(0)) + getter.substring(1);
+    String getter = Names.javaRangeGetter(r.name());
+    String setter = Names.javaRangeSetter(r.name());
     String value = carrier;
     if (r.enumName() != null)
       value =

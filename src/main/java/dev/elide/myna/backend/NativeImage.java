@@ -535,7 +535,7 @@ public final class NativeImage implements Backend {
           .append(f.name().substring(1))
           .append("();\n");
       FlagSet bits = bitfields(m, f);
-      if (bits != null) bitfieldAccessors(f, bits, carrier, out);
+      if (bits != null) bitfieldAccessors(m, f, bits, carrier, out);
     }
     out.append("    }\n");
   }
@@ -595,10 +595,19 @@ public final class NativeImage implements Backend {
    * struct that {@code seam.h} unions with the field. They read and write the same bits as the
    * masks in {@code <Class>Constants}, at one shift more per read than a mask test (spec 7a.9).
    */
-  private static void bitfieldAccessors(Field f, FlagSet set, String carrier, StringBuilder out) {
+  private static void bitfieldAccessors(
+      Module m, Field f, FlagSet set, String carrier, StringBuilder out) {
     for (FlagBit b : set.bits()) bitfieldAccessor(f, b.name(), "boolean", out);
-    // A range reads zero-extended (the bit-field is unsigned) and writes its low bits.
-    for (FlagRange r : set.ranges()) bitfieldAccessor(f, r.name(), carrier, out);
+    // A range is typed as <Class>Constants types it: the enum's Java carrier with enum=, else the
+    // flag carrier's. SVM reads the unsigned bit-field zero-extended and narrows it to that type,
+    // so a value with the type's top bit set reads negative, as the literals of an unsigned carrier
+    // are; a write stores the value's low bits.
+    for (FlagRange r : set.ranges()) {
+      String type = carrier;
+      if (r.enumName() != null)
+        type = Types.java(enumGroup(m, new GroupRef(GroupKind.ENUM, r.enumName())).type());
+      bitfieldAccessor(f, r.name(), type, out);
+    }
   }
 
   private static void bitfieldAccessor(Field f, String member, String type, StringBuilder out) {

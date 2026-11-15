@@ -81,6 +81,17 @@ public final class Names {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_" + member;
   }
 
+  /** The Java getter of a flag set's range: {@code kind}, {@code typeCode}. */
+  public static String javaRangeGetter(String range) {
+    return lowerCamel(range);
+  }
+
+  /** The Java {@code with} setter of a flag set's range: {@code withKind}, {@code withTypeCode}. */
+  public static String javaRangeSetter(String range) {
+    String getter = javaRangeGetter(range);
+    return "with" + Character.toUpperCase(getter.charAt(0)) + getter.substring(1);
+  }
+
   /** The Rust accessor of a tagged field's case: {@code operand_as_binary_op}. */
   public static String rustCaseAccessor(String field, String group) {
     return field + "_as_" + lowerSnake(group);
