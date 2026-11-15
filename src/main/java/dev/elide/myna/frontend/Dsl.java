@@ -191,7 +191,7 @@ public final class Dsl {
             var opts = options(words, 2);
             var type = Seam.type(takeRequired(opts, "type"));
             long offset = Long.parseLong(takeRequired(opts, "offset"));
-            fields.add(new Field(words[1], type, offset, group(opts)));
+            fields.add(new Field(words[1], type, offset, group(opts), take(opts, "count", null)));
             empty(opts);
           }
           case "end" -> {

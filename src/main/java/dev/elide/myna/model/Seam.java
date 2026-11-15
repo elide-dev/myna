@@ -301,10 +301,18 @@ public final class Seam {
     }
   }
 
-  /** A struct field; {@code group} names the enum or flag set annotating it, or is null. */
-  public record Field(String name, Type type, long offset, GroupRef group) {
+  /**
+   * A struct field; {@code group} names the enum or flag set annotating it, or is null. {@code
+   * count}, on a {@code ptr<T>} field, names the integer field of the same struct that counts the
+   * elements it points to, or is null.
+   */
+  public record Field(String name, Type type, long offset, GroupRef group, String count) {
     public Field(String name, Type type, long offset) {
       this(name, type, offset, null);
+    }
+
+    public Field(String name, Type type, long offset, GroupRef group) {
+      this(name, type, offset, group, null);
     }
   }
 

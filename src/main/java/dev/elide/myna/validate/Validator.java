@@ -465,6 +465,7 @@ public final class Validator {
     }
     ConstantsValidator.validate(module);
     OwnershipValidator.validate(module);
+    ViewsValidator.validate(module);
   }
 
   /**

@@ -15,6 +15,72 @@ public final class RustFfi implements Backend {
     return "seam.rs";
   }
 
+  /**
+   * A safe slice accessor per counted view: a {@code &Record} is already trusted, and its contract
+   * is that a non-null pointer addresses {@code count} elements living as long as the record. The
+   * null and size rules are checked once here, with {@code debug_assert!} for the contract parts.
+   */
+  private static void views(Module m, Struct s, StringBuilder out) {
+    var views = Views.of(m, s);
+    if (views.isEmpty()) return;
+    out.append("impl ").append(s.name()).append(" {\n");
+    for (Views v : views) {
+      String pointer = "self." + v.pointer().name();
+      String count = "self." + v.count().name();
+      String element = Types.rust(v.element());
+      out.append("    /// The `")
+          .append(v.count().name())
+          .append("` elements at `")
+          .append(v.pointer().name())
+          .append("`, empty when it is null.\n")
+          .append("    ///\n")
+          .append("    /// The record's contract: a non-null `")
+          .append(v.pointer().name())
+          .append("` addresses `")
+          .append(v.count().name())
+          .append("` initialized,\n")
+          .append(
+              "    /// aligned elements that stay valid and unmodified for as long as the record")
+          .append(" is borrowed,\n")
+          .append("    /// and a null one has a zero count. Debug builds assert both rules.\n")
+          .append("    #[inline]\n    pub fn ")
+          .append(v.pointer().name())
+          .append("(&self) -> &[")
+          .append(element)
+          .append("] {\n");
+      if (v.signedCount())
+        out.append("        debug_assert!(")
+            .append(count)
+            .append(" >= 0, \"")
+            .append(v.label())
+            .append(": negative count\");\n");
+      out.append("        let count = ")
+          .append(count)
+          .append(v.countType() == Scalar.USIZE ? "" : " as usize")
+          .append(";\n        if ")
+          .append(pointer)
+          .append(".is_null() {\n            debug_assert!(count == 0, \"")
+          .append(v.label())
+          .append(": null with a nonzero count\");\n")
+          .append("            return &[];\n        }\n")
+          .append("        debug_assert!(count <= isize::MAX as usize / core::mem::size_of::<")
+          .append(element)
+          .append(">(), \"")
+          .append(v.label())
+          .append(": count overflows isize\");\n")
+          .append("        debug_assert!(")
+          .append(pointer)
+          .append(".is_aligned(), \"")
+          .append(v.label())
+          .append(": misaligned\");\n")
+          .append("        // SAFETY: the record's contract above; null was handled.\n")
+          .append("        unsafe { core::slice::from_raw_parts(")
+          .append(pointer)
+          .append(", count) }\n    }\n");
+    }
+    out.append("}\n");
+  }
+
   public String generate(Module m) {
     var out =
         new StringBuilder(
@@ -82,6 +148,7 @@ public final class RustFfi implements Backend {
             .append(f.offset())
             .append(");\n");
       out.append("};\n");
+      views(m, s, out);
     }
     out.append("\nunsafe extern \"C\" {\n");
     for (Function declared : m.functions()) {

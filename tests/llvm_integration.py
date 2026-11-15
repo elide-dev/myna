@@ -667,4 +667,13 @@ int main(void) {
             run("rustc", "--edition=2024", "--test", "-C", "opt-level=2", ROOT / "tests/constants" / (name + ".rs"), "-o", test)
             run(test)
 
+    def test_views_rust(self):
+        """Counted views: slices of the counted length; index count and, in debug builds, a null
+        pointer with a nonzero count panic; a null pointer with a zero count is empty."""
+        test = self.work / "views_check"
+        os.environ["SEAM_GENERATED"] = str(ROOT / "tests/golden/views")
+        run("rustc", "--edition=2024", "--test", "-C", "opt-level=2", "-C", "debug-assertions",
+            ROOT / "tests/views/check.rs", "-o", test)
+        run(test)
+
 if __name__ == "__main__": main(sys.modules[__name__], "llvm-integration")

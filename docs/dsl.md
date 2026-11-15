@@ -49,7 +49,30 @@ struct View size=24 align=8
 end
 ```
 
-Fields are scalar/pointer values in ascending, non-overlapping, naturally aligned offsets. All padding and final size are explicit. C/Rust emit compile-time size/alignment/offset assertions; FFM uses explicit padding layouts. Rust records derive `Clone, Copy`; the Native Image class gets a `@CStruct` interface per record (`SIZE` and `ALIGNMENT` constants, `@CField` get/set per field, `addressOf<Field>()`), used with `StackValue.get(R.class)` and `SizeOf.get(R.class)` for records in the stack or unmanaged memory. Arrays, nested by-value fields and custom packing are not implemented.
+Fields are scalar/pointer values in ascending, non-overlapping, naturally aligned offsets. All padding and final size are explicit. C/Rust emit compile-time size/alignment/offset assertions; FFM uses explicit padding layouts. Rust records derive `Clone, Copy`; the Native Image class gets a `@CStruct` interface per record (`SIZE` and `ALIGNMENT` constants, `@CField` get/set per field, `addressOf<Field>()`), used with `StackValue.get(R.class)` and `SizeOf.get(R.class)` for records in the stack or unmanaged memory. Inline arrays, nested by-value fields and custom packing are not implemented; a pointer field can name its element count (below).
+
+### Counted element views
+
+A `ptr<T>` field may name the integer field of the same record that counts the elements it points to:
+
+```text
+struct Program size=32 align=8
+  field functions type=ptr<Function> offset=0 count=functionCount
+  field functionCount type=u64 offset=8
+  field text type=ptr<u16> offset=16 count=textLength
+  field textLength type=u32 offset=24
+  field version type=u32 offset=28
+end
+```
+
+The pair is a contract on the record: a non-null pointer addresses `count` consecutive elements that stay valid for as long as the record does, and a null pointer has a zero count. The carrier, layout, C ABI, `seam.h` and `seam.ll` do not change; `seam.json` records `"count"` on the pointer field, so the relation is part of the fingerprint. `T` is a declared struct or a non-`bool` scalar; the count is a plain signed or unsigned integer field (no `enum=`/`flags=`) that counts at most one pointer. A view that should share another view's count is not expressible yet. Generated accessors (see `examples/views.seam`):
+
+- **Rust**: `fn functions(&self) -> &[Function]` on the record (the field's name; Rust keeps methods and fields apart). It is safe because a `&Record` is already trusted. Null is the empty slice; `debug_assert!` checks a null pointer's zero count, a negative signed count, the `isize` size limit and alignment. Indexing past the count panics as any slice does.
+- **Java FFM**: `<Struct>_<field>(MemorySegment record)` is a segment of `count * sizeof(T)` bytes (`MemorySegment.NULL` when the pointer is null, with an `assert` on the count), and `<Struct>_<field>(record, i)` returns element `i` (a slice for a struct, the value for a scalar) after `Objects.checkIndex(i, count)`, so index `count` throws `IndexOutOfBoundsException`. Unsigned counts zero-extend; a count beyond `Long.MAX_VALUE` fails the check.
+- **Native Image**: the record's getter keeps returning the typed pointer, and an element struct's interface gains `T addressOf(long index)`. SVM accepts only C-interface methods in a `@CStruct` interface, so the bounded accessor is a static method of the class: `<Struct>_<field>At(record, i)` returns the element record (`addressOf(i)`) or the scalar (`read(WordFactory.signed(i))`) after an `assert` of `0 <= i < count`, which compiles out unless the image is built with `-ea`. A struct used as an element may not have a field named `addressOf`.
+- **Truffle**: records are not guest-visible objects (cells take and copy buffers), so cells generate nothing for views.
+
+The accessor names `<Struct>_<field>` and `<Struct>_<field>At` may not be function names.
 
 ### Records by value
 

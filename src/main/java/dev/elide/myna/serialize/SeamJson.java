@@ -57,6 +57,9 @@ public final class SeamJson {
                                         + ",\"offset\":"
                                         + f.offset()
                                         + reference(f.group(), "")
+                                        + (f.count() == null
+                                            ? ""
+                                            : ",\"count\":" + quote(f.count()))
                                         + "}")
                                 .toList())
                         + "}")

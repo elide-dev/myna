@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 3,
+  "bindingAbiVersion": 2,
+  "generatorVersion": "0.18.0",
+  "name": "views",
+  "abiVersion": 1,
+  "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
+  "java": {"package":"fixture.views","class":"Views"},
+  "opaqueTypes": [],
+  "structs": [{"name":"Function","size":16,"alignment":8,"fields":[{"name":"id","type":"u32","offset":0},{"name":"arity","type":"u16","offset":4},{"name":"entry","type":"u64","offset":8}]},{"name":"Program","size":32,"alignment":8,"fields":[{"name":"functions","type":"ptr<Function>","offset":0,"count":"functionCount"},{"name":"functionCount","type":"u64","offset":8},{"name":"text","type":"ptr<u16>","offset":16,"count":"textLength"},{"name":"textLength","type":"u32","offset":24},{"name":"version","type":"u32","offset":28}]}],
+  "callbacks": [],
+  "functions": [{"logicalName":"empty","symbolName":"views_empty","direction":"IMPORT","nativeCallPolicy":"INLINE_LEAF","callingConvention":"C","returnType":"ptr<Program>","errorConvention":"NO_FAILURE","sentinel":null,"javaTarget":null,"isolateThread":false,"parameters":[],"abiParameters":[],"facts":{}},{"logicalName":"program","symbolName":"views_program","direction":"IMPORT","nativeCallPolicy":"INLINE_LEAF","callingConvention":"C","returnType":"ptr<Program>","errorConvention":"NO_FAILURE","sentinel":null,"javaTarget":null,"isolateThread":false,"parameters":[],"abiParameters":[],"facts":{}}]
+}

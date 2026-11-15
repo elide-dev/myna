@@ -222,6 +222,27 @@ class NativeImageIntegrationTests(unittest.TestCase):
                     continue
                 self.assertEqual(field, raw, f"@CField {name} must compile to the raw offset access's code")
 
+    def test_counted_views(self):
+        """examples/views.seam over C's static records: the element helpers read records through
+        the indexed addressOf(long) and scalars through the C pointer, and with -ea the asserted
+        bound rejects index count, a negative index and index 0 of an empty view."""
+        work = ROOT / "build/views-test"
+        fixture = ROOT / "tests/views"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", ROOT / "examples/views.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-Wmissing-prototypes", "-I", generated,
+            "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "Views.java", generated / "ViewsDirectives.java",
+                       fixture / "ViewsMain.java")
+        app = work / "views-app"
+        native_image("-O2", "-ea", "-cp", classes,
+                     "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={work / 'native.o'}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.views.ViewsMain", "-o", app)
+        self.assertIn("Native Image counted views passed", run(app).stdout)
+
     def test_bemo_context_delegates(self):
         """Bemo names its own c_context: the generated context delegates its library path (static
         linkage), macros, options and headers to it; tests/bemo/context.h fails the C query unless

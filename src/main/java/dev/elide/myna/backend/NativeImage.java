@@ -127,6 +127,9 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.struct.CFieldAddress");
     }
     for (Struct st : m.structs())
+      if (Views.of(m, st).stream().anyMatch(v -> v.element() instanceof Scalar))
+        imports.add("org.graalvm.word.WordFactory");
+    for (Struct st : m.structs())
       for (Field f : st.fields()) {
         carrierImport(imports, f.type());
         carrierImport(imports, new Pointer(f.type()));
@@ -513,7 +516,62 @@ public final class NativeImage implements Backend {
       FlagSet bits = bitfields(m, f);
       if (bits != null) bitfieldAccessors(f, bits, out);
     }
+    if (Views.elementStructs(m).contains(st.name()))
+      out.append("        /** Element {@code index} of the C array this record starts. */\n")
+          .append("        ")
+          .append(st.name())
+          .append(" addressOf(long index);\n");
     out.append("    }\n");
+    for (Views v : Views.of(m, st)) viewAccessor(m, v, out);
+  }
+
+  /**
+   * {@code <Struct>_<field>At(record, i)}: element {@code i} of a counted view, the element record
+   * through its {@code addressOf(long)} or the scalar through its C pointer's {@code read}. SVM
+   * rejects methods without C-interface annotations in a {@code @CStruct} interface, default and
+   * static ones included, so the helper is a static method of the class. The bound is an {@code
+   * assert}, which compiles out unless the image is built with assertions enabled.
+   */
+  private static void viewAccessor(Module m, Views v, StringBuilder out) {
+    String record = "record." + v.pointer().name() + "()";
+    String count = "record." + v.count().name() + "()";
+    String bound =
+        switch (v.countType()) {
+          case U64, USIZE -> "Long.compareUnsigned(i, " + count + ") < 0";
+          case U32 -> "i < Integer.toUnsignedLong(" + count + ")";
+          case U16 -> "i < Short.toUnsignedLong(" + count + ")";
+          case U8 -> "i < Byte.toUnsignedLong(" + count + ")";
+          default -> "i < " + count;
+        };
+    String element;
+    String access;
+    if (v.element() instanceof Scalar e) {
+      element = Types.java(e);
+      access = record + ".read(WordFactory.signed(i))";
+      if (e == Scalar.USIZE || e == Scalar.ISIZE) access += ".rawValue()";
+    } else {
+      element = javaType(m, v.pointer().type());
+      access = record + ".addressOf(i)";
+    }
+    out.append("    /** Element i of ")
+        .append(v.label())
+        .append("; asserts 0 <= i < ")
+        .append(v.count().name())
+        .append(". */\n    public static ")
+        .append(element)
+        .append(' ')
+        .append(v.struct().name())
+        .append('_')
+        .append(v.pointer().name())
+        .append("At(")
+        .append(v.struct().name())
+        .append(" record, long i) {\n        assert i >= 0L && ")
+        .append(bound)
+        .append(" : \"")
+        .append(v.label())
+        .append(": index out of bounds\";\n        return ")
+        .append(access)
+        .append(";\n    }\n");
   }
 
   /** The {@code c_bitfields=true} flag set annotating a field, or null. */

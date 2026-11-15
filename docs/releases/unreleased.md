@@ -23,6 +23,15 @@ parameters, returns and callback types reference them (see
   in `<Class>Constants`.
 - `@CBitfield` accessors and a C bitfield union in `seam.h` are opt-in per flag set with `c_bitfields=true`.
 
+## Counted element views
+
+A `ptr<T>` record field may name the integer field counting its elements with `count=FIELD` (#133; see
+[the descriptor format](../dsl.md#counted-element-views)). Rust records gain a safe `&[T]` accessor, FFM
+gains `<Struct>_<field>(record)` and the `Objects.checkIndex`ed `<Struct>_<field>(record, i)`, and Native
+Image gains `addressOf(long)` on element structs and an asserted `<Struct>_<field>At(record, i)`. The C ABI is
+unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
+the same output as before.
+
 ## Breaking changes
 
 | # | Change | Affects | Migration |

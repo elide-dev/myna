@@ -78,6 +78,7 @@ public final class JavaFfm implements Backend {
             .append("_OFFSET = ")
             .append(f.offset())
             .append("L;\n");
+      for (Views v : Views.of(m, s)) view(v, out);
     }
     for (FfmFunction prepared : functions) {
       Function f = prepared.function();
@@ -196,6 +197,78 @@ public final class JavaFfm implements Backend {
     ownership(m, out);
     FfmCallbacks.generate(m, out);
     return out.append("}\n").toString();
+  }
+
+  /**
+   * {@code <Struct>_<field>(record)}, the counted elements as one segment sized {@code count *
+   * elementSize} ({@link MemorySegment#NULL} when the pointer is null), and {@code
+   * <Struct>_<field>(record, i)}, element {@code i} with {@code Objects.checkIndex}: a slice for a
+   * struct element, the value for a scalar one. Static like the {@code _OFFSET} constants, so the
+   * names cannot collide with the record's other members.
+   */
+  private static void view(Views v, StringBuilder out) {
+    String name = v.struct().name() + "_" + v.pointer().name();
+    String count = countRead(v);
+    String size = v.elementSize() + "L";
+    out.append("    /** The ")
+        .append(v.count().name())
+        .append(" elements at ")
+        .append(v.pointer().name())
+        .append(", empty when it is null; valid for as long as the record is. */\n")
+        .append("    public static MemorySegment ")
+        .append(name)
+        .append("(MemorySegment record) {\n")
+        .append("        MemorySegment base = record.get(ValueLayout.ADDRESS, ")
+        .append(v.pointer().offset())
+        .append("L);\n        long count = ")
+        .append(count)
+        .append(";\n        if (base.address() == 0L) {\n            assert count == 0L : \"")
+        .append(v.label())
+        .append(" is null with a nonzero count\";\n")
+        .append("            return MemorySegment.NULL;\n        }\n")
+        .append("        return base.reinterpret(Math.multiplyExact(count, ")
+        .append(size)
+        .append("));\n    }\n");
+    String index = "java.util.Objects.checkIndex(i, " + count + ")";
+    out.append("    /** Element i of ")
+        .append(v.label())
+        .append("; IndexOutOfBoundsException unless 0 <= i < ")
+        .append(v.count().name())
+        .append(". */\n    public static ");
+    if (v.element() instanceof Scalar e)
+      out.append(Types.java(e))
+          .append(' ')
+          .append(name)
+          .append("(MemorySegment record, long i) {\n        return ")
+          .append(name)
+          .append("(record).getAtIndex(")
+          .append(Types.layout(e))
+          .append(", ")
+          .append(index)
+          .append(");\n    }\n");
+    else
+      out.append("MemorySegment ")
+          .append(name)
+          .append("(MemorySegment record, long i) {\n        return ")
+          .append(name)
+          .append("(record).asSlice(")
+          .append(index)
+          .append(" * ")
+          .append(size)
+          .append(", ")
+          .append(size)
+          .append(");\n    }\n");
+  }
+
+  /** The count field as a {@code long}: unsigned narrow carriers zero-extend, signed ones widen. */
+  private static String countRead(Views v) {
+    String read = "record.get(" + Types.layout(v.countType()) + ", " + v.count().offset() + "L)";
+    return switch (v.countType()) {
+      case U8 -> "Byte.toUnsignedLong(" + read + ")";
+      case U16 -> "Short.toUnsignedLong(" + read + ")";
+      case U32 -> "Integer.toUnsignedLong(" + read + ")";
+      default -> read;
+    };
   }
 
   private static void ownership(Module m, StringBuilder out) {
