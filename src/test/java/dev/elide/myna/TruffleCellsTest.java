@@ -643,6 +643,52 @@ class TruffleCellsTest {
   }
 
   /**
+   * A cell lends an empty buffer a page-aligned dummy, so a byte parameter it lends takes an
+   * approved {@code align} of at most 4096, as a borrow does; opting the import out of cells, or a
+   * fact cells ignore, keeps the general 2^29 limit.
+   */
+  @Test
+  void alignOnCellByteParametersStaysWithinAPage() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+            + " align=4096@explicit_contract truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "end\n";
+    assertTrue(
+        generate(MODULE + decode)
+            .get("MynaTruffle.java")
+            .contains(
+                "new OverAlignedBytesCoercion(\"decode\", \"data\", false, true, false, false,"
+                    + " 4096);"));
+    for (String text :
+        new String[] {
+          decode,
+          decode
+              .replace("ptr<u8>", "ptr<char>")
+              .replace(" truffle_buffer=true@explicit_contract", "")
+        }) {
+      var refused =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> generate(MODULE + text.replace("align=4096", "align=8192")));
+      assertEquals(
+          "Truffle cells lend byte pointers at most 4096-byte alignment: decode.data declares"
+              + " align=8192; opt out with truffle_cell=false@explicit_contract on decode",
+          refused.getMessage());
+    }
+    generate(
+        MODULE
+            + decode
+                .replace("align=4096", "align=8192")
+                .replace(
+                    "import decode return=i32 error=no_failure",
+                    "import decode return=i32 error=no_failure"
+                        + " truffle_cell=false@explicit_contract")
+                .replace(" truffle_buffer=true@explicit_contract", ""));
+  }
+
+  /**
    * A byte pointer without a borrow declaration is by default a C string parameter. {@code
    * truffle_buffer} declares it raw bytes whose count stays a guest argument: no terminator, pinned
    * when large.

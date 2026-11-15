@@ -245,7 +245,9 @@ in a `finally` of its own, in reverse acquisition order:
   at a lesser alignment (a misaligned `asSlice`) is copied, written back for writable parameters,
   and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
   bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
-  buffer lends a page-aligned dummy address.
+  buffer lends a page-aligned dummy address, so a byte pointer that a cell lends takes an approved
+  `align` of at most 4096, as a call `borrow` does; validation refuses a larger one unless the
+  import opts out with `truffle_cell=false@explicit_contract`.
   The fact is accepted on any byte-pointer parameter: a C string, a `truffle_buffer`, a call `borrow`
   or a held one (a held copy and a held native buffer follow the same rules). On a `borrow` it is
   also a caller contract for the other wrappers, which assert it in debug builds only; a cell is
