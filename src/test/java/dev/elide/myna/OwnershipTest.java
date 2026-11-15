@@ -983,6 +983,19 @@ class OwnershipTest {
                 "debug_assert!(input.len() == 0 || (input.as_ptr() as usize) & 15 == 0,"
                     + " \"transfer.input requires 16-byte alignment\");"),
         all.get("seam.rs"));
+    // A nullable buffer is an Option until it is consumed into its (pointer, length) pair under
+    // the same name; the assertion reads that pair, so it must come after the binding.
+    String nullable =
+        plain.replace(
+            "param input type=ptr<u8> nullable=false", "param input type=ptr<u8> nullable=true");
+    assertNotEquals(plain, nullable);
+    String rust = Generator.generate(Dsl.parse(nullable), true).get("seam.rs");
+    int binding = rust.indexOf("let input = input.map_or(");
+    int check =
+        rust.indexOf(
+            "debug_assert!(input.1 == 0 || (input.0 as usize) & 15 == 0,"
+                + " \"transfer.input requires 16-byte alignment\");");
+    assertTrue(binding >= 0 && check > binding, rust);
     // Without the fact nothing is asserted anywhere.
     var none = Generator.generate(Dsl.parse(TRANSFER), true);
     for (String file : List.of("ApiFFM.java", "ApiOwnership.java", "seam.rs"))

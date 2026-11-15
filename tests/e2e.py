@@ -92,6 +92,10 @@ end
             self.assertIn('assert length0 == 0 || (arg0.address() & 15L) == 0 : "copy.source requires 16-byte alignment";',
                           texts["ApiFFM.java"])
             self.assertIn("debug_assert!(", texts["seam.rs"])
+            # A nullable buffer's assertion reads the (pointer, length) pair it is bound to, so it
+            # follows that binding; rustc below compiles both the nullable and the plain forms.
+            rust = texts["seam.rs"]
+            self.assertLess(rust.index("let target = target.map_or("), rust.index("debug_assert!(target.1 == 0"))
             self.assertIn("_Alignas(16) uint8_t", texts["seam-jni.c"])
             self.assertIn("empty.allocate(1, 16)", texts["ApiFFM.java"])
             home = Path(os.environ["GRAALVM_HOME"])
