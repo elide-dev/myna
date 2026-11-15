@@ -5,6 +5,7 @@ package dev.elide.myna.validate;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import java.math.BigInteger;
 import java.util.*;
 
 /** Validates the stronger contracts required by generated ownership APIs, even in relaxed mode. */
@@ -270,6 +271,29 @@ final class OwnershipValidator {
       require(
           !r.success().isEmpty(),
           "a resource create with a handle must list the results that mean success: " + form);
+      // Each success value must be representable in the create's return scalar after guest
+      // conversion: the Truffle cell compares the converted carrier against each value verbatim,
+      // so a status the carrier can never take makes the success guard always fail and every
+      // create throw at runtime. Mirrors the integer_sentinel range check in Validator.
+      Scalar scalar = (Scalar) create.returns();
+      boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
+      boolean unsigned =
+          scalar == Scalar.U8
+              || scalar == Scalar.U16
+              || scalar == Scalar.U32
+              || scalar == Scalar.U64
+              || scalar == Scalar.USIZE
+              || (charUnsigned && scalar == Scalar.CHAR);
+      int bits = scalar.bytes * 8;
+      BigInteger max =
+          BigInteger.ONE.shiftLeft(unsigned ? bits : bits - 1).subtract(BigInteger.ONE);
+      BigInteger min = unsigned ? BigInteger.ZERO : BigInteger.ONE.shiftLeft(bits - 1).negate();
+      for (long value : r.success())
+        require(
+            BigInteger.valueOf(value).compareTo(min) >= 0
+                && BigInteger.valueOf(value).compareTo(max) <= 0,
+            "a resource create's success status is outside its return scalar's carrier range: "
+                + form);
     }
   }
 
