@@ -117,6 +117,12 @@ import hold symbol=cells_hold return=u64 error=no_failure nounwind=true@explicit
   param count type=u64
   param gate type=ptr<i32> nullable=false ownership=borrowed access=read_write
 end
+borrow holdFill bytes length=count lifetime=call
+import holdFill symbol=cells_hold_fill return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract align=16@explicit_contract
+  param count type=u64
+  param gate type=ptr<i32> nullable=false ownership=borrowed access=read_write
+end
 import counterCreate symbol=cells_counter_create return=ptr<Counter> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param start type=i64
 end

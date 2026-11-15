@@ -82,6 +82,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         self.assertIn("wrapper assertions enabled: fired", result.stdout)
         self.assertIn("guest constants read and named", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 
     def test_ffm_cells_in_native_image(self):
         """FFM cells in an image: the same checks, including the scopes of lent segments, and what
@@ -101,6 +103,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("wrapper assertions disabled: silent", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 
     def assert_wrapper_assertions_compiled_out(self, reports):
         """An image built without assertions has no assertion code in a non-cell wrapper.
@@ -147,6 +151,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         # (CellChecks.guestConstants throws otherwise).
         self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("Truffle cells compiled and passed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 
     def assert_cells_are_runtime_compilable(self, log):
         """Every method on a cell's compiled path must be available to partial evaluation.

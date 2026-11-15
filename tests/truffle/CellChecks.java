@@ -258,6 +258,77 @@ public final class CellChecks {
     heldBorrowRefusesClosedSegment(cells);
     heldBorrowRefusesForeignThreadConfinedSegment(cells);
   }
+  /**
+   * A misaligned writable buffer is lent as a copy and written back after the call. Guest code that
+   * closes the buffer's arena meanwhile gets a NativeCellException at write-back and nothing is
+   * written: the write-back is a scope-checked segment copy in every runtime, never the raw word
+   * stores a Native Image compiles buffer messages to. The buffer views memory that stays allocated
+   * under an arena of its own, so the check can see that nothing reached it.
+   *
+   * <p>A confined arena can be closed only by its owner, here between the coercion's execute and
+   * release on this thread, where a callback would close it. A shared arena is closed from this
+   * thread while another one is inside holdFill. Prints which arenas were checked: an image without
+   * shared arena support says so, and the integration test records it.
+   */
+  static void copyBackAfterClose(Function<String, NativeFunction> cells) throws Exception {
+    MemorySegment backing = Arena.global().allocate(64, 64);
+    for (Object coercion : new Object[] {
+        new AlignedBytesCoercion("f", "bytes", false, true, true, false, 8),
+        new OverAlignedBytesCoercion("f", "bytes", false, true, true, false, 64)}) {
+      backing.fill((byte) 0);
+      Arena guest = Arena.ofConfined();
+      NativeBytes slice = NativeBytes.of(backing.reinterpret(64, guest, null).asSlice(3, 8), true);
+      Borrow lent = coercion instanceof AlignedBytesCoercion a ? a.execute(slice) : ((OverAlignedBytesCoercion) coercion).execute(slice);
+      check(lent.address() != slice.address(), "a misaligned slice is copied");
+      MemorySegment.ofAddress(lent.address()).reinterpret(8).fill((byte) 0x5a);
+      guest.close();
+      try {
+        lent.release();
+        throw new AssertionError("write-back reached a closed confined arena");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("closed before write-back"), expected.getMessage());
+      }
+      for (int i = 0; i < 64; i++) check(backing.get(ValueLayout.JAVA_BYTE, i) == 0, "write-back wrote byte " + i + " of a closed arena");
+    }
+    String shared;
+    Arena arena;
+    try {
+      arena = Arena.ofShared();
+    } catch (UnsupportedOperationException | Error unsupported) {
+      arena = null;
+    }
+    if (arena == null) {
+      shared = "shared arenas unsupported";
+    } else {
+      backing.fill((byte) 0);
+      NativeBytes slice = NativeBytes.of(backing.reinterpret(64, arena, null).asSlice(3, 8), true);
+      MemorySegment gate = Arena.global().allocate(8, 4);
+      var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread caller = new Thread(() -> {
+        try { result.set(call(cells, "holdFill", slice, NativePointer.of(gate.address()))); } catch (Throwable failure) { result.set(failure); }
+      });
+      caller.start();
+      while (gate.get(ValueLayout.JAVA_INT, 0) == 0 && caller.isAlive()) Thread.sleep(1);
+      check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "holdFill never reached native code: " + result.get());
+      // Native code holds the copy, not the guest's segment, so nothing keeps the arena open.
+      arena.close();
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      caller.join();
+      check(result.get() instanceof NativeCellException failure && failure.getMessage().contains("closed before write-back"),
+          "holdFill wrote back into a closed shared arena: " + result.get());
+      for (int i = 0; i < 64; i++) check(backing.get(ValueLayout.JAVA_BYTE, i) == 0, "write-back wrote byte " + i + " of a closed shared arena");
+      shared = "shared";
+    }
+    // With the arena open the same call writes its result back.
+    try (Arena open = Arena.ofConfined()) {
+      MemorySegment base = open.allocate(32, 16);
+      MemorySegment gate = Arena.global().allocate(8, 4);
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      check(call(cells, "holdFill", NativeBytes.of(base.asSlice(3, 8), true), NativePointer.of(gate.address())).equals(8L), "holdFill");
+      for (int i = 0; i < 32; i++) check(base.get(ValueLayout.JAVA_BYTE, i) == (i >= 3 && i < 11 ? 0x5a : 0), "holdFill wrote back byte " + i);
+    }
+    System.out.println("copy-back after close refused: confined, " + shared);
+  }
   /** The refusal a cell raises for {@code args}, which it must refuse. */
   static NativeCellException refusal(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
     try { call(cells, name, args); } catch (NativeCellException expected) { return expected; }
@@ -515,6 +586,7 @@ public final class CellChecks {
       }
     }
     check(cells.apply("rawLength").call((Object) null).equals(0L), "nullable host null");
+    copyBackAfterClose(cells);
     check(call(cells, "add", 40, 2).equals(42), "add");
     check(call(cells, "add", 40L, 2.0).equals(42), "add from long and double");
     rejects(cells, "add", 1);

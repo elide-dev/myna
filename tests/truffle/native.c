@@ -71,6 +71,15 @@ uint64_t cells_hold(const uint8_t *bytes, uint64_t count, int32_t *gate) {
   return sum;
 }
 
+/* hold for a writable buffer: waits on the gate, then fills what it was lent. */
+uint64_t cells_hold_fill(uint8_t *bytes, uint64_t count, int32_t *gate) {
+  struct timespec pause = {0, 1000000};
+  __atomic_store_n(&gate[0], 1, __ATOMIC_SEQ_CST);
+  while (!__atomic_load_n(&gate[1], __ATOMIC_SEQ_CST)) nanosleep(&pause, NULL);
+  for (uint64_t i = 0; i < count; i++) bytes[i] = 0x5a;
+  return count;
+}
+
 typedef struct Counter { int64_t next; } Counter;
 static int64_t live = 0;
 Counter *cells_counter_create(int64_t start) {
