@@ -1225,6 +1225,30 @@ class TruffleCellsTest {
             .get("ApiTruffle.java");
     assertTrue(ffm.contains(", null, null, borrow_schema.keep());"), ffm);
     assertTrue(ffm.contains("ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"), ffm);
+    // The create call itself passes the guest's segment, as a call borrow's does (#120): the
+    // linker refuses a closed or foreign-thread segment before native code runs, and holds a
+    // shared arena open for the call. The borrow still keeps the buffer afterwards.
+    assertTrue(
+        ffm.contains(
+            "int status = scoped(coerce_schema.segment(arguments[0]), borrow_schema.address(),"
+                + " borrow_schema.length(), out.address());"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static int scoped$1(MemorySegment schema, long length, long"
+                + " result) {\n"
+                + "            try {\n"
+                + "                return ApiFFM.layoutCompile(schema, length,"
+                + " MemorySegment.ofAddress(result));\n"),
+        ffm);
+    // invoke keeps raw addresses, and a held borrow is never lent without its borrow.
+    assertTrue(
+        ffm.contains("        public static int invoke(long schema, long length, long result) {\n"),
+        ffm);
+    assertFalse(ffm.contains("lent_"), ffm);
+    // Native Image cells pass addresses only: nothing about them changes.
+    assertFalse(truffle.contains("segment"), truffle);
   }
 
   /**
@@ -1281,6 +1305,8 @@ class TruffleCellsTest {
     // The two call borrows still lend their segments in the slow path.
     assertTrue(truffle.contains("coerce_key.segment(arguments["), truffle);
     assertTrue(truffle.contains("coerce_key2.segment(arguments["), truffle);
+    // So does the held one, for the create call (#120).
+    assertTrue(truffle.contains("coerce_data.segment(arguments[0])"), truffle);
     // The held buffer is never lent in place: no lent_data local is ever declared.
     assertFalse(truffle.contains("lent_data"), truffle);
     // The in-place fast path (which would reference borrow_data/lent_data before they are

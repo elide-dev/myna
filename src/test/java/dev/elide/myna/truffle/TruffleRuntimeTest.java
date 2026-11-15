@@ -1419,6 +1419,132 @@ class TruffleRuntimeTest {
   }
 
   /**
+   * A held borrow gives back the segment whose scope its create call must check, exactly where a
+   * call borrow's coercion does: native memory lent in place whose scope has something to check.
+   * Never global memory, a view made from an address, an empty buffer, a copy or null.
+   */
+  @Test
+  void heldBorrowsGiveBackTheSegmentWhoseScopeTheCreateMustCheck() throws Exception {
+    var held = new HeldBytesCoercion("adopt", "data", true);
+    try (Arena confined = Arena.ofConfined();
+        Arena shared = Arena.ofShared()) {
+      MemorySegment mine = confined.allocate(8);
+      MemorySegment common = shared.allocate(8);
+      NativeBytes bytes = NativeBytes.of(mine, false);
+      assertSame(mine, held.segment(bytes));
+      assertSame(common, held.segment(NativeBytes.of(common, false)));
+      // A writable buffer is lent the same way; the borrow only reads it.
+      assertSame(mine, held.segment(NativeBytes.of(mine, true)));
+      // Lent in place, the borrow's address is the segment's.
+      Borrow lent = held.execute(bytes);
+      assertEquals(mine.address(), lent.address());
+      lent.release();
+      for (Object nothing :
+          new Object[] {
+            NativeBytes.of(Arena.global().allocate(8), false),
+            NativeBytes.of(common.address(), 8, false),
+            NativeBytes.of(confined.allocate(0), false),
+            new HeapBytes(new byte[] {1}, false),
+            "text",
+            TruffleString.fromJavaStringUncached("text", Encoding.UTF_8),
+            new ForeignBuffer(new byte[] {1}, false),
+            NativePointer.NULL,
+            null
+          }) assertNull(held.segment(nothing), String.valueOf(nothing));
+    }
+  }
+
+  /** Calls that reached {@link #adopted}, the native side of the held-borrow refusal tests. */
+  private static final AtomicLong ADOPTIONS = new AtomicLong();
+
+  /** The native function a held borrow is lent to: an upcall stub, so it can count its calls. */
+  @SuppressWarnings("unused") // the upcall target
+  private static int adopted(MemorySegment data, long length) {
+    ADOPTIONS.incrementAndGet();
+    return 0;
+  }
+
+  /** A downcall to {@link #adopted} through a real native entry point, built once. */
+  private static final class Adopt {
+    static final java.lang.invoke.MethodHandle HANDLE;
+
+    static {
+      var descriptor =
+          java.lang.foreign.FunctionDescriptor.of(
+              ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
+      try {
+        var target =
+            java.lang.invoke.MethodHandles.lookup()
+                .findStatic(
+                    TruffleRuntimeTest.class,
+                    "adopted",
+                    java.lang.invoke.MethodType.methodType(
+                        int.class, MemorySegment.class, long.class));
+        var linker = java.lang.foreign.Linker.nativeLinker();
+        HANDLE =
+            linker.downcallHandle(
+                linker.upcallStub(target, descriptor, Arena.global()), descriptor);
+      } catch (ReflectiveOperationException e) {
+        throw new ExceptionInInitializerError(e);
+      }
+    }
+  }
+
+  /**
+   * The create call an FFM cell makes for a held borrow: the borrow lends the address and is kept
+   * afterwards, and the call passes the segment the coercion gives back, or the address when it
+   * gives back none.
+   */
+  private static int adopt(HeldBytesCoercion held, Object value) throws Throwable {
+    Borrow borrow = held.execute(value);
+    try {
+      MemorySegment segment = held.segment(value);
+      // A local: a conditional argument would type the exact invocation as Object.
+      MemorySegment data = segment != null ? segment : MemorySegment.ofAddress(borrow.address());
+      return (int) Adopt.HANDLE.invokeExact(data, borrow.length());
+    } finally {
+      borrow.release();
+    }
+  }
+
+  /**
+   * A held borrow of a closed segment is refused by the create call itself, before native code
+   * runs, as a call borrow is (#120); its bare address would have reached native code.
+   */
+  @Test
+  void heldBorrowRefusesClosedSegment() throws Throwable {
+    var held = new HeldBytesCoercion("adopt", "data", false);
+    Arena arena = Arena.ofShared();
+    NativeBytes bytes = NativeBytes.of(arena.allocate(8), false);
+    long before = ADOPTIONS.get();
+    assertEquals(0, adopt(held, bytes));
+    assertEquals(before + 1, ADOPTIONS.get());
+    arena.close();
+    IllegalStateException refused =
+        assertThrows(IllegalStateException.class, () -> adopt(held, bytes));
+    assertEquals("Already closed", refused.getMessage());
+    assertEquals(before + 1, ADOPTIONS.get(), "the native function ran on a closed segment");
+  }
+
+  /** A held borrow of a segment confined to another thread is refused by the create call. */
+  @Test
+  void heldBorrowRefusesForeignThreadConfinedSegment() throws Throwable {
+    var held = new HeldBytesCoercion("adopt", "data", false);
+    try (Arena arena = Arena.ofConfined()) {
+      NativeBytes bytes = NativeBytes.of(arena.allocate(8), false);
+      long before = ADOPTIONS.get();
+      onFreshThread(() -> {
+        RuntimeException refused = assertThrows(RuntimeException.class, () -> adopt(held, bytes));
+        assertInstanceOf(WrongThreadException.class, refused);
+      });
+      assertEquals(before, ADOPTIONS.get(), "the native function ran on another thread's segment");
+      // The owner thread still lends it.
+      assertEquals(0, adopt(held, bytes));
+      assertEquals(before + 1, ADOPTIONS.get());
+    }
+  }
+
+  /**
    * A kept borrow ends exactly once, after its resource's destroy has returned: on close, from the
    * cleaner, and not again on a second close. A resource that cannot be adopted ends it at once.
    */

@@ -157,6 +157,67 @@ public final class CellChecks {
     check(Long.valueOf(16).equals(result.get()), "hold read its buffer: " + result.get());
     shared.close();
     rejects(cells, "hold", NativeBytes.of(data, false), NativePointer.of(gate.address()));
+    heldBorrowRefusesClosedSegment(cells);
+    heldBorrowRefusesForeignThreadConfinedSegment(cells);
+  }
+  /** The refusal a cell raises for {@code args}, which it must refuse. */
+  static NativeCellException refusal(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
+    try { call(cells, name, args); } catch (NativeCellException expected) { return expected; }
+    throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
+  }
+  /**
+   * A borrow held by the resource a create makes passes its segment to the create call too, so the
+   * linker refuses a closed one before native code runs, as it refuses a call borrow's (#120):
+   * the same error, nothing adopted, and the next create still works.
+   */
+  static void heldBorrowRefusesClosedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena results = Arena.ofConfined()) {
+      Object out = NativeBytes.of(results.allocate(24), true);
+      Arena arena = Arena.ofShared();
+      MemorySegment input = arena.allocate(8);
+      input.fill((byte) 1);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      Object owner = call(cells, "adopt", bytes, null, out);
+      check(call(cells, "adoptedSum", owner).equals(8L), "adopted a live shared segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+      arena.close();
+      NativeCellException held = refusal(cells, "adopt", bytes, null, out);
+      NativeCellException borrowed = refusal(cells, "checksum", bytes);
+      check(held.getMessage().equals(borrowed.getMessage()), "held: " + held.getMessage() + ", call: " + borrowed.getMessage());
+      check(call(cells, "counterLive").equals(live), "a closed segment was adopted");
+      // A call borrow of the same create is refused the same way.
+      refusal(cells, "adopt", new HeapBytes(new byte[] {1}, false), bytes, out);
+      check(call(cells, "counterLive").equals(live), "a closed key was read");
+      Object after = call(cells, "adopt", new HeapBytes(new byte[] {2}, false), null, out);
+      check(call(cells, "adoptedSum", after).equals(2L), "adopt after a refused create");
+      check(call(cells, "adoptedRelease", after) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
+  }
+  /** A held borrow of a segment confined to another thread is refused by the create call. */
+  static void heldBorrowRefusesForeignThreadConfinedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena confined = Arena.ofConfined()) {
+      MemorySegment input = confined.allocate(8);
+      input.fill((byte) 3);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      var outcome = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread other = new Thread(() -> {
+        try (Arena results = Arena.ofConfined()) {
+          outcome.set(call(cells, "adopt", bytes, null, NativeBytes.of(results.allocate(24), true)));
+        } catch (Throwable failure) { outcome.set(failure); }
+      });
+      other.start();
+      other.join();
+      check(outcome.get() instanceof NativeCellException, "a segment confined to another thread was adopted: " + outcome.get());
+      check(call(cells, "counterLive").equals(live), "another thread's segment reached native code");
+      // The owner thread still lends it, and the resource keeps it until its release.
+      Object owner = call(cells, "adopt", bytes, null, NativeBytes.of(confined.allocate(24), true));
+      check(call(cells, "adoptedSum", owner).equals(24L), "the owner thread adopts its segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
   }
   /**
    * Two borrows with lengths of their own beside a pointer that passes through: the guest gives

@@ -7,6 +7,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.strings.AbstractTruffleString;
+import java.lang.foreign.MemorySegment;
 
 /**
  * Coerces a guest value to the read-only buffer of a {@code lifetime=resource:NAME} borrow, which a
@@ -15,7 +16,8 @@ import com.oracle.truffle.api.strings.AbstractTruffleString;
  *
  * <ul>
  *   <li>{@link NativeBytes} is lent in place, and the borrow keeps it reachable, which keeps an
- *       automatic arena's memory allocated until the borrow ends;
+ *       automatic arena's memory allocated until the borrow ends. An FFM cell also passes its
+ *       segment to the create call (see {@link #segment}), so that call checks and holds its scope;
  *   <li>heap arrays, strings (as UTF-8, unterminated) and other interop buffers are copied into
  *       native memory the borrow owns, so later guest writes to the source do not reach the native
  *       side;
@@ -56,6 +58,23 @@ public final class HeldBytesCoercion extends Coercion {
       slow(value, borrow);
     }
     return borrow;
+  }
+
+  /**
+   * The segment whose scope the create call must check for the memory {@link #execute} lent in
+   * place for {@code value}, or {@code null} when there is nothing to check: anything but native
+   * memory (a copy, null), an empty buffer, or native memory of the global scope or viewed from an
+   * address, as for {@link BytesCoercion#segment}. Only FFM cells ask, to pass the guest's own
+   * segment to the create's downcall, which then refuses a closed segment or one confined to
+   * another thread before native code runs, and keeps a shared arena open for the call. After the
+   * call the borrow only keeps the buffer reachable; no scope is held for the resource's lifetime.
+   *
+   * <p>Unlike a call borrow's, this site does not profile whether it has seen such a segment: the
+   * test is a type check and a field read, and the cell's call already profiles which patterns of
+   * segments it has made.
+   */
+  public MemorySegment segment(Object value) {
+    return value instanceof NativeBytes bytes ? bytes.scoped : null;
   }
 
   @TruffleBoundary

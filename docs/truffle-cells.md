@@ -422,9 +422,12 @@ Why each choice:
   copy is the point of an adopting create. Keeping the `NativeBytes` reachable keeps an automatic
   arena's memory allocated; memory its owner frees explicitly (a closed arena, a raw address passed
   to `NativeBytes.of`) is the owner's to keep alive while the resource is open, exactly as
-  `NativeBytes` already requires for as long as guest code can reach it. No scope is acquired: the
-  FFM API exposes no acquire outside a downcall, and one held for as long as a guest keeps a
-  resource open would keep its arena from ever closing.
+  `NativeBytes` already requires for as long as guest code can reach it. An FFM cell passes the
+  segment to the create call itself, as it does a call borrow's (see [Borrows](#borrows)), so that
+  call refuses a closed segment or one confined to another thread before native code runs, and
+  holds a shared arena open while it runs. No scope is held after the call: the FFM API exposes no
+  acquire outside a downcall, and one held for as long as a guest keeps a resource open would keep
+  its arena from ever closing.
 - **Thread confinement is the resource's.** A confined resource closes only on its thread, so its
   borrow ends there; a shared one ends wherever it is closed, which the copies above allow.
 
@@ -657,8 +660,9 @@ Findings that are tracked, not blocking:
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
 - FFM cells pass the scope of a guest's own segment to the downcall when they lend its memory in
-  place (see [Borrows](#borrows)). Host code calling `invoke` still passes raw addresses, whose
-  validity is its own to keep.
+  place (see [Borrows](#borrows)), a held borrow's included, for its create call only (see
+  [Borrows held by a resource](#borrows-held-by-a-resource)). Host code calling `invoke` still
+  passes raw addresses, whose validity is its own to keep.
 - FFM cells over leaf imports are critical: they call the module's static FFM entry, which for a
   native leaf is a critical downcall over the build-time typed adapter. See
   [Measurement](#measurement) for their cost against the direct and handwritten calls.

@@ -220,6 +220,10 @@ public final class TruffleCells implements Backend {
             String local = "borrow_" + p.name();
             borrows.add(local + " = " + field + ".execute(" + argument + ")");
             arguments.add(address(ffm, imports, local + ".address()"));
+            // Every borrow, held or not, lends the guest's own segment to the downcall: a held
+            // borrow's create call checks and holds its scope as a call borrow's does, and the
+            // resource then keeps the buffer itself.
+            lent.add(p.name());
             if (cell.isHeld(p)) {
               // Lent until the resource is destroyed: never pinned or on a scratch stack.
               held.add(local);
@@ -250,8 +254,6 @@ public final class TruffleCells implements Backend {
                 // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either.
                 .append(rawBytes(p) ? ", false" : "")
                 .append(");\n");
-            // Only a call borrow may lend the guest's own segment to the downcall.
-            lent.add(p.name());
           } else {
             imports.add(RUNTIME + "PointerCoercion");
             fields
@@ -525,8 +527,9 @@ public final class TruffleCells implements Backend {
         call = "scoped(" + String.join(", ", scopedForwarded) + ")";
         // With one borrow held the compiled loop still keeps its result in a register, and at the
         // sizes measured the call is no faster for dropping it; from two borrows on it is. A held
-        // borrow is acquired before the call and kept by the resource, so its borrow_/lent_ locals
-        // do not exist at the in-place point: skip the fast path whenever the create has any.
+        // borrow outlives the call, so the resource must keep a borrow of it and the call cannot
+        // go without one: skip the fast path whenever the create has any. Its segment still
+        // reaches the downcall through scoped.
         if (held.isEmpty() && segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
           unborrowedCall =
               "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
