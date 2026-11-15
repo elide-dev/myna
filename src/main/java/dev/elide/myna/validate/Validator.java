@@ -60,7 +60,7 @@ public final class Validator {
    * names live in Rust's value namespace and do not collide, so they stay governed by {@link
    * #identifier(String)}.
    */
-  private static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
+  static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
 
   public static void validate(Module module, boolean strict) {
     identifier(module.name());
@@ -389,6 +389,7 @@ public final class Validator {
             "noalias requires explicit_contract or compiler_proven");
       }
     }
+    ConstantsValidator.validate(module);
     OwnershipValidator.validate(module);
   }
 
@@ -451,7 +452,7 @@ public final class Validator {
     for (String part : name.split("\\.", -1)) identifier(part);
   }
 
-  private static boolean isScalarName(String name) {
+  static boolean isScalarName(String name) {
     for (Scalar scalar : Scalar.values()) if (scalar.text().equals(name)) return true;
     return false;
   }
@@ -535,7 +536,7 @@ public final class Validator {
     return value;
   }
 
-  private static void identifier(String name) {
+  static void identifier(String name) {
     require(
         name != null
             && IDENTIFIER.matcher(name).matches()

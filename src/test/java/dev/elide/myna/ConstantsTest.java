@@ -10,11 +10,15 @@ import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.validate.Ranges;
+import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
 import java.nio.file.*;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ConstantsTest {
   static final TargetAbi X86 = Seam.targetAbi("x86_64-unknown-linux-gnu");
@@ -217,5 +221,313 @@ class ConstantsTest {
     assertEquals(
         "line 3: enum= and flags= are mutually exclusive",
         parseError("struct S size=4 align=4\n field a type=u32 offset=0 enum=E flags=F\nend\n"));
+  }
+
+  static final String HEAD = "module komodo_frontend target=x86_64-unknown-linux-gnu\n";
+  static final String CELLS =
+      "module komodo_frontend target=x86_64-unknown-linux-gnu java_class=Cells"
+          + " truffle_cells=true\n";
+
+  static String invalid(String head, String body) {
+    return assertThrows(
+            IllegalArgumentException.class, () -> Validator.validate(Dsl.parse(head + body), true))
+        .getMessage();
+  }
+
+  static final String FL = "flags FunctionFlags type=u32\n bit exported = 0\nend\n";
+  static final String ST = "enum Status type=i32\n value ok = 0\nend\n";
+  static final String IMP = "import status symbol=s return=i32 error=no_failure";
+  static final String NOFAIL = " return=void error=no_failure\nend";
+
+  static Stream<Arguments> rejects() {
+    return Stream.of(
+        Arguments.of(
+            "enum Status type=f32\n value ok = 0\nend\n",
+            "enum Status: carrier must be an integer scalar, found f32"),
+        Arguments.of(
+            "enum Status type=void\n value ok = 0\nend\n",
+            "enum Status: carrier must be an integer scalar, found void"),
+        Arguments.of(
+            "enum Status type=bool\n value ok = 0\nend\n",
+            "enum Status: carrier must be an integer scalar, found bool"),
+        Arguments.of(
+            "enum Status type=char\n value ok = 0\nend\n",
+            "enum Status: carrier must be an integer scalar, found char"),
+        Arguments.of(
+            "const X type=f32 value=1\n", "const X: carrier must be an integer scalar, found f32"),
+        Arguments.of(
+            "flags F type=bool\n bit a = 0\nend\n",
+            "flags F: carrier must be an integer scalar, found bool"),
+        Arguments.of("enum Status type=i32\nend\n", "enum Status: declares no values"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\nend\n", "flags FunctionFlags: declares no bits"),
+        Arguments.of(ST + "enum Status type=i32\n value x = 1\nend\n", "duplicate type: Status"),
+        Arguments.of("opaque Status\n" + ST, "duplicate type: Status"),
+        Arguments.of(ST + "flags Status type=u32\n bit a = 0\nend\n", "duplicate type: Status"),
+        Arguments.of("enum u32 type=i32\n value ok = 0\nend\n", "type shadows scalar: u32"),
+        Arguments.of(
+            "enum core type=i32\n value ok = 0\nend\n", "type shadows generated name: core"),
+        Arguments.of(
+            "flags Option type=u32\n bit a = 0\nend\n", "type shadows generated name: Option"),
+        Arguments.of(
+            ST + "import Status symbol=Status" + NOFAIL + "\n",
+            "enum Status: name collides with function symbol Status"),
+        Arguments.of(
+            FL + "import FunctionFlags symbol=FunctionFlags" + NOFAIL + "\n",
+            "flags FunctionFlags: name collides with function symbol FunctionFlags"),
+        Arguments.of("const A type=u8 value=1\nconst A type=u8 value=2\n", "duplicate constant: A"),
+        Arguments.of(
+            "const X type=u8 value=1\nimport q symbol=X" + NOFAIL + "\n",
+            "const X: name collides with function symbol X"),
+        Arguments.of(
+            "const ANALYSIS_MAGIC type=u32 value=4294967296\n",
+            "const ANALYSIS_MAGIC: value 4294967296 does not fit u32"),
+        Arguments.of(
+            "const ANALYSIS_MAGIC type=i8 value=-129\n",
+            "const ANALYSIS_MAGIC: value -129 does not fit i8"),
+        Arguments.of(
+            "const BINDING_ABI_VERSION type=u8 value=1\n",
+            "invalid or reserved identifier: BINDING_ABI_VERSION"),
+        Arguments.of(
+            "enum Status type=i32\n value ok = 0\n value ok = 1\nend\n",
+            "enum Status: duplicate value name: ok"),
+        Arguments.of(
+            "enum Status type=i32\n value ok = 0\n value success = 0\nend\n",
+            "enum Status: values ok and success are both 0"),
+        Arguments.of(
+            "enum Status type=i32\n value internal_error = 2147483648\nend\n",
+            "enum Status: value internal_error = 2147483648 does not fit i32"),
+        Arguments.of(
+            "enum Status type=i32\n value Ok = 0\nend\n", "enum Status: invalid value name: Ok"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit exported = 0\n bit exported = 1\nend\n",
+            "flags FunctionFlags: duplicate bit name: exported"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit exported = 0\n bit public = 0\nend\n",
+            "flags FunctionFlags: bits exported and public both use bit 0"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit external = 32\nend\n",
+            "flags FunctionFlags: bit external = 32 is outside u32 (bits 0..31)"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit all = 0\nend\n",
+            "flags FunctionFlags: bit name is reserved: all"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit none = 0\nend\n",
+            "flags FunctionFlags: bit name is reserved: none"),
+        Arguments.of(
+            "flags FunctionFlags type=u32\n bit Mixed = 0\nend\n",
+            "flags FunctionFlags: invalid bit name: Mixed"),
+        Arguments.of(
+            FL
+                + "struct IrFunction size=4 align=4\n"
+                + " field flags type=u32 offset=0 flags=FunctionFlagz\nend\n",
+            "field IrFunction.flags: undeclared flag set: FunctionFlagz"),
+        Arguments.of(ST + IMP + " enum=Statuz\nend\n", "import status: undeclared enum: Statuz"),
+        Arguments.of(
+            "import compile symbol=c return=void error=no_failure\n"
+                + " param mode type=i32 enum=Modez\n"
+                + "end\n",
+            "param compile.mode: undeclared enum: Modez"),
+        Arguments.of(
+            FL + IMP + " enum=FunctionFlags\nend\n",
+            "import status: enum=FunctionFlags names a flag set; use flags=FunctionFlags"),
+        Arguments.of(
+            ST + IMP + " flags=Status\nend\n",
+            "import status: flags=Status names an enum; use enum=Status"),
+        Arguments.of(
+            FL
+                + "struct IrFunction size=8 align=8\n"
+                + " field flags type=u64 offset=0 flags=FunctionFlags\nend\n",
+            "field IrFunction.flags: flags=FunctionFlags has carrier u32, but the field's type is"
+                + " u64"),
+        Arguments.of(
+            FL
+                + "struct IrFunction size=8 align=8\n"
+                + " field flags type=ptr<u32> offset=0 flags=FunctionFlags\nend\n",
+            "field IrFunction.flags: flags=FunctionFlags has carrier u32, but the field's type is"
+                + " ptr<u32>"),
+        Arguments.of(
+            ST + IMP + " enum=Status\n param p type=ptr<i32> enum=Status\nend\n",
+            "param status.p: enum=Status has carrier i32, but the parameter's type is ptr<i32>"),
+        Arguments.of(
+            ST + "import status symbol=s return=u8 error=no_failure enum=Status\nend\n",
+            "import status: enum=Status has carrier i32, but the return type is u8"),
+        // References on export and callback headers.
+        Arguments.of(
+            ST
+                + "export run symbol=r return=i32 java=a.B.run isolate=thread error=abort"
+                + " enum=Statuz\nend\n",
+            "export run: undeclared enum: Statuz"),
+        Arguments.of(
+            FL
+                + "export run symbol=r return=i32 java=a.B.run isolate=thread error=abort"
+                + " enum=FunctionFlags\nend\n",
+            "export run: enum=FunctionFlags names a flag set; use flags=FunctionFlags"),
+        Arguments.of(
+            FL
+                + "export run symbol=r return=u64 java=a.B.run isolate=thread error=abort"
+                + " flags=FunctionFlags\nend\n",
+            "export run: flags=FunctionFlags has carrier u32, but the return type is u64"),
+        Arguments.of(
+            "export run symbol=r return=i32 java=a.B.run isolate=thread error=abort\n"
+                + " param mode type=i32 enum=Modez\nend\n",
+            "param run.mode: undeclared enum: Modez"),
+        Arguments.of(
+            "callback Cb return=i32 enum=Statuz\nend\n", "callback Cb: undeclared enum: Statuz"),
+        Arguments.of(
+            ST + "callback Cb return=u8 enum=Status\nend\n",
+            "callback Cb: enum=Status has carrier i32, but the return type is u8"),
+        Arguments.of(
+            ST + "callback Cb return=void\n param x type=i32 flags=Status\nend\n",
+            "param Cb.x: flags=Status names an enum; use enum=Status"),
+        // Generated C names.
+        Arguments.of(
+            "const STATUS_OK type=i32 value=1\n" + ST,
+            "C name KOMODO_FRONTEND_STATUS_OK is generated by both const STATUS_OK and enum Status"
+                + " value ok"),
+        Arguments.of(
+            "flags Status2 type=u8\n bit a = 0\nend\nconst STATUS2_ALL type=u8 value=1\n",
+            "C name KOMODO_FRONTEND_STATUS2_ALL is generated by both const STATUS2_ALL and flags"
+                + " Status2 _ALL"),
+        Arguments.of(
+            "const SEAM_ABI type=u8 value=1\n",
+            "const SEAM_ABI: C name KOMODO_FRONTEND_SEAM_ABI is reserved by the generated header"),
+        Arguments.of(
+            "const SEAM_H type=u8 value=1\n",
+            "const SEAM_H: C name KOMODO_FRONTEND_SEAM_H is reserved by the generated header"),
+        Arguments.of(
+            "enum Binding type=i32\n value abi_version = 0\nend\n",
+            "enum Binding value abi_version: C name KOMODO_FRONTEND_BINDING_ABI_VERSION is reserved"
+                + " by the generated header"),
+        Arguments.of(
+            "enum Seam type=i32\n value abi = 0\nend\n",
+            "enum Seam value abi: C name KOMODO_FRONTEND_SEAM_ABI is reserved by the generated"
+                + " header"),
+        Arguments.of(
+            "flags Binding type=u32\n bit abi_version = 0\nend\n",
+            "flags Binding bit abi_version: C name KOMODO_FRONTEND_BINDING_ABI_VERSION is reserved"
+                + " by the generated header"),
+        Arguments.of(
+            "enum A type=i32\n value b_t = 0\nend\nenum A_B type=i32\n value t = 0\nend\n",
+            "C name KOMODO_FRONTEND_A_B_T is generated by both enum A value b_t and enum A_B value"
+                + " t"),
+        Arguments.of(
+            ST + "import q symbol=komodo_frontend_status_t" + NOFAIL + "\n",
+            "C name komodo_frontend_status_t is generated by both function symbol"
+                + " komodo_frontend_status_t and enum Status typedef"),
+        Arguments.of(
+            ST + "import q symbol=komodo_frontend_status_name" + NOFAIL + "\n",
+            "C name komodo_frontend_status_name is generated by both function symbol"
+                + " komodo_frontend_status_name and enum Status name function"),
+        Arguments.of(
+            "flags F type=u8 c_bitfields=true\n bit a = 0\nend\n"
+                + "import q symbol=komodo_frontend_f_bits"
+                + NOFAIL
+                + "\n",
+            "C name komodo_frontend_f_bits is generated by both function symbol"
+                + " komodo_frontend_f_bits and flags F bits struct"),
+        Arguments.of(
+            "flags F type=i32 c_bitfields=true\n bit a = 0\nend\n",
+            "flags F: c_bitfields requires an unsigned carrier, found i32"),
+        Arguments.of(
+            ST + IMP + " enum=Status\nend\nimport statusEnum symbol=se" + NOFAIL + "\n",
+            "logical name collides with the typed enum wrapper of status: statusEnum"),
+        // Generated Java names.
+        Arguments.of(
+            "opaque MynaNativeConstants\nconst A type=u8 value=1\n",
+            "type collides with generated constants class MynaNativeConstants"),
+        Arguments.of(
+            "opaque MynaNativeDirectives\nconst A type=u8 value=1\n",
+            "type collides with generated directives class MynaNativeDirectives"),
+        Arguments.of(
+            "enum MynaNativeConstants type=i32\n value ok = 0\nend\n",
+            "type collides with generated constants class MynaNativeConstants"),
+        Arguments.of(
+            "opaque StatusNames\n" + ST,
+            "enum Status: generated name StatusNames collides with a declared type"),
+        Arguments.of(
+            ST + "enum StatusNames type=i32\n value ok = 0\nend\n",
+            "enum Status: generated name StatusNames collides with a declared type"),
+        // Bitfield accessors.
+        Arguments.of(
+            "flags FunctionFlags type=u32 c_bitfields=true\n bit exported = 0\nend\n"
+                + "struct IrFunction size=8 align=4\n"
+                + " field flags type=u32 offset=0 flags=FunctionFlags\n"
+                + " field flagsExported type=u32 offset=4\nend\n",
+            "struct IrFunction: accessor flagsExported of field flags bit exported collides with"
+                + " field flagsExported"),
+        Arguments.of(
+            "flags F type=u8 c_bitfields=true\n bit a_b = 0\n bit a__b = 1\nend\n"
+                + "struct S size=1 align=1\n field f type=u8 offset=0 flags=F\nend\n",
+            "struct S: accessor fAB of field f bit a__b collides with accessor of field f bit"
+                + " a_b"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("rejects")
+  void rejects(String body, String message) {
+    assertEquals(message, invalid(HEAD, body));
+  }
+
+  static Stream<Arguments> rejectsWithCells() {
+    return Stream.of(
+        Arguments.of(
+            "enum CellsTruffle type=i32\n value ok = 0\nend\n",
+            "type collides with generated Truffle class CellsTruffle"),
+        Arguments.of(
+            "enum status_Cell type=i32\n value ok = 0\nend\n" + IMP + "\nend\n",
+            "type collides with generated Truffle cell for status"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("rejectsWithCells")
+  void rejectsWithCells(String body, String message) {
+    assertEquals(message, invalid(CELLS, body));
+  }
+
+  @Test
+  void referencesAcceptMatchingCarriers() {
+    var m =
+        Dsl.parse(
+            HEAD + ST + FL + IMP + " enum=Status\n param f type=u32 flags=FunctionFlags\nend\n");
+    Validator.validate(m, true);
+    Validator.validate(
+        Dsl.parse(
+            HEAD
+                + "flags F type=u8 c_bitfields=true\n bit a = 0\n bit b_c = 1\nend\n"
+                + "struct S size=1 align=1\n field f type=u8 offset=0 flags=F\nend\n"),
+        true);
+  }
+
+  @Test
+  void examplePasses() throws Exception {
+    Validator.validate(Dsl.parse(Files.readString(Path.of("examples/constants.seam"))), true);
+  }
+
+  @Test
+  void bothOptionsAreRejectedOnEveryDeclaration() {
+    for (String line :
+        new String[] {
+          "import f symbol=f return=i32 error=no_failure enum=E flags=F\nend\n",
+          "export f symbol=f return=i32 java=a.B.f isolate=thread error=abort enum=E flags=F\n"
+              + "end\n",
+          "callback Cb return=i32 enum=E flags=F\nend\n",
+          "import f symbol=f return=void error=no_failure\n param p type=i32 enum=E flags=F\nend\n",
+          "struct S size=4 align=4\n field a type=i32 offset=0 enum=E flags=F\nend\n"
+        }) {
+      var message = parseError(line);
+      assertTrue(message.endsWith("enum= and flags= are mutually exclusive"), message);
+      assertTrue(message.startsWith("line "), message);
+    }
+  }
+
+  @Test
+  void paramIsRejectedInsideGroupBlocks() {
+    assertEquals(
+        "line 3: param requires a function block and a type",
+        parseError("enum E type=i32\n param p type=i32\nend\n"));
+    assertEquals(
+        "line 3: param requires a function block and a type",
+        parseError("flags F type=u8\n param p type=u8\nend\n"));
   }
 }
