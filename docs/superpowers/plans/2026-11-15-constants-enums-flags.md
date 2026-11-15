@@ -22,7 +22,6 @@
 - Descriptors that declare no constants/enums/flags serialize `seam.json` byte-for-byte as today; `schemaVersion` stays 3.
 - Generator version (`Seam.VERSION`) stays `0.18.0` on this branch; the release PR bumps it and regenerates goldens.
 - Golden outputs are regenerated, never hand-edited: `scripts/build.sh` then `build/dist/myna generate examples/<x>.seam --out tests/golden/<dir>` (main golden: `examples/buffer.seam` → `tests/golden`; `examples/truffle.seam` → `tests/golden/truffle`; new `examples/constants.seam` → `tests/golden/constants`).
-- Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Gates: focused tasks while developing; `mise run test`, `mise run lint`, `python3 scripts/check-hygiene.py` at the end.
 
 ## Review Focus
