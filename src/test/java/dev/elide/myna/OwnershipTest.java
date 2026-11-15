@@ -1001,6 +1001,30 @@ class OwnershipTest {
     assertTrue(refused.getMessage().contains("cannot impose extent or noalias"));
   }
 
+  /** An align fact on a borrow buffer is a power of two, at most 4096. */
+  @Test
+  void alignOnBorrowsMustBeAPowerOfTwoWithinAPage() {
+    for (String bad : new String[] {"24", "3", "8192", "0"}) {
+      String source =
+          TRANSFER.replace(
+              " readonly=true@explicit_contract\n",
+              " readonly=true@explicit_contract align=" + bad + "@explicit_contract\n");
+      assertThrows(
+          IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true), bad);
+    }
+    var message =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Generator.generate(
+                    Dsl.parse(
+                        TRANSFER.replace(
+                            " readonly=true@explicit_contract\n",
+                            " readonly=true@explicit_contract align=24@explicit_contract\n")),
+                    true));
+    assertTrue(message.getMessage().contains("power of two"), message.getMessage());
+  }
+
   /** A held borrow takes the same fact; its cell copies a buffer that violates it. */
   @Test
   void alignOnHeldBorrowsReachesTheirCoercion() {

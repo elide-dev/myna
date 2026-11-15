@@ -250,7 +250,9 @@ public final class NativeOwnership implements Backend {
           .append(s)
           .append(" = ")
           .append(nullable ? b.name() + " == null ? " + NULL_POINTER + " : " : "")
-          .append("address")
+          // A present empty buffer is lent the dummy, whatever address it reports: under an align
+          // fact that address may be misaligned, which LLVM's attribute does not excuse.
+          .append(call.align(b.borrow()) > 1 ? "length" : "address")
           .append(s)
           .append(" == 0\n")
           .append(pad)

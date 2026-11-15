@@ -134,8 +134,8 @@ final class RustOwnership {
       // A nullable buffer is an Option of the slice. It is consumed once, into the pointer and
       // byte count the call passes, under the parameter's own name: no other name is introduced.
       var absent = new StringBuilder();
-      // Caller contracts of align facts, checked in debug builds only; an empty slice has no
-      // address of its own, so it is not checked.
+      // Caller contracts of align facts, checked in debug builds only. An empty slice is lent an
+      // aligned static in its place, so only the address of a non-empty one is checked.
       var alignments = new StringBuilder();
       for (Parameter p : f.parameters()) {
         BufferBorrow buffer = call.buffer(p);
