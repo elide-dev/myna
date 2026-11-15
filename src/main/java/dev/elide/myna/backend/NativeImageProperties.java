@@ -51,7 +51,8 @@ public final class NativeImageProperties implements Backend {
   /**
    * Partial evaluation inlines only methods of build-time-initialized classes, so the cells (which
    * hold no addresses: the bindings they call keep theirs in run-time classes) initialize at build
-   * time, like every Truffle node class.
+   * time, like every Truffle node class. So do the enum name classes: their {@code TruffleString}s
+   * are image-heap constants holding only text.
    */
   private static String truffle(Module module, String prefix) {
     if (module.truffleConfig() == null) return "";
@@ -62,6 +63,9 @@ public final class NativeImageProperties implements Backend {
         + type
         + cells.stream()
             .map(f -> "," + type + "$" + f.name() + "_Cell")
+            .collect(Collectors.joining())
+        + module.enums().stream()
+            .map(e -> "," + type + "$" + e.name() + "Names")
             .collect(Collectors.joining())
         + (prefix.equals(" ") ? "" : "\n");
   }

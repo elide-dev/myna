@@ -4,12 +4,17 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.serialize.SeamJson;
+import java.net.URLClassLoader;
 import java.nio.file.*;
 import java.util.*;
+import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 
 /** The generated Truffle cells: a projection of the same seam the other backends emit. */
@@ -1782,5 +1787,120 @@ class TruffleCellsTest {
           output.getValue(),
           output.getKey());
     assertEquals(SeamJson.fingerprint(Dsl.parse(example())) + "\n", actual.get("seam.abi"));
+  }
+
+  static final String NAMED =
+      "module named target=x86_64-unknown-linux-gnu java_package=fixture.named java_class=Named"
+          + " truffle_cells=true\n"
+          + "const MAGIC type=u32 value=0x80000001\n"
+          + "const LIMIT type=u64 value=0xffffffffffffffff\n"
+          + "enum Status type=i32\n  value null_result = -1\n  value ok = 0\n"
+          + "  value syntax_error = 0x10\nend\n"
+          + "enum Level type=u8\n  value low = 0\n  value high = 255\nend\n"
+          + "enum Big type=u64\n  value top = 0xfffffffffffffffe\nend\n"
+          + "flags Perms type=u32\n  bit read = 0\n  bit sticky = 31\nend\n";
+
+  /** Compiles the generated Truffle class of {@link #NAMED} against the test class path. */
+  private static Class<?> compileNamed() throws Exception {
+    var java = generate(NAMED).get("NamedTruffle.java");
+    Path dir = Files.createTempDirectory("myna-names");
+    Path source = dir.resolve("fixture/named/NamedTruffle.java");
+    Files.createDirectories(source.getParent());
+    Files.writeString(source, java);
+    var compiler = ToolProvider.getSystemJavaCompiler();
+    assertNotNull(compiler, "javac is required to compile generated Java");
+    int status =
+        compiler.run(
+            null,
+            null,
+            null,
+            "-proc:none",
+            "-cp",
+            System.getProperty("java.class.path"),
+            "-d",
+            dir.toString(),
+            source.toString());
+    assertEquals(0, status, java);
+    var loader =
+        new URLClassLoader(
+            new java.net.URL[] {dir.toUri().toURL()}, TruffleCellsTest.class.getClassLoader());
+    return Class.forName("fixture.named.NamedTruffle", true, loader);
+  }
+
+  @Test
+  void namesReturnNullWhenUnlisted() throws Exception {
+    Class<?> truffle = compileNamed();
+    ClassLoader loader = truffle.getClassLoader();
+    var status = Class.forName("fixture.named.NamedTruffle$StatusNames", true, loader);
+    var name = status.getMethod("name", int.class);
+    assertEquals(
+        TruffleString.fromJavaStringUncached("ok", TruffleString.Encoding.UTF_8),
+        name.invoke(null, 0));
+    assertEquals("null_result", name.invoke(null, -1).toString());
+    assertEquals("syntax_error", name.invoke(null, 0x10).toString());
+    assertNull(name.invoke(null, 2), "an unlisted value has no name");
+    // The same instance every time: an image-heap constant, never a new string.
+    assertSame(name.invoke(null, 0), name.invoke(null, 0));
+    var level = Class.forName("fixture.named.NamedTruffle$LevelNames", true, loader);
+    var levelName = level.getMethod("name", byte.class);
+    assertEquals("high", levelName.invoke(null, (byte) -1).toString(), "u8 255 is byte -1");
+    assertNull(levelName.invoke(null, (byte) 1));
+    var big = Class.forName("fixture.named.NamedTruffle$BigNames", true, loader);
+    var bigName = big.getMethod("name", long.class);
+    assertEquals(
+        "top", bigName.invoke(null, -2L).toString(), "u64 above Long.MAX_VALUE is raw bits");
+    assertNull(bigName.invoke(null, 0L));
+    // Flag sets get no name class: a mask is not one name.
+    assertThrows(
+        ClassNotFoundException.class,
+        () -> Class.forName("fixture.named.NamedTruffle$PermsNames", true, loader));
+  }
+
+  @Test
+  void generatedConstantsReadMembers() throws Exception {
+    Object constants = compileNamed().getMethod("constants").invoke(null);
+    var interop = InteropLibrary.getUncached();
+    assertTrue(interop.hasMembers(constants));
+    assertEquals(0x80000001, interop.readMember(constants, "MAGIC"));
+    assertEquals(-1L, interop.readMember(constants, "LIMIT"));
+    Object status = interop.readMember(constants, "Status");
+    assertEquals(-1, interop.readMember(status, "null_result"));
+    assertEquals(0x10, interop.readMember(status, "syntax_error"));
+    assertEquals((byte) -1, interop.readMember(interop.readMember(constants, "Level"), "high"));
+    Object perms = interop.readMember(constants, "Perms");
+    assertEquals(1, interop.readMember(perms, "read"));
+    assertEquals(Integer.MIN_VALUE, interop.readMember(perms, "sticky"), "bit 31 is the u32 mask");
+    assertThrows(UnknownIdentifierException.class, () -> interop.readMember(status, "missing"));
+    var members = interop.getMembers(constants);
+    assertEquals(6, interop.getArraySize(members));
+    assertEquals(
+        "LIMIT",
+        interop.readArrayElement(members, 0),
+        "consts in name order, then enums, then flags");
+    assertEquals("Perms", interop.readArrayElement(members, 5));
+  }
+
+  @Test
+  void constantsOnlyWhenDeclared() throws Exception {
+    var plain = generate(MODULE + ADD).get("MynaTruffle.java");
+    assertFalse(plain.contains("NativeConstants"));
+    assertFalse(plain.contains("TruffleString"));
+    var properties =
+        generate(NAMED)
+            .get(
+                "META-INF/native-image/dev.elide.myna/fixture.named.Named/native-image.properties");
+    assertNotNull(properties);
+    assertTrue(properties.contains("fixture.named.NamedTruffle$StatusNames"), properties);
+    assertTrue(properties.contains("fixture.named.NamedTruffle$BigNames"), properties);
+    assertFalse(properties.contains("PermsNames"), properties);
+    var clash =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> generate(NAMED + "import constants return=i32 error=no_failure\nend\n"));
+    assertEquals(
+        "Truffle cell constants collides with the generated constants() accessor",
+        clash.getMessage());
+    // Without anything declared, an import may still be called constants.
+    generate(MODULE + "import constants return=i32 error=no_failure\nend\n");
   }
 }

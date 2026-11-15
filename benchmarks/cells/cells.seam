@@ -1,5 +1,9 @@
 # Truffle cell workloads over the shared comparison kernel plus borrow and string targets.
 module cells_bench abi=1 target=aarch64-apple-darwin java_package=bench java_class=Cells truffle_cells=true
+# A guest-visible constant (CellsTruffle.constants().Mode.zero) against the literal 0.
+enum Mode type=i64
+  value zero = 0
+end
 import leaf symbol=myna_bench_leaf return=i64 error=no_failure
   param value type=i64
 end

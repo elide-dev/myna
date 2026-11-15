@@ -45,6 +45,7 @@ public final class FfmCellsMain {
         Arena confined = Arena.ofConfined(); Arena shared = Arena.ofShared()) {
       context.enter();
       try {
+        CellChecks.guestConstants(CellApiTruffle.constants(), true);
         MemorySegment global = Arena.global().allocate(4), globalOut = Arena.global().allocate(4);
         MemorySegment mine = confined.allocate(4), mineOut = confined.allocate(4), common = shared.allocate(4);
         global.fill((byte) 1);
@@ -113,6 +114,8 @@ public final class FfmCellsMain {
     }
     if (CellApiTruffle.CELLS.length != 42) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
     // Only an image compiles at run time here; on HotSpot the fixture runs without a compiler.
+    // The same guest code as the image runs compiled; here interpreted, for the result.
+    if (!ImageInfo.inImageRuntimeCode()) CellChecks.guestConstants(CellApiTruffle.constants(), false);
     if (ImageInfo.inImageRuntimeCode()) compiledAllocations();
     System.out.println("Truffle FFM cells passed");
   }

@@ -228,6 +228,7 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment lent = java.lang.foreign.Arena.global().allocate(64);
         lent.fill((byte) 3);
         allocates("add", new CellApiTruffle.add_Cell(), 0, 5, 2, 3);
+        CellChecks.guestConstants(CellApiTruffle.constants(), true);
         allocates("checksum of native bytes", new CellApiTruffle.checksum_Cell(), 0, 64 * 3, NativeBytes.of(lent, false));
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);

@@ -1,7 +1,10 @@
 // Copyright the Myna contributors.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package fixture.cells;
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.truffle.*;
 import java.lang.foreign.Arena;
@@ -758,5 +761,71 @@ public final class CellChecks {
     INTEROP.invokeMember(other, "close");
     check(call(cells, "counterLive").equals(0L), "closed through the member");
     check(new String("ok".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8).equals("ok"), "sanity");
+  }
+  /**
+   * Guest code over the seam's constants: each iteration reads {@code constants.Status.ok} through
+   * interop, as a guest language does with constant member names, compares it with the result of
+   * {@code add} and names that result through {@code StatusNames}. Compiled, the reads fold to the
+   * number and the name to a constant, so the loop allocates nothing and never deoptimizes.
+   */
+  static final class GuestConstants extends NativeCell {
+    static final int CALLS = 4096;
+    private final Object constants;
+    @Node.Child private InteropLibrary groups = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary values = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary numbers = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private CellApiTruffle.add_Cell add = new CellApiTruffle.add_Cell();
+    GuestConstants(Object constants) { super("guest:constants", 2); this.constants = constants; }
+    @Override public Object execute(Object[] arguments) {
+      long matches = 0, named = 0;
+      try {
+        for (int i = 0; i < CALLS; i++) {
+          Object status = groups.readMember(constants, "Status");
+          int ok = numbers.asInt(values.readMember(status, "ok"));
+          int result = add.executeInt(arguments);
+          if (result == ok) matches++;
+          if (CellApiTruffle.StatusNames.name(result) != null) named++;
+        }
+      } catch (InteropException e) {
+        throw CompilerDirectives.shouldNotReachHere(e);
+      }
+      return new Object[] {matches, named, CompilerDirectives.inCompiledCode()};
+    }
+  }
+  /**
+   * The guest constants loop over {@code add(2, -2)}. With {@code compiled}, it must reach compiled
+   * code, stay there for the rest of the run (no deoptimization), and allocate nothing beyond the
+   * host call's own result array. Without, it runs interpreted (HotSpot with no compiler) for the
+   * functional result only.
+   */
+  public static void guestConstants(Object constants, boolean compiled) throws Exception {
+    // Functional checks first, through the uncached library a host or guest without caches uses.
+    Object status = INTEROP.readMember(constants, "Status");
+    check(INTEROP.readMember(status, "ok").equals(0), "constants.Status.ok");
+    check(INTEROP.readMember(status, "five").equals(5), "constants.Status.five");
+    check(INTEROP.readMember(constants, "LIMIT").equals(-2L), "u64 const is its raw long bits");
+    check(INTEROP.readMember(INTEROP.readMember(constants, "Mode"), "high").equals((byte) -128), "u8 bit 7 is byte -128");
+    check(CellApiTruffle.StatusNames.name(5).toJavaStringUncached().equals("five"), "StatusNames.name(5)");
+    check(CellApiTruffle.StatusNames.name(1) == null, "an unlisted value has no name");
+    NativeFunction loop = new GuestConstants(constants).function();
+    var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+    long thread = Thread.currentThread().threadId();
+    boolean reached = false;
+    for (int i = 0; i < 20 && !(compiled && reached); i++) reached = (Boolean) ((Object[]) loop.call(2, -2))[2];
+    if (compiled && !reached) throw new AssertionError("guest constants loop did not run in compiled code");
+    long before = bean.getThreadAllocatedBytes(thread);
+    Object[] outcome = (Object[]) loop.call(2, -2);
+    long allocated = bean.getThreadAllocatedBytes(thread) - before;
+    check(outcome[0].equals((long) GuestConstants.CALLS), "guest constants matches: " + outcome[0]);
+    check(outcome[1].equals((long) GuestConstants.CALLS), "guest constants names: " + outcome[1]);
+    if (compiled) {
+      if (!(Boolean) outcome[2]) throw new AssertionError("guest constants loop left compiled code");
+      if (allocated > 1024) throw new AssertionError("guest constants loop allocated " + allocated + " bytes over " + GuestConstants.CALLS + " iterations");
+      for (int i = 0; i < 1_000; i++)
+        if (!(Boolean) ((Object[]) loop.call(2, -2))[2]) throw new AssertionError("guest constants loop deoptimized at " + i);
+      System.out.println("guest constants allocated " + allocated + " bytes over " + GuestConstants.CALLS + " compiled iterations");
+    } else {
+      System.out.println("guest constants read and named");
+    }
   }
 }

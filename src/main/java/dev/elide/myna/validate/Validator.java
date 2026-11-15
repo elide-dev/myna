@@ -482,6 +482,15 @@ public final class Validator {
     require(
         !function.facts().containsKey("truffle_cell") || function.direction() == Direction.IMPORT,
         "truffle_cell applies to imports only");
+    // The Truffle class's constants() returns the guest-visible constants object.
+    require(
+        !configured
+            || !function.name().equals("constants")
+            || !Seam.truffleCell(module, function)
+            || (module.constants().isEmpty()
+                && module.enums().isEmpty()
+                && module.flagSets().isEmpty()),
+        "Truffle cell constants collides with the generated constants() accessor");
     for (Parameter parameter : function.parameters()) {
       Fact buffer = parameter.facts().get("truffle_buffer");
       if (buffer == null) continue;
