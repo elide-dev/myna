@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // Enum and flag returns and parameters through the ownership wrappers, under #![deny(warnings)].
 #![deny(warnings)]
 #[allow(dead_code, non_snake_case)]

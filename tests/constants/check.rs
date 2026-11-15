@@ -1,3 +1,5 @@
+// Copyright the Myna contributors.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 // Compiles the generated constants seam under #![deny(warnings)] and checks the newtypes.
 #![deny(warnings)]
 #[allow(dead_code, non_snake_case)]
