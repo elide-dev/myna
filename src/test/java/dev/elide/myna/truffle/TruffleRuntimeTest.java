@@ -1040,6 +1040,48 @@ class TruffleRuntimeTest {
     }
   }
 
+  /**
+   * A failed create reports its own status or missing resource even when the buffer stops taking
+   * the struct it wrote: the copy error rides along as suppressed.
+   */
+  @Test
+  void failedCreateKeepsStatusWhenCopyBackFails() {
+    ShrinkingBuffer shrinking = new ShrinkingBuffer(24);
+    NativeStruct out = NativeStruct.allocate(24, shrinking, "compile", "result", null);
+    NativeStatusException status =
+        (NativeStatusException)
+            assertThrows(
+                NativeStatusException.class,
+                () -> {
+                  throw out.copyToAfterFailure(
+                      shrinking, NativeCellException.status("compile", 7, null));
+                });
+    assertEquals(7, status.status());
+    assertEquals(1, status.getSuppressed().length);
+    assertEquals(NativeCellException.class, status.getSuppressed()[0].getClass());
+    assertEquals(
+        "buffer stopped taking the struct a create wrote", status.getSuppressed()[0].getMessage());
+    out.free();
+  }
+
+  @Test
+  void failedCreateWithNoResourceKeepsNoResourceWhenCopyBackFails() {
+    ShrinkingBuffer shrinking = new ShrinkingBuffer(24);
+    NativeStruct out = NativeStruct.allocate(24, shrinking, "compile", "result", null);
+    NativeCellException missing =
+        assertThrows(
+            NativeCellException.class,
+            () -> {
+              throw out.copyToAfterFailure(
+                  shrinking, NativeCellException.noResource("compile", null));
+            });
+    assertEquals("compile reported success but wrote no resource", missing.getMessage());
+    assertEquals(1, missing.getSuppressed().length);
+    assertEquals(
+        "buffer stopped taking the struct a create wrote", missing.getSuppressed()[0].getMessage());
+    out.free();
+  }
+
   /** Whether a struct's memory is still allocated: its arena is alive on HotSpot. */
   private static boolean structAlive(NativeStruct struct) throws ReflectiveOperationException {
     var field = NativeStruct.class.getDeclaredField("arena");

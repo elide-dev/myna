@@ -597,7 +597,8 @@ public final class TruffleCells implements Backend {
                     x -> x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
                 .findFirst()
                 .orElseThrow();
-        String copy = "out.copyTo(" + guest.get(parameter.name());
+        String guestArgument = guest.get(parameter.name());
+        String copy = "out.copyTo(" + guestArgument;
         // A struct the resource lives in is freed by the resource; any other struct, once the
         // cell is done with it.
         before
@@ -623,10 +624,11 @@ public final class TruffleCells implements Backend {
               .append("if (!(")
               .append(String.join(" || ", succeeded))
               .append(")) {\n    ")
-              .append(copy)
-              .append(");\n    throw NativeCellException.status(")
+              .append("throw out.copyToAfterFailure(")
+              .append(guestArgument)
+              .append(", NativeCellException.status(")
               .append(quotedName)
-              .append(", status, this);\n}\n");
+              .append(", status, this));\n}\n");
         }
         String field = cell.creates().handleField();
         if (field == null) {
@@ -644,10 +646,11 @@ public final class TruffleCells implements Backend {
               .append(offset)
               .append("L);\n")
               .append("if (created == 0) {\n    ")
-              .append(copy)
-              .append(");\n    throw NativeCellException.noResource(")
+              .append("throw out.copyToAfterFailure(")
+              .append(guestArgument)
+              .append(", NativeCellException.noResource(")
               .append(quotedName)
-              .append(", this);\n}\n");
+              .append(", this));\n}\n");
         }
         after.append(copy).append(", resource);\n");
       }

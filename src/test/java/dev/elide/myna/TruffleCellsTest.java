@@ -988,6 +988,17 @@ class TruffleCellsTest {
   }
 
   /**
+   * A failed create throws its own status after a best-effort copy: a copy that fails cannot
+   * replace the status the guest needs.
+   */
+  @Test
+  void failedCreateThrowsStatusAfterBestEffortCopy() {
+    String truffle = generate(OwnershipTest.HANDLES).get("ApiTruffle.java");
+    assertTrue(truffle.contains("throw out.copyToAfterFailure("), truffle);
+    assertFalse(truffle.contains("out.copyTo(arguments[1]);\n"), truffle);
+  }
+
+  /**
    * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
    * create writes into a struct the runtime owns; the cell compares the result with the listed
    * statuses, reads the resource from that struct and returns its owner, and the guest's buffer
@@ -1016,13 +1027,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
                                 adopted = true;
@@ -1131,13 +1140,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
                                 adopted = true;
