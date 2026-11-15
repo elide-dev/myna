@@ -170,7 +170,8 @@ final class RustOwnership {
           .append('(')
           .append(String.join(", ", params))
           .append(')');
-      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+      if (f.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
       out.append(" {\n")
           .append(absent)
           .append("        unsafe { super::")

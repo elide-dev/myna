@@ -60,13 +60,24 @@ final class Types {
     return rust(type);
   }
 
+  /** The Rust type, spelled as the group's newtype when the value belongs to an enum or flags. */
+  static String rust(Type type, GroupRef group) {
+    return group == null ? rust(type) : group.name();
+  }
+
+  static String rust(Type type, GroupRef group, String q) {
+    return group == null ? rust(type, q) : q + group.name();
+  }
+
   static String rust(Parameter p, String q) {
+    if (p.group() != null) return q + p.group().name();
     if (p.type() instanceof Pointer ptr)
       return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee(), q);
     return rust(p.type(), q);
   }
 
   static String rust(Parameter p) {
+    if (p.group() != null) return p.group().name();
     if (p.type() instanceof Pointer ptr)
       return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee());
     return rust(p.type());

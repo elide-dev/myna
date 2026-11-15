@@ -7,6 +7,8 @@ import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
+import java.math.BigInteger;
+import java.util.Locale;
 
 public final class RustFfi implements Backend {
   public String filename(Module module) {
@@ -24,6 +26,7 @@ public final class RustFfi implements Backend {
         .append(Seam.BINDING_ABI_VERSION)
         .append(";\n");
     out.append("const _: () = assert!(core::mem::size_of::<*const ()>() == 8);\n");
+    constants(m, out);
     for (String name : m.opaqueTypes())
       out.append("#[repr(C)]\npub struct ").append(name).append(" { _private: [u8; 0] }\n");
     for (Signature c : m.callbacks()) {
@@ -32,7 +35,8 @@ public final class RustFfi implements Backend {
           .append(" = Option<unsafe extern \"C\" fn(")
           .append(String.join(", ", c.parameters().stream().map(Types::rust).toList()))
           .append(')');
-      if (c.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(c.returns()));
+      if (c.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(c.returns(), c.returnsGroup()));
       out.append(">;\n");
     }
     for (Struct s : m.structs()) {
@@ -49,7 +53,7 @@ public final class RustFfi implements Backend {
         out.append("    pub ")
             .append(f.name())
             .append(": ")
-            .append(Types.rust(f.type()))
+            .append(Types.rust(f.type(), f.group()))
             .append(",\n");
         offset = f.offset() + Validator.size(f.type());
       }
@@ -106,7 +110,8 @@ public final class RustFfi implements Backend {
                   ", ",
                   f.abiParameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList()))
           .append(')');
-      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+      if (f.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
       out.append(";\n");
     }
     out.append("}\n");
@@ -121,7 +126,8 @@ public final class RustFfi implements Backend {
           .append("Fn = unsafe extern \"C\" fn(")
           .append(String.join(", ", f.abiParameters().stream().map(Types::rust).toList()))
           .append(')');
-      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+      if (f.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
       out.append(";\n");
     }
     var imports = m.functions().stream().filter(f -> f.direction() == Direction.IMPORT).toList();
@@ -147,12 +153,121 @@ public final class RustFfi implements Backend {
     return out.toString();
   }
 
+  private static void constants(Module m, StringBuilder out) {
+    for (Constant c : m.constants())
+      out.append("pub const ")
+          .append(c.name().toUpperCase(Locale.ROOT))
+          .append(": ")
+          .append(Types.rust(c.type()))
+          .append(" = ")
+          .append(literal(c.type(), c.value(), c.type().text().startsWith("u")))
+          .append(";\n");
+    for (EnumGroup e : m.enums()) {
+      String carrier = Types.rust(e.type());
+      newtype(
+          out,
+          e.name(),
+          carrier,
+          "enum "
+              + e.name()
+              + ": "
+              + carrier
+              + ". Open set: every "
+              + carrier
+              + " is a valid `"
+              + e.name()
+              + "`; undeclared values equal no constant.");
+      for (EnumValue v : e.values()) constant(out, v.name(), literal(e.type(), v.value(), false));
+      out.append("    #[inline]\n    pub const fn name(self) -> Option<&'static str> {\n")
+          .append("        match self.0 { ");
+      for (EnumValue v : e.values())
+        out.append(literal(e.type(), v.value(), false))
+            .append(" => Some(")
+            .append(SeamJson.quote(v.name()))
+            .append("), ");
+      out.append("_ => None }\n    }\n}\n");
+    }
+    for (FlagSet f : m.flagSets()) {
+      String carrier = Types.rust(f.type());
+      String n = f.name();
+      newtype(out, n, carrier, "flags " + n + ": " + carrier + ".");
+      constant(out, "NONE", "0");
+      BigInteger all = BigInteger.ZERO;
+      for (FlagBit b : f.bits()) {
+        BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
+        all = all.or(mask);
+        constant(out, b.name(), literal(f.type(), mask, true));
+      }
+      constant(out, "ALL", literal(f.type(), all, true));
+      out.append(
+              "    #[inline(always)] pub const fn contains(self, other: Self) -> bool { self.0 &"
+                  + " other.0 == other.0 }\n"
+                  + "    #[inline(always)] pub const fn intersects(self, other: Self) -> bool {"
+                  + " self.0 & other.0 != 0 }\n"
+                  + "    #[inline(always)] pub const fn union(self, other: Self) -> Self {"
+                  + " Self(self.0 | other.0) }\n"
+                  + "    /// `self` if `on`, otherwise no bits. Written as a multiply so a single"
+                  + " bit lowers to a shift.\n"
+                  + "    #[inline(always)] pub const fn when(self, on: bool) -> Self { Self(self.0"
+                  + " * on as ")
+          .append(carrier)
+          .append(") }\n}\n");
+      for (String[] op : new String[][] {{"BitOr", "bitor", "|"}, {"BitAnd", "bitand", "&"}})
+        out.append("impl core::ops::")
+            .append(op[0])
+            .append(" for ")
+            .append(n)
+            .append(" { type Output = Self; #[inline(always)] fn ")
+            .append(op[1])
+            .append("(self, o: Self) -> Self { Self(self.0 ")
+            .append(op[2])
+            .append(" o.0) } }\n");
+    }
+  }
+
+  private static void newtype(StringBuilder out, String name, String carrier, String doc) {
+    out.append("\n/// ")
+        .append(doc)
+        .append(
+            "\n"
+                + "#[repr(transparent)]\n"
+                + "#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]\n"
+                + "pub struct ")
+        .append(name)
+        .append("(pub ")
+        .append(carrier)
+        .append(");\nimpl ")
+        .append(name)
+        .append(" {\n");
+  }
+
+  private static void constant(StringBuilder out, String name, String value) {
+    out.append("    pub const ")
+        .append(name.toUpperCase(Locale.ROOT))
+        .append(": Self = Self(")
+        .append(value)
+        .append(");\n");
+  }
+
+  /** A literal in hex when {@code hex} (unsigned constants, flag masks), else decimal. */
+  static String literal(Scalar type, BigInteger value, boolean hex) {
+    int bits = type == Scalar.USIZE || type == Scalar.ISIZE ? 64 : type.bytes * 8;
+    boolean unsigned = type.text().startsWith("u");
+    // A signed mask with the sign bit set is that bit pattern's negative value; a hex literal
+    // would not fit the type.
+    if (!unsigned && hex && value.bitLength() >= bits)
+      value = value.subtract(BigInteger.ONE.shiftLeft(bits));
+    else if (hex) return "0x" + value.toString(16);
+    return value.toString();
+  }
+
   private static void pins(java.util.List<Function> imports, String q, StringBuilder out) {
     for (Function f : imports) {
       out.append("            let _: unsafe extern \"C\" fn(")
           .append(String.join(", ", f.abiParameters().stream().map(p -> Types.rust(p, q)).toList()))
           .append(')');
-      if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns(), q));
+      if (f.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup(), q));
       out.append(" = ").append(f.symbol()).append(";\n");
     }
   }
@@ -167,7 +282,8 @@ public final class RustFfi implements Backend {
                 ", ",
                 f.abiParameters().stream().map(p -> p.name() + ": " + Types.rust(p)).toList()))
         .append(')');
-    if (f.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(f.returns()));
+    if (f.returns() != Scalar.VOID)
+      out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
     out.append(" {\n");
     boolean record = f.returns() instanceof Named;
     if (record)
@@ -208,7 +324,8 @@ public final class RustFfi implements Backend {
                   ", ",
                   ref.parameters().stream().map(p -> p.name() + ": " + Types.rust(p, q)).toList()))
           .append(')');
-      if (ref.returns() != Scalar.VOID) out.append(" -> ").append(Types.rust(ref.returns(), q));
+      if (ref.returns() != Scalar.VOID)
+        out.append(" -> ").append(Types.rust(ref.returns(), ref.returnsGroup(), q));
       String call =
           f.symbol()
               + "("

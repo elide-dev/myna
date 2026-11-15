@@ -660,4 +660,11 @@ int main(void) {
             run(llvm(compiler), std, "-pedantic", "-Wall", "-Wextra", "-Werror", "-I", header.parent, checked, "-o", binary)
             run(binary)
 
+    def test_constants_rust(self):
+        source = ROOT / "tests/constants/check.rs"
+        test = self.work / "constants_rust"
+        os.environ["SEAM_GENERATED"] = str(ROOT / "tests/golden/constants")
+        run("rustc", "--edition=2024", "--test", "-C", "opt-level=2", source, "-o", test)
+        run(test)
+
 if __name__ == "__main__": main(sys.modules[__name__], "llvm-integration")

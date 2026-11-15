@@ -747,4 +747,23 @@ class ConstantsTest {
   void cHeaderWithoutDeclarationsHasNoConstantsSection() {
     assertFalse(header("module m target=x86_64-unknown-linux-gnu\n").contains("typedef"));
   }
+
+  @Test
+  void rustEmitsTransparentNewtypesAndLiterals() throws Exception {
+    var m = Dsl.parse(Files.readString(Path.of("examples/constants.seam")));
+    String rust = new dev.elide.myna.backend.RustFfi().generate(m);
+    assertTrue(rust.contains("pub const FLOOR: i64 = -9223372036854775808;"));
+    assertTrue(rust.contains("pub const LIMIT: u64 = 0xffffffffffffffff;"));
+    assertTrue(
+        rust.contains(
+            "#[repr(transparent)]\n"
+                + "#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]\n"
+                + "pub struct Status(pub i32);"));
+    assertTrue(rust.contains("pub const STICKY: Self = Self(0x80000000);"));
+    assertTrue(rust.contains("Self(self.0 * on as u64)"));
+    assertTrue(rust.contains("pub fn status(view: *const Record) -> Status;"));
+    assertTrue(rust.contains("pub status: Status,"));
+    assertTrue(
+        rust.contains("pub type SetLevelFn = unsafe extern \"C\" fn(Level, *const Session);"));
+  }
 }

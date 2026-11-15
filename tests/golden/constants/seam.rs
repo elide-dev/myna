@@ -2,15 +2,83 @@
 pub const ABI_FINGERPRINT: &str = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
 pub const BINDING_ABI_VERSION: u32 = 2;
 const _: () = assert!(core::mem::size_of::<*const ()>() == 8);
+pub const FLOOR: i64 = -9223372036854775808;
+pub const LIMIT: u64 = 0xffffffffffffffff;
+pub const MAGIC: u32 = 0x3141514b;
+
+/// enum Level: u8. Open set: every u8 is a valid `Level`; undeclared values equal no constant.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Level(pub u8);
+impl Level {
+    pub const LOW: Self = Self(0);
+    pub const HIGH: Self = Self(255);
+    #[inline]
+    pub const fn name(self) -> Option<&'static str> {
+        match self.0 { 0 => Some("low"), 255 => Some("high"), _ => None }
+    }
+}
+
+/// enum Status: i32. Open set: every i32 is a valid `Status`; undeclared values equal no constant.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Status(pub i32);
+impl Status {
+    pub const NULL_RESULT: Self = Self(-1);
+    pub const OK: Self = Self(0);
+    pub const INTERNAL_ERROR: Self = Self(3);
+    pub const SYNTAX_ERROR: Self = Self(16);
+    #[inline]
+    pub const fn name(self) -> Option<&'static str> {
+        match self.0 { -1 => Some("null_result"), 0 => Some("ok"), 3 => Some("internal_error"), 16 => Some("syntax_error"), _ => None }
+    }
+}
+
+/// flags Perms: u32.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Perms(pub u32);
+impl Perms {
+    pub const NONE: Self = Self(0);
+    pub const READ: Self = Self(0x1);
+    pub const WRITE: Self = Self(0x2);
+    pub const STICKY: Self = Self(0x80000000);
+    pub const ALL: Self = Self(0x80000003);
+    #[inline(always)] pub const fn contains(self, other: Self) -> bool { self.0 & other.0 == other.0 }
+    #[inline(always)] pub const fn intersects(self, other: Self) -> bool { self.0 & other.0 != 0 }
+    #[inline(always)] pub const fn union(self, other: Self) -> Self { Self(self.0 | other.0) }
+    /// `self` if `on`, otherwise no bits. Written as a multiply so a single bit lowers to a shift.
+    #[inline(always)] pub const fn when(self, on: bool) -> Self { Self(self.0 * on as u32) }
+}
+impl core::ops::BitOr for Perms { type Output = Self; #[inline(always)] fn bitor(self, o: Self) -> Self { Self(self.0 | o.0) } }
+impl core::ops::BitAnd for Perms { type Output = Self; #[inline(always)] fn bitand(self, o: Self) -> Self { Self(self.0 & o.0) } }
+
+/// flags Wide: u64.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Wide(pub u64);
+impl Wide {
+    pub const NONE: Self = Self(0);
+    pub const FIRST: Self = Self(0x1);
+    pub const LAST: Self = Self(0x8000000000000000);
+    pub const ALL: Self = Self(0x8000000000000001);
+    #[inline(always)] pub const fn contains(self, other: Self) -> bool { self.0 & other.0 == other.0 }
+    #[inline(always)] pub const fn intersects(self, other: Self) -> bool { self.0 & other.0 != 0 }
+    #[inline(always)] pub const fn union(self, other: Self) -> Self { Self(self.0 | other.0) }
+    /// `self` if `on`, otherwise no bits. Written as a multiply so a single bit lowers to a shift.
+    #[inline(always)] pub const fn when(self, on: bool) -> Self { Self(self.0 * on as u64) }
+}
+impl core::ops::BitOr for Wide { type Output = Self; #[inline(always)] fn bitor(self, o: Self) -> Self { Self(self.0 | o.0) } }
+impl core::ops::BitAnd for Wide { type Output = Self; #[inline(always)] fn bitand(self, o: Self) -> Self { Self(self.0 & o.0) } }
 #[repr(C)]
 pub struct Session { _private: [u8; 0] }
-pub type Listener = Option<unsafe extern "C" fn(*mut core::ffi::c_void) -> i32>;
+pub type Listener = Option<unsafe extern "C" fn(*mut core::ffi::c_void) -> Status>;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Record {
-    pub status: i32,
-    pub perms: u32,
-    pub wide: u64,
+    pub status: Status,
+    pub perms: Perms,
+    pub wide: Wide,
     pub raw: u64,
 }
 const _: () = {
@@ -26,20 +94,20 @@ unsafe extern "C" {
     // IMPORT; error=NO_FAILURE
     // session: nullable=false ownership=BORROWED access=READ
     #[link_name = "consts_blocking_status"]
-    pub fn blockingStatus(session: *const Session) -> i32;
+    pub fn blockingStatus(session: *const Session) -> Status;
     // IMPORT; error=NO_FAILURE
     // level: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED
     // session: nullable=false ownership=BORROWED access=READ
     #[link_name = "consts_set_level"]
-    pub fn setLevel(level: u8, session: *const Session);
+    pub fn setLevel(level: Level, session: *const Session);
     // IMPORT; error=NO_FAILURE
     // view: nullable=false ownership=BORROWED access=READ
     #[link_name = "consts_status"]
-    pub fn status(view: *const Record) -> i32;
+    pub fn status(view: *const Record) -> Status;
 }
-pub type BlockingStatusFn = unsafe extern "C" fn(*const Session) -> i32;
-pub type SetLevelFn = unsafe extern "C" fn(u8, *const Session);
-pub type StatusFn = unsafe extern "C" fn(*const Record) -> i32;
+pub type BlockingStatusFn = unsafe extern "C" fn(*const Session) -> Status;
+pub type SetLevelFn = unsafe extern "C" fn(Level, *const Session);
+pub type StatusFn = unsafe extern "C" fn(*const Record) -> Status;
 
 /// Pins each import's implementation, in scope under its symbol name, to this ABI.
 /// Pass this module's path when the declared types are not in scope.
@@ -47,16 +115,16 @@ pub type StatusFn = unsafe extern "C" fn(*const Record) -> i32;
 macro_rules! assert_implementations {
     () => {
         const _: () = {
-            let _: unsafe extern "C" fn(*const Session) -> i32 = consts_blocking_status;
-            let _: unsafe extern "C" fn(u8, *const Session) = consts_set_level;
-            let _: unsafe extern "C" fn(*const Record) -> i32 = consts_status;
+            let _: unsafe extern "C" fn(*const Session) -> Status = consts_blocking_status;
+            let _: unsafe extern "C" fn(Level, *const Session) = consts_set_level;
+            let _: unsafe extern "C" fn(*const Record) -> Status = consts_status;
         };
     };
     ($($seam:ident)::+) => {
         const _: () = {
-            let _: unsafe extern "C" fn(*const $($seam)::+::Session) -> i32 = consts_blocking_status;
-            let _: unsafe extern "C" fn(u8, *const $($seam)::+::Session) = consts_set_level;
-            let _: unsafe extern "C" fn(*const $($seam)::+::Record) -> i32 = consts_status;
+            let _: unsafe extern "C" fn(*const $($seam)::+::Session) -> $($seam)::+::Status = consts_blocking_status;
+            let _: unsafe extern "C" fn($($seam)::+::Level, *const $($seam)::+::Session) = consts_set_level;
+            let _: unsafe extern "C" fn(*const $($seam)::+::Record) -> $($seam)::+::Status = consts_status;
         };
     };
 }

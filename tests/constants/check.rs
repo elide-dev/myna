@@ -1,0 +1,86 @@
+// Compiles the generated constants seam under #![deny(warnings)] and checks the newtypes.
+#![deny(warnings)]
+#[allow(dead_code, non_snake_case)]
+mod seam {
+    include!(concat!(env!("SEAM_GENERATED"), "/seam.rs"));
+}
+use seam::{Level, Perms, Record, Session, Status, Wide};
+
+const _: () = assert!(seam::MAGIC == 0x3141514b);
+const _: () = assert!(seam::LIMIT == u64::MAX);
+const _: () = assert!(seam::FLOOR == i64::MIN);
+const _: () = assert!(Status::NULL_RESULT.0 == -1);
+const _: () = assert!(Status::OK.0 == 0);
+const _: () = assert!(Status::SYNTAX_ERROR.0 == 16);
+const _: () = assert!(Status::INTERNAL_ERROR.0 == 3);
+const _: () = assert!(Level::LOW.0 == 0);
+const _: () = assert!(Level::HIGH.0 == 255);
+const _: () = assert!(Perms::NONE.0 == 0);
+const _: () = assert!(Perms::READ.0 == 1);
+const _: () = assert!(Perms::WRITE.0 == 2);
+const _: () = assert!(Perms::STICKY.0 == 0x8000_0000);
+const _: () = assert!(Perms::ALL.0 == 0x8000_0003);
+const _: () = assert!(Wide::FIRST.0 == 1);
+const _: () = assert!(Wide::LAST.0 == 1 << 63);
+const _: () = assert!(Wide::ALL.0 == 0x8000_0000_0000_0001);
+const _: () = assert!(core::mem::size_of::<Status>() == 4);
+const _: () = assert!(core::mem::size_of::<Level>() == 1);
+const _: () = assert!(core::mem::size_of::<Perms>() == 4);
+const _: () = assert!(core::mem::size_of::<Wide>() == 8);
+const _: () = assert!(core::mem::offset_of!(Record, perms) == 4);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn consts_status(view: *const Record) -> Status {
+    unsafe { (*view).status }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn consts_set_level(_level: Level, _session: *const Session) {}
+#[unsafe(no_mangle)]
+pub extern "C" fn consts_blocking_status(_session: *const Session) -> Status {
+    Status::OK
+}
+seam::assert_implementations!(seam);
+
+fn classify(status: Status) -> u32 {
+    match status {
+        Status::NULL_RESULT => 1,
+        Status::OK => 2,
+        Status::INTERNAL_ERROR => 3,
+        Status::SYNTAX_ERROR => 4,
+        _ => 0,
+    }
+}
+
+#[test]
+fn enums_match_as_patterns_and_keep_open_values() {
+    assert_eq!(classify(Status(-1)), 1);
+    assert_eq!(classify(Status::SYNTAX_ERROR), 4);
+    assert_eq!(classify(Status(12345)), 0);
+    assert_eq!(Status::OK.name(), Some("ok"));
+    assert_eq!(Status::NULL_RESULT.name(), Some("null_result"));
+    assert_eq!(Status(12345).name(), None);
+    assert_eq!(Level(7).name(), None);
+    assert_eq!(Level::HIGH.name(), Some("high"));
+}
+
+#[test]
+fn flags_compose() {
+    let rw = Perms::READ | Perms::WRITE;
+    assert!(rw.contains(Perms::READ));
+    assert!(!rw.contains(Perms::STICKY));
+    assert!(rw.intersects(Perms::WRITE | Perms::STICKY));
+    assert!(!Perms::NONE.intersects(Perms::ALL));
+    assert_eq!(rw & Perms::WRITE, Perms::WRITE);
+    assert_eq!(rw.union(Perms::STICKY), Perms::ALL);
+    assert_eq!(Perms::READ.when(true) | Perms::WRITE.when(false), Perms::READ);
+    assert_eq!(Wide::LAST.when(true), Wide::LAST);
+    assert_eq!(Wide::LAST.when(false), Wide::NONE);
+}
+
+#[test]
+fn record_fields_use_newtypes() {
+    let r = Record { status: Status::OK, perms: Perms::READ, wide: Wide::FIRST, raw: 5 };
+    assert_eq!(r.status, Status::OK);
+    assert!(r.perms.contains(Perms::READ));
+    assert_eq!(consts_status(&r), Status::OK);
+}
