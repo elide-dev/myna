@@ -8,7 +8,7 @@ shellcheck = "0.11.0"
 "github:taiki-e/cargo-llvm-cov" = "0.9.1"
 
 [tools."github:elide-dev/elide"]
-version = "1.6.2"
+version = "1.6.3"
 bin_path = "bin"
 
 [tools."github:elide-dev/elide".platforms]

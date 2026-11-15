@@ -30,7 +30,7 @@ RUN cmake -S llvm -B output -DLLVM_DIR=/opt/elide-toolchain/lib/cmake/llvm -DCMA
 
 FROM native-toolchain AS java-build
 ARG TARGETARCH
-ARG ELIDE_VERSION=1.6.2
+ARG ELIDE_VERSION=1.6.3
 WORKDIR /tmp
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
     && rm -rf /var/lib/apt/lists/* \
