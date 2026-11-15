@@ -137,6 +137,27 @@ public final class CellsMain {
     }
     System.out.println(what + " ran in compiled code");
   }
+  /**
+   * The Native Image ownership wrapper of a call borrow with align=16 (#120): a pinned byte[] starts
+   * on 8 bytes, so the array overload copies, and the dummy for an empty buffer is aligned too.
+   * Without assertions in this image, only the address says so.
+   */
+  static void ownershipAlignment() {
+    for (int length : new int[] {0, 1, 3, 17, 255, 256, 4097, 40_000}) {
+      byte[] array = new byte[length];
+      long at = CellApiOwnership.addressOfBorrow(array);
+      if (at % 16 != 0) throw new AssertionError("addressOfBorrow(byte[" + length + "]) at " + Long.toHexString(at));
+      // The callee writes the copy; the array receives it back.
+      CellApiOwnership.fill(array, (byte) 7);
+      for (byte b : array) if (b != 7) throw new AssertionError("fill(byte[" + length + "]) was not written back");
+      // One buffer copied, the other pinned, in one call.
+      byte[] input = new byte[length], output = new byte[length];
+      java.util.Arrays.fill(input, (byte) 2);
+      long sum = CellApiOwnership.transfer(input, output, org.graalvm.word.WordFactory.nullPointer());
+      if (sum != 2L * length) throw new AssertionError("transfer(byte[" + length + "]) = " + sum);
+      for (byte b : output) if (b != 2) throw new AssertionError("transfer did not fill its pinned output");
+    }
+  }
   public static void main(String[] args) throws Exception {
     if (CellApi.BINDING_ABI_VERSION != 2) throw new AssertionError("binding ABI");
     String runtime = Truffle.getRuntime().getName();
@@ -144,6 +165,7 @@ public final class CellsMain {
     if (runtime.contains("Default") || runtime.contains("Interpreted"))
       throw new AssertionError("optimizing Truffle runtime missing from the image: " + runtime);
     CellChecks.run(CellApiTruffle::function);
+    ownershipAlignment();
     try (Context context = Context.newBuilder().allowExperimentalOptions(true)
         .option("engine.CompileImmediately", "true").option("engine.BackgroundCompilation", "false")
         .option("engine.MultiTier", "false").option("engine.CompilationFailureAction", "Throw").build()) {
@@ -209,6 +231,12 @@ public final class CellsMain {
         allocates("checksum of native bytes", new CellApiTruffle.checksum_Cell(), 0, 64 * 3, NativeBytes.of(lent, false));
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
+        // A parameter with an align fact costs what one without it does: native memory, a copy
+        // on the scratch stack, and text pushed there, with the alignment checks folded away.
+        allocates("utf16Probe of aligned native bytes", new CellApiTruffle.utf16Probe_Cell(), 0, 0, NativeBytes.of(lent, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a copied heap array", new CellApiTruffle.utf16Probe_Cell(), 0, 0, new HeapBytes(small, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, "hello world", 11L, 0, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a guest string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, CellChecks.guest("hello world"), 11L, 0, NativePointer.NULL, 0L);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
         // Text goes straight onto the scratch stack, ASCII or not: no UTF-8 array.
         allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 0, 11, "hello world");
@@ -279,6 +307,9 @@ public final class CellsMain {
         // A cell's typed execute from host code, which is compiled ahead of time and has no
         // partial evaluation: the borrow must still stay out of the heap.
         hostExecute(bean, "host execute: checksum of native bytes", 0, new CellApiTruffle.checksum_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of aligned native bytes", 0, new CellApiTruffle.addressOfBorrow_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of a copied heap array", 0, new CellApiTruffle.addressOfBorrow_Cell(), new HeapBytes(small, false));
+        hostExecute(bean, "host execute: addressOf of a copied heap array", 0, new CellApiTruffle.addressOf_Cell(), new HeapBytes(small, false), 64L);
         hostExecute(bean, "host execute: checksum of a copied heap array", 0, new CellApiTruffle.checksum_Cell(), new HeapBytes(small, false));
         hostExecute(bean, "host execute: checksum of a pinned heap array", 32, new CellApiTruffle.checksum_Cell(), pinned);
         hostExecute(bean, "host execute: strlen of a string", 0, new CellApiTruffle.strlen_Cell(), "hello world");

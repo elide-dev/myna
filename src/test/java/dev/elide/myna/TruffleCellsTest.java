@@ -609,6 +609,35 @@ class TruffleCellsTest {
   }
 
   /**
+   * An approved {@code align} fact reaches the coercion of a byte parameter, whichever shape it has
+   * (C string or raw bytes); a heuristic one is refused (#120).
+   */
+  @Test
+  void alignFactsReachByteCoercions() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " align=8@explicit_contract truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "  param text type=ptr<char> nullable=false ownership=borrowed access=read"
+            + " align=2@explicit_contract\n"
+            + "end\n";
+    String truffle = generate(MODULE + decode).get("MynaTruffle.java");
+    assertTrue(
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"data\", false, false, false, false, 8);"),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"text\", false, false, false, true, 2);"),
+        truffle);
+    // Only an approved fact is a requirement; validation refuses the rest.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + decode.replace("align=8@explicit_contract", "align=8@heuristic")));
+  }
+
+  /**
    * A byte pointer without a borrow declaration is by default a C string parameter. {@code
    * truffle_buffer} declares it raw bytes whose count stays a guest argument: no terminator, pinned
    * when large.
@@ -989,6 +1018,17 @@ class TruffleCellsTest {
   }
 
   /**
+   * A failed create throws its own status after a best-effort copy: a copy that fails cannot
+   * replace the status the guest needs.
+   */
+  @Test
+  void failedCreateThrowsStatusAfterBestEffortCopy() {
+    String truffle = generate(OwnershipTest.HANDLES).get("ApiTruffle.java");
+    assertTrue(truffle.contains("throw out.copyToAfterFailure("), truffle);
+    assertFalse(truffle.contains("out.copyTo(arguments[1]);\n"), truffle);
+  }
+
+  /**
    * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
    * create writes into a struct the runtime owns; the cell compares the result with the listed
    * statuses, reads the resource from that struct and returns its owner, and the guest's buffer
@@ -1017,13 +1057,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
                                 adopted = true;
@@ -1132,13 +1170,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
                                 adopted = true;
@@ -1219,6 +1255,30 @@ class TruffleCellsTest {
             .get("ApiTruffle.java");
     assertTrue(ffm.contains(", null, null, borrow_schema.keep());"), ffm);
     assertTrue(ffm.contains("ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"), ffm);
+    // The create call itself passes the guest's segment, as a call borrow's does (#120): the
+    // linker refuses a closed or foreign-thread segment before native code runs, and holds a
+    // shared arena open for the call. The borrow still keeps the buffer afterwards.
+    assertTrue(
+        ffm.contains(
+            "int status = scoped(coerce_schema.segment(arguments[0]), borrow_schema.address(),"
+                + " borrow_schema.length(), out.address());"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static int scoped$1(MemorySegment schema, long length, long"
+                + " result) {\n"
+                + "            try {\n"
+                + "                return ApiFFM.layoutCompile(schema, length,"
+                + " MemorySegment.ofAddress(result));\n"),
+        ffm);
+    // invoke keeps raw addresses, and a held borrow is never lent without its borrow.
+    assertTrue(
+        ffm.contains("        public static int invoke(long schema, long length, long result) {\n"),
+        ffm);
+    assertFalse(ffm.contains("lent_"), ffm);
+    // Native Image cells pass addresses only: nothing about them changes.
+    assertFalse(truffle.contains("segment"), truffle);
   }
 
   /**
@@ -1275,6 +1335,8 @@ class TruffleCellsTest {
     // The two call borrows still lend their segments in the slow path.
     assertTrue(truffle.contains("coerce_key.segment(arguments["), truffle);
     assertTrue(truffle.contains("coerce_key2.segment(arguments["), truffle);
+    // So does the held one, for the create call (#120).
+    assertTrue(truffle.contains("coerce_data.segment(arguments[0])"), truffle);
     // The held buffer is never lent in place: no lent_data local is ever declared.
     assertFalse(truffle.contains("lent_data"), truffle);
     // The in-place fast path (which would reference borrow_data/lent_data before they are

@@ -58,7 +58,7 @@ def build_truffle_fixture():
     jars = truffle_jars()
     classpath = [TRUFFLE_JAR, *jars.values()]
     classes = work / "classes"
-    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java",
+    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java", generated / "CellApiOwnership.java",
                    generated / "CellApiDirectives.java", FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"
@@ -76,7 +76,10 @@ class TruffleIntegrationTests(unittest.TestCase):
     def test_ffm_cells_on_hotspot(self):
         java = Path(os.environ["GRAALVM_HOME"]) / "bin/java"
         classpath = os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR, *self.jars.values()]))
-        result = run(java, "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
+        # Assertions on for the generated bindings only (Truffle's own interop assertions reject the
+        # host nulls the checks pass): a non-cell wrapper asserts the caller's align contract.
+        result = run(java, "-ea:fixture.cells...", "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
+        self.assertIn("wrapper assertions enabled: fired", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
 
     def test_ffm_cells_in_native_image(self):
@@ -89,10 +92,34 @@ class TruffleIntegrationTests(unittest.TestCase):
                              # The probe is the consumer's own node class.
                              "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat",
                              "--module-path", self.module_path(), "-cp", os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR])),
+                             "-H:+PrintAnalysisCallTree", f"-H:Path={self.work}",
                              "--features=fixture.cells.CellApiForeignFeature", "fixture.cells.FfmCellsMain", "-o", app)
         self.assertIn("ffm-cells-app", build.stdout)
+        self.assert_wrapper_assertions_compiled_out(self.work / "reports")
         result = run(app, self.library)
+        self.assertIn("wrapper assertions disabled: silent", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
+
+    def assert_wrapper_assertions_compiled_out(self, reports):
+        """An image built without assertions has no assertion code in a non-cell wrapper.
+
+        The call tree lists what each method reaches; the wrapper that asserts a borrow's align
+        contract reaches `AssertionError` only if the `assert` statement survived into the image.
+        The report is kept in the build directory as evidence."""
+        trees = sorted(reports.glob("call_tree_ffm-cells-app_*.txt"))
+        self.assertTrue(trees, f"no call tree report in {reports}")
+        lines = trees[-1].read_text().splitlines()
+        wrapper = "CellApiFFM$LibraryBinding.addressOfBorrow("
+        starts = [i for i, line in enumerate(lines) if wrapper in line]
+        self.assertTrue(starts, "the asserting wrapper is not in the image's call tree")
+        for start in starts:
+            depth = len(lines[start]) - len(lines[start].lstrip())
+            for line in lines[start + 1:]:
+                if len(line) - len(line.lstrip()) <= depth:
+                    break
+                self.assertNotIn("AssertionError", line, "assertion code reachable from the wrapper")
+        evidence = self.work / "wrapper-assertions-call-tree.txt"
+        evidence.write_text("\n".join(lines[starts[0]:starts[0] + 60]) + "\n")
 
     def module_path(self):
         return os.pathsep.join(str(self.jars[name]) for name in
@@ -136,7 +163,8 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
             "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release", "GuestText.push",
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
-            "BytesCoercion.emptyAddress",
+            "BytesCoercion.emptyAddress", "AlignedBytesCoercion.execute", "AlignedBytesCoercion.slow",
+            "OverAlignedBytesCoercion.execute", "OverAlignedBytesCoercion.slow",
             "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText")]
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")

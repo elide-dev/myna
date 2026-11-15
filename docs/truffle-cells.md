@@ -233,12 +233,31 @@ in a `finally` of its own, in reverse acquisition order:
   costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
   arena of their own. Because cells release in reverse order, nested borrows and calls back into
   guest code are last-in, first-out; releasing out of order or on another thread throws
-  `IllegalStateException` and leaves the stack unchanged.
+  `IllegalStateException` and leaves the stack unchanged;
+- every copy a borrow lends starts on a 16-byte boundary (`Borrow.Scratch.ALIGNMENT`): scratch,
+  arena, text and held copies alike, whatever was pushed before. A guest's UTF-16 or wider
+  elements therefore never meet an odd address through a copy, which heap arrays on HotSpot
+  (object-header dependent base offsets) could not promise in place;
+- a parameter with `align=N@explicit_contract` is never lent at an address not divisible by `N`.
+  Copies start on a boundary of at least `N` (an arena or a rounded `malloc` for `N` above 16); a
+  heap array is never pinned for `N` above 8 (a pinned array's data starts on 8 bytes), so it is
+  copied; native memory lent in place
+  at a lesser alignment (a misaligned `asSlice`) is copied, written back for writable parameters,
+  and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
+  bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
+  buffer lends a page-aligned dummy address.
+  The fact is accepted on any byte-pointer parameter: a C string, a `truffle_buffer`, a call `borrow`
+  or a held one (a held copy and a held native buffer follow the same rules). On a `borrow` it is
+  also a caller contract for the other wrappers, which assert it in debug builds only; a cell is
+  the one caller that cannot be trusted, so it copies. A parameter with the fact takes
+  `AlignedBytesCoercion`: for a fact up to 16 it is `BytesCoercion` with checks that fold on the
+  fact, the borrow stays out of the heap in compiled code, and text keeps its scratch-stack paths; a
+  stricter fact encodes text into an array and copies it into an arena of its own.
 
 A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
-hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
+hand-written pin does. A parameter with an `align` fact keeps that for native memory, scratch copies and text: the mask folds on the final field and what remains is one AND of the address at run time, which allocates nothing. Two things allocate: a large heap array under `align` above 8, which a Native Image copies instead of pinning, and a fact above 16, which copies into an arena of its own. Each byte parameter profiles the kinds of value it has been given (native
 buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
 those paths. Several borrows on one call cost what each costs alone:
 `tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native
@@ -422,9 +441,12 @@ Why each choice:
   copy is the point of an adopting create. Keeping the `NativeBytes` reachable keeps an automatic
   arena's memory allocated; memory its owner frees explicitly (a closed arena, a raw address passed
   to `NativeBytes.of`) is the owner's to keep alive while the resource is open, exactly as
-  `NativeBytes` already requires for as long as guest code can reach it. No scope is acquired: the
-  FFM API exposes no acquire outside a downcall, and one held for as long as a guest keeps a
-  resource open would keep its arena from ever closing.
+  `NativeBytes` already requires for as long as guest code can reach it. An FFM cell passes the
+  segment to the create call itself, as it does a call borrow's (see [Borrows](#borrows)), so that
+  call refuses a closed segment or one confined to another thread before native code runs, and
+  holds a shared arena open while it runs. No scope is held after the call: the FFM API exposes no
+  acquire outside a downcall, and one held for as long as a guest keeps a resource open would keep
+  its arena from ever closing.
 - **Thread confinement is the resource's.** A confined resource closes only on its thread, so its
   borrow ends there; a shared one ends wherever it is closed, which the copies above allow.
 
@@ -657,8 +679,9 @@ Findings that are tracked, not blocking:
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
 - FFM cells pass the scope of a guest's own segment to the downcall when they lend its memory in
-  place (see [Borrows](#borrows)). Host code calling `invoke` still passes raw addresses, whose
-  validity is its own to keep.
+  place (see [Borrows](#borrows)), a held borrow's included, for its create call only (see
+  [Borrows held by a resource](#borrows-held-by-a-resource)). Host code calling `invoke` still
+  passes raw addresses, whose validity is its own to keep.
 - FFM cells over leaf imports are critical: they call the module's static FFM entry, which for a
   native leaf is a critical downcall over the build-time typed adapter. See
   [Measurement](#measurement) for their cost against the direct and handwritten calls.

@@ -424,6 +424,7 @@ public final class JavaFfm implements Backend {
           .append(arg)
           .append(
               ".address() == 0) throw new IllegalArgumentException(\"null buffer address\");\n");
+      checks.append(call.alignmentAssertion(buffer, arg + ".address()", "length" + s, pad));
       if (call.narrow(buffer))
         checks
             .append(pad)
@@ -449,7 +450,12 @@ public final class JavaFfm implements Backend {
           .append(s)
           .append(" = ")
           .append(several ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
-          .append("empty.allocate(1);\n");
+          // Aligned like the fact, which LLVM's align attribute makes independent of the extent.
+          .append(
+              call.align(buffer) > 1
+                  ? "empty.allocate(1, " + call.align(buffer) + ")"
+                  : "empty.allocate(1)")
+          .append(";\n");
     }
     String invoke =
         (f.returns() == Scalar.VOID ? "" : "return ")

@@ -65,6 +65,101 @@ public final class CellChecks {
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
   }
   /**
+   * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,
+   * lent together (the second copy stacks on the first) at every length and odd output size.
+   */
+  static void utf16Inputs(Function<String, NativeFunction> cells) throws Exception {
+    for (int length : new int[] {0, 2, 6, 254, 256, 258, 4096, 20_000, 40_000}) {
+      for (int extra : new int[] {0, 1, 3}) {
+        for (boolean writable : new boolean[] {false, true}) {
+          byte[] data = new byte[length], out = new byte[length + extra];
+          check(call(cells, "utf16Probe", new HeapBytes(data, writable), (long) length, 1, new HeapBytes(out, true), (long) out.length).equals(0),
+              "utf16Probe: input of " + length + " bytes, output of " + out.length);
+        }
+      }
+    }
+  }
+  /**
+   * TruffleData's JSON cells, as its json/cells tests call them (#120): a session decode with a
+   * heap, native or guest-string input and an absent or present text_out, a flags word per input
+   * encoding, and decode_adopted's held input with padding. The natives refuse a misaligned
+   * text_out or UTF-16 input, a text_out without WANT_TEXT, and a misaligned result.
+   */
+  static void truffleData(Function<String, NativeFunction> cells) throws Exception {
+    final long WANT_TEXT = 1, UTF16 = 2;
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result = arena.allocate(88, 8);
+      Object session = call(cells, "tdSessionCreate");
+      for (int length : new int[] {2, 6, 254, 258, 4096, 20_000}) {
+        byte[] heap = new byte[length];
+        MemorySegment segment = arena.allocate(length + 8, 16);
+        for (Object data : new Object[] {new HeapBytes(heap, false), new HeapBytes(heap, true), NativeBytes.of(segment.asSlice(0, length), false)}) {
+          for (int extra : new int[] {0, 1, 2, 5}) {
+            // UTF-16 input with a text_out of any size: both are 2-byte aligned wherever lent.
+            Object out = new HeapBytes(new byte[length + extra], true);
+            check(call(cells, "tdSessionDecode", session, data, UTF16 | WANT_TEXT, out, NativeBytes.of(result, true)).equals(0),
+                "tdSessionDecode: " + data + " with text of " + (length + extra));
+          }
+          check(call(cells, "tdSessionDecode", session, data, UTF16, null, NativeBytes.of(result, true)).equals(0), "tdSessionDecode without text_out: " + data);
+          // A present empty text_out without WANT_TEXT is the argument status, as in api.cc.
+          check(call(cells, "tdSessionDecode", session, data, UTF16, new HeapBytes(new byte[0], true), NativeBytes.of(result, true)).equals(3), "empty text_out without WANT_TEXT");
+        }
+        // decode_adopted: held input, capacity = length + padding.
+        byte[] padded = new byte[length + 64];
+        Object owner = call(cells, "tdDecodeAdopted", new HeapBytes(padded, false), (long) length, 1L << 20, NativeBytes.of(result, true));
+        check(owner instanceof NativeResource, "decode_adopted of " + length + " bytes: " + owner);
+        ((NativeResource) owner).close();
+      }
+      // A guest string is lent as the UTF-8 of its text, never as UTF-16 units.
+      check(call(cells, "tdSessionDecode", session, guest("ab"), 0, null, NativeBytes.of(result, true)).equals(0), "guest string, UTF-8");
+      check(call(cells, "tdSessionDecode", session, guest("abc"), UTF16, null, NativeBytes.of(result, true)).equals(3), "a guest string is not UTF-16 input (odd UTF-8 length)");
+      ((NativeResource) session).close();
+    }
+  }
+
+  /** Native buffers at odd offsets reach the same decode: the align facts make the cell copy them. */
+  static void utf16NativeInputs(Function<String, NativeFunction> cells) throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 16);
+      for (int offset = 0; offset < 4; offset++) {
+        for (int outOffset = 0; outOffset < 4; outOffset++) {
+          NativeBytes data = NativeBytes.of(base.asSlice(offset, 64), false);
+          NativeBytes out = NativeBytes.of(base.asSlice(128 + outOffset, 64), true);
+          check(call(cells, "utf16Probe", data, 64L, 1, out, 64L).equals(0), "utf16Probe: native input at offset " + offset + ", output at " + outOffset);
+        }
+      }
+    }
+  }
+  /** A borrow derives its byte count; the other cells take it as an argument. */
+  static Object addressOf(Function<String, NativeFunction> cells, String name, Object buffer, long length) throws Exception {
+    return name.equals("addressOfBorrow") ? call(cells, name, buffer) : call(cells, name, buffer, length);
+  }
+  /** The address a call received: every lent copy is 16-byte aligned and align facts are honored. */
+  static void alignment(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    byte[][] arrays = {new byte[1], new byte[3], new byte[255], new byte[4097], large, new byte[40_000]};
+    for (byte[] array : arrays) {
+      for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+        long want = name.equals("addressOfWide") ? 64 : 16;
+        long at = (Long) addressOf(cells, name, new HeapBytes(array, false), array.length);
+        check(at % want == 0, name + " of " + array.length + " heap bytes at " + Long.toHexString(at));
+      }
+      long text = (Long) call(cells, "addressOf", "x".repeat(Math.min(array.length, 1000)), 1L);
+      check(text % 16 == 0, "addressOf a string at " + Long.toHexString(text));
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 64);
+      for (int offset : new int[] {0, 1, 8, 16, 33}) {
+        NativeBytes slice = NativeBytes.of(base.asSlice(offset, 32), false);
+        for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+          long want = name.equals("addressOfWide") ? 64 : 16;
+          long at = (Long) addressOf(cells, name, slice, 32);
+          check(at % want == 0, name + " of native memory at offset " + offset + ": " + Long.toHexString(at));
+          check(((base.address() + offset) % want == 0) == (at == slice.address()), name + " lends aligned memory in place and copies the rest, offset " + offset);
+        }
+      }
+    }
+  }
+  /**
    * What only FFM cells do: a buffer lent from a caller's segment reaches the downcall as that
    * segment, so the linker refuses a closed one and one confined to another thread, and keeps a
    * shared arena open while native code reads it. Native Image cells pass addresses.
@@ -157,6 +252,67 @@ public final class CellChecks {
     check(Long.valueOf(16).equals(result.get()), "hold read its buffer: " + result.get());
     shared.close();
     rejects(cells, "hold", NativeBytes.of(data, false), NativePointer.of(gate.address()));
+    heldBorrowRefusesClosedSegment(cells);
+    heldBorrowRefusesForeignThreadConfinedSegment(cells);
+  }
+  /** The refusal a cell raises for {@code args}, which it must refuse. */
+  static NativeCellException refusal(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
+    try { call(cells, name, args); } catch (NativeCellException expected) { return expected; }
+    throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
+  }
+  /**
+   * A borrow held by the resource a create makes passes its segment to the create call too, so the
+   * linker refuses a closed one before native code runs, as it refuses a call borrow's (#120):
+   * the same error, nothing adopted, and the next create still works.
+   */
+  static void heldBorrowRefusesClosedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena results = Arena.ofConfined()) {
+      Object out = NativeBytes.of(results.allocate(24), true);
+      Arena arena = Arena.ofShared();
+      MemorySegment input = arena.allocate(8);
+      input.fill((byte) 1);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      Object owner = call(cells, "adopt", bytes, null, out);
+      check(call(cells, "adoptedSum", owner).equals(8L), "adopted a live shared segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+      arena.close();
+      NativeCellException held = refusal(cells, "adopt", bytes, null, out);
+      NativeCellException borrowed = refusal(cells, "checksum", bytes);
+      check(held.getMessage().equals(borrowed.getMessage()), "held: " + held.getMessage() + ", call: " + borrowed.getMessage());
+      check(call(cells, "counterLive").equals(live), "a closed segment was adopted");
+      // A call borrow of the same create is refused the same way.
+      refusal(cells, "adopt", new HeapBytes(new byte[] {1}, false), bytes, out);
+      check(call(cells, "counterLive").equals(live), "a closed key was read");
+      Object after = call(cells, "adopt", new HeapBytes(new byte[] {2}, false), null, out);
+      check(call(cells, "adoptedSum", after).equals(2L), "adopt after a refused create");
+      check(call(cells, "adoptedRelease", after) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
+  }
+  /** A held borrow of a segment confined to another thread is refused by the create call. */
+  static void heldBorrowRefusesForeignThreadConfinedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena confined = Arena.ofConfined()) {
+      MemorySegment input = confined.allocate(8);
+      input.fill((byte) 3);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      var outcome = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread other = new Thread(() -> {
+        try (Arena results = Arena.ofConfined()) {
+          outcome.set(call(cells, "adopt", bytes, null, NativeBytes.of(results.allocate(24), true)));
+        } catch (Throwable failure) { outcome.set(failure); }
+      });
+      other.start();
+      other.join();
+      check(outcome.get() instanceof NativeCellException, "a segment confined to another thread was adopted: " + outcome.get());
+      check(call(cells, "counterLive").equals(live), "another thread's segment reached native code");
+      // The owner thread still lends it, and the resource keeps it until its release.
+      Object owner = call(cells, "adopt", bytes, null, NativeBytes.of(confined.allocate(24), true));
+      check(call(cells, "adoptedSum", owner).equals(24L), "the owner thread adopts its segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
   }
   /**
    * Two borrows with lengths of their own beside a pointer that passes through: the guest gives
@@ -438,6 +594,10 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
+    utf16Inputs(cells);
+    truffleData(cells);
+    utf16NativeInputs(cells);
+    alignment(cells, large);
     transfers(cells, large);
     decodes(cells);
     guestStrings(cells);

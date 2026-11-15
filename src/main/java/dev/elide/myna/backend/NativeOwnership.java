@@ -130,6 +130,28 @@ public final class NativeOwnership implements Backend {
   private record Buffer(String name, String suffix, BufferBorrow borrow) {}
 
   /**
+   * The alignment of a pinned {@code byte[]}'s data: an 8-byte object boundary and a 16-byte base.
+   */
+  private static final long PINNED_ALIGNMENT = 8;
+
+  /**
+   * What a present empty buffer lends: a stack byte for a buffer without an align fact, otherwise
+   * one rounded up to the fact, since LLVM's {@code align} attribute does not depend on the extent.
+   */
+  private static String dummy(CallBorrows call, BufferBorrow b) {
+    long align = call.align(b);
+    if (align <= 1) return "org.graalvm.nativeimage.StackValue.get(1)";
+    return "org.graalvm.word.WordFactory.pointer((org.graalvm.nativeimage.StackValue"
+        + ".<org.graalvm.word.PointerBase>get("
+        + 2 * align
+        + ").rawValue() + "
+        + (align - 1)
+        + ") & -"
+        + align
+        + "L)";
+  }
+
+  /**
    * The off-heap and array wrappers of one function. Buffers are acquired or pinned in parameter
    * order and released in reverse, each in a {@code finally} of its own; other parameters pass
    * through in the carriers of the raw binding. A {@code null} argument for a nullable buffer is an
@@ -222,18 +244,22 @@ public final class NativeOwnership implements Backend {
           .append(" == 0 && length")
           .append(s)
           .append(" != 0)) throw new IllegalArgumentException(\"invalid buffer extent\");\n")
+          .append(call.alignmentAssertion(b.borrow(), "address" + s, "length" + s, pad + "    "))
           .append(pad)
           .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
           .append(s)
           .append(" = ")
           .append(nullable ? b.name() + " == null ? " + NULL_POINTER + " : " : "")
-          .append("address")
+          // A present empty buffer is lent the dummy, whatever address it reports: under an align
+          // fact that address may be misaligned, which LLVM's attribute does not excuse.
+          .append(call.align(b.borrow()) > 1 ? "length" : "address")
           .append(s)
           .append(" == 0\n")
           .append(pad)
           .append(
-              "        ? org.graalvm.nativeimage.StackValue.get(1) :"
-                  + " org.graalvm.word.WordFactory.pointer(address")
+              "        ? "
+                  + dummy(call, b.borrow())
+                  + " : org.graalvm.word.WordFactory.pointer(address")
           .append(s)
           .append(");\n");
       pad += "    ";
@@ -270,7 +296,10 @@ public final class NativeOwnership implements Backend {
         .append(") {\n");
     // Plain try/finally throughout: try-with-resources compiles to Throwable.addSuppressed, which
     // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
-    if (buffers.size() == 1) {
+    // A pinned array's data starts on an 8-byte boundary, so a stricter align fact is met by a
+    // copy,
+    // which the several-array code below makes.
+    if (buffers.size() == 1 && call.align(buffers.getFirst().borrow()) <= PINNED_ALIGNMENT) {
       String name = buffers.getFirst().name();
       if (call.nullable(buffers.getFirst().borrow()))
         out.append("        if (")
@@ -288,7 +317,9 @@ public final class NativeOwnership implements Backend {
           .append(
               "        if (length == 0) {\n"
                   + "            org.graalvm.nativeimage.c.type.CCharPointer pointer ="
-                  + " org.graalvm.nativeimage.StackValue.get(1);\n"
+                  + " "
+                  + dummy(call, buffers.getFirst().borrow())
+                  + ";\n"
                   + "            ")
           .append(invoke)
           .append(f.returns() == Scalar.VOID ? "\n            return;" : "")
@@ -300,8 +331,11 @@ public final class NativeOwnership implements Backend {
           .append(");\n        try {\n")
           .append(
               "            org.graalvm.nativeimage.c.type.CCharPointer pointer ="
-                  + " pin.addressOfArrayElement(0);\n"
-                  + "            ")
+                  + " pin.addressOfArrayElement(0);\n")
+          .append(
+              call.alignmentAssertion(
+                  buffers.getFirst().borrow(), "pointer.rawValue()", "length", "            "))
+          .append("            ")
           .append(invoke)
           .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
       return;
@@ -319,43 +353,138 @@ public final class NativeOwnership implements Backend {
     pad = "        ";
     for (Buffer b : buffers) {
       String s = b.suffix();
-      out.append(pad)
-          .append("org.graalvm.nativeimage.PinnedObject pin")
-          .append(s)
-          .append(" = length")
-          .append(s)
-          .append(" == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(")
-          .append(b.name())
-          .append(");\n")
-          .append(pad)
-          .append("try {\n")
-          .append(pad)
-          .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
-          .append(s)
-          .append(" = ")
-          .append(call.nullable(b.borrow()) ? b.name() + " == null ? " + NULL_POINTER + " : " : "")
-          .append("pin")
-          .append(s)
-          .append(" == null\n")
-          .append(pad)
-          .append("        ? org.graalvm.nativeimage.StackValue.get(1) : pin")
-          .append(s)
-          .append(".addressOfArrayElement(0);\n");
+      long align = call.align(b.borrow());
+      String absent =
+          call.nullable(b.borrow()) ? b.name() + " == null ? " + NULL_POINTER + " : " : "";
+      if (align > PINNED_ALIGNMENT) {
+        // Copied: native memory rounded up to the fact, filled from the array, and written back
+        // (the callee may write a writable buffer) before it is freed.
+        out.append(pad)
+            .append("org.graalvm.word.Pointer raw")
+            .append(s)
+            .append(" = length")
+            .append(s)
+            .append(" == 0 ? org.graalvm.word.WordFactory.nullPointer()\n")
+            .append(pad)
+            .append(
+                "    : org.graalvm.nativeimage.UnmanagedMemory.malloc("
+                    + "org.graalvm.word.WordFactory.unsigned(length")
+            .append(s)
+            .append(" + ")
+            .append(align)
+            .append("));\n")
+            .append(pad)
+            .append("org.graalvm.nativeimage.c.type.CCharPointer pointer")
+            .append(s)
+            .append(" = ")
+            .append(absent)
+            .append("raw")
+            .append(s)
+            .append(".isNull()\n")
+            .append(pad)
+            .append("    ? ")
+            .append(dummy(call, b.borrow()))
+            .append(" : org.graalvm.word.WordFactory.pointer((raw")
+            .append(s)
+            .append(".rawValue() + ")
+            .append(align - 1)
+            .append(") & -")
+            .append(align)
+            .append("L);\n")
+            .append(pad)
+            .append("try {\n")
+            .append(pad)
+            .append("    for (int i")
+            .append(s)
+            .append(" = 0; i")
+            .append(s)
+            .append(" < length")
+            .append(s)
+            .append("; i")
+            .append(s)
+            .append("++) pointer")
+            .append(s)
+            .append(".write(i")
+            .append(s)
+            .append(", ")
+            .append(b.name())
+            .append("[i")
+            .append(s)
+            .append("]);\n")
+            .append(
+                call.alignmentAssertion(
+                    b.borrow(), "pointer" + s + ".rawValue()", "length" + s, pad + "    "));
+      } else {
+        out.append(pad)
+            .append("org.graalvm.nativeimage.PinnedObject pin")
+            .append(s)
+            .append(" = length")
+            .append(s)
+            .append(" == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(")
+            .append(b.name())
+            .append(");\n")
+            .append(pad)
+            .append("try {\n")
+            .append(pad)
+            .append("    org.graalvm.nativeimage.c.type.CCharPointer pointer")
+            .append(s)
+            .append(" = ")
+            .append(absent)
+            .append("pin")
+            .append(s)
+            .append(" == null\n")
+            .append(pad)
+            .append("        ? ")
+            .append(dummy(call, b.borrow()))
+            .append(" : pin")
+            .append(s)
+            .append(".addressOfArrayElement(0);\n")
+            .append(
+                call.alignmentAssertion(
+                    b.borrow(), "pointer" + s + ".rawValue()", "length" + s, pad + "    "));
+      }
       pad += "    ";
     }
     out.append(pad).append(invoke).append('\n');
     for (Buffer b : buffers.reversed()) {
       pad = pad.substring(4);
-      out.append(pad)
-          .append("} finally {\n")
-          .append(pad)
-          .append("    if (pin")
-          .append(b.suffix())
-          .append(" != null) pin")
-          .append(b.suffix())
-          .append(".close();\n")
-          .append(pad)
-          .append("}\n");
+      String s = b.suffix();
+      out.append(pad).append("} finally {\n");
+      if (call.align(b.borrow()) > PINNED_ALIGNMENT) {
+        out.append(pad).append("    if (raw").append(s).append(".isNonNull()) {\n");
+        if (call.writable(b.borrow()))
+          out.append(pad)
+              .append("        for (int i")
+              .append(s)
+              .append(" = 0; i")
+              .append(s)
+              .append(" < length")
+              .append(s)
+              .append("; i")
+              .append(s)
+              .append("++) ")
+              .append(b.name())
+              .append("[i")
+              .append(s)
+              .append("] = pointer")
+              .append(s)
+              .append(".read(i")
+              .append(s)
+              .append(");\n");
+        out.append(pad)
+            .append("        org.graalvm.nativeimage.UnmanagedMemory.free(raw")
+            .append(s)
+            .append(");\n")
+            .append(pad)
+            .append("    }\n");
+      } else
+        out.append(pad)
+            .append("    if (pin")
+            .append(s)
+            .append(" != null) pin")
+            .append(s)
+            .append(".close();\n");
+      out.append(pad).append("}\n");
     }
     out.append("    }\n");
   }

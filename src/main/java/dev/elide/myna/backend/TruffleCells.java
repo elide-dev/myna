@@ -208,7 +208,15 @@ public final class TruffleCells implements Backend {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
             boolean writable = p.access() != Access.READ;
-            String coercion = cell.isHeld(p) ? "HeldBytesCoercion" : "BytesCoercion";
+            // A parameter with an align fact takes the coercion that honors it, one that costs more
+            // above 16, where no scratch copy satisfies it. The others keep the smaller one, which
+            // a compiled call inlines to keep its borrow out of the heap.
+            String coercion =
+                cell.isHeld(p)
+                    ? "HeldBytesCoercion"
+                    : align(p) > 16
+                        ? "OverAlignedBytesCoercion"
+                        : align(p) > 1 ? "AlignedBytesCoercion" : "BytesCoercion";
             imports.add(RUNTIME + coercion);
             imports.add(RUNTIME + "Borrow");
             fields
@@ -220,6 +228,10 @@ public final class TruffleCells implements Backend {
             String local = "borrow_" + p.name();
             borrows.add(local + " = " + field + ".execute(" + argument + ")");
             arguments.add(address(ffm, imports, local + ".address()"));
+            // Every borrow, held or not, lends the guest's own segment to the downcall: a held
+            // borrow's create call checks and holds its scope as a call borrow's does, and the
+            // resource then keeps the buffer itself.
+            lent.add(p.name());
             if (cell.isHeld(p)) {
               // Lent until the resource is destroyed: never pinned or on a scratch stack.
               held.add(local);
@@ -231,12 +243,15 @@ public final class TruffleCells implements Backend {
                   .append(declared)
                   .append(", ")
                   .append(p.nullable())
+                  .append(align(p) > 1 ? ", " + align(p) : "")
                   .append(");\n");
               continue;
             }
             init.append("            this.")
                 .append(field)
-                .append(" = new BytesCoercion(")
+                .append(" = new ")
+                .append(coercion)
+                .append("(")
                 .append(quotedName)
                 .append(", ")
                 .append(declared)
@@ -247,11 +262,16 @@ public final class TruffleCells implements Backend {
                 .append(writable)
                 .append(", ")
                 .append(cell.isBuffer(p))
-                // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either.
-                .append(rawBytes(p) ? ", false" : "")
+                // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either. An
+                // align fact follows the terminated flag, which then has to be spelled out.
+                .append(
+                    align(p) > 1
+                        ? ", "
+                            + (rawBytes(p) ? "false" : String.valueOf(!cell.isBuffer(p)))
+                            + ", "
+                            + align(p)
+                        : rawBytes(p) ? ", false" : "")
                 .append(");\n");
-            // Only a call borrow may lend the guest's own segment to the downcall.
-            lent.add(p.name());
           } else {
             imports.add(RUNTIME + "PointerCoercion");
             fields
@@ -525,8 +545,9 @@ public final class TruffleCells implements Backend {
         call = "scoped(" + String.join(", ", scopedForwarded) + ")";
         // With one borrow held the compiled loop still keeps its result in a register, and at the
         // sizes measured the call is no faster for dropping it; from two borrows on it is. A held
-        // borrow is acquired before the call and kept by the resource, so its borrow_/lent_ locals
-        // do not exist at the in-place point: skip the fast path whenever the create has any.
+        // borrow outlives the call, so the resource must keep a borrow of it and the call cannot
+        // go without one: skip the fast path whenever the create has any. Its segment still
+        // reaches the downcall through scoped.
         if (held.isEmpty() && segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
           unborrowedCall =
               "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
@@ -597,7 +618,8 @@ public final class TruffleCells implements Backend {
                     x -> x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
                 .findFirst()
                 .orElseThrow();
-        String copy = "out.copyTo(" + guest.get(parameter.name());
+        String guestArgument = guest.get(parameter.name());
+        String copy = "out.copyTo(" + guestArgument;
         // A struct the resource lives in is freed by the resource; any other struct, once the
         // cell is done with it.
         before
@@ -623,10 +645,11 @@ public final class TruffleCells implements Backend {
               .append("if (!(")
               .append(String.join(" || ", succeeded))
               .append(")) {\n    ")
-              .append(copy)
-              .append(");\n    throw NativeCellException.status(")
+              .append("throw out.copyToAfterFailure(")
+              .append(guestArgument)
+              .append(", NativeCellException.status(")
               .append(quotedName)
-              .append(", status, this);\n}\n");
+              .append(", status, this));\n}\n");
         }
         String field = cell.creates().handleField();
         if (field == null) {
@@ -644,10 +667,11 @@ public final class TruffleCells implements Backend {
               .append(offset)
               .append("L);\n")
               .append("if (created == 0) {\n    ")
-              .append(copy)
-              .append(");\n    throw NativeCellException.noResource(")
+              .append("throw out.copyToAfterFailure(")
+              .append(guestArgument)
+              .append(", NativeCellException.noResource(")
               .append(quotedName)
-              .append(", this);\n}\n");
+              .append(", this));\n}\n");
         }
         after.append(copy).append(", resource);\n");
       }
@@ -1154,6 +1178,15 @@ public final class TruffleCells implements Backend {
       case I64, U64, USIZE, ISIZE, U32 -> new String[] {"long", "executeLong"};
       case F32, F64 -> new String[] {"double", "executeDouble"};
     };
+  }
+
+  /**
+   * The {@code align} fact a byte parameter's coercion honors, or zero: only an approved ({@code
+   * explicit_contract} or compiler-proven) fact is a requirement.
+   */
+  private static long align(Parameter p) {
+    Fact fact = p.facts().get("align");
+    return fact != null && fact.enabled() && fact.approved() ? Long.parseLong(fact.value()) : 0;
   }
 
   private static boolean enabled(Function f, String key) {

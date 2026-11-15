@@ -48,6 +48,18 @@ uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bi
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];
   return sum;
 }
+// What TruffleData's session decode checks of its byte arguments: 2-byte alignment of UTF-16
+// input and of text_out, and an even UTF-16 length. 0 accepts; 1 is its argument status.
+int32_t cells_utf16_probe(const uint8_t *data, uint64_t length, uint32_t flags, uint8_t *text_out, uint64_t text_capacity) {
+  (void)text_capacity;
+  if (text_out && ((uintptr_t)text_out % 2)) return 1;
+  if ((flags & 1) && (length % 2 || (uintptr_t)data % 2)) return 1;
+  return 0;
+}
+// The address of a buffer, to observe the alignment of what a cell lends.
+uint64_t cells_address_of(const uint8_t *bytes, uint64_t count) { (void)count; return (uint64_t)(uintptr_t)bytes; }
+uint64_t cells_address_of_borrow(const uint8_t *bytes, uint64_t count) { (void)count; return (uint64_t)(uintptr_t)bytes; }
+uint64_t cells_address_of_wide(const uint8_t *bytes, uint64_t count) { (void)count; return (uint64_t)(uintptr_t)bytes; }
 // Sums a buffer for as long as the caller wants the call to last: gate[0] is set once the call
 // is in native code, and the sum starts when the caller sets gate[1].
 uint64_t cells_hold(const uint8_t *bytes, uint64_t count, int32_t *gate) {
@@ -156,3 +168,37 @@ void cells_adopted_release(Adopted *adopted) {
   live--;
 }
 int64_t cells_adopted_last(void) { return adopted_last; }
+
+// TruffleData's json/native/api.cc, reduced to its argument checks (#120). The result is 88 bytes
+// whose owner word is set on success; every refusal is TD_JSON_ARGUMENT (3).
+typedef struct { void *owner; void *view; uint64_t words[9]; } TdResult;
+static int td_aligned(const void *p) { return p && ((uintptr_t)p % 8) == 0; }
+void *td_session_create(void) { return malloc(8); }
+void td_session_release(void *session) { free(session); }
+int32_t td_session_decode(void *session, const uint8_t *data, uint64_t length, uint32_t flags, uint8_t *text_out, uint64_t text_capacity, void *output) {
+  (void)session;
+  if (!td_aligned(output)) return 3;
+  TdResult *result = output;
+  memset(result, 0, sizeof *result);
+  if (!data || (flags & ~15u)) return 3;
+  int text = flags & 1, validate_only = flags & 8;
+  if (validate_only && text) return 3;
+  if (text ? !text_out || ((uintptr_t)text_out % 2) || text_capacity > INT32_MAX : (text_out || text_capacity)) return 3;
+  int utf16 = flags & 2, latin1 = flags & 4;
+  if (utf16 && (latin1 || length % 2 || ((uintptr_t)data % 2))) return 3;
+  result->owner = (void *)1;
+  result->words[0] = length;
+  return 0;
+}
+int32_t td_decode_adopted(const uint8_t *data, uint64_t length, uint64_t capacity, uint64_t max_input_bytes, void *output) {
+  if (!td_aligned(output)) return 3;
+  TdResult *result = output;
+  if (result->owner || result->view) return 3;
+  memset(result, 0, sizeof *result);
+  if (!data || capacity < length) return 3;
+  if (length > max_input_bytes) return 4;
+  result->owner = (void *)data;
+  result->words[0] = length;
+  return 0;
+}
+void td_release(void *output) { if (td_aligned(output)) memset(output, 0, sizeof(TdResult)); }
