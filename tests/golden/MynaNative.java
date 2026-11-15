@@ -11,10 +11,14 @@ import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
+import org.graalvm.nativeimage.c.struct.CField;
+import org.graalvm.nativeimage.c.struct.CFieldAddress;
+import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CCharPointer;
+import org.graalvm.nativeimage.c.type.CCharPointerPointer;
 import org.graalvm.nativeimage.c.type.CConst;
+import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
-import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
 public final class MynaNative {
@@ -49,13 +53,13 @@ public final class MynaNative {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        void invoke(PointerBase value, int times, PointerBase result);
+        void invoke(Triple value, int times, Triple result);
     }
     public interface swapPair_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        void invoke(PointerBase value, PointerBase result);
+        void invoke(Pair value, Pair result);
     }
     public interface widen_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
@@ -101,68 +105,45 @@ public final class MynaNative {
     private static final class widen_Binding {
         static final widen_Leaf ADDRESS = MynaSymbols.widen.get();
     }
-    public static final class BufferView {
-        private BufferView() {}
-        public static final int SIZE = 24;
-        public static final int ALIGNMENT = 8;
-        public static CCharPointer data(PointerBase record) {
-            return ((Pointer) record).readWord(0);
-        }
-        public static void data(PointerBase record, CCharPointer value) {
-            ((Pointer) record).writeWord(0, value);
-        }
-        public static long length(PointerBase record) {
-            return ((Pointer) record).readLong(8);
-        }
-        public static void length(PointerBase record, long value) {
-            ((Pointer) record).writeLong(8, value);
-        }
-        public static int flags(PointerBase record) {
-            return ((Pointer) record).readInt(16);
-        }
-        public static void flags(PointerBase record, int value) {
-            ((Pointer) record).writeInt(16, value);
-        }
+    public interface Buffer extends PointerBase {}
+    @CStruct(value = "BufferView", addStructKeyword = true)
+    public interface BufferView extends PointerBase {
+        int SIZE = 24;
+        int ALIGNMENT = 8;
+        @CField("data") CCharPointer data();
+        @CField("data") void data(CCharPointer value);
+        @CFieldAddress("data") CCharPointerPointer addressOfData();
+        @CField("length") long length();
+        @CField("length") void length(long value);
+        @CFieldAddress("length") CLongPointer addressOfLength();
+        @CField("flags") int flags();
+        @CField("flags") void flags(int value);
+        @CFieldAddress("flags") CIntPointer addressOfFlags();
     }
-    public static final class Pair {
-        private Pair() {}
-        public static final int SIZE = 16;
-        public static final int ALIGNMENT = 8;
-        public static long left(PointerBase record) {
-            return ((Pointer) record).readLong(0);
-        }
-        public static void left(PointerBase record, long value) {
-            ((Pointer) record).writeLong(0, value);
-        }
-        public static int right(PointerBase record) {
-            return ((Pointer) record).readInt(8);
-        }
-        public static void right(PointerBase record, int value) {
-            ((Pointer) record).writeInt(8, value);
-        }
+    @CStruct(value = "Pair", addStructKeyword = true)
+    public interface Pair extends PointerBase {
+        int SIZE = 16;
+        int ALIGNMENT = 8;
+        @CField("left") long left();
+        @CField("left") void left(long value);
+        @CFieldAddress("left") CLongPointer addressOfLeft();
+        @CField("right") int right();
+        @CField("right") void right(int value);
+        @CFieldAddress("right") CIntPointer addressOfRight();
     }
-    public static final class Triple {
-        private Triple() {}
-        public static final int SIZE = 24;
-        public static final int ALIGNMENT = 8;
-        public static long a(PointerBase record) {
-            return ((Pointer) record).readLong(0);
-        }
-        public static void a(PointerBase record, long value) {
-            ((Pointer) record).writeLong(0, value);
-        }
-        public static long b(PointerBase record) {
-            return ((Pointer) record).readLong(8);
-        }
-        public static void b(PointerBase record, long value) {
-            ((Pointer) record).writeLong(8, value);
-        }
-        public static long c(PointerBase record) {
-            return ((Pointer) record).readLong(16);
-        }
-        public static void c(PointerBase record, long value) {
-            ((Pointer) record).writeLong(16, value);
-        }
+    @CStruct(value = "Triple", addStructKeyword = true)
+    public interface Triple extends PointerBase {
+        int SIZE = 24;
+        int ALIGNMENT = 8;
+        @CField("a") long a();
+        @CField("a") void a(long value);
+        @CFieldAddress("a") CLongPointer addressOfA();
+        @CField("b") long b();
+        @CField("b") void b(long value);
+        @CFieldAddress("b") CLongPointer addressOfB();
+        @CField("c") long c();
+        @CField("c") void c(long value);
+        @CFieldAddress("c") CLongPointer addressOfC();
     }
     public interface Reducer extends CFunctionPointer {
         @InvokeCFunctionPointer
@@ -238,15 +219,15 @@ public final class MynaNative {
         return rotate_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static void rotate(PointerBase value, int times, PointerBase result) {
+    public static void rotate(Triple value, int times, Triple result) {
         MynaSymbols.rotate.get().invoke(value, times, result);
     }
     @CEntryPoint(name = "seam_scale_myna_ref")
-    public static void scale(IsolateThread isolate_thread, @CConst PointerBase value, int factor, PointerBase result) {
+    public static void scale(IsolateThread isolate_thread, @CConst Pair value, int factor, Pair result) {
         fixture.BufferOps.scale(value, factor, result);
     }
     @CEntryPoint(name = "seam_spread_myna_ref")
-    public static void spread(IsolateThread isolate_thread, @CConst PointerBase value, PointerBase result) {
+    public static void spread(IsolateThread isolate_thread, @CConst Triple value, Triple result) {
         fixture.BufferOps.spread(value, result);
     }
     @CEntryPoint(name = "seam_struct_probe")
@@ -267,7 +248,7 @@ public final class MynaNative {
         return swapPair_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static void swapPair(PointerBase value, PointerBase result) {
+    public static void swapPair(Pair value, Pair result) {
         MynaSymbols.swapPair.get().invoke(value, result);
     }
     @CEntryPoint(name = "seam_visit")

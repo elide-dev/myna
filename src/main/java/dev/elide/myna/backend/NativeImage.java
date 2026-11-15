@@ -22,7 +22,12 @@ public final class NativeImage implements Backend {
               .orElseThrow();
       return signature.javaType() == null ? signature.name() : signature.javaType();
     }
-    return Types.java(type);
+    return Types.nativeImage(type);
+  }
+
+  /** A pointer to a declared struct or opaque type: its interface, nested in the class. */
+  private static boolean typed(Type type) {
+    return type instanceof Pointer p && p.pointee() instanceof Named;
   }
 
   private static String carrier(Module m, Parameter p) {
@@ -37,14 +42,15 @@ public final class NativeImage implements Backend {
           "WordPointer", "org.graalvm.nativeimage.c.type");
 
   /** The carrier by its qualified name, for generated classes that import nothing. */
-  static String qualifiedCarrier(Type type) {
+  static String qualifiedCarrier(Module m, Type type) {
+    if (typed(type)) return m.nativeClass() + "." + Types.nativeImage(type);
     String c = Types.java(type);
     if (WORD_TYPES.containsKey(c)) return WORD_TYPES.get(c) + "." + c;
     return type instanceof Pointer ? "org.graalvm.nativeimage.c.type." + c : c;
   }
 
   private static void carrierImport(Set<String> imports, Type type) {
-    if (type instanceof FunctionPointer) return; // nested in the generated class
+    if (type instanceof FunctionPointer || typed(type)) return; // nested in the generated class
     String c = Types.java(type);
     if (WORD_TYPES.containsKey(c)) imports.add(WORD_TYPES.get(c) + "." + c);
     else if (type instanceof Pointer) imports.add("org.graalvm.nativeimage.c.type." + c);
@@ -99,11 +105,18 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
     }
-    if (!m.structs().isEmpty()) {
-      imports.add("org.graalvm.word.Pointer");
+    if (!m.structs().isEmpty() || !m.opaqueTypes().isEmpty())
       imports.add("org.graalvm.word.PointerBase");
+    if (!m.structs().isEmpty()) {
+      imports.add("org.graalvm.nativeimage.c.struct.CStruct");
+      imports.add("org.graalvm.nativeimage.c.struct.CField");
+      imports.add("org.graalvm.nativeimage.c.struct.CFieldAddress");
     }
-    for (Struct st : m.structs()) st.fields().forEach(f -> carrierImport(imports, f.type()));
+    for (Struct st : m.structs())
+      for (Field f : st.fields()) {
+        carrierImport(imports, f.type());
+        carrierImport(imports, new Pointer(f.type()));
+      }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
       carrierImport(imports, c.returns());
@@ -129,7 +142,9 @@ public final class NativeImage implements Backend {
   /** Class literal for {@code CEntryPointLiteral.create}; nested callback types are qualified. */
   private static String classLiteral(Module m, Type type) {
     String carrier = javaType(m, type);
-    return (type instanceof FunctionPointer && !carrier.contains(".") ? m.nativeClass() + "." : "")
+    return ((type instanceof FunctionPointer && !carrier.contains(".")) || typed(type)
+            ? m.nativeClass() + "."
+            : "")
         + carrier
         + ".class";
   }
@@ -253,7 +268,9 @@ public final class NativeImage implements Backend {
         .append(Seam.BINDING_ABI_VERSION)
         .append(";\n");
     leafBindings(m, out);
-    for (Struct st : m.structs()) accessors(m, st, out);
+    for (String opaque : m.opaqueTypes())
+      out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
+    for (Struct st : m.structs()) struct(m, st, out);
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
       out.append("    public interface ")
@@ -371,60 +388,54 @@ public final class NativeImage implements Backend {
   }
 
   /**
-   * Field access at the descriptor's offsets, for records in Java-managed memory (StackValue,
-   * UnmanagedMemory) and for the reference form of by-value calls.
+   * A record as SVM's typed pointer. SVM takes the offsets from {@code seam.h}, whose {@code
+   * SEAM_ASSERT}s pin them to the descriptor's, and the interface works with {@code
+   * StackValue.get(R.class)}, {@code SizeOf.get(R.class)} and typed signatures. Each accessor is
+   * the single load or store at the field's offset that a raw {@code Pointer} access is, with the
+   * same code (tests/native_image_integration.py measures every carrier); a {@code boolean} store
+   * is one instruction shorter, and a narrow integer read ({@code i8}, {@code u8}, {@code char},
+   * {@code i16}, {@code u16}) is one register extension longer, because SVM does not fold the
+   * extension into a C-interface load.
+   *
+   * <p>Carriers are the same-width Java primitives as everywhere else, so unsigned and narrow
+   * fields keep their raw bits. SVM's C-interface verifier checks only sizes by default
+   * (equal-sized carriers need no {@code @AllowNarrowingCast}/{@code @AllowWideningCast}); its
+   * signedness check is the debug option {@code -H:+VerifyCInterfaceSignedness}, off by default,
+   * which would reject {@code u8}/{@code u16}/{@code u32}/{@code u64} carried as signed Java types.
+   * A read sign-extends a narrow value into its Java type ({@code byte} 0xff reads as -1, as {@code
+   * readByte} did), and a {@code boolean} reads its byte as zero or one and writes 0 or 1.
    */
-  private static void accessors(Module m, Struct st, StringBuilder out) {
-    out.append("    public static final class ")
+  private static void struct(Module m, Struct st, StringBuilder out) {
+    out.append("    @CStruct(value = ")
+        .append(SeamJson.quote(st.name()))
+        .append(", addStructKeyword = true)\n    public interface ")
         .append(st.name())
-        .append(" {\n        private ")
-        .append(st.name())
-        .append("() {}\n        public static final int SIZE = ")
+        .append(" extends PointerBase {\n        int SIZE = ")
         .append(st.size())
-        .append(";\n        public static final int ALIGNMENT = ")
+        .append(";\n        int ALIGNMENT = ")
         .append(st.alignment())
         .append(";\n");
     for (Field f : st.fields()) {
       String carrier = javaType(m, f.type());
-      String at = "((Pointer) record)";
-      String get, set;
-      if (f.type() instanceof Scalar s)
-        switch (s) {
-          case BOOL -> {
-            get = at + ".readByte(" + f.offset() + ") != 0";
-            set = at + ".writeByte(" + f.offset() + ", (byte) (value ? 1 : 0))";
-          }
-          default -> {
-            String kind =
-                switch (s) {
-                  case CHAR, I8, U8 -> "Byte";
-                  case I16, U16 -> "Short";
-                  case I32, U32 -> "Int";
-                  case F32 -> "Float";
-                  case F64 -> "Double";
-                  default -> "Long";
-                };
-            get = at + ".read" + kind + "(" + f.offset() + ")";
-            set = at + ".write" + kind + "(" + f.offset() + ", value)";
-          }
-        }
-      else {
-        get = at + ".readWord(" + f.offset() + ")";
-        set = at + ".writeWord(" + f.offset() + ", value)";
-      }
-      out.append("        public static ")
+      String field = "(" + SeamJson.quote(f.name()) + ") ";
+      out.append("        @CField")
+          .append(field)
           .append(carrier)
           .append(' ')
           .append(f.name())
-          .append("(PointerBase record) {\n            return ")
-          .append(get)
-          .append(";\n        }\n        public static void ")
+          .append("();\n        @CField")
+          .append(field)
+          .append("void ")
           .append(f.name())
-          .append("(PointerBase record, ")
+          .append('(')
           .append(carrier)
-          .append(" value) {\n            ")
-          .append(set)
-          .append(";\n        }\n");
+          .append(" value);\n        @CFieldAddress")
+          .append(field)
+          .append(Types.nativeImage(new Pointer(f.type())))
+          .append(" addressOf")
+          .append(Character.toUpperCase(f.name().charAt(0)))
+          .append(f.name().substring(1))
+          .append("();\n");
     }
     out.append("    }\n");
   }

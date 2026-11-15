@@ -49,9 +49,9 @@ public final class NativeOwnership implements Backend {
           m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
       var params = new ArrayList<String>();
       var args = new ArrayList<String>();
-      // Pointer arguments keep the raw binding's word carriers; scalars are spelled as before.
+      // Pointer arguments keep the raw binding's carriers, typed records and opaques included.
       for (int i = 0; i < create.parameters().size(); i++) {
-        params.add(NativeImage.qualifiedCarrier(create.parameters().get(i).type()) + " arg" + i);
+        params.add(NativeImage.qualifiedCarrier(m, create.parameters().get(i).type()) + " arg" + i);
         args.add("arg" + i);
       }
       out.append("    public static final class ")
@@ -156,7 +156,7 @@ public final class NativeOwnership implements Backend {
       } else if (length != null)
         arguments.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
       else {
-        String carrier = NativeImage.qualifiedCarrier(p.type());
+        String carrier = NativeImage.qualifiedCarrier(m, p.type());
         nativeParams.add(carrier + " " + name);
         arrayParams.add(carrier + " " + name);
         arguments.add(name);
@@ -170,7 +170,7 @@ public final class NativeOwnership implements Backend {
             + "("
             + String.join(", ", arguments)
             + ");";
-    String returns = Types.java(f.returns());
+    String returns = NativeImage.qualifiedCarrier(m, f.returns());
     out.append("    public static ")
         .append(returns)
         .append(' ')

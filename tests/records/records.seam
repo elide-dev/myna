@@ -1,0 +1,29 @@
+# Native Image records are @CStruct interfaces: every scalar carrier, typed struct and opaque pointers.
+module records_fixture target=aarch64-apple-darwin java_package=fixture.records java_class=RecordsApi c_context=fixture.directives.SeamHeaderDirectives
+opaque Handle
+struct Rec size=80 align=8
+  field signed64 type=i64 offset=0
+  field unsigned64 type=u64 offset=8
+  field size type=usize offset=16
+  field offset type=isize offset=24
+  field ratio type=f64 offset=32
+  field next type=ptr<Rec> offset=40
+  field handle type=ptr<Handle> offset=48
+  field signed32 type=i32 offset=56
+  field unsigned32 type=u32 offset=60
+  field scale type=f32 offset=64
+  field signed16 type=i16 offset=68
+  field unsigned16 type=u16 offset=70
+  field flag type=bool offset=72
+  field letter type=char offset=73
+  field signed8 type=i8 offset=74
+  field unsigned8 type=u8 offset=75
+end
+# Checks the extremes Java wrote (one bit per field), then writes the opposite extremes.
+import exchange symbol=records_exchange return=i32 error=no_failure
+  param rec type=ptr<Rec> nullable=false ownership=borrowed access=read_write
+end
+# A typed opaque result through a transitioning @CFunction.
+import handleOf symbol=records_handle_of return=ptr<Handle> error=no_failure native_leaf=false@explicit_contract
+  param rec type=ptr<Rec> nullable=false ownership=borrowed access=read
+end

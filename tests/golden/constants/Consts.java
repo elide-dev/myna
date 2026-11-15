@@ -9,7 +9,11 @@ import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
-import org.graalvm.word.Pointer;
+import org.graalvm.nativeimage.c.struct.CField;
+import org.graalvm.nativeimage.c.struct.CFieldAddress;
+import org.graalvm.nativeimage.c.struct.CStruct;
+import org.graalvm.nativeimage.c.type.CIntPointer;
+import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.word.PointerBase;
 
 public final class Consts {
@@ -20,13 +24,13 @@ public final class Consts {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        void invoke(int level, PointerBase session);
+        void invoke(int level, Session session);
     }
     public interface status_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        int invoke(PointerBase view);
+        int invoke(Record view);
     }
     /** Linker metadata only: initialized at image build time. */
     private static final class MynaSymbols {
@@ -41,48 +45,37 @@ public final class Consts {
     private static final class status_Binding {
         static final status_Leaf ADDRESS = MynaSymbols.status.get();
     }
-    public static final class Record {
-        private Record() {}
-        public static final int SIZE = 24;
-        public static final int ALIGNMENT = 8;
-        public static int status(PointerBase record) {
-            return ((Pointer) record).readInt(0);
-        }
-        public static void status(PointerBase record, int value) {
-            ((Pointer) record).writeInt(0, value);
-        }
-        public static int perms(PointerBase record) {
-            return ((Pointer) record).readInt(4);
-        }
-        public static void perms(PointerBase record, int value) {
-            ((Pointer) record).writeInt(4, value);
-        }
-        public static long wide(PointerBase record) {
-            return ((Pointer) record).readLong(8);
-        }
-        public static void wide(PointerBase record, long value) {
-            ((Pointer) record).writeLong(8, value);
-        }
-        public static long raw(PointerBase record) {
-            return ((Pointer) record).readLong(16);
-        }
-        public static void raw(PointerBase record, long value) {
-            ((Pointer) record).writeLong(16, value);
-        }
+    public interface Session extends PointerBase {}
+    @CStruct(value = "Record", addStructKeyword = true)
+    public interface Record extends PointerBase {
+        int SIZE = 24;
+        int ALIGNMENT = 8;
+        @CField("status") int status();
+        @CField("status") void status(int value);
+        @CFieldAddress("status") CIntPointer addressOfStatus();
+        @CField("perms") int perms();
+        @CField("perms") void perms(int value);
+        @CFieldAddress("perms") CIntPointer addressOfPerms();
+        @CField("wide") long wide();
+        @CField("wide") void wide(long value);
+        @CFieldAddress("wide") CLongPointer addressOfWide();
+        @CField("raw") long raw();
+        @CField("raw") void raw(long value);
+        @CFieldAddress("raw") CLongPointer addressOfRaw();
     }
     public interface Listener extends CFunctionPointer {
         @InvokeCFunctionPointer
         int invoke(IsolateThread isolate);
     }
     @CFunction(value = "consts_blocking_status")
-    public static native int blockingStatus(PointerBase session);
+    public static native int blockingStatus(Session session);
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
     public static setLevel_Leaf setLevelLeafPointer() {
         return setLevel_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static void setLevel(byte level, PointerBase session) {
+    public static void setLevel(byte level, Session session) {
         MynaSymbols.setLevel.get().invoke(level & 0xff, session);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
@@ -91,7 +84,7 @@ public final class Consts {
         return status_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static int status(PointerBase view) {
+    public static int status(Record view) {
         return MynaSymbols.status.get().invoke(view);
     }
 }

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """Build and execute real Native Image C API glue and the hosted Feature."""
 import os
+import re
 import shutil
 from pathlib import Path
 import sys
@@ -9,6 +10,17 @@ import unittest
 from values_cpp import build_cpp
 from support import BINARY, ROOT, TARGET, main, native_image, run, compile_native
 LLVM = Path(os.environ.get("LLVM_BIN", "/opt/homebrew/opt/llvm/bin" if sys.platform == "darwin" else "/usr/lib/llvm-23/bin"))
+
+DIRECTIVES = ROOT / "tests/directives/SeamHeaderDirectives.java"
+
+
+def with_seam_header(source, out):
+    """A copy of a descriptor whose Native Image class takes seam.h from the test directives."""
+    text = source.read_text()
+    module = next(line for line in text.splitlines() if line.startswith("module "))
+    out.write_text(text.replace(module, module + " c_context=fixture.directives.SeamHeaderDirectives", 1))
+    return out
+
 
 class NativeImageIntegrationTests(unittest.TestCase):
     def test_scoped_ffm_callbacks_and_static_jni(self):
@@ -91,14 +103,17 @@ class NativeImageIntegrationTests(unittest.TestCase):
         compile_native(classes, generated, generated / "FastApi.java", *sorted(fixture.glob("*.java")))
         app = work / "fast-app"
         # Configuration travels with the compiled classes. No manual symbol/export/init flags.
-        native_image("-O2", "-cp", classes, f"-Dmyna.fast.libraryPath={work}", "fixture.fast.FastMain", "-o", app)
+        native_image("-O2", "-cp", classes, f"-Dmyna.fast.libraryPath={work}", f"-Dmyna.seam.header={generated / 'seam.h'}",
+                     "fixture.fast.FastMain", "-o", app)
         self.assertIn("Binding ABI 2 default leaf, static linkage, lazy symbols and GC passed", run(app).stdout)
 
     def test_serde_value_tape(self):
         work = ROOT / "build/values-test"
         generated = work / "generated"
         fixture = ROOT / "tests/values"
-        run(BINARY, "generate", ROOT / "examples/values.seam", "--out", generated, "--target", TARGET)
+        work.mkdir(parents=True, exist_ok=True)
+        source = with_seam_header(ROOT / "examples/values.seam", work / "values.seam")
+        run(BINARY, "generate", source, "--out", generated, "--target", TARGET)
         run("cargo", "build", "--locked", "--release", "-p", "myna-values-fixture")
         classes = work / "classes"
         if classes.exists():
@@ -106,7 +121,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         classes.mkdir(parents=True)
         runtime = ROOT / "src/values/java/dev/elide/myna/values"
         compile_native(classes, generated, generated / "ValueApi.java",
-            *sorted(runtime.glob("*.java")), fixture / "ValuesMain.java")
+            *sorted(runtime.glob("*.java")), fixture / "ValuesMain.java", DIRECTIVES)
         archive = ROOT / "target/release/libmyna_values_fixture.a"
         objects = build_cpp(work)
         linker = [f"-H:NativeLinkerOption={archive}", *[f"-H:NativeLinkerOption={obj}" for obj in objects]]
@@ -115,7 +130,8 @@ class NativeImageIntegrationTests(unittest.TestCase):
         else:
             linker += ["-H:NativeLinkerOption=-lc++"]
         app = work / "values-app"
-        native_image("-O2", "-cp", classes,
+        header = f"-Dmyna.seam.header={generated / 'seam.h'}"
+        native_image("-O2", "-cp", classes, header,
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.ValuesMain", "-o", app)
         self.assertIn("Serde Rust -> SVM value mapping passed", run(app).stdout)
@@ -136,11 +152,72 @@ class NativeImageIntegrationTests(unittest.TestCase):
         truffle_app = work / "truffle-values-app"
         native_image("-O2", "--add-exports=org.graalvm.truffle.runtime/com.oracle.truffle.runtime=ALL-UNNAMED",
             "--initialize-at-build-time=fixture.values.TruffleValuesMain$Read,dev.elide.myna.values",
-            "-cp", os.pathsep.join(map(str, [classes, *deps])),
+            "-cp", os.pathsep.join(map(str, [classes, *deps])), header,
             "-H:+UnlockExperimentalVMOptions", *linker, "-H:-UnlockExperimentalVMOptions",
             "fixture.values.TruffleValuesMain", "-o", truffle_app)
         self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
 
+
+    def test_records_are_cstructs(self):
+        """Records are @CStruct interfaces: StackValue and SizeOf agree with SIZE, every carrier keeps
+        its raw bits in both directions, and each @CField accessor is the single access at the
+        descriptor's offset that the raw offset accessor was."""
+        work = ROOT / "build/records-test"
+        fixture = ROOT / "tests/records"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", fixture / "records.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-Wmissing-prototypes", "-I", generated,
+            "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "RecordsApi.java", fixture / "RecordsMain.java", DIRECTIVES)
+        app = work / "records-app"
+        native_image("-O2", "-cp", classes, f"-Dmyna.seam.header={generated / 'seam.h'}",
+                     "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols", f"-H:NativeLinkerOption={work / 'native.o'}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.records.RecordsMain", "-o", app)
+        self.assertIn("Native Image @CStruct records passed", run(app).stdout)
+        # Evidence: the measured methods' machine code, retained under build/reports.
+        evidence = ROOT / "build/reports/native-image/records"
+        evidence.mkdir(parents=True, exist_ok=True)
+        symbols = run(LLVM / "llvm-nm", app).stdout.splitlines()
+        def body(method):
+            name = next(line.split()[-1] for line in symbols if f"RecordsMain_{method}_" in line)
+            listing = run(LLVM / "llvm-objdump", "--disassemble", f"--disassemble-symbols={name}",
+                          "--no-show-raw-insn", "--no-leading-addr", app).stdout
+            (evidence / f"{method}.disassembly.txt").write_text(listing)
+            lines = listing.split(f"<{name}>:", 1)[1].strip().splitlines()
+            code = [" ".join(line.split()) for line in lines if line.strip()]
+            while code and code[-1].startswith(("int3", "nop", "udf")):
+                code.pop()  # alignment padding
+            return code
+        # Each @CField accessor against the raw offset access it replaced: one access at the
+        # descriptor's offset (x86-64 and AArch64 spellings) and otherwise the same code.
+        narrow = re.compile(r"(movs[bw]l %a[lx], %eax|sxt[bh] w\d+, w\d+)$")
+        offsets = {"U64": 8, "F64": 32, "Next": 40, "U32": 60, "F32": 64, "I16": 68, "U16": 70,
+                   "Char": 73, "I8": 74, "U8": 75, "Bool": 72}
+        for access in ("read", "write"):
+            for kind, offset in offsets.items():
+                if access == "write" and kind not in ("U64", "Next", "U32", "U16", "U8", "Bool"):
+                    continue
+                name = access + kind
+                field, raw = body(name), body("raw" + name[0].upper() + name[1:])
+                at = [i for i in field if f"{offset:#x}(%rdi)" in i or f"[x0, #{offset:#x}]" in i or f"[x0, #{offset}]" in i]
+                self.assertEqual(len(at), 1, field)
+                if access == "read" and kind in ("I16", "U16", "Char", "I8", "U8"):
+                    # Known SVM gap: a narrow C-interface read is a CInterfaceReadNode, which the
+                    # backend's sign-extending-load match rule does not fold, so one register
+                    # extension follows the (already extending) load. Fold it and this fails.
+                    extra = [i for i in field if narrow.match(i)]
+                    self.assertEqual(len(extra), 1, field)
+                    field = [i for i in field if i is not extra[0]]
+                if name == "writeBool":
+                    # Better than before: a Java boolean is already 0 or 1, so the store needs no
+                    # `value ? 1 : 0` normalization; the code is the raw form without it.
+                    self.assertLess(len(field), len(raw), field)
+                    self.assertTrue(set(field) - set(raw) == {at[0]}, field)
+                    continue
+                self.assertEqual(field, raw, f"@CField {name} must compile to the raw offset access's code")
 
     def test_bemo_static_linkage_and_handwritten_callbacks(self):
         work = ROOT / "build/bemo-test"
@@ -161,7 +238,8 @@ class NativeImageIntegrationTests(unittest.TestCase):
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         native_image( "-O1", "-cp", classes,
             "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
-            f"-Dmyna.bemo.libraryPath={work}", "fixture.bemo.BemoMain", "-o", app)
+            f"-Dmyna.bemo.libraryPath={work}", f"-Dmyna.seam.header={generated / 'seam.h'}",
+            "fixture.bemo.BemoMain", "-o", app)
         self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
 
     def test_consumer_ownership_and_off_heap_buffers(self):
@@ -255,24 +333,25 @@ class NativeImageIntegrationTests(unittest.TestCase):
         work = ROOT / "build/native-image-test"
         work.mkdir(parents=True, exist_ok=True)
         generated = work / "generated"
-        run(BINARY, "generate", ROOT / "examples/buffer.seam", "--out", generated, "--target", TARGET)
+        # The hosted Feature consumes the exact same target-adjusted DSL as the generator.
+        source = with_seam_header(ROOT / "examples/buffer.seam", work / "buffer.seam")
+        source.write_text(source.read_text().replace("aarch64-apple-darwin", TARGET))
+        run(BINARY, "generate", source, "--out", generated)
         # Elide supplies the Graal SDK to its compiler and native-image builder.
         classes = work / "classes"
         # Renamed/removed entry-point classes must not survive an earlier fixture build.
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        compile_native(classes, generated, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java")
+        compile_native(classes, generated, generated / "MynaNative.java", ROOT / "tests/abi/BufferOps.java", DIRECTIVES)
         inspector = work / "inspect.o"
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=lib", "--emit=obj", "-Cpanic=abort", "-Copt-level=2", "-Crelocation-model=pic", ROOT / "tests/abi/inspect.rs", "-o", inspector)
         feature = ROOT / "build/dist/myna-feature.jar"
-        # The hosted Feature consumes the exact same target-adjusted DSL as the generator.
-        source = work / "buffer.seam"
-        source.write_text((ROOT / "examples/buffer.seam").read_text().replace("aarch64-apple-darwin", TARGET))
         feature_output = work / "feature-output"
         native_image( "--shared", "-O1", "-cp", os.pathsep.join([str(classes), str(feature)]),
             "--features=dev.elide.myna.nativeimage.MynaFeature", f"-Dmyna.input={source}", f"-Dmyna.output={feature_output}",
+            f"-Dmyna.seam.header={generated / 'seam.h'}",
             "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={inspector}", "-H:-UnlockExperimentalVMOptions",
             "-o", work / "libseamfixture")
         self.assertEqual((generated / "seam.json").read_bytes(), (feature_output / "seam.json").read_bytes())

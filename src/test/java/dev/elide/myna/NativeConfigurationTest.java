@@ -24,7 +24,7 @@ class NativeConfigurationTest {
     assertTrue(java.contains("@CLibrary(value = \"bemofixture\", requireStatic = true)"));
     assertTrue(java.contains("fixture.bemo.HandwrittenSink callback"));
     assertFalse(java.contains("interface Sink"));
-    assertTrue(java.contains("fixture.bemo.HandwrittenSink callback(PointerBase record)"));
+    assertTrue(java.contains("@CField(\"callback\") fixture.bemo.HandwrittenSink callback();"));
     assertFalse(java.contains("import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer"));
     assertFalse(java.contains("class Literals"));
     assertTrue(outputs.get("seam.h").contains("Sink"));

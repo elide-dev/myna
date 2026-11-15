@@ -9,4 +9,9 @@ public final class BemoDirectives implements CContext.Directives {
   public List<String> getLibraryPaths() {
     return List.of(System.getProperty("myna.bemo.libraryPath"));
   }
+
+  /** The generated header, for the {@code @CStruct} records; see tests/directives. */
+  public List<String> getHeaderFiles() {
+    return List.of("\"" + System.getProperty("myna.seam.header") + "\"");
+  }
 }

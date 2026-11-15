@@ -109,7 +109,8 @@ class TruffleIntegrationTests(unittest.TestCase):
                              "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
-                             f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
+                             f"-Dmyna.cells.libraryPath={self.work}", f"-Dmyna.seam.header={self.work / 'generated/seam.h'}",
+                             "fixture.cells.CellsMain", "-o", app)
         self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)
         self.assertIn("Truffle cells compiled and passed", result.stdout)

@@ -9,12 +9,13 @@ public final class Owned {
     private Owned() {}
     public static final String ABI_FINGERPRINT = "db1131847a802043558af025069ae4fadcab2ffb194a8308febb20f8e1807e31";
     public static final int BINDING_ABI_VERSION = 2;
+    public interface Ticket extends PointerBase {}
     @CFunction(value = "owned_check")
     public static native int check(CCharPointer bytes, long count, int mode);
     @CFunction(value = "owned_permissions")
     public static native int permissions(CCharPointer bytes, long count, int wanted);
     @CFunction(value = "owned_ticket_create")
-    public static native PointerBase ticketCreate();
+    public static native Ticket ticketCreate();
     @CFunction(value = "owned_ticket_destroy")
-    public static native void ticketDestroy(PointerBase ticket);
+    public static native void ticketDestroy(Ticket ticket);
 }

@@ -83,7 +83,19 @@ final class Types {
     return rust(p.type());
   }
 
-  /** Native Image word carriers; typed C pointers where the pointee has one. */
+  /**
+   * The Native Image carrier: a pointer to a declared struct or opaque type is that type's typed
+   * pointer interface, nested in the Native Image class; every other type is {@link #java(Type)}.
+   */
+  static String nativeImage(Type type) {
+    return type instanceof Pointer p && p.pointee() instanceof Named n ? n.name() : java(type);
+  }
+
+  /**
+   * Word carriers; typed C pointers where the pointee has one. A pointer to a pointer is a plain
+   * word ({@code CCharPointerPointer} for C strings), and so is a pointer to a declared type here:
+   * {@link #nativeImage(Type)} gives that one its interface.
+   */
   static String java(Type type) {
     if (type instanceof FunctionPointer f) return f.signature();
     if (type == Isolate.THREAD) return "IsolateThread";

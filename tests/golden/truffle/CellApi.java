@@ -8,10 +8,12 @@ import com.oracle.svm.shared.Uninterruptible;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
+import org.graalvm.nativeimage.c.struct.CField;
+import org.graalvm.nativeimage.c.struct.CFieldAddress;
+import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.nativeimage.c.type.VoidPointer;
-import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
 public final class CellApi {
@@ -34,7 +36,7 @@ public final class CellApi {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        long invoke(PointerBase counter);
+        long invoke(Counter counter);
     }
     public interface fill_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
@@ -82,7 +84,7 @@ public final class CellApi {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        void invoke(PointerBase value, PointerBase result);
+        void invoke(Pair value, Pair result);
     }
     public interface widen_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
@@ -153,22 +155,17 @@ public final class CellApi {
     private static final class widen_Binding {
         static final widen_Leaf ADDRESS = MynaSymbols.widen.get();
     }
-    public static final class Pair {
-        private Pair() {}
-        public static final int SIZE = 16;
-        public static final int ALIGNMENT = 8;
-        public static long left(PointerBase record) {
-            return ((Pointer) record).readLong(0);
-        }
-        public static void left(PointerBase record, long value) {
-            ((Pointer) record).writeLong(0, value);
-        }
-        public static long right(PointerBase record) {
-            return ((Pointer) record).readLong(8);
-        }
-        public static void right(PointerBase record, long value) {
-            ((Pointer) record).writeLong(8, value);
-        }
+    public interface Counter extends PointerBase {}
+    @CStruct(value = "Pair", addStructKeyword = true)
+    public interface Pair extends PointerBase {
+        int SIZE = 16;
+        int ALIGNMENT = 8;
+        @CField("left") long left();
+        @CField("left") void left(long value);
+        @CFieldAddress("left") CLongPointer addressOfLeft();
+        @CField("right") long right();
+        @CField("right") void right(long value);
+        @CFieldAddress("right") CLongPointer addressOfRight();
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
@@ -189,16 +186,16 @@ public final class CellApi {
         return MynaSymbols.checksum.get().invoke(bytes, count);
     }
     @CFunction(value = "cells_counter_create")
-    public static native PointerBase counterCreate(long start);
+    public static native Counter counterCreate(long start);
     @CFunction(value = "cells_counter_destroy")
-    public static native void counterDestroy(PointerBase counter);
+    public static native void counterDestroy(Counter counter);
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
     public static counterNext_Leaf counterNextLeafPointer() {
         return counterNext_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static long counterNext(PointerBase counter) {
+    public static long counterNext(Counter counter) {
         return MynaSymbols.counterNext.get().invoke(counter);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
@@ -272,7 +269,7 @@ public final class CellApi {
         return swap_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static void swap(PointerBase value, PointerBase result) {
+    public static void swap(Pair value, Pair result) {
         MynaSymbols.swap.get().invoke(value, result);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */

@@ -34,6 +34,14 @@ public final class Validator {
           "truffle_cell",
           "truffle_raw_pointers");
   private static final Pattern IDENTIFIER = Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*");
+
+  /**
+   * Methods a Native Image record inherits from {@code PointerBase}: a field accessor of the same
+   * name would redeclare or overload a word operation.
+   */
+  private static final Set<String> WORD_METHODS =
+      Set.of("isNull", "isNonNull", "rawValue", "equal", "notEqual");
+
   private static final Set<String> KEYWORDS =
       Set.of(
           ("abstract assert auto boolean break byte case catch char class const continue default do"
@@ -174,6 +182,9 @@ public final class Validator {
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
+        require(
+            !WORD_METHODS.contains(field.name()),
+            "field collides with a Native Image word method: " + field.name());
         type(field.type(), pointable, signatures, false);
         require(field.type() != Isolate.THREAD, "isolate_thread is a parameter type");
         int size = size(field.type());
@@ -185,6 +196,13 @@ public final class Validator {
         require(
             field.offset() <= struct.size() - size, "field exceeds struct size: " + field.name());
         end = field.offset() + size;
+      }
+      for (Field field : struct.fields()) {
+        String address =
+            "addressOf" + Character.toUpperCase(field.name().charAt(0)) + field.name().substring(1);
+        require(
+            !fields.contains(address),
+            "field collides with the Native Image address accessor of " + field.name());
       }
       require(
           struct.alignment() == naturalAlignment,

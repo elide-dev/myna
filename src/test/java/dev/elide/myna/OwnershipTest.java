@@ -182,7 +182,7 @@ class OwnershipTest {
     assertTrue(
         java.contains(
             """
-                public static int transfer(org.graalvm.word.PointerBase arg0, NativeBuffer arg1, NativeBuffer arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
+                public static int transfer(Api.Session arg0, NativeBuffer arg1, NativeBuffer arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
                     arg1.acquire(false);
                     try {
                         long length1 = arg1.byteSize();
@@ -215,7 +215,7 @@ class OwnershipTest {
         java.contains(
             """
                 /** Array convenience path; caller prevents conflicting concurrent array access. */
-                public static int transfer(org.graalvm.word.PointerBase arg0, byte[] arg1, byte[] arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
+                public static int transfer(Api.Session arg0, byte[] arg1, byte[] arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
                     long length1 = arg1.length;
                     long length4 = arg4.length;
                     org.graalvm.nativeimage.PinnedObject pin1 = length1 == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(arg1);
@@ -276,7 +276,7 @@ class OwnershipTest {
         "(NativeBuffer arg0, org.graalvm.nativeimage.c.type.VoidPointer arg2,"
             + " org.graalvm.nativeimage.c.type.WordPointer arg3,"
             + " org.graalvm.nativeimage.c.type.CCharPointerPointer arg4,"
-            + " org.graalvm.word.PointerBase arg5) {\n";
+            + " NativeApi.Ticket arg5) {\n";
     assertTrue(java.contains("    public static long checksum" + signature), java);
     assertTrue(
         java.contains("return NativeApi.checksum(pointer, length, arg2, arg3, arg4, arg5);"), java);
@@ -287,7 +287,7 @@ class OwnershipTest {
                 "(byte[] arg0, org.graalvm.nativeimage.c.type.VoidPointer arg2,"
                     + " org.graalvm.nativeimage.c.type.WordPointer arg3,"
                     + " org.graalvm.nativeimage.c.type.CCharPointerPointer arg4,"
-                    + " org.graalvm.word.PointerBase arg5) {\n",
+                    + " NativeApi.Ticket arg5) {\n",
                 "(byte[] arg0) {\n")
             .replace("(pointer, length, arg2, arg3, arg4, arg5);", "(pointer, length);"));
   }
@@ -490,12 +490,12 @@ class OwnershipTest {
   @Test
   void resourceCreatesPassPointerArgumentsThrough() throws Exception {
     var output = Generator.generate(Dsl.parse(CREATES), true);
-    // Native Image: the raw binding's word carriers, by their qualified names.
+    // Native Image: the raw binding's carriers, by their qualified names.
     String java = output.get("ApiOwnership.java");
     assertTrue(
         java.contains(
             """
-                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, org.graalvm.nativeimage.c.type.CCharPointer arg1) {
+                    public static <T> T create(ResourceFactory<T> factory, Api.Limits arg0, org.graalvm.nativeimage.c.type.CCharPointer arg1) {
                         java.util.Objects.requireNonNull(factory);
                         long address = Api.sessionCreate(arg0, arg1).rawValue();
                         if (address == 0) return null;
@@ -506,7 +506,7 @@ class OwnershipTest {
     assertTrue(
         java.contains(
             """
-                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, long arg1, short arg2) {
+                    public static <T> T create(ResourceFactory<T> factory, Api.Session arg0, long arg1, short arg2) {
                         java.util.Objects.requireNonNull(factory);
                         long address = Api.streamCreate(arg0, arg1, arg2).rawValue();
             """),

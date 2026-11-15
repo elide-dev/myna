@@ -151,7 +151,7 @@ class GeneratorTest {
     assertTrue(
         ni.contains(
             "open(IsolateThread isolate_thread, @CConst CCharPointer path, CCharPointerPointer"
-                + " argv, VoidPointer any, CIntPointer ints, PointerBase handle)"),
+                + " argv, VoidPointer any, CIntPointer ints, Handle handle)"),
         ni);
     assertTrue(ni.contains("return fixture.Ops.open(path, argv, any, ints, handle);"));
     assertFalse(ni.contains("WordFactory"));
@@ -380,12 +380,11 @@ class GeneratorTest {
     var output = generate(base);
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("CGlobalDataFactory.forSymbol(\"pt_flip_myna_ref\")"), ni);
-    assertTrue(
-        ni.contains("public static void flip(PointerBase p, int k, PointerBase result) {"), ni);
+    assertTrue(ni.contains("public static void flip(Pt p, int k, Pt result) {"), ni);
     assertTrue(ni.contains("@CEntryPoint(name = \"pt_norm_myna_ref\")"), ni);
     assertTrue(ni.contains("return fixture.Ops.norm(p);"), ni);
-    assertTrue(ni.contains("public static final int SIZE = 8;"), ni);
-    assertTrue(ni.contains("((Pointer) record).readInt(4)"), ni);
+    assertTrue(ni.contains("        int SIZE = 8;\n"), ni);
+    assertTrue(ni.contains("@CField(\"y\") int y();"), ni);
     String rust = output.get("seam.rs");
     assertTrue(rust.contains("pub fn flip(p: Pt, k: i32) -> Pt;"), rust);
     assertTrue(
@@ -982,6 +981,152 @@ class GeneratorTest {
     assertTrue(output.get("seam.rs").contains("*mut *mut u8"));
     assertTrue(output.get("MynaFFM.java").contains("MemoryLayout.paddingLayout(8)"));
     assertTrue(output.get("seam.ll").contains("ptr writeonly"));
+  }
+
+  @Test
+  void nativeImageRecordsAreCStructs() {
+    String source =
+        MODULE
+            + "opaque Handle\n"
+            + "struct Rec size=80 align=8\n"
+            + "field signed64 type=i64 offset=0\n"
+            + "field unsigned64 type=u64 offset=8\n"
+            + "field size type=usize offset=16\n"
+            + "field offset type=isize offset=24\n"
+            + "field ratio type=f64 offset=32\n"
+            + "field next type=ptr<Rec> offset=40\n"
+            + "field handle type=ptr<Handle> offset=48\n"
+            + "field signed32 type=i32 offset=56\n"
+            + "field unsigned32 type=u32 offset=60\n"
+            + "field scale type=f32 offset=64\n"
+            + "field signed16 type=i16 offset=68\n"
+            + "field unsigned16 type=u16 offset=70\n"
+            + "field flag type=bool offset=72\n"
+            + "field letter type=char offset=73\n"
+            + "field signed8 type=i8 offset=74\n"
+            + "field unsigned8 type=u8 offset=75\n"
+            + "end\n"
+            + "import first return=i64 error=no_failure\n"
+            + "param rec type=ptr<Rec>\n"
+            + "end\n";
+    String ni = generate(source).get("MynaNative.java");
+    String expected =
+        """
+            @CStruct(value = "Rec", addStructKeyword = true)
+            public interface Rec extends PointerBase {
+                int SIZE = 80;
+                int ALIGNMENT = 8;
+                @CField("signed64") long signed64();
+                @CField("signed64") void signed64(long value);
+                @CFieldAddress("signed64") CLongPointer addressOfSigned64();
+                @CField("unsigned64") long unsigned64();
+                @CField("unsigned64") void unsigned64(long value);
+                @CFieldAddress("unsigned64") CLongPointer addressOfUnsigned64();
+                @CField("size") long size();
+                @CField("size") void size(long value);
+                @CFieldAddress("size") WordPointer addressOfSize();
+                @CField("offset") long offset();
+                @CField("offset") void offset(long value);
+                @CFieldAddress("offset") WordPointer addressOfOffset();
+                @CField("ratio") double ratio();
+                @CField("ratio") void ratio(double value);
+                @CFieldAddress("ratio") CDoublePointer addressOfRatio();
+                @CField("next") Rec next();
+                @CField("next") void next(Rec value);
+                @CFieldAddress("next") PointerBase addressOfNext();
+                @CField("handle") Handle handle();
+                @CField("handle") void handle(Handle value);
+                @CFieldAddress("handle") PointerBase addressOfHandle();
+                @CField("signed32") int signed32();
+                @CField("signed32") void signed32(int value);
+                @CFieldAddress("signed32") CIntPointer addressOfSigned32();
+                @CField("unsigned32") int unsigned32();
+                @CField("unsigned32") void unsigned32(int value);
+                @CFieldAddress("unsigned32") CIntPointer addressOfUnsigned32();
+                @CField("scale") float scale();
+                @CField("scale") void scale(float value);
+                @CFieldAddress("scale") CFloatPointer addressOfScale();
+                @CField("signed16") short signed16();
+                @CField("signed16") void signed16(short value);
+                @CFieldAddress("signed16") CShortPointer addressOfSigned16();
+                @CField("unsigned16") short unsigned16();
+                @CField("unsigned16") void unsigned16(short value);
+                @CFieldAddress("unsigned16") CShortPointer addressOfUnsigned16();
+                @CField("flag") boolean flag();
+                @CField("flag") void flag(boolean value);
+                @CFieldAddress("flag") CCharPointer addressOfFlag();
+                @CField("letter") byte letter();
+                @CField("letter") void letter(byte value);
+                @CFieldAddress("letter") CCharPointer addressOfLetter();
+                @CField("signed8") byte signed8();
+                @CField("signed8") void signed8(byte value);
+                @CFieldAddress("signed8") CCharPointer addressOfSigned8();
+                @CField("unsigned8") byte unsigned8();
+                @CField("unsigned8") void unsigned8(byte value);
+                @CFieldAddress("unsigned8") CCharPointer addressOfUnsigned8();
+            }
+        """;
+    assertTrue(ni.contains(expected), ni);
+    assertTrue(ni.contains("    public interface Handle extends PointerBase {}\n"), ni);
+    for (String i :
+        List.of(
+            "org.graalvm.nativeimage.c.struct.CStruct",
+            "org.graalvm.nativeimage.c.struct.CField",
+            "org.graalvm.nativeimage.c.struct.CFieldAddress"))
+      assertTrue(ni.contains("import " + i + ";\n"), i);
+    // Records are typed pointers: no static accessor classes, no raw offset reads.
+    assertFalse(ni.contains("static final class Rec"), ni);
+    assertFalse(ni.contains("((Pointer) record)"), ni);
+    assertFalse(ni.contains("import org.graalvm.word.Pointer;"), ni);
+    assertTrue(ni.contains(" long first(Rec rec)"), ni);
+    // Accessor names may not redeclare a word method or another field's address accessor.
+    for (String clash : List.of("isNull type=bool", "rawValue type=u8", "addressOfNext type=u8"))
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> generate(source.replace("unsigned8 type=u8", clash)),
+          clash);
+  }
+
+  @Test
+  void typedOpaquePointers() {
+    String source =
+        MODULE
+            + "opaque Handle\n"
+            + "struct Pair size=16 align=8\n"
+            + "field left type=i64 offset=0\n"
+            + "field right type=ptr<ptr<u8>> offset=8\n"
+            + "end\n"
+            + "callback Visit return=i32\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param pair type=ptr<Pair>\n"
+            + "end\n"
+            + "import open return=ptr<Handle> error=no_failure"
+            + " native_leaf=false@explicit_contract\n"
+            + "param name type=ptr<u8>\n"
+            + "end\n"
+            + "import peek return=ptr<Pair> error=no_failure\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param names type=ptr<ptr<Pair>>\n"
+            + "end\n"
+            + "export visit symbol=x_visit return=i32 java=fixture.Ops.visit isolate=thread"
+            + " error=abort\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param pair type=ptr<Pair> access=read\n"
+            + "end\n";
+    String ni = generate(source).get("MynaNative.java");
+    assertTrue(ni.contains("    public interface Handle extends PointerBase {}\n"), ni);
+    // A transitioning @CFunction returning ptr<Opaque> returns the opaque interface.
+    assertTrue(
+        ni.contains(
+            "    @CFunction(value = \"open\")\n"
+                + "    public static native Handle open(CCharPointer name);\n"),
+        ni);
+    // Default leaves carry the same types; ptr<ptr<…>> keeps today's carriers.
+    assertTrue(ni.contains("Pair invoke(Handle handle, PointerBase names);"), ni);
+    assertTrue(ni.contains("public static Pair peek(Handle handle, PointerBase names) {"), ni);
+    assertTrue(ni.contains("int invoke(Handle handle, Pair pair);"), ni);
+    assertTrue(ni.contains("Handle handle, @CConst Pair pair) {"), ni);
+    assertTrue(ni.contains("@CField(\"right\") CCharPointerPointer right();"), ni);
   }
 
   @Test
