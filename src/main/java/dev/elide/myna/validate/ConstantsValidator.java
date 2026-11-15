@@ -42,6 +42,25 @@ final class ConstantsValidator {
           Ranges.fits(c.type(), c.value(), abi),
           where + ": value " + c.value() + " does not fit " + c.type().text());
     }
+    // Truffle's constants() object has one member per const and per group, in one namespace.
+    if (m.truffleConfig() != null) {
+      for (EnumGroup e : m.enums())
+        require(
+            !constants.contains(e.name()),
+            "enum "
+                + e.name()
+                + ": name collides with const "
+                + e.name()
+                + " in Truffle constants()");
+      for (FlagSet f : m.flagSets())
+        require(
+            !constants.contains(f.name()),
+            "flags "
+                + f.name()
+                + ": name collides with const "
+                + f.name()
+                + " in Truffle constants()");
+    }
     accessors(m);
     for (EnumGroup e : m.enums()) enumValues(e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);

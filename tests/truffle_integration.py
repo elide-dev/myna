@@ -98,7 +98,7 @@ class TruffleIntegrationTests(unittest.TestCase):
         self.assertIn("ffm-cells-app", build.stdout)
         self.assert_wrapper_assertions_compiled_out(self.work / "reports")
         result = run(app, self.library)
-        self.assertRegex(result.stdout, r"guest constants allocated \d+ bytes over 4096 compiled iterations")
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("wrapper assertions disabled: silent", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
 
@@ -142,9 +142,10 @@ class TruffleIntegrationTests(unittest.TestCase):
                              "fixture.cells.CellsMain", "-o", app)
         self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)
-        # Reads of constants.Status.ok compared with a cell result: compiled, no deoptimization,
-        # and no allocation (CellChecks.guestConstants throws otherwise).
-        self.assertRegex(result.stdout, r"guest constants allocated \d+ bytes over 4096 compiled iterations")
+        # Reads of constants.Status.ok compared with a cell result: compiled, folded to a compilation
+        # constant, no deoptimization and no allocation; lowByte's u8 255 equals constants.Octet.top
+        # (CellChecks.guestConstants throws otherwise).
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("Truffle cells compiled and passed", result.stdout)
 
     def assert_cells_are_runtime_compilable(self, log):

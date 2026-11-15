@@ -19,12 +19,14 @@ import com.oracle.truffle.api.library.ExportMessage;
  * masks of the bits). A generated {@code <Class>Truffle.constants()} returns one, built when its
  * class initializes (at image build time in a Native Image).
  *
- * <p>Numbers are the carrier's same-width signed Java primitive, boxed once when the object is
- * built: {@code u64} values above {@code Long.MAX_VALUE} are their raw {@code long} bits, as cell
- * results are. Names and values sit in {@link CompilationFinal} arrays, and {@code readMember}
- * caches on the identity of the receiver and the member string, so a compiled guest read of {@code
- * constants.Status.ok} with a constant member name folds to the number; any other name takes a
- * {@link TruffleBoundary} lookup.
+ * <p>Numbers are what a cell returning the carrier gives a guest, boxed once when the object is
+ * built: an {@code Integer} up to {@code i32}/{@code u16}, a {@code Long} holding the number for
+ * {@code u32} and the signed 64-bit carriers, and raw {@code long} bits for {@code u64}, so {@code
+ * u64} values above {@code Long.MAX_VALUE} are negative exactly as cell results are. Names and
+ * values sit in {@link CompilationFinal} arrays, and {@code readMember} caches on the receiver's
+ * identity and the member string's equality (identity first, so a constant name skips the compare),
+ * so a compiled guest read of {@code constants.Status.ok} with a constant member name folds to the
+ * number; past the cache limit a {@link TruffleBoundary} lookup answers.
  */
 @ExportLibrary(InteropLibrary.class)
 public final class NativeConstants implements TruffleObject {
@@ -88,7 +90,10 @@ public final class NativeConstants implements TruffleObject {
   @ExportMessage
   static final class IsMemberReadable {
     @Specialization(
-        guards = {"receiver == cachedReceiver", "member == cachedMember"},
+        guards = {
+          "receiver == cachedReceiver",
+          "member == cachedMember || cachedMember.equals(member)"
+        },
         limit = "4")
     static boolean cached(
         @SuppressWarnings("unused") NativeConstants receiver,
@@ -108,7 +113,10 @@ public final class NativeConstants implements TruffleObject {
   @ExportMessage
   static final class ReadMember {
     @Specialization(
-        guards = {"receiver == cachedReceiver", "member == cachedMember"},
+        guards = {
+          "receiver == cachedReceiver",
+          "member == cachedMember || cachedMember.equals(member)"
+        },
         limit = "4")
     static Object cached(
         @SuppressWarnings("unused") NativeConstants receiver,
@@ -117,6 +125,7 @@ public final class NativeConstants implements TruffleObject {
         @Cached("member") String cachedMember,
         @Cached("cachedReceiver.indexOf(cachedMember)") int index)
         throws UnknownIdentifierException {
+      // A cached unknown member still allocates its exception on every read.
       if (index < 0) throw UnknownIdentifierException.create(cachedMember);
       return cachedReceiver.values[index];
     }

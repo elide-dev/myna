@@ -12,6 +12,9 @@ enum Status type=i32
   value ok = 0
   value five = 5
 end
+enum Octet type=u8
+  value top = 255
+end
 flags Mode type=u8
   bit fast = 0
   bit high = 7
@@ -30,7 +33,7 @@ import scale symbol=cells_scale return=f64 error=no_failure
   param value type=f32
   param factor type=f64
 end
-import lowByte symbol=cells_low_byte return=u8 error=no_failure
+import lowByte symbol=cells_low_byte return=u8 error=no_failure enum=Octet
   param value type=i64
 end
 import peek symbol=cells_peek return=i64 error=no_failure

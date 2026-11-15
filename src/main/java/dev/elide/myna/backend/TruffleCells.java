@@ -178,14 +178,14 @@ public final class TruffleCells implements Backend {
     var values = new ArrayList<String>();
     for (Constant c : m.constants()) {
       names.add(c.name());
-      values.add(boxed(c.type(), c.value()));
+      values.add(guestLiteral(c.type(), c.value()));
     }
     for (EnumGroup e : m.enums()) {
       names.add(e.name());
       values.add(
           group(
               e.values().stream().map(EnumValue::name).toList(),
-              e.values().stream().map(v -> boxed(e.type(), v.value())).toList(),
+              e.values().stream().map(v -> guestLiteral(e.type(), v.value())).toList(),
               "                    "));
     }
     for (FlagSet f : m.flagSets()) {
@@ -194,7 +194,7 @@ public final class TruffleCells implements Backend {
           group(
               f.bits().stream().map(FlagBit::name).toList(),
               f.bits().stream()
-                  .map(b -> boxed(f.type(), BigInteger.ONE.shiftLeft(b.bit())))
+                  .map(b -> guestLiteral(f.type(), BigInteger.ONE.shiftLeft(b.bit())))
                   .toList(),
               "                    "));
     }
@@ -208,7 +208,10 @@ public final class TruffleCells implements Backend {
                 + " when this\n"
                 + "     * class initializes: {@code constants.Status.ok} reads a number that a"
                 + " compiled guest\n"
-                + "     * folds. Flag members are the masks of their bits.\n"
+                + "     * folds. Flag members are the masks of their bits. Each value is what a"
+                + " cell returning\n"
+                + "     * its carrier gives a guest: unsigned values below 64 bits are their"
+                + " number.\n"
                 + "     */\n")
         .append("    public static NativeConstants constants() {\n")
         .append("        return CONSTANTS;\n    }\n");
@@ -238,26 +241,46 @@ public final class TruffleCells implements Backend {
           .append("        public static TruffleString name(")
           .append(carrier)
           .append(" value) {\n");
-      if (carrier.equals("long")) {
-        for (EnumValue v : e.values())
-          out.append("            if (value == ")
-              .append(literal(e.type(), v.value()))
-              .append(") return ")
-              .append(v.name().toUpperCase(Locale.ROOT))
-              .append(";\n");
-        out.append("            return null;\n");
-      } else {
-        out.append("            switch (value) {\n");
-        for (EnumValue v : e.values())
-          out.append("                case ")
-              .append(literal(e.type(), v.value()))
-              .append(": return ")
-              .append(v.name().toUpperCase(Locale.ROOT))
-              .append(";\n");
-        out.append("                default: return null;\n            }\n");
+      nameBody(e, carrier, v -> literal(e.type(), v.value()), out);
+      String guest = typed(e.type())[0];
+      if (!guest.equals(carrier)) {
+        out.append("        }\n")
+            .append(
+                "        /** The same, for the value as a cell returns it: no narrowing needed."
+                    + " */\n")
+            .append("        public static TruffleString name(")
+            .append(guest)
+            .append(" value) {\n");
+        nameBody(e, guest, v -> guestLiteral(e.type(), v.value()), out);
       }
       out.append("        }\n    }\n");
     }
+  }
+
+  /** A switch over {@code value} (an if chain for {@code long}, which Java cannot switch on). */
+  private static void nameBody(
+      EnumGroup e,
+      String carrier,
+      java.util.function.Function<EnumValue, String> literal,
+      StringBuilder out) {
+    if (carrier.equals("long")) {
+      for (EnumValue v : e.values())
+        out.append("            if (value == ")
+            .append(literal.apply(v))
+            .append(") return ")
+            .append(v.name().toUpperCase(Locale.ROOT))
+            .append(";\n");
+      out.append("            return null;\n");
+      return;
+    }
+    out.append("            switch (value) {\n");
+    for (EnumValue v : e.values())
+      out.append("                case ")
+          .append(literal.apply(v))
+          .append(": return ")
+          .append(v.name().toUpperCase(Locale.ROOT))
+          .append(";\n");
+    out.append("                default: return null;\n            }\n");
   }
 
   /** {@code new NativeConstants(names, values)} for one level of members, one per line. */
@@ -292,14 +315,16 @@ public final class TruffleCells implements Backend {
     };
   }
 
-  /** A literal that autoboxes to the carrier's same-width wrapper in an {@code Object[]}. */
-  private static String boxed(Scalar type, BigInteger value) {
-    String literal = literal(type, value);
-    return switch (Types.java(type)) {
-      case "byte" -> "(byte) " + literal;
-      case "short" -> "(short) " + literal;
-      default -> literal;
-    };
+  /**
+   * A value as the cell that returns it carries it to a guest ({@link #typed}): an {@code int}
+   * holding the number for carriers up to {@code i32} and {@code u16}, a {@code long} holding the
+   * number for {@code u32} and the signed 64-bit carriers, and raw {@code long} bits for {@code
+   * u64}/{@code usize}, so a guest comparing a cell result with a constant compares equal numbers.
+   */
+  private static String guestLiteral(Scalar type, BigInteger value) {
+    return typed(type)[0].equals("int")
+        ? Integer.toString(value.intValueExact())
+        : Long.toString(value.longValue()) + "L";
   }
 
   /** One cell class: coercion children, the call, result conversion, borrow release. */

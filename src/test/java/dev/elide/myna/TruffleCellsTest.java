@@ -1845,6 +1845,11 @@ class TruffleCellsTest {
     var levelName = level.getMethod("name", byte.class);
     assertEquals("high", levelName.invoke(null, (byte) -1).toString(), "u8 255 is byte -1");
     assertNull(levelName.invoke(null, (byte) 1));
+    // The overload taking what the lowByte-style cell returns: 255 as an int, no narrowing.
+    var levelGuest = level.getMethod("name", int.class);
+    assertEquals("high", levelGuest.invoke(null, 255).toString());
+    assertNull(levelGuest.invoke(null, -1), "-1 is not a u8 value");
+    assertThrows(NoSuchMethodException.class, () -> status.getMethod("name", long.class));
     var big = Class.forName("fixture.named.NamedTruffle$BigNames", true, loader);
     var bigName = big.getMethod("name", long.class);
     assertEquals(
@@ -1861,15 +1866,18 @@ class TruffleCellsTest {
     Object constants = compileNamed().getMethod("constants").invoke(null);
     var interop = InteropLibrary.getUncached();
     assertTrue(interop.hasMembers(constants));
-    assertEquals(0x80000001, interop.readMember(constants, "MAGIC"));
+    assertEquals(
+        0x80000001L, interop.readMember(constants, "MAGIC"), "u32 is a long, as cells return it");
     assertEquals(-1L, interop.readMember(constants, "LIMIT"));
     Object status = interop.readMember(constants, "Status");
     assertEquals(-1, interop.readMember(status, "null_result"));
     assertEquals(0x10, interop.readMember(status, "syntax_error"));
-    assertEquals((byte) -1, interop.readMember(interop.readMember(constants, "Level"), "high"));
+    assertEquals(
+        255, interop.readMember(interop.readMember(constants, "Level"), "high"), "u8 is an int");
     Object perms = interop.readMember(constants, "Perms");
-    assertEquals(1, interop.readMember(perms, "read"));
-    assertEquals(Integer.MIN_VALUE, interop.readMember(perms, "sticky"), "bit 31 is the u32 mask");
+    assertEquals(1L, interop.readMember(perms, "read"));
+    assertEquals(
+        0x80000000L, interop.readMember(perms, "sticky"), "bit 31 of u32 is a positive long");
     assertThrows(UnknownIdentifierException.class, () -> interop.readMember(status, "missing"));
     var members = interop.getMembers(constants);
     assertEquals(6, interop.getArraySize(members));

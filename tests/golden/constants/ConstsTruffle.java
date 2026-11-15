@@ -41,12 +41,12 @@ public final class ConstsTruffle {
                 new Object[] {
                     -9223372036854775808L,
                     -1L,
-                    826364235,
+                    826364235L,
                     new NativeConstants(
                             new String[] {"low", "high"},
                             new Object[] {
-                                (byte) 0,
-                                (byte) -1
+                                0,
+                                255
                             }),
                     new NativeConstants(
                             new String[] {"null_result", "ok", "internal_error", "syntax_error"},
@@ -59,9 +59,9 @@ public final class ConstsTruffle {
                     new NativeConstants(
                             new String[] {"read", "write", "sticky"},
                             new Object[] {
-                                1,
-                                2,
-                                -2147483648
+                                1L,
+                                2L,
+                                2147483648L
                             }),
                     new NativeConstants(
                             new String[] {"first", "last"},
@@ -73,7 +73,8 @@ public final class ConstsTruffle {
     /**
      * The seam's consts, enums and flag sets as one guest-visible object, built when this
      * class initializes: {@code constants.Status.ok} reads a number that a compiled guest
-     * folds. Flag members are the masks of their bits.
+     * folds. Flag members are the masks of their bits. Each value is what a cell returning
+     * its carrier gives a guest: unsigned values below 64 bits are their number.
      */
     public static NativeConstants constants() {
         return CONSTANTS;
@@ -93,6 +94,14 @@ public final class ConstsTruffle {
             switch (value) {
                 case 0: return LOW;
                 case -1: return HIGH;
+                default: return null;
+            }
+        }
+        /** The same, for the value as a cell returns it: no narrowing needed. */
+        public static TruffleString name(int value) {
+            switch (value) {
+                case 0: return LOW;
+                case 255: return HIGH;
                 default: return null;
             }
         }
