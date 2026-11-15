@@ -105,9 +105,67 @@ Provenance: `explicit_contract`, `compiler_proven`, `abi_derived`, `language_der
 
 Facts describe the entire exported/native operation, including runtime transitions and error paths. A read-only Java body is not evidence that its Native Image entry wrapper is globally read-only. There is no automatic inference of `noalias`, `memory(none)`, `nosync`, or `speculatable`.
 
+## Constants, enums and flag sets
+
+A module may name integer values the native side already defines:
+
+```text
+const ANALYSIS_MAGIC type=u32 value=0x3141514b
+
+enum Status type=i32
+  value null_result = -1
+  value ok = 0
+  value syntax_error = 1
+end
+
+flags FunctionFlags type=u32 c_bitfields=true
+  bit exported = 0
+  bit suspending = 1
+end
+
+struct IrFunction size=72 align=8
+  field flags type=u32 offset=64 flags=FunctionFlags
+end
+import status symbol=frontend_status return=i32 error=no_failure enum=Status
+  param result type=ptr<FrontendResult> nullable=true ownership=borrowed access=read
+end
+```
+
+- `const NAME type=INT value=INTEGER` is one line. `NAME` is `[A-Z][A-Z0-9_]*`. `INT` is one of
+  `i8 u8 i16 u16 i32 u32 i64 u64 isize usize`; `bool`, `char`, floats and `void` are rejected. A value is decimal
+  or `0x` hex (a magnitude) and must fit the carrier.
+- `enum GROUP type=INT` lists `value name = INTEGER` lines and `flags GROUP type=INT` lists
+  `bit name = INDEX` lines, each closed by `end`. Group names follow the struct-name rule and join the declared
+  types; value and bit names are `[a-z][a-z0-9_]*`. A flag set needs an unsigned carrier for `c_bitfields=true`.
+- A struct `field`, an import or export `param`, a return (`enum=`/`flags=` on the header) and a callback
+  parameter or return may carry `enum=GROUP` or `flags=GROUP` (at most one) when its type is the group's carrier.
+  Parameters write the options before any fact.
+- **Enums are open sets.** A value outside the list is legal: the name functions return `NULL`/`None`/`null`,
+  the Java `<Enum>.of(v)` returns `null`, and flag sets expose the unknown bits (`hasUnknown`). Nothing checks a
+  returned value against the list, and a reference adds no optimizer fact (`range` would let LLVM delete a
+  caller's check for a value the list omits). A reference changes types and names only.
+- **Constants are compile-time literals in every backend.** C gets typed `#define`s (`INTn_C`/`UINTn_C`),
+  carrier typedefs, name functions and `<GROUP>_ALL` masks in `seam.h`; Rust gets `pub const`s, a
+  `#[repr(transparent)]` newtype per group with associated consts and `name()`, and flag operators; Java gets
+  `static final` primitives in `<Class>Constants`. There are no globals in `seam.ll`, no Java `enum` in
+  `<Class>Constants`, and nothing to link or load.
+- `c_bitfields=true` on a flag set is opt-in. It adds a `struct <Group>Bits` and turns each annotated field in
+  `seam.h` into an anonymous union of the typedef and the bits, for C code and for Native Image `@CBitfield`
+  accessors. Offsets and sizes are unchanged. It costs an extra shift and a narrower load over a mask test, so
+  leave it off unless a reader wants named bits.
+
+The canonical JSON gains `constants`, `enums` and `flagSets` sections and `enum`/`flags` keys on references.
+Entries are sorted by name and values are decimal strings, so the fingerprint is stable.
+
+The Native Image class gains `<name>Enum` methods for `enum=` returns (the plain import still returns the
+carrier) and typed overloads for `enum=` parameters, a nested `@CEnum` Java enum per enum, and `@CConstant`
+accessors for constants that fold to the literal. `<Class>Constants` carries the literals and, per group,
+`<Enum>.name(v)` or `<Flags>.<bit>(flags)` and `hasUnknown`. See
+[the C context](#native-image-c-context-library-linkage-and-handwritten-callbacks) for what an image needs.
+
 ## Determinism
 
-Declarations and fact keys are sorted, parameter/field order is preserved, and output includes no timestamps or input paths. `seam.abi` is the SHA-256 of canonical `seam.json` including target ABI class, generator/schema version, ABI shape, Java adaptation, and fact provenance. It intentionally changes when contracts change, even if the C signature remains identical. Fingerprints detect drift; they do not prove semantic correctness or authenticate a provider binary.
+Declarations and fact keys are sorted, parameter/field order is preserved, and output includes no timestamps or input paths. `seam.abi` is the SHA-256 of canonical `seam.json` including target ABI class, generator/schema version, ABI shape, Java adaptation, and fact provenance. It intentionally changes when contracts change, even if the C signature remains identical. Constants, enum values and flag bits sort by name, and numbers are canonical decimal strings, so a hex or decimal spelling in the source does not change the fingerprint. Fingerprints detect drift; they do not prove semantic correctness or authenticate a provider binary.
 
 ## Native Image leaf-call policy
 

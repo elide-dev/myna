@@ -466,6 +466,23 @@ javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's 
 blocklist (`-H:+TruffleCheckBlockListMethods`) rejects on partially evaluated paths. Hand-written
 code that runs around a cell on a compiled path should do the same.
 
+## Constants and names
+
+A module that declares constants, enums or flag sets also gets, in `<NativeClass>Truffle`:
+
+- `constants()`, a `NativeConstants` interop object whose members are the constants by name and one object per enum or flag set
+  (`constants.Status.ok`; a flag member is its bit's mask). Values use the guest carriers cells return: `u8` and `u16` are
+  `int`, `u32` is `long`, and `u64` is the raw bits as a `long`. A member read with a constant name
+  folds to the value in compiled code (the lookup cache keys on string equality, with four entries
+  per call site; further sites fall back to a `@TruffleBoundary` lookup).
+- `<Enum>Names.name(value)` per enum, returning a `TruffleString` or `null` for an unlisted value, with
+  overloads for the guest carriers.
+
+`constants` and the `<Enum>Names` classes are reserved, so a cell named `constants` is rejected in such a
+module. Cells stay primitive: results are carriers, never enum objects, and a reference changes no cell
+signature or leaf status. A Truffle class with no cells still compiles; its `function(String)` always
+throws `IllegalArgumentException`.
+
 ## Transitions
 
 The hard constraints come from the compiler, not from Myna:
