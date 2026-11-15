@@ -1100,4 +1100,141 @@ class ConstantsTest {
     assertTrue(java.contains("if (value == -9223372036854775808L) return MIN;"), java);
     assertTrue(java.contains("case 0xffffffff: return BIG;"), java);
   }
+
+  private static final String ENUM_ONLY =
+      "module m target=x86_64-unknown-linux-gnu java_package=fx java_class=Api truffle_cells=true\n"
+          + "enum E type=i8\n value a = 1\nend\n";
+  private static final String FLAGS_ONLY =
+      "module m target=x86_64-unknown-linux-gnu java_package=fx java_class=Api truffle_cells=true\n"
+          + "flags F type=u16\n bit a = 0\n bit b = 15\nend\n";
+  private static final String CONST_ONLY =
+      "module m target=x86_64-unknown-linux-gnu java_package=fx java_class=Api truffle_cells=true\n"
+          + "const NARROW type=u8 value=255\nconst SMALL type=i16 value=-2\n";
+
+  /** Enums alone, or flag sets alone, are declarations enough for every constants surface. */
+  @Test
+  void anyOneKindOfDeclarationBringsTheConstantsSurfaces() {
+    for (String source : List.of(ENUM_ONLY, FLAGS_ONLY, CONST_ONLY)) {
+      var out = Generator.generate(Dsl.parse(source), true);
+      assertTrue(
+          out.get("seam.h").contains("typedef") || out.get("seam.h").contains("#define M_NARROW"),
+          source);
+      assertNotNull(out.get("ApiConstants.java"), source);
+      assertTrue(out.get("ApiTruffle.java").contains("NativeConstants"), source);
+    }
+    // Without any, none of them is emitted.
+    var none =
+        Generator.generate(
+            Dsl.parse("module m target=x86_64-unknown-linux-gnu truffle_cells=true\n"), true);
+    assertFalse(none.get("MynaTruffle.java").contains("NativeConstants"));
+  }
+
+  /** Name lookups switch on the signed Java type of the carrier's width, as raw bits. */
+  @Test
+  void truffleEnumNameLookupsUseRawBitLiteralsForNarrowCarriers() {
+    String source =
+        "module m target=x86_64-unknown-linux-gnu java_package=fx java_class=Api"
+            + " truffle_cells=true\n"
+            + "enum Small type=u8\n"
+            + " value top = 255\n"
+            + " value one = 1\n"
+            + "end\n"
+            + "enum Mid type=u16\n"
+            + " value top = 65535\n"
+            + " value two = 2\n"
+            + "end\n";
+    String java = Generator.generate(Dsl.parse(source), true).get("ApiTruffle.java");
+    assertEquals(2, java.split("case -1: return TOP;", -1).length - 1, java);
+    assertTrue(java.contains("case 1: return ONE;"), java);
+    assertTrue(java.contains("case 2: return TWO;"), java);
+  }
+
+  /** Size-width carriers mask as 64 bits on every backend. */
+  @Test
+  void sizeCarriersAreSixtyFourBitsWide() {
+    for (String type : List.of("usize", "isize")) {
+      String source =
+          "module m target=x86_64-unknown-linux-gnu\nflags F type="
+              + type
+              + "\n bit lo = 0\n bit hi = 63\nend\n";
+      var out = Generator.generate(Dsl.parse(source), true);
+      String signed =
+          type.equals("isize")
+              ? "(-INT64_C(9223372036854775807) - 1)"
+              : "UINT64_C(0x8000000000000000)";
+      assertTrue(out.get("seam.h").contains("#define M_F_HI " + signed), out.get("seam.h"));
+      String rust =
+          type.equals("isize") ? "Self(-9223372036854775808)" : "Self(0x8000000000000000)";
+      assertTrue(
+          out.get("seam.rs").contains("pub const HI: " + rust.replace("Self(", "Self = Self(")),
+          out.get("seam.rs"));
+    }
+  }
+
+  @Test
+  void lowerCamelDropsLeadingSeparators() {
+    assertEquals("analysisMagic", Names.lowerCamel("ANALYSIS_MAGIC"));
+    assertEquals("magic", Names.lowerCamel("_MAGIC"));
+    assertEquals("aB", Names.lowerCamel("A__B"));
+  }
+
+  @Test
+  void constDeclarationsNeedAnIntegerCarrierOutsideBlocks() {
+    var bad =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Dsl.parse(
+                    "module m target=x86_64-unknown-linux-gnu\nconst X type=ptr<i32> value=1\n"));
+    assertTrue(bad.getMessage().contains("carrier must be an integer scalar"), bad.getMessage());
+    var inBlock =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Dsl.parse(
+                    "module m target=x86_64-unknown-linux-gnu\n"
+                        + "import f return=void error=no_failure\n"
+                        + "const X type=u8 value=1\n"
+                        + "end\n"));
+    assertTrue(inBlock.getMessage().contains("const"), inBlock.getMessage());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Dsl.parse("module m target=x86_64-unknown-linux-gnu\nconst\n"));
+  }
+
+  /** A cell named constants clashes with the generated accessor for any declaration kind. */
+  @Test
+  void constantsCellClashesWithEveryKindOfDeclaration() {
+    for (String source : List.of(ENUM_ONLY, FLAGS_ONLY, CONST_ONLY)) {
+      var clash =
+          assertThrows(
+              IllegalArgumentException.class,
+              () ->
+                  Generator.generate(
+                      Dsl.parse(source + "import constants return=i32 error=no_failure\nend\n"),
+                      true),
+              source);
+      assertTrue(clash.getMessage().contains("collides with the generated constants()"));
+    }
+    // A cell opted out of Truffle does not clash.
+    Generator.generate(
+        Dsl.parse(
+            ENUM_ONLY
+                + "import constants return=i32 error=no_failure"
+                + " truffle_cell=false@explicit_contract\n"
+                + "end\n"),
+        true);
+  }
+
+  /** Header pieces split on UTF-8 byte widths of every size and flush before an oversized line. */
+  @Test
+  void headerPiecesCountEveryUtf8Width() {
+    String text = "ab\n" + "\u00e9".repeat(10) + "\n" + "\u20ac".repeat(10) + "\n" + "x";
+    var pieces = dev.elide.myna.backend.NativeImageDirectives.pieces(text, 8);
+    assertEquals(text, String.join("", pieces));
+    for (String piece : pieces)
+      assertTrue(piece.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 8, piece);
+    assertTrue(pieces.size() >= 4, pieces.toString());
+    assertEquals("ab\n", pieces.get(0));
+  }
 }

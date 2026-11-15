@@ -4201,4 +4201,164 @@ class TruffleRuntimeTest {
         IllegalArgumentException.class,
         () -> new NativeConstants(new String[] {"a"}, new Object[] {}));
   }
+
+  /** Which kinds of value a coercion names in its mismatch message depends on its parameter. */
+  @Test
+  void alignedCoercionsNameTheValuesTheyTakeInMismatches() throws Exception {
+    for (long align : new long[] {4, 64}) {
+      var text = lender(true, false, false, true, align);
+      var sized = lender(false, false, true, false, align);
+      var writable = lender(false, true, false, false, align);
+      String why =
+          assertThrows(NativeCellException.class, () -> text.execute(new ForeignBoolean()))
+              .getMessage();
+      assertTrue(why.contains("string, buffer or pointer or null"), why);
+      why =
+          assertThrows(NativeCellException.class, () -> sized.execute(new ForeignBoolean()))
+              .getMessage();
+      assertTrue(why.contains("string, sized buffer"), why);
+      assertFalse(why.contains("or null"), why);
+      // A writable parameter takes no text: a string is a mismatch, not a lent copy.
+      for (Object value : new Object[] {"text", guestStrings().get(0), new ForeignString()}) {
+        String refused =
+            assertThrows(NativeCellException.class, () -> writable.execute(value)).getMessage();
+        assertTrue(refused.contains("buffer or pointer"), refused);
+        assertFalse(refused.contains("string,"), refused);
+      }
+    }
+  }
+
+  /** Memory of no size lends no address to check; heap arrays and empties are learned once. */
+  @Test
+  void alignedCoercionsSeeEmptyMemoryAndRepeatedArrays() throws Exception {
+    for (long align : new long[] {4, 64}) {
+      var reader = lender(false, false, true, false, align);
+      NativeBytes empty = NativeBytes.of(0, 0, false);
+      reader.execute(empty).release();
+      assertNull(reader.segment(empty));
+      assertNull(reader.scoped(empty));
+      Borrow again = reader.execute(empty);
+      assertEquals(0, again.address() % align);
+      assertNotEquals(0, again.address());
+      again.release();
+      for (int i = 0; i < 2; i++) {
+        Borrow array = reader.execute(new HeapBytes(new byte[] {1, 2, 3}, false));
+        assertEquals(3, array.length());
+        array.release();
+      }
+      try (Arena confined = Arena.ofConfined()) {
+        NativeBytes inPlace = NativeBytes.of(confined.allocate(32, 64), false);
+        reader.execute(inPlace).release();
+        assertSame(inPlace, reader.scoped(inPlace));
+      }
+    }
+  }
+
+  /** A held coercion's align fact is a power of two, and empty memory is never misaligned. */
+  @Test
+  void heldCoercionChecksItsAlignFactAndEmptyMemory() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> new HeldBytesCoercion("f", "d", false, 3));
+    var plain = new HeldBytesCoercion("f", "d", false);
+    var wide = new HeldBytesCoercion("f", "d", false, 64);
+    try (Arena confined = Arena.ofConfined()) {
+      MemorySegment mine = confined.allocate(128, 64);
+      NativeBytes aligned = NativeBytes.of(mine.asSlice(64, 8), true);
+      NativeBytes misaligned = NativeBytes.of(mine.asSlice(65, 8), true);
+      NativeBytes empty = NativeBytes.of(0, 0, false);
+      assertSame(aligned.segment(), plain.segment(aligned));
+      assertSame(misaligned.segment(), plain.segment(misaligned));
+      assertSame(aligned.segment(), wide.segment(aligned));
+      assertNull(wide.segment(misaligned));
+      assertNull(wide.segment(empty));
+      assertNull(wide.segment("text"));
+      Borrow lentEmpty = wide.execute(empty);
+      assertNotEquals(0, lentEmpty.address());
+      assertEquals(0, lentEmpty.length());
+      lentEmpty.release();
+      Borrow lentAligned = wide.execute(aligned);
+      assertEquals(aligned.address(), lentAligned.address());
+      lentAligned.release();
+      Borrow lentOdd = wide.execute(misaligned);
+      assertEquals(0, lentOdd.address() % 64);
+      assertNotEquals(misaligned.address(), lentOdd.address());
+      lentOdd.release();
+      Borrow lentPlain = plain.execute(misaligned);
+      assertEquals(misaligned.address(), lentPlain.address());
+      lentPlain.release();
+    }
+  }
+
+  @Test
+  void nativeConstantsRejectNullNamesAndTakeEveryIntegerWidth() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeConstants(new String[] {null}, new Object[] {1}));
+    var inner = new NativeConstants(new String[] {"x"}, new Object[] {1});
+    var constants =
+        new NativeConstants(
+            new String[] {"b", "s", "l", "n"}, new Object[] {(byte) 1, (short) 2, 3L, inner});
+    assertEquals((byte) 1, INTEROP.readMember(constants, "b"));
+    assertEquals((short) 2, INTEROP.readMember(constants, "s"));
+    assertEquals(3L, INTEROP.readMember(constants, "l"));
+    assertSame(inner, INTEROP.readMember(constants, "n"));
+    Object members = INTEROP.getMembers(constants);
+    assertTrue(INTEROP.hasArrayElements(members));
+    assertTrue(INTEROP.isArrayElementReadable(members, 0));
+    assertTrue(INTEROP.isArrayElementReadable(members, 3));
+    assertFalse(INTEROP.isArrayElementReadable(members, 4));
+    assertFalse(INTEROP.isArrayElementReadable(members, -1));
+    assertThrows(InvalidArrayIndexException.class, () -> INTEROP.readArrayElement(members, -1));
+    assertEquals("l", INTEROP.readArrayElement(members, 2));
+  }
+
+  /** When the buffer still takes the struct, a failed create's own error comes back untouched. */
+  @Test
+  void failedCreateStillCopiesTheStructWhenTheBufferTakesIt() {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment guest = arena.allocate(24);
+      NativeBytes buffer = NativeBytes.of(guest, true);
+      NativeStruct out = NativeStruct.allocate(24, buffer, "compile", "result", null);
+      MemorySegment.ofAddress(out.address()).reinterpret(24).set(ValueLayout.JAVA_LONG, 16, 42);
+      NativeCellException failure = NativeCellException.status("compile", 7, null);
+      assertSame(failure, out.copyToAfterFailure(buffer, failure));
+      assertEquals(0, failure.getSuppressed().length);
+      assertEquals(42, guest.get(ValueLayout.JAVA_LONG, 16));
+      out.free();
+    }
+  }
+
+  /** Read-only heap arrays are refused for writable parameters once the kind is known. */
+  @Test
+  void alignedCoercionsRefuseReadOnlyHeapArraysForWritableParameters() throws Exception {
+    for (long align : new long[] {4, 64}) {
+      var writable = lender(false, true, true, false, align);
+      Borrow ok = writable.execute(new HeapBytes(new byte[4], true));
+      ok.release();
+      assertThrows(
+          NativeCellException.class, () -> writable.execute(new HeapBytes(new byte[4], false)));
+    }
+  }
+
+  /** Misaligned native memory is copied for any align fact, and offers no segment. */
+  @Test
+  void alignedCoercionsCopyMisalignedNativeMemoryAfterSeeingAlignedMemory() throws Exception {
+    for (long align : new long[] {8, 64}) {
+      var reader = lender(false, false, true, false, align);
+      try (Arena confined = Arena.ofConfined()) {
+        MemorySegment base = confined.allocate(256, 64);
+        for (int i = 0; i < 256; i++) base.set(ValueLayout.JAVA_BYTE, i, (byte) i);
+        NativeBytes aligned = NativeBytes.of(base.asSlice(64, 16), false);
+        NativeBytes odd = NativeBytes.of(base.asSlice(65, 16), false);
+        reader.execute(aligned).release();
+        assertNotNull(reader.segment(aligned));
+        assertNull(reader.segment(odd));
+        assertNull(reader.scoped(odd));
+        Borrow copy = reader.execute(odd);
+        assertNotEquals(odd.address(), copy.address());
+        assertEquals(0, copy.address() % align);
+        assertEquals(bytesAt(odd.address(), 16), bytesAt(copy.address(), 16));
+        copy.release();
+      }
+    }
+  }
 }
