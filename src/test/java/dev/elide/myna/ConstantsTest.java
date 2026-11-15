@@ -766,4 +766,19 @@ class ConstantsTest {
     assertTrue(
         rust.contains("pub type SetLevelFn = unsafe extern \"C\" fn(Level, *const Session);"));
   }
+
+  @Test
+  void ownershipWrappersQualifyEnumAndFlagReturns() throws Exception {
+    String source = Files.readString(Path.of("examples/constants_ownership.seam"));
+    var output = Generator.generate(Dsl.parse(source), true);
+    String rust = output.get("seam.rs");
+    assertTrue(rust.contains("pub fn check(bytes: &[u8], mode: super::Status) -> super::Status {"));
+    assertTrue(
+        rust.contains("pub fn permissions(bytes: &[u8], wanted: super::Perms) -> super::Perms {"));
+    for (var file : output.entrySet())
+      assertEquals(
+          Files.readString(Path.of("tests/golden/constants-ownership", file.getKey())),
+          file.getValue(),
+          file.getKey());
+  }
 }
