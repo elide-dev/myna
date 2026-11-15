@@ -167,6 +167,11 @@ final class OwnershipValidator {
       require(
           !p.facts().containsKey("dereferenceable") && !p.facts().containsKey("noalias"),
           "call buffer cannot impose extent or noalias preconditions");
+      // Every wrapper lends a present empty buffer an aligned dummy, which bounds what it can be.
+      if (p.facts().containsKey("align"))
+        require(
+            Long.parseLong(p.facts().get("align").value()) <= 4096,
+            "call buffer align must be at most 4096");
       // Other pointers pass through each wrapper under their own declared contracts. Callbacks,
       // by-value records and isolate threads have no pass-through carrier in every backend.
       for (Parameter other : f.parameters())

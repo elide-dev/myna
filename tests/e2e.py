@@ -69,6 +69,37 @@ end
                 generated / "seam-jni.c")
             run("javac", "-d", work / "classes", generated / "MynaFFM.java", generated / "MynaNativeJNI.java")
 
+    def test_generated_align_assertions_compile(self):
+        """An align fact on call borrows reaches every non-cell wrapper as compiled code: the FFM
+        and JNI Java wrappers (Java assert), the JNI C shim (aligned empty dummy) and the Rust
+        wrappers (debug_assert!, aligned static dummy)."""
+        with tempfile.TemporaryDirectory(prefix="myna-align-") as tmp:
+            work = Path(tmp)
+            source = work / "aligned.seam"
+            source.write_text(f"""module aligned target={TARGET} java_class=Api
+borrow copy source length=count lifetime=call
+borrow copy target length=capacity lifetime=call
+import copy symbol=copy_bytes return=u64 error=no_failure nounwind=true@explicit_contract
+  param source type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract align=16@explicit_contract
+  param count type=u64
+  param target type=ptr<u8> nullable=true ownership=borrowed access=read_write nocapture=true@explicit_contract align=2@explicit_contract
+  param capacity type=u64
+end
+""")
+            generated = work / "generated"
+            run(BINARY, "generate", source, "--jni", "--out", generated)
+            texts = {f.name: f.read_text() for f in generated.iterdir() if f.is_file()}
+            self.assertIn('assert length0 == 0 || (arg0.address() & 15L) == 0 : "copy.source requires 16-byte alignment";',
+                          texts["ApiFFM.java"])
+            self.assertIn("debug_assert!(", texts["seam.rs"])
+            self.assertIn("_Alignas(16) uint8_t", texts["seam-jni.c"])
+            self.assertIn("empty.allocate(1, 16)", texts["ApiFFM.java"])
+            home = Path(os.environ["GRAALVM_HOME"])
+            run("cc", "-std=c11", "-Wall", "-Werror", "-fsyntax-only", "-I", home / "include",
+                "-I", home / "include" / ("darwin" if sys.platform == "darwin" else "linux"), generated / "seam-jni.c")
+            run("javac", "-d", work / "classes", generated / "ApiFFM.java", generated / "ApiJNI.java")
+            run("rustc", "--edition=2024", "--crate-type=lib", generated / "seam.rs", "-o", work / "libseam.rlib")
+
     def test_record_allocator_parameter_collision(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

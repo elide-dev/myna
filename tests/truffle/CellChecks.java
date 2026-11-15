@@ -79,6 +79,44 @@ public final class CellChecks {
       }
     }
   }
+  /**
+   * TruffleData's JSON cells, as its json/cells tests call them (#120): a session decode with a
+   * heap, native or guest-string input and an absent or present text_out, a flags word per input
+   * encoding, and decode_adopted's held input with padding. The natives refuse a misaligned
+   * text_out or UTF-16 input, a text_out without WANT_TEXT, and a misaligned result.
+   */
+  static void truffleData(Function<String, NativeFunction> cells) throws Exception {
+    final long WANT_TEXT = 1, UTF16 = 2;
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result = arena.allocate(88, 8);
+      Object session = call(cells, "tdSessionCreate");
+      for (int length : new int[] {2, 6, 254, 258, 4096, 20_000}) {
+        byte[] heap = new byte[length];
+        MemorySegment segment = arena.allocate(length + 8, 16);
+        for (Object data : new Object[] {new HeapBytes(heap, false), new HeapBytes(heap, true), NativeBytes.of(segment.asSlice(0, length), false)}) {
+          for (int extra : new int[] {0, 1, 2, 5}) {
+            // UTF-16 input with a text_out of any size: both are 2-byte aligned wherever lent.
+            Object out = new HeapBytes(new byte[length + extra], true);
+            check(call(cells, "tdSessionDecode", session, data, UTF16 | WANT_TEXT, out, NativeBytes.of(result, true)).equals(0),
+                "tdSessionDecode: " + data + " with text of " + (length + extra));
+          }
+          check(call(cells, "tdSessionDecode", session, data, UTF16, null, NativeBytes.of(result, true)).equals(0), "tdSessionDecode without text_out: " + data);
+          // A present empty text_out without WANT_TEXT is the argument status, as in api.cc.
+          check(call(cells, "tdSessionDecode", session, data, UTF16, new HeapBytes(new byte[0], true), NativeBytes.of(result, true)).equals(3), "empty text_out without WANT_TEXT");
+        }
+        // decode_adopted: held input, capacity = length + padding.
+        byte[] padded = new byte[length + 64];
+        Object owner = call(cells, "tdDecodeAdopted", new HeapBytes(padded, false), (long) length, 1L << 20, NativeBytes.of(result, true));
+        check(owner instanceof NativeResource, "decode_adopted of " + length + " bytes: " + owner);
+        ((NativeResource) owner).close();
+      }
+      // A guest string is lent as the UTF-8 of its text, never as UTF-16 units.
+      check(call(cells, "tdSessionDecode", session, guest("ab"), 0, null, NativeBytes.of(result, true)).equals(0), "guest string, UTF-8");
+      check(call(cells, "tdSessionDecode", session, guest("abc"), UTF16, null, NativeBytes.of(result, true)).equals(3), "a guest string is not UTF-16 input (odd UTF-8 length)");
+      ((NativeResource) session).close();
+    }
+  }
+
   /** Native buffers at odd offsets reach the same decode: the align facts make the cell copy them. */
   static void utf16NativeInputs(Function<String, NativeFunction> cells) throws Exception {
     try (Arena arena = Arena.ofConfined()) {
@@ -557,6 +595,7 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
     utf16Inputs(cells);
+    truffleData(cells);
     utf16NativeInputs(cells);
     alignment(cells, large);
     transfers(cells, large);

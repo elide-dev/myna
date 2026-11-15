@@ -88,7 +88,8 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
    * A Java {@code assert} statement for a buffer at {@code address} of {@code length} bytes, or
    * nothing without an {@code align} fact. A single AND of the address: it costs nothing where
    * assertions are off, which is HotSpot without {@code -ea} and any Native Image built without
-   * assertions. An empty buffer has no address of its own to check.
+   * assertions. An empty buffer is exempt because every wrapper lends it an aligned dummy in its
+   * place, which LLVM's {@code align} attribute requires: it does not depend on the extent.
    */
   String alignmentAssertion(BufferBorrow b, String address, String length, String pad) {
     long align = align(b);

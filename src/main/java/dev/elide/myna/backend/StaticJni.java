@@ -357,7 +357,10 @@ public final class StaticJni {
             .append("    return")
             .append(f.returns() == Scalar.VOID ? "" : " 0")
             .append(";\n  }\n")
-            .append("  uint8_t ")
+            .append(
+                CallBorrows.align(p) > 1
+                    ? "  _Alignas(" + CallBorrows.align(p) + ") uint8_t "
+                    : "  uint8_t ")
             .append(empty)
             .append(" = 0;\n  if (")
             .append(nullable ? name + " != NULL && " : "")

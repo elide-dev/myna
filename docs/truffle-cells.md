@@ -240,7 +240,8 @@ in a `finally` of its own, in reverse acquisition order:
   (object-header dependent base offsets) could not promise in place;
 - a parameter with `align=N@explicit_contract` is never lent at an address not divisible by `N`.
   Copies start on a boundary of at least `N` (an arena or a rounded `malloc` for `N` above 16); a
-  pin that is not divisible by `N` is undone and the array copied; native memory lent in place
+  heap array is never pinned for `N` above 8 (a pinned array's data starts on 8 bytes), so it is
+  copied; native memory lent in place
   at a lesser alignment (a misaligned `asSlice`) is copied, written back for writable parameters,
   and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
   bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
@@ -256,8 +257,7 @@ in a `finally` of its own, in reverse acquisition order:
 A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
-hand-written pin does. A parameter with an `align` fact up to 16 costs the same (its checks fold on the fact); a stricter
-fact copies into an arena of its own, which allocates. Each byte parameter profiles the kinds of value it has been given (native
+hand-written pin does. A parameter with an `align` fact keeps that for native memory, scratch copies and text: the mask folds on the final field and what remains is one AND of the address at run time, which allocates nothing. Two things allocate: a large heap array under `align` above 8, which a Native Image copies instead of pinning, and a fact above 16, which copies into an arena of its own. Each byte parameter profiles the kinds of value it has been given (native
 buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
 those paths. Several borrows on one call cost what each costs alone:
 `tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native

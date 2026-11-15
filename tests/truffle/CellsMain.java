@@ -137,6 +137,27 @@ public final class CellsMain {
     }
     System.out.println(what + " ran in compiled code");
   }
+  /**
+   * The Native Image ownership wrapper of a call borrow with align=16 (#120): a pinned byte[] starts
+   * on 8 bytes, so the array overload copies, and the dummy for an empty buffer is aligned too.
+   * Without assertions in this image, only the address says so.
+   */
+  static void ownershipAlignment() {
+    for (int length : new int[] {0, 1, 3, 17, 255, 256, 4097, 40_000}) {
+      byte[] array = new byte[length];
+      long at = CellApiOwnership.addressOfBorrow(array);
+      if (at % 16 != 0) throw new AssertionError("addressOfBorrow(byte[" + length + "]) at " + Long.toHexString(at));
+      // The callee writes the copy; the array receives it back.
+      CellApiOwnership.fill(array, (byte) 7);
+      for (byte b : array) if (b != 7) throw new AssertionError("fill(byte[" + length + "]) was not written back");
+      // One buffer copied, the other pinned, in one call.
+      byte[] input = new byte[length], output = new byte[length];
+      java.util.Arrays.fill(input, (byte) 2);
+      long sum = CellApiOwnership.transfer(input, output, org.graalvm.word.WordFactory.nullPointer());
+      if (sum != 2L * length) throw new AssertionError("transfer(byte[" + length + "]) = " + sum);
+      for (byte b : output) if (b != 2) throw new AssertionError("transfer did not fill its pinned output");
+    }
+  }
   public static void main(String[] args) throws Exception {
     if (CellApi.BINDING_ABI_VERSION != 2) throw new AssertionError("binding ABI");
     String runtime = Truffle.getRuntime().getName();
@@ -144,6 +165,7 @@ public final class CellsMain {
     if (runtime.contains("Default") || runtime.contains("Interpreted"))
       throw new AssertionError("optimizing Truffle runtime missing from the image: " + runtime);
     CellChecks.run(CellApiTruffle::function);
+    ownershipAlignment();
     try (Context context = Context.newBuilder().allowExperimentalOptions(true)
         .option("engine.CompileImmediately", "true").option("engine.BackgroundCompilation", "false")
         .option("engine.MultiTier", "false").option("engine.CompilationFailureAction", "Throw").build()) {

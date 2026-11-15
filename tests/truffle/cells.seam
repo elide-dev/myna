@@ -42,14 +42,14 @@ import checksum symbol=cells_checksum return=u64 error=no_failure nounwind=true@
 end
 borrow fill bytes length=count lifetime=call
 import fill symbol=cells_fill return=void error=no_failure nounwind=true@explicit_contract
-  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract align=16@explicit_contract
   param count type=u32
   param value type=u8
 end
 borrow transfer input length=count lifetime=call
 borrow transfer output length=capacity lifetime=call
 import transfer symbol=cells_transfer return=u64 error=no_failure nounwind=true@explicit_contract
-  param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param input type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract align=16@explicit_contract
   param count type=u64
   param output type=ptr<u8> nullable=false ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=u32
@@ -192,4 +192,51 @@ import adoptedSum symbol=cells_adopted_sum return=i64 error=no_failure
   param adopted type=ptr<Adopted> nullable=false ownership=borrowed access=read
 end
 import adoptedLast symbol=cells_adopted_last return=i64 error=no_failure
+end
+# TruffleData's JSON cells (elide-dev/truffledata json/native/json.seam with json/cells/ownership.seam;
+# #120): a session decode with call borrows for its input and a nullable text_out, a decode_adopted
+# whose input is a held borrow of extent capacity, and the in-place JsonResult both fill. The natives
+# repeat api.cc's argument checks.
+opaque TdSession
+struct TdResult size=88 align=8
+  field owner type=ptr<void> offset=0
+  field view type=ptr<void> offset=8
+  field copied_input_bytes type=u64 offset=16
+  field padded_input_bytes type=u64 offset=24
+  field index_retained_bytes type=u64 offset=32
+  field index_peak_bytes type=u64 offset=40
+  field index_allocations type=u64 offset=48
+  field parser_input_capacity type=u64 offset=56
+  field control_bytes type=u64 offset=64
+  field text_table type=ptr<void> offset=72
+  field text_bytes type=u64 offset=80
+end
+resource TdSession representation=native threading=confined create=tdSessionCreate destroy=tdSessionRelease
+resource TdResult representation=native threading=confined create=tdDecodeAdopted destroy=tdRelease handle=result success=0
+import tdSessionCreate symbol=td_session_create return=ptr<TdSession> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+end
+import tdSessionRelease symbol=td_session_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param session type=ptr<TdSession> nullable=false ownership=transferred_to_callee access=read_write
+end
+borrow tdSessionDecode data length=length lifetime=call
+borrow tdSessionDecode text_out length=text_capacity lifetime=call
+import tdSessionDecode symbol=td_session_decode return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param session type=ptr<TdSession> nullable=false ownership=borrowed access=read_write
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param flags type=u32
+  param text_out type=ptr<u8> nullable=true ownership=borrowed access=read_write nocapture=true@explicit_contract
+  param text_capacity type=u64
+  param result type=ptr<void> nullable=false ownership=borrowed access=read_write
+end
+borrow tdDecodeAdopted data length=capacity lifetime=resource:TdResult
+import tdDecodeAdopted symbol=td_decode_adopted return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+  param capacity type=u64
+  param max_input_bytes type=u64
+  param result type=ptr<TdResult> nullable=false ownership=borrowed access=read_write
+end
+import tdRelease symbol=td_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param result type=ptr<TdResult> nullable=false ownership=transferred_to_callee access=read_write
 end

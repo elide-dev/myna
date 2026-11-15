@@ -110,6 +110,23 @@ final class RustOwnership {
           .append(n)
           .append(" { self.owner.pointer.as_ptr() }\n    }\n");
     }
+    // A present empty slice is a dangling pointer, which no align fact holds for (LLVM's align
+    // attribute does not depend on the extent): it is lent an aligned static byte instead.
+    var aligns = new TreeSet<Long>();
+    for (CallBorrows call : CallBorrows.of(m))
+      for (BufferBorrow b : call.borrows()) if (call.align(b) > 1) aligns.add(call.align(b));
+    for (long align : aligns)
+      out.append("    #[repr(align(")
+          .append(align)
+          .append("))]\n    struct Empty")
+          .append(align)
+          .append("([u8; 1]);\n    static EMPTY_")
+          .append(align)
+          .append(": Empty")
+          .append(align)
+          .append(" = Empty")
+          .append(align)
+          .append("([0]);\n");
     for (CallBorrows call : CallBorrows.of(m)) {
       Function f = call.function();
       var params = new ArrayList<String>();
@@ -159,14 +176,13 @@ final class RustOwnership {
                 .append("(), 0), |")
                 .append(p.name())
                 .append("| (")
-                .append(p.name())
-                .append(pointer)
+                .append(lent(p.name(), pointer, align, shared))
                 .append(", ")
                 .append(p.name())
                 .append(".len()));\n");
           } else {
             params.add(p.name() + ": " + slice);
-            args.add(p.name() + pointer);
+            args.add(lent(p.name(), pointer, align, shared));
           }
         } else if (length != null)
           args.add(
@@ -203,5 +219,24 @@ final class RustOwnership {
           .append(") }\n    }\n");
     }
     return out.append("}\n").toString();
+  }
+
+  /**
+   * The pointer a call receives for a slice: the slice's own, or, for an empty one under an align
+   * fact, a static byte of that alignment instead of the dangling pointer.
+   */
+  private static String lent(String slice, String pointer, long align, boolean shared) {
+    if (align <= 1) return slice + pointer;
+    String cast = shared ? "*const u8" : "*mut u8";
+    return "if "
+        + slice
+        + ".is_empty() { EMPTY_"
+        + align
+        + ".0.as_ptr() as "
+        + cast
+        + " } else { "
+        + slice
+        + pointer
+        + " }";
   }
 }

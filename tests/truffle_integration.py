@@ -58,7 +58,7 @@ def build_truffle_fixture():
     jars = truffle_jars()
     classpath = [TRUFFLE_JAR, *jars.values()]
     classes = work / "classes"
-    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java",
+    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java", generated / "CellApiOwnership.java",
                    FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"

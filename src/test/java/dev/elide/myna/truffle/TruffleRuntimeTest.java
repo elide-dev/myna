@@ -940,10 +940,6 @@ class TruffleRuntimeTest {
     buffer.release();
   }
 
-  /**
-   * A failed resource create is a guest error that carries the native result: a number for host
-   * code and a {@code status} member for guests, on an otherwise ordinary exception.
-   */
   /** The members of a status error are an array of one: the interop messages say so. */
   @Test
   void statusMembersAnswerAsAnArray() throws Exception {
@@ -953,6 +949,10 @@ class TruffleRuntimeTest {
     assertEquals(1, interop.getArraySize(members));
   }
 
+  /**
+   * A failed resource create is a guest error that carries the native result: a number for host
+   * code and a {@code status} member for guests, on an otherwise ordinary exception.
+   */
   @Test
   void statusErrorsCarryTheNativeResult() throws Exception {
     NativeStatusException failed = NativeCellException.status("compile", -7, null);
