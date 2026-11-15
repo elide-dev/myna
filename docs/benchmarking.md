@@ -22,7 +22,7 @@ the baseline requires a real optimization available under the same contract.
 
 ## Toolchain and execution modes
 
-Pin Elide 1.6.3, the native toolchain 2026.11.6, and GraalVM
+Pin Elide 1.6.3, the native toolchain 2026.11.7, and GraalVM
 25.5.5-elide.28. The latter is an explicit external distribution: native builds
 use it directly even though Elide 1.6.3 bundles the same version. Retain archive checksums,
 compiler versions, edition, target, JVM flags and native link flags with results.
@@ -173,7 +173,7 @@ result schema. Hooks alone provide profiles, not wall-time result statistics. Cr
 ## Sanitizer and coverage boundaries
 
 The sanitizer wrappers and Linux amd64 instrumented-library add-ons come from
-`elide-dev/toolchain` 2026.11.6. ASan and TSan each must detect a deliberate bug in
+`elide-dev/toolchain` 2026.11.7. ASan and TSan each must detect a deliberate bug in
 a separate process before a clean workload can pass. The ASan lane also requires
 undefined-behavior and leak canaries and enforces fail-fast UBSan and LSan without
 leak suppressions. UBSan includes `-fsanitize=integer,implicit-conversion`, with
