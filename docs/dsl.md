@@ -197,7 +197,7 @@ end
   least that many bits, a signed one of more), and each declared value must be non-negative and fit the width.
 - Range names follow the bit-name rule and share a namespace with the set's bits, including each range's
   derived `<name>_shift` and `<name>_mask`. `all` and `none` are reserved, and a range may not be named after a
-  Rust flag method (`contains`, `intersects`, `union`, `when`) or take another member's Java getter or `with`
+  Rust flag or derived trait method (`contains`, `intersects`, `union`, `when`, `clone`, `clone_from`, `eq`, `ne`, `hash`, `hash_slice`, `fmt`, `bitor`, `bitand`, `assert_receiver_is_total_eq`) or take another member's Java getter or `with`
   setter name.
 - Every backend that emits bit constants also emits `<GROUP>_<NAME>_SHIFT` (`LOW`) and `<GROUP>_<NAME>_MASK`
   (the range in place), typed with the carrier. `<GROUP>_ALL` includes every range, so `hasUnknown` means a bit
