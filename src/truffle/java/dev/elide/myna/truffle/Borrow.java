@@ -282,6 +282,10 @@ public final class Borrow {
       interop.readBuffer(buffer, 0, bytes, 0, bytes.length);
     } catch (InvalidBufferOffsetException e) {
       throw new IllegalArgumentException("buffer shrank while being borrowed", e);
+    } catch (IllegalStateException | WrongThreadException e) {
+      // Guest native memory read through its segment: closed, or confined to another thread.
+      if (!(buffer instanceof NativeBytes)) throw e;
+      throw unavailable("copy-in", e);
     }
     return bytes;
   }
@@ -427,13 +431,21 @@ public final class Borrow {
   private static void writeBackNative(byte[] array, NativeBytes bytes) {
     try {
       MemorySegment.copy(array, 0, bytes.segment(), ValueLayout.JAVA_BYTE, 0, array.length);
-    } catch (IllegalStateException e) {
-      throw NativeCellException.of(
-          null, "borrowed native buffer's arena was closed before write-back");
-    } catch (WrongThreadException e) {
-      throw NativeCellException.of(
-          null, "borrowed native buffer is confined to another thread at write-back");
+    } catch (IllegalStateException | WrongThreadException e) {
+      throw unavailable("write-back", e);
     }
+  }
+
+  /**
+   * The failure of a copy from or to guest native memory whose arena is closed ({@link
+   * IllegalStateException}) or confined to another thread ({@link WrongThreadException}).
+   */
+  private static NativeCellException unavailable(String when, RuntimeException e) {
+    return NativeCellException.memory(
+        e instanceof WrongThreadException
+            ? "borrowed native buffer is confined to another thread at " + when
+            : "borrowed native buffer's arena was closed before " + when,
+        e);
   }
 
   /**

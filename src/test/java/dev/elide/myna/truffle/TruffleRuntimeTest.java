@@ -2643,6 +2643,7 @@ class TruffleRuntimeTest {
             var failure = assertThrows(NativeCellException.class, out::release);
             assertTrue(
                 failure.getMessage().contains("closed before write-back"), failure.getMessage());
+            assertInstanceOf(IllegalStateException.class, failure.getCause());
             for (int i = 0; i < 64; i++)
               assertEquals(0, memory.get(ValueLayout.JAVA_BYTE, i), "byte " + i + " written");
             // The borrow is released all the same: a second release does nothing.
@@ -2663,6 +2664,39 @@ class TruffleRuntimeTest {
         }
       }
     });
+  }
+
+  /**
+   * Native memory confined to another thread is copied in through its segment, which refuses this
+   * thread: a {@link NativeCellException} with the runtime's exception as its cause, as at
+   * write-back, never a raw {@link WrongThreadException}.
+   */
+  @Test
+  void copyInOfMisalignedMemoryOfAnotherThreadIsACellError() throws Exception {
+    try (Arena owner = Arena.ofConfined()) {
+      NativeBytes slice = NativeBytes.of(owner.allocate(64, 64).asSlice(3, 8), true);
+      onFreshThread(() -> {
+        for (Coercion coercion :
+            new Coercion[] {
+              new AlignedBytesCoercion("f", "data", false, true, true, false, 8),
+              new OverAlignedBytesCoercion("f", "data", false, true, true, false, 64),
+              new HeldBytesCoercion("f", "data", false, 8)
+            }) {
+          var failure =
+              assertThrows(
+                  NativeCellException.class,
+                  () -> {
+                    if (coercion instanceof AlignedBytesCoercion a) a.execute(slice);
+                    else if (coercion instanceof OverAlignedBytesCoercion o) o.execute(slice);
+                    else ((HeldBytesCoercion) coercion).execute(slice);
+                  });
+          assertTrue(
+              failure.getMessage().contains("confined to another thread at copy-in"),
+              failure.getMessage());
+          assertInstanceOf(WrongThreadException.class, failure.getCause());
+        }
+      });
+    }
   }
 
   /**
