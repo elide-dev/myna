@@ -56,6 +56,7 @@ public final class SeamJson {
                                         + quote(f.type().text())
                                         + ",\"offset\":"
                                         + f.offset()
+                                        + reference(f.group(), "")
                                         + "}")
                                 .toList())
                         + "}")
@@ -77,10 +78,12 @@ public final class SeamJson {
                         + quote(c.returns().text())
                         + ",\"parameters\":"
                         + array(c.parameters().stream().map(SeamJson::parameter).toList())
+                        + reference(c.returnsGroup(), "return")
                         + "}")
                 .toList())
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
+        + groups(m)
         + ownership(m)
         + "\n}\n";
   }
@@ -195,7 +198,81 @@ public final class SeamJson {
         + array(f.abiParameters().stream().map(SeamJson::parameter).toList())
         + ",\"facts\":"
         + facts(f.facts())
+        + reference(f.returnsGroup(), "return")
         + "}";
+  }
+
+  /** Constants, enums and flag sets; each section is omitted when empty. Values are decimal. */
+  private static String groups(Module m) {
+    String result = "";
+    if (!m.constants().isEmpty())
+      result +=
+          ",\n  \"constants\": "
+              + array(
+                  m.constants().stream()
+                      .map(c ->
+                          "{\"name\":"
+                              + quote(c.name())
+                              + ",\"type\":"
+                              + quote(c.type().text())
+                              + ",\"value\":"
+                              + quote(c.value().toString())
+                              + "}")
+                      .toList());
+    if (!m.enums().isEmpty())
+      result +=
+          ",\n  \"enums\": "
+              + array(
+                  m.enums().stream()
+                      .map(e ->
+                          "{\"name\":"
+                              + quote(e.name())
+                              + ",\"type\":"
+                              + quote(e.type().text())
+                              + ",\"values\":"
+                              + array(
+                                  e.values().stream()
+                                      .map(v ->
+                                          "{\"name\":"
+                                              + quote(v.name())
+                                              + ",\"value\":"
+                                              + quote(v.value().toString())
+                                              + "}")
+                                      .toList())
+                              + "}")
+                      .toList());
+    if (!m.flagSets().isEmpty())
+      result +=
+          ",\n  \"flagSets\": "
+              + array(
+                  m.flagSets().stream()
+                      .map(f ->
+                          "{\"name\":"
+                              + quote(f.name())
+                              + ",\"type\":"
+                              + quote(f.type().text())
+                              + (f.cBitfields() ? ",\"cBitfields\":true" : "")
+                              + ",\"bits\":"
+                              + array(
+                                  f.bits().stream()
+                                      .map(b ->
+                                          "{\"name\":"
+                                              + quote(b.name())
+                                              + ",\"bit\":"
+                                              + b.bit()
+                                              + "}")
+                                      .toList())
+                              + "}")
+                      .toList());
+    return result;
+  }
+
+  /** Appended only when present: {@code "enum"}/{@code "flags"}, or {@code "returnEnum"} etc. */
+  private static String reference(GroupRef group, String prefix) {
+    if (group == null) return "";
+    String key = group.kind() == GroupKind.ENUM ? "Enum" : "Flags";
+    key = prefix.isEmpty() ? key.toLowerCase(Locale.ROOT) : prefix + key;
+    return ",\"" + key + "\":" + quote(group.name());
   }
 
   private static String parameter(Parameter p) {
@@ -211,6 +288,7 @@ public final class SeamJson {
         + quote(p.access().name())
         + ",\"facts\":"
         + facts(p.facts())
+        + reference(p.group(), "")
         + "}";
   }
 

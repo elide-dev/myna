@@ -9,6 +9,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Ranges;
 import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
@@ -577,5 +578,111 @@ class ConstantsTest {
     assertEquals(
         "line 3: param requires a function block and a type",
         parseError("flags F type=u8\n param p type=u8\nend\n"));
+  }
+
+  static final String BASE =
+      "module m target=x86_64-unknown-linux-gnu\n"
+          + "enum E type=i32\n value a = 1\n value b = 0x10\nend\n"
+          + "flags F type=u32\n bit x = 0\n bit y = 1\nend\n"
+          + "const C type=u32 value=5\n"
+          + "struct S size=8 align=4\n field f type=u32 offset=0 flags=F\n"
+          + " field e type=i32 offset=4 enum=E\nend\n";
+
+  static String abi(String source) {
+    return SeamJson.fingerprint(Dsl.parse(source));
+  }
+
+  @Test
+  void fingerprintTracksValues() throws Exception {
+    assertEquals(
+        Files.readString(Path.of("tests/golden/seam.abi")).trim(),
+        abi(Files.readString(Path.of("examples/buffer.seam"))));
+    assertEquals(
+        Files.readString(Path.of("tests/golden/truffle/seam.abi")).trim(),
+        abi(Files.readString(Path.of("examples/truffle.seam"))));
+    String base = abi(BASE);
+    assertEquals(base, abi(BASE.replace("value b = 0x10", "value b = 16")));
+    assertEquals(
+        base,
+        abi(BASE.replace(" value a = 1\n value b = 0x10\n", " value b = 0x10\n value a = 1\n")));
+    for (String[] change :
+        new String[][] {
+          {"value=5", "value=6"},
+          {"const C", "const D"},
+          {"value a = 1", "value a = 2"},
+          {"value a", "value z"},
+          {"bit y = 1", "bit y = 2"},
+          {"bit y", "bit z"},
+          {"flags F type=u32", "flags F type=u64"},
+          {"enum E type=i32", "enum E type=i64"},
+          {"flags F type=u32", "flags F type=u32 c_bitfields=true"},
+          {"offset=0 flags=F", "offset=0"},
+          {"offset=4 enum=E", "offset=4"},
+        }) {
+      String changed = BASE.replace(change[0], change[1]);
+      assertNotEquals(BASE, changed, change[0]);
+      assertNotEquals(base, abi(changed), change[0]);
+    }
+  }
+
+  @Test
+  void canonicalShape() throws Exception {
+    String json =
+        SeamJson.canonical(Dsl.parse(Files.readString(Path.of("examples/constants.seam"))));
+    assertTrue(
+        json.contains(
+            "\"constants\":"
+                + " [{\"name\":\"FLOOR\",\"type\":\"i64\",\"value\":\"-9223372036854775808\"},"
+                + "{\"name\":\"LIMIT\",\"type\":\"u64\",\"value\":\"18446744073709551615\"},"
+                + "{\"name\":\"MAGIC\",\"type\":\"u32\",\"value\":\"826364235\"}]"),
+        json);
+    assertTrue(
+        json.contains(
+            "{\"name\":\"Status\",\"type\":\"i32\",\"values\":[{\"name\":\"null_result\",\"value\":\"-1\"},"
+                + "{\"name\":\"ok\",\"value\":\"0\"},{\"name\":\"internal_error\",\"value\":\"3\"},"
+                + "{\"name\":\"syntax_error\",\"value\":\"16\"}]}"),
+        json);
+    assertTrue(
+        json.contains(
+            "\"flagSets\":"
+                + " [{\"name\":\"Perms\",\"type\":\"u32\",\"bits\":[{\"name\":\"read\",\"bit\":0},"
+                + "{\"name\":\"write\",\"bit\":1},{\"name\":\"sticky\",\"bit\":31}]},"
+                + "{\"name\":\"Wide\",\"type\":\"u64\",\"cBitfields\":true,\"bits\":"),
+        json);
+    assertEquals(1, json.split("\"cBitfields\"", -1).length - 1);
+    assertTrue(
+        json.contains("{\"name\":\"perms\",\"type\":\"u32\",\"offset\":4,\"flags\":\"Perms\"}"));
+    assertTrue(
+        json.contains("{\"name\":\"status\",\"type\":\"i32\",\"offset\":0,\"enum\":\"Status\"}"));
+    assertTrue(json.contains(",\"facts\":{},\"returnEnum\":\"Status\""));
+    assertTrue(json.contains(",\"facts\":{},\"enum\":\"Level\"}"));
+    assertTrue(json.indexOf("\"functions\":") < json.indexOf("\"constants\":"));
+    assertTrue(
+        json.indexOf("\"flagSets\":") < json.indexOf("\"resources\":")
+            || !json.contains("\"resources\":"));
+  }
+
+  @Test
+  void flagReferencesUseFlagsKeys() {
+    String json =
+        SeamJson.canonical(
+            Dsl.parse(
+                BASE
+                    + "import g symbol=g return=u32 error=no_failure flags=F\n"
+                    + " param p type=u32 flags=F\n"
+                    + "end\n"
+                    + "callback Cb return=u32 flags=F\n"
+                    + "end\n"));
+    assertEquals(2, json.split("\"returnFlags\":\"F\"", -1).length - 1);
+    assertTrue(json.contains("\"flags\":\"F\"}"));
+    assertFalse(json.contains("returnEnum"));
+  }
+
+  @Test
+  void withoutDeclarationsJsonHasNoNewSections() {
+    String json = SeamJson.canonical(Dsl.parse("module m target=x86_64-unknown-linux-gnu\n"));
+    assertFalse(json.contains("constants"));
+    assertFalse(json.contains("enums"));
+    assertFalse(json.contains("flagSets"));
   }
 }

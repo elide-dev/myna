@@ -781,6 +781,20 @@ class GeneratorTest {
   }
 
   @Test
+  void constantsGoldenOutputs() throws Exception {
+    var actual = generate(Files.readString(Path.of("examples/constants.seam")));
+    assertFalse(actual.isEmpty());
+    try (var files = Files.list(Path.of("tests/golden/constants"))) {
+      assertTrue(files.findAny().isPresent());
+    }
+    for (var output : actual.entrySet())
+      assertEquals(
+          Files.readString(Path.of("tests/golden/constants", output.getKey())),
+          output.getValue(),
+          output.getKey());
+  }
+
+  @Test
   void determinismIgnoresCommentsWhitespaceAndDeclarationOrder() {
     String a =
         MODULE
