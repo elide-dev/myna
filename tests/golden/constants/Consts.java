@@ -117,9 +117,11 @@ public final class Consts {
         @CField("status") int status();
         @CField("status") void status(int value);
         @CFieldAddress("status") CIntPointer addressOfStatus();
+        /** flags Perms: test with ConstsConstants.Perms.read(perms()) */
         @CField("perms") int perms();
         @CField("perms") void perms(int value);
         @CFieldAddress("perms") CIntPointer addressOfPerms();
+        /** flags Wide: test with ConstsConstants.Wide.first(wide()) */
         @CField("wide") long wide();
         @CField("wide") void wide(long value);
         @CFieldAddress("wide") CLongPointer addressOfWide();

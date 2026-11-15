@@ -470,6 +470,24 @@ public final class NativeImage implements Backend {
     for (Field f : st.fields()) {
       String carrier = javaType(m, f.type());
       String field = "(" + SeamJson.quote(f.name()) + ") ";
+      if (f.group() != null && f.group().kind() == GroupKind.FLAGS) {
+        FlagSet set =
+            m.flagSets().stream()
+                .filter(g -> g.name().equals(f.group().name()))
+                .findFirst()
+                .orElseThrow();
+        out.append("        /** flags ")
+            .append(set.name())
+            .append(": test with ")
+            .append(m.constantsClass())
+            .append('.')
+            .append(set.name())
+            .append('.')
+            .append(Names.lowerCamel(set.bits().get(0).name()))
+            .append('(')
+            .append(f.name())
+            .append("()) */\n");
+      }
       out.append("        @CField")
           .append(field)
           .append(carrier)
@@ -624,9 +642,21 @@ public final class NativeImage implements Backend {
     return forms;
   }
 
+  /**
+   * The parameters of the public raw method the typed wrappers call: the lowered helper's logical
+   * parameters when narrow unsigned values are widened behind it, the ABI parameters otherwise.
+   */
+  private static List<Parameter> publicParameters(Function f) {
+    boolean lowered =
+        !Seam.nativeLeaf(f)
+            && f.direction() == Direction.IMPORT
+            && f.parameters().stream().anyMatch(p -> unsignedSmall(p.type()));
+    return lowered ? f.parameters() : f.abiParameters();
+  }
+
   private static void typedWrappers(Module m, Function f, StringBuilder out) {
     var forms = typedWrappers(f);
-    var ps = f.abiParameters();
+    var ps = publicParameters(f);
     String args = String.join(", ", ps.stream().map(Parameter::name).toList());
     if (forms.contains("return")) {
       EnumGroup e = enumGroup(m, f.returnsGroup());

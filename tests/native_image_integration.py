@@ -522,8 +522,11 @@ class ConstantsTests(unittest.TestCase):
         self.assertRegex(text, r"(\$0x10|#0x10|#16)\b", raw)
         self.assertNotIn("CEnumRuntimeData", text)
         self.assertNotIn("CEnumArrayLookup", text)
-        self.assertNotIn("Safepoint", text)
-        self.assertNotIn("ThreadStatus", text)
+        # Every interruptible method ends in a safepoint check, so "Safepoint" proves nothing; a
+        # transition shows as SVM's native-transition prologue/epilogue or its slow paths.
+        for marker in ("TransitionFromNative", "enterSlowPathTransition", "CFunctionPrologue",
+                       "CFunctionEpilogue"):
+            self.assertNotIn(marker, text)
         # A constant enum argument is the immediate, with no load from the enum object.
         passed = body("passConst")
         self.assertRegex("\n".join(passed), r"(\$0xff|#0xff|#255)\b", passed)

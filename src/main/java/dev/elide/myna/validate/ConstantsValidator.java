@@ -264,7 +264,12 @@ final class ConstantsValidator {
   private static void bitfieldAccessors(Module m) {
     for (Struct s : m.structs()) {
       var accessors = new HashMap<String, String>();
-      for (Field f : s.fields()) accessors.put(f.name(), "field " + f.name());
+      for (Field f : s.fields()) {
+        accessors.put(f.name(), "field " + f.name());
+        accessors.put(
+            "addressOf" + Character.toUpperCase(f.name().charAt(0)) + f.name().substring(1),
+            "address accessor of field " + f.name());
+      }
       for (Field f : s.fields()) {
         if (f.group() == null || f.group().kind() != GroupKind.FLAGS) continue;
         for (FlagSet set : m.flagSets()) {

@@ -261,6 +261,22 @@ class ConstantsTest {
             "const STATUS_ENUM: Native Image accessor statusEnum collides with typed enum wrapper"
                 + " of function status"),
         Arguments.of(
+            "enum Status type=i32\n value ok = 0\nend\n"
+                + IMP
+                + " enum=Status\n"
+                + " param x type=i32\n"
+                + "end\n"
+                + "import statusEnum symbol=t return=i32 error=no_failure\n"
+                + " param x type=i32\n"
+                + "end\n",
+            "logical name collides with the typed enum wrapper of status: statusEnum"),
+        Arguments.of(
+            "flags F type=u8 c_bitfields=true\n bit raw = 0\nend\n"
+                + "struct S size=2 align=1\n field addressOf type=u8 offset=0 flags=F\n"
+                + " field raw type=u8 offset=1\nend\n",
+            "struct S: accessor addressOfRaw of field addressOf bit raw collides with address"
+                + " accessor of field raw"),
+        Arguments.of(
             "flags F type=u32\n bit int = 0\nend\n",
             "flags F: bit int: predicate int is a reserved Java name"),
         Arguments.of(
@@ -985,6 +1001,10 @@ class ConstantsTest {
                 + "        setLevel(level.value, session);\n"));
     assertTrue(java.contains("@CBitfield(\"wideBits.last\") boolean wideLast();"));
     assertTrue(java.contains("@CBitfield(\"wideBits.last\") void wideLast(boolean value);"));
+    assertTrue(
+        java.contains(
+            "        /** flags Perms: test with ConstsConstants.Perms.read(perms()) */\n"
+                + "        @CField(\"perms\") int perms();\n"));
     // Not opted in: Perms keeps the plain field only.
     assertFalse(java.contains("permsRead"));
     // Exports and callbacks keep raw carriers.
