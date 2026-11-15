@@ -1687,4 +1687,52 @@ class GeneratorTest {
       assertFalse(escapes.contains(unsafe), unsafe);
     assertEquals(List.of(""), dev.elide.myna.backend.NativeImageDirectives.pieces("", 16));
   }
+
+  /**
+   * {@code enum=}/{@code flags=} references add typed forms beside the raw bindings and never
+   * change a binding's transition: the leaf interfaces, symbols and {@code @CFunction} declarations
+   * are the same with and without them, in the Native Image class, and so is the AOT FFM and
+   * Truffle leaf choice.
+   */
+  @Test
+  void enumReferencesNeverChangeTransition() throws Exception {
+    String typed = Files.readString(Path.of("examples/constants.seam"));
+    String raw = typed.replaceAll(" (enum|flags)=[A-Za-z]+", "");
+    assertNotEquals(typed, raw);
+    var withRefs = generate(typed);
+    var without = generate(raw);
+    for (Function f : Dsl.parse(typed).functions())
+      assertEquals(
+          Seam.nativeLeaf(f),
+          Seam.nativeLeaf(
+              Dsl.parse(raw).functions().stream()
+                  .filter(g -> g.name().equals(f.name()))
+                  .findFirst()
+                  .orElseThrow()),
+          f.name());
+    java.util.function.Function<String, List<String>> transitions =
+        text ->
+            text.lines()
+                .filter(line ->
+                    line.contains("CFunction")
+                        || line.contains("Transition")
+                        || line.contains("_Leaf")
+                        || line.contains("forSymbol")
+                        || line.contains("Uninterruptible"))
+                .toList();
+    assertEquals(
+        transitions.apply(without.get("Consts.java")),
+        transitions.apply(withRefs.get("Consts.java")));
+    assertTrue(withRefs.get("Consts.java").contains("statusEnum("));
+    for (String file : List.of("ConstsFFM.java", "ConstsTruffle.java"))
+      assertEquals(
+          without.get(file).lines().filter(GeneratorTest::bindingLine).toList(),
+          withRefs.get(file).lines().filter(GeneratorTest::bindingLine).toList(),
+          file);
+  }
+
+  /** Lines that describe a binding, not the descriptor's fingerprint or a comment. */
+  private static boolean bindingLine(String line) {
+    return !line.strip().startsWith("//") && !line.contains("ABI_FINGERPRINT");
+  }
 }

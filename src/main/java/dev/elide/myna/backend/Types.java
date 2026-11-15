@@ -5,6 +5,7 @@ package dev.elide.myna.backend;
 import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import java.math.BigInteger;
 
 final class Types {
   private Types() {}
@@ -167,6 +168,26 @@ final class Types {
     return switch (s) {
       case CHAR, I8, I16 -> "signext";
       default -> "zeroext";
+    };
+  }
+
+  /**
+   * A Java compile-time constant of an integer scalar in its same-width signed carrier ({@link
+   * #java(Type)}): hex of the raw bits when {@code hex} (unsigned consts, flag masks) or when a
+   * decimal would not fit the signed carrier, decimal otherwise. {@code byte} and {@code short}
+   * values are a cast of an {@code int} literal, which is still a constant expression usable as a
+   * {@code case} label.
+   */
+  static String javaLiteral(Scalar type, BigInteger value, boolean hex) {
+    int bits = type == Scalar.USIZE || type == Scalar.ISIZE ? 64 : type.bytes * 8;
+    BigInteger raw = value.signum() < 0 ? value.add(BigInteger.ONE.shiftLeft(bits)) : value;
+    // A narrow value is a cast of an int literal, which holds every u8/u16 value in decimal.
+    boolean fits = bits < 32 || value.bitLength() < bits;
+    String text = hex || !fits ? "0x" + raw.toString(16) : value.toString();
+    return switch (java(type)) {
+      case "long" -> text + "L";
+      case "byte", "short" -> "(" + java(type) + ") " + text;
+      default -> text;
     };
   }
 }

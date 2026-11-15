@@ -30,6 +30,10 @@ public final class Generator {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
     }
+    if (JavaConstants.applies(module)) {
+      var constants = new JavaConstants();
+      outputs.put(constants.filename(module), constants.generate(module));
+    }
     if (module.truffleConfig() != null) {
       var cells = new TruffleCells();
       outputs.put(cells.filename(module), cells.generate(module));

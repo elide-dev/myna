@@ -10,6 +10,8 @@ public final class OwnedFFM {
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
+    // returns enum Status: values in OwnedConstants.Status
+    // mode: enum Status: values in OwnedConstants.Status
     public static final FunctionDescriptor check_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT);
     public static MethodHandle check(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("owned_check").orElseThrow(() -> new UnsatisfiedLinkError("owned_check")), check_DESCRIPTOR);
@@ -19,6 +21,8 @@ public final class OwnedFFM {
         if (!critical) return check(lookup);
         throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
+    // returns flags Perms: values in OwnedConstants.Perms
+    // wanted: flags Perms: values in OwnedConstants.Perms
     public static final FunctionDescriptor permissions_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT);
     public static MethodHandle permissions(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("owned_permissions").orElseThrow(() -> new UnsatisfiedLinkError("owned_permissions")), permissions_DESCRIPTOR);

@@ -51,10 +51,10 @@ public final class Validator {
       Set.of(
           ("AlwaysInline Uninterruptible CGlobalData CGlobalDataFactory CFunction CFunctionPointer"
                + " InvokeCFunctionPointer CEntryPoint CEntryPointLiteral CContext CLibrary CConst"
-               + " CStruct CField CFieldAddress CConstant AllowNarrowingCast PointerBase"
-               + " WordFactory IsolateThread VoidPointer WordPointer CCharPointer"
-               + " CCharPointerPointer CShortPointer CIntPointer CLongPointer CFloatPointer"
-               + " CDoublePointer String Throwable")
+               + " CStruct CField CFieldAddress CConstant AllowNarrowingCast PointerBase CEnum"
+               + " CEnumConstant CEnumValue CEnumLookup CBitfield WordFactory IsolateThread"
+               + " VoidPointer WordPointer CCharPointer CCharPointerPointer CShortPointer"
+               + " CIntPointer CLongPointer CFloatPointer CDoublePointer String Throwable")
               .split(" "));
 
   private static final Set<String> KEYWORDS =

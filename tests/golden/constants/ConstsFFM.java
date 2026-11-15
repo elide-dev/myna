@@ -15,10 +15,14 @@ public final class ConstsFFM {
         ValueLayout.JAVA_INT.withName("perms"),
         ValueLayout.JAVA_LONG.withName("wide"),
         ValueLayout.JAVA_LONG.withName("raw"));
+    // enum Status: values in ConstsConstants.Status
     public static final long Record_status_OFFSET = 0L;
+    // flags Perms: values in ConstsConstants.Perms
     public static final long Record_perms_OFFSET = 4L;
+    // flags Wide: values in ConstsConstants.Wide
     public static final long Record_wide_OFFSET = 8L;
     public static final long Record_raw_OFFSET = 16L;
+    // returns enum Status: values in ConstsConstants.Status
     public static final FunctionDescriptor blockingStatus_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle blockingStatus(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_blocking_status").orElseThrow(() -> new UnsatisfiedLinkError("consts_blocking_status")), blockingStatus_DESCRIPTOR);
@@ -28,6 +32,7 @@ public final class ConstsFFM {
         if (!critical) return blockingStatus(lookup);
         throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
+    // level: enum Level: values in ConstsConstants.Level
     public static final FunctionDescriptor setLevel_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle setLevel(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_set_level").orElseThrow(() -> new UnsatisfiedLinkError("consts_set_level")), setLevel_DESCRIPTOR);
@@ -37,6 +42,7 @@ public final class ConstsFFM {
         if (!critical) return setLevel(lookup);
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_set_level").orElseThrow(() -> new UnsatisfiedLinkError("consts_set_level")), setLevel_DESCRIPTOR, Linker.Option.critical(false));
     }
+    // returns enum Status: values in ConstsConstants.Status
     public static final FunctionDescriptor status_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle status(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_status").orElseThrow(() -> new UnsatisfiedLinkError("consts_status")), status_DESCRIPTOR);

@@ -4,6 +4,9 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.sun.source.tree.*;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreeScanner;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
@@ -13,8 +16,17 @@ import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Ranges;
 import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.*;
+import java.util.*;
 import java.util.stream.Stream;
+import javax.lang.model.element.Modifier;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -242,6 +254,18 @@ class ConstantsTest {
 
   static Stream<Arguments> rejects() {
     return Stream.of(
+        Arguments.of(
+            "enum Status type=i32\n value ok = 0\nend\nconst STATUS_ENUM type=i32 value=1\n"
+                + IMP
+                + " enum=Status\nend\n",
+            "const STATUS_ENUM: Native Image accessor statusEnum collides with typed enum wrapper"
+                + " of function status"),
+        Arguments.of(
+            "flags F type=u32\n bit int = 0\nend\n",
+            "flags F: bit int: predicate int is a reserved Java name"),
+        Arguments.of(
+            "flags F type=u32\n bit has_unknown = 0\nend\n",
+            "flags F: bit has_unknown: predicate hasUnknown is a reserved Java name"),
         Arguments.of(
             "enum Status type=f32\n value ok = 0\nend\n",
             "enum Status: carrier must be an integer scalar, found f32"),
@@ -800,5 +824,197 @@ class ConstantsTest {
           Files.readString(Path.of("tests/golden/constants-ownership", file.getKey())),
           file.getValue(),
           file.getKey());
+  }
+
+  /**
+   * {@code <Class>Constants} holds only JLS compile-time constants: every field initializer is a
+   * literal, a negated literal or a cast of one; no imports, no static initializer, no nested enum.
+   */
+  @Test
+  void javaConstantsAreLiterals() throws Exception {
+    for (String example : List.of("examples/constants.seam", "examples/constants_ownership.seam")) {
+      var module = Dsl.parse(Files.readString(Path.of(example)));
+      String source = Generator.generate(module, true).get(module.constantsClass() + ".java");
+      assertNotNull(source, example);
+      var compiler = ToolProvider.getSystemJavaCompiler();
+      var task =
+          (JavacTask)
+              compiler.getTask(
+                  null, null, null, List.of("-proc:none"), null, List.of(source(module, source)));
+      var unit = task.parse().iterator().next();
+      assertEquals(List.of(), unit.getImports(), example);
+      var fields = new ArrayList<String>();
+      new TreeScanner<Void, Void>() {
+        @Override
+        public Void visitClass(ClassTree tree, Void unused) {
+          assertNotEquals(Tree.Kind.ENUM, tree.getKind(), tree.getSimpleName().toString());
+          for (Tree member : tree.getMembers())
+            assertNotEquals(Tree.Kind.BLOCK, member.getKind(), "initializer block in " + example);
+          return super.visitClass(tree, unused);
+        }
+
+        @Override
+        public Void visitVariable(VariableTree tree, Void unused) {
+          if (tree.getInitializer() == null) return null; // a parameter
+          var mods = tree.getModifiers().getFlags();
+          assertTrue(mods.containsAll(Set.of(Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)));
+          assertEquals(Tree.Kind.PRIMITIVE_TYPE, tree.getType().getKind(), tree.toString());
+          ExpressionTree init = tree.getInitializer();
+          if (init instanceof TypeCastTree cast) init = cast.getExpression();
+          if (init instanceof UnaryTree minus && minus.getKind() == Tree.Kind.UNARY_MINUS)
+            init = minus.getExpression();
+          assertInstanceOf(LiteralTree.class, init, tree.toString());
+          fields.add(tree.getName().toString());
+          return null;
+        }
+      }.scan(unit, null);
+      assertFalse(fields.isEmpty(), example);
+    }
+  }
+
+  /** A HotSpot consumer switches over every enum constant and tests every mask predicate. */
+  @Test
+  void javaConstantsCompileAsCaseLabelsAndRunOnHotSpot() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("examples/constants.seam")));
+    String constants = Generator.generate(module, true).get(module.constantsClass() + ".java");
+    String consumer =
+        """
+        package fixture.constants;
+        import static fixture.constants.ConstsConstants.*;
+        public final class Consumer {
+          static String status(int value) {
+            switch (value) {
+              case Status.NULL_RESULT: return "null_result";
+              case Status.OK: return "ok";
+              case Status.SYNTAX_ERROR: return "syntax_error";
+              case Status.INTERNAL_ERROR: return "internal_error";
+              default: return "?" + value;
+            }
+          }
+          static String level(byte value) {
+            return switch (value) { case Level.LOW -> "low"; case Level.HIGH -> "high"; default -> "?"; };
+          }
+          public static String run() {
+            StringBuilder out = new StringBuilder();
+            for (int v : new int[] {-1, 0, 16, 3, 7}) out.append(status(v)).append(Status.name(v)).append(' ');
+            out.append(level((byte) 0xff)).append(Level.name((byte) 0)).append(' ');
+            int perms = Perms.READ | Perms.STICKY;
+            out.append(Perms.read(perms)).append(Perms.write(perms)).append(Perms.sticky(perms))
+                .append(Perms.hasUnknown(perms)).append(Perms.hasUnknown(perms | 0x4)).append(' ');
+            out.append(Wide.last(Wide.LAST)).append(Wide.first(Wide.LAST)).append(Wide.hasUnknown(2L))
+                .append(' ').append(MAGIC).append(' ').append(LIMIT).append(' ').append(FLOOR);
+            return out.toString();
+          }
+        }
+        """;
+    Path out = Files.createTempDirectory("myna-constants");
+    try {
+      var compiler = ToolProvider.getSystemJavaCompiler();
+      var diagnostics = new DiagnosticCollector<JavaFileObject>();
+      boolean ok =
+          compiler
+              .getTask(
+                  null,
+                  null,
+                  diagnostics,
+                  List.of("-proc:none", "-Werror", "-Xlint:all", "-d", out.toString()),
+                  null,
+                  List.of(
+                      source(module, constants),
+                      new SimpleJavaFileObject(
+                          URI.create("string:///fixture/constants/Consumer.java"),
+                          JavaFileObject.Kind.SOURCE) {
+                        @Override
+                        public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                          return consumer;
+                        }
+                      }))
+              .call();
+      assertTrue(ok, diagnostics.getDiagnostics().toString());
+      try (var loader = new URLClassLoader(new URL[] {out.toUri().toURL()}, null)) {
+        Object result =
+            loader.loadClass("fixture.constants.Consumer").getMethod("run").invoke(null);
+        assertEquals(
+            "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
+                + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
+                + " -9223372036854775808",
+            result);
+      }
+    } finally {
+      try (var walk = Files.walk(out)) {
+        walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+      }
+    }
+  }
+
+  private static JavaFileObject source(Module module, String text) {
+    return new SimpleJavaFileObject(
+        URI.create(
+            "string:///"
+                + module.javaPackageName().replace('.', '/')
+                + "/"
+                + module.constantsClass()
+                + ".java"),
+        JavaFileObject.Kind.SOURCE) {
+      @Override
+      public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+        return text;
+      }
+    };
+  }
+
+  /** The Native Image class's typed forms beside the raw bindings, and opt-in @CBitfield. */
+  @Test
+  void nativeImageEnumsAndTypedWrappers() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("examples/constants.seam")));
+    String java = Generator.generate(module, true).get("Consts.java");
+    assertTrue(java.contains("    @CEnum(\"constants_status_t\")\n    public enum Status {\n"));
+    assertTrue(java.contains("@CEnumConstant(\"CONSTANTS_STATUS_NULL_RESULT\") NULL_RESULT(-1),"));
+    assertTrue(java.contains("@CEnumConstant(\"CONSTANTS_LEVEL_HIGH\") HIGH((byte) 255);"));
+    assertTrue(java.contains("@CEnumValue public native int cValue();"));
+    assertTrue(java.contains("@CEnumLookup public static native Status lookup(int value);"));
+    // The plain name stays the raw leaf; the typed form calls it.
+    assertTrue(java.contains("    public static int status(Record view) {"));
+    assertTrue(
+        java.contains(
+            "    public static Status statusEnum(Record view) {\n"
+                + "        return Status.of(status(view));\n"));
+    assertTrue(
+        java.contains(
+            "    public static void setLevel(Level level, Session session) {\n"
+                + "        setLevel(level.value, session);\n"));
+    assertTrue(java.contains("@CBitfield(\"wideBits.last\") boolean wideLast();"));
+    assertTrue(java.contains("@CBitfield(\"wideBits.last\") void wideLast(boolean value);"));
+    // Not opted in: Perms keeps the plain field only.
+    assertFalse(java.contains("permsRead"));
+    // Exports and callbacks keep raw carriers.
+    assertTrue(java.contains("        int invoke(IsolateThread isolate);"));
+    // Not listed for build-time initialization.
+    for (var output : Generator.generate(module, true).entrySet())
+      if (output.getKey().endsWith(".properties"))
+        assertFalse(output.getValue().contains("ConstsConstants"), output.getKey());
+  }
+
+  @Test
+  void javaLiteralsKeepRawBits() throws Exception {
+    String source =
+        HEAD
+            + "const A type=i8 value=-128\nconst B type=u16 value=65535\n"
+            + "const C type=i32 value=-2147483648\nconst D type=u32 value=4294967295\n"
+            + "enum E type=u32\n value big = 4294967295\n value small = 1\nend\n"
+            + "enum L type=i64\n value min = -9223372036854775808\n value one = 1\nend\n";
+    var module = Dsl.parse(source);
+    var out = Generator.generate(module, true);
+    String constants = out.get(module.constantsClass() + ".java");
+    assertTrue(constants.contains("public static final byte A = (byte) -128;"), constants);
+    assertTrue(constants.contains("public static final short B = (short) 0xffff;"), constants);
+    assertTrue(constants.contains("public static final int C = -2147483648;"), constants);
+    assertTrue(constants.contains("public static final int D = 0xffffffff;"), constants);
+    assertTrue(constants.contains("public static final int BIG = 0xffffffff;"), constants);
+    // Java has no switch over long.
+    assertTrue(constants.contains("if (value == MIN) return \"min\";"), constants);
+    String java = out.get(module.nativeClass() + ".java");
+    assertTrue(java.contains("if (value == -9223372036854775808L) return MIN;"), java);
+    assertTrue(java.contains("case 0xffffffff: return BIG;"), java);
   }
 }

@@ -127,6 +127,11 @@ final class ConstantsValidator {
       methods.putIfAbsent(f.name(), "function " + f.name());
       methods.putIfAbsent(f.name() + "Native", "function " + f.name());
       if (Seam.nativeLeaf(f)) methods.putIfAbsent(f.name() + "LeafPointer", "function " + f.name());
+      // The typed form of an import whose return names an enum.
+      if (f.direction() == Direction.IMPORT
+          && f.returnsGroup() != null
+          && f.returnsGroup().kind() == GroupKind.ENUM)
+        methods.putIfAbsent(f.name() + "Enum", "typed enum wrapper of function " + f.name());
     }
     for (Constant c : m.constants()) {
       String accessor = Names.lowerCamel(c.name());
@@ -177,6 +182,11 @@ final class ConstantsValidator {
       String other = byBit.putIfAbsent(b.bit(), b.name());
       require(
           other == null, where + "bits " + other + " and " + b.name() + " both use bit " + b.bit());
+      // Each bit is also a static predicate of <Class>Constants.<Flags>, named lowerCamel(bit).
+      String predicate = Names.lowerCamel(b.name());
+      require(
+          !RESERVED_ACCESSORS.contains(predicate) && !predicate.equals("hasUnknown"),
+          where + "bit " + b.name() + ": predicate " + predicate + " is a reserved Java name");
     }
     require(
         !f.cBitfields() || unsigned(f.type()),

@@ -70,7 +70,8 @@ public final class JavaFfm implements Backend {
           .append(String.join(",\n        ", elements))
           .append(");\n");
       for (Field f : s.fields())
-        out.append("    public static final long ")
+        out.append(f.group() == null ? "" : "    // " + groupComment(m, f.group()))
+            .append("    public static final long ")
             .append(s.name())
             .append('_')
             .append(f.name())
@@ -83,6 +84,11 @@ public final class JavaFfm implements Backend {
       var args = new ArrayList<String>();
       if (f.returns() != Scalar.VOID) args.add(Types.layout(f.returns()));
       prepared.abiParameters().forEach(p -> args.add(paramLayout(p.type())));
+      if (f.returnsGroup() != null)
+        out.append("    // returns ").append(groupComment(m, f.returnsGroup()));
+      for (Parameter p : f.parameters())
+        if (p.group() != null)
+          out.append("    // ").append(p.name()).append(": ").append(groupComment(m, p.group()));
       out.append("    public static final FunctionDescriptor ")
           .append(f.name())
           .append("_DESCRIPTOR = FunctionDescriptor.")
@@ -555,5 +561,16 @@ public final class JavaFfm implements Backend {
     if (t == Scalar.U8) return value + " & 0xff";
     if (t == Scalar.U16) return value + " & 0xffff";
     return value;
+  }
+
+  /** A line naming the enum or flag set whose literals in {@code <Class>Constants} apply. */
+  private static String groupComment(Module m, GroupRef group) {
+    return (group.kind() == GroupKind.ENUM ? "enum " : "flags ")
+        + group.name()
+        + ": values in "
+        + m.constantsClass()
+        + "."
+        + group.name()
+        + "\n";
   }
 }

@@ -487,4 +487,57 @@ class GeneratedContextTests(unittest.TestCase):
         self.assertIn(f"header {self.tmp}", probe)
         self.assertEqual(sorted(p.name for p in self.tmp.glob("myna-seam*")), [])
 
+class ConstantsTests(unittest.TestCase):
+    """examples/constants.seam in a real image: <Class>Constants folds into the consumer and is never
+    reached, the plain import stays the raw leaf, the typed forms sit beside it, a consumer-written
+    @CFunction can use the @CEnum type, and opt-in @CBitfield accessors agree with the masks."""
+
+    def test_constants_and_enums(self):
+        work = ROOT / "build/constants-test"
+        fixture = ROOT / "tests/constants"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", ROOT / "examples/constants.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-Wmissing-prototypes", "-I", generated,
+            "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "Consts.java", generated / "ConstsDirectives.java",
+                       generated / "ConstsConstants.java", fixture / "ConstantsMain.java")
+        app = work / "constants-app"
+        native_image("-O2", "-cp", classes,
+                     "-H:+UnlockExperimentalVMOptions", "-H:+PrintAnalysisCallTree", "-H:-DeleteLocalSymbols",
+                     f"-H:NativeLinkerOption={work / 'native.o'}", "-H:-UnlockExperimentalVMOptions",
+                     "fixture.constants.ConstantsMain", "-o", app)
+        out = run(app).stdout
+        self.assertIn("statusEnum(7) == null, status(7) == 7: true", out)
+        self.assertIn("Native Image constants, @CEnum enums and @CBitfield passed", out)
+        evidence = ROOT / "build/reports/native-image/constants"
+        def body(method):
+            return disassembly(app, "ConstantsMain", method, evidence)
+        # The raw leaf import switched on with javac-inlined labels: immediate compares, and neither
+        # SVM's enum runtime data nor a thread-state transition anywhere in the method.
+        raw = body("rawSwitch")
+        text = "\n".join(raw)
+        self.assertRegex(text, r"(\$0x10|#0x10|#16)\b", raw)
+        self.assertNotIn("CEnumRuntimeData", text)
+        self.assertNotIn("CEnumArrayLookup", text)
+        self.assertNotIn("Safepoint", text)
+        self.assertNotIn("ThreadStatus", text)
+        # A constant enum argument is the immediate, with no load from the enum object.
+        passed = body("passConst")
+        self.assertRegex("\n".join(passed), r"(\$0xff|#0xff|#255)\b", passed)
+        self.assertFalse([i for i in passed if "CEnumRuntimeData" in i or "ordinal" in i], passed)
+        # Evidence for the @CBitfield cost (spec 7a.9): one shift more than the mask test.
+        body("bitfieldLast"), body("maskLast")
+        # The constants have nothing to initialize and nothing reaches them: javac inlined every
+        # field. Only the flag set whose static predicates the fixture calls is a reached class.
+        reports = sorted(work.rglob("used_classes_*.txt"))
+        self.assertEqual(len(reports), 1, reports)
+        used = [line.rsplit(":", 1)[-1] for line in reports[0].read_text().splitlines()]
+        self.assertIn("fixture.constants.ConstantsMain", used)
+        self.assertEqual([c for c in used if c.startswith("fixture.constants.ConstsConstants")],
+                         ["fixture.constants.ConstsConstants$Wide"])
+
+
 if __name__ == "__main__": main(sys.modules[__name__], "native-image-integration")

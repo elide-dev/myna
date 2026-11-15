@@ -103,6 +103,18 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.struct.AllowNarrowingCast");
     if (m.nativeConfig() != null && m.nativeConfig().cLibrary() != null)
       imports.add("org.graalvm.nativeimage.c.function.CLibrary");
+    if (!m.enums().isEmpty()) {
+      imports.add("org.graalvm.nativeimage.c.constant.CEnum");
+      imports.add("org.graalvm.nativeimage.c.constant.CEnumConstant");
+      imports.add("org.graalvm.nativeimage.c.constant.CEnumLookup");
+      imports.add("org.graalvm.nativeimage.c.constant.CEnumValue");
+    }
+    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty()))
+      imports.add("com.oracle.svm.shared.AlwaysInline");
+    if (m.structs().stream()
+        .flatMap(st -> st.fields().stream())
+        .anyMatch(f -> bitfields(m, f) != null))
+      imports.add("org.graalvm.nativeimage.c.struct.CBitfield");
     if (m.callbacks().stream().anyMatch(c -> c.javaType() == null)) {
       imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
       imports.add("org.graalvm.nativeimage.c.function.InvokeCFunctionPointer");
@@ -270,6 +282,7 @@ public final class NativeImage implements Backend {
         .append(Seam.BINDING_ABI_VERSION)
         .append(";\n");
     constants(m, out);
+    for (EnumGroup e : m.enums()) cEnum(m, e, out);
     leafBindings(m, out);
     for (String opaque : m.opaqueTypes())
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
@@ -307,6 +320,7 @@ public final class NativeImage implements Backend {
       out.append("    }\n");
     }
     for (Function f : m.functions().stream().map(d -> ByValue.lower(m, d)).toList()) {
+      typedWrappers(m, f, out);
       if (Seam.nativeLeaf(f)) {
         leafWrapper(m, f, out);
         continue;
@@ -474,7 +488,197 @@ public final class NativeImage implements Backend {
           .append(Character.toUpperCase(f.name().charAt(0)))
           .append(f.name().substring(1))
           .append("();\n");
+      FlagSet bits = bitfields(m, f);
+      if (bits != null) bitfieldAccessors(f, bits, out);
     }
     out.append("    }\n");
+  }
+
+  /** The {@code c_bitfields=true} flag set annotating a field, or null. */
+  private static FlagSet bitfields(Module m, Field f) {
+    if (f.group() == null || f.group().kind() != GroupKind.FLAGS) return null;
+    return m.flagSets().stream()
+        .filter(set -> set.name().equals(f.group().name()) && set.cBitfields())
+        .findFirst()
+        .orElse(null);
+  }
+
+  /**
+   * Opt-in ({@code c_bitfields=true}) {@code @CBitfield} accessors over the {@code <field>Bits}
+   * struct that {@code seam.h} unions with the field. They read and write the same bits as the
+   * masks in {@code <Class>Constants}, at one shift more per read than a mask test (spec 7a.9).
+   */
+  private static void bitfieldAccessors(Field f, FlagSet set, StringBuilder out) {
+    for (FlagBit b : set.bits()) {
+      String camel = Names.lowerCamel(b.name());
+      String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
+      String annotation =
+          "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + b.name()) + ") ";
+      out.append(annotation)
+          .append("boolean ")
+          .append(accessor)
+          .append("();\n")
+          .append(annotation)
+          .append("void ")
+          .append(accessor)
+          .append("(boolean value);\n");
+    }
+  }
+
+  private static EnumGroup enumGroup(Module m, GroupRef ref) {
+    if (ref == null || ref.kind() != GroupKind.ENUM) return null;
+    return m.enums().stream().filter(e -> e.name().equals(ref.name())).findFirst().orElseThrow();
+  }
+
+  /**
+   * An enum as a first-class C-interface type: SVM sources each value from {@code seam.h} through
+   * {@code @CEnumConstant}, and consumer-written {@code @CFunction} signatures may use the type.
+   * Myna's own wrappers use the literal {@code value} field, which folds to an immediate for a
+   * constant enum (SVM's {@code cValue()} is a table load), and {@code of}, a switch with no image
+   * heap table and no virtual call (SVM's {@code lookup} is both). Unlisted values map to null.
+   */
+  private static void cEnum(Module m, EnumGroup e, StringBuilder out) {
+    String carrier = Types.java(e.type());
+    out.append("    /** enum ")
+        .append(e.name())
+        .append(": ")
+        .append(e.type().text())
+        .append(". The raw carrier keeps unlisted values; {@code of} maps them to null. */\n")
+        .append("    @CEnum(")
+        .append(SeamJson.quote(Names.cTypedef(m, e.name())))
+        .append(")\n    public enum ")
+        .append(e.name())
+        .append(" {\n");
+    var values = e.values();
+    for (int i = 0; i < values.size(); i++) {
+      EnumValue v = values.get(i);
+      out.append("        @CEnumConstant(")
+          .append(SeamJson.quote(Names.cMacro(m, e.name(), v.name())))
+          .append(") ")
+          .append(v.name().toUpperCase(Locale.ROOT))
+          .append('(')
+          .append(Types.javaLiteral(e.type(), v.value(), false))
+          .append(i + 1 < values.size() ? "),\n" : ");\n");
+    }
+    out.append(
+            "        /** The literal value: a constant enum folds to an immediate, a variable one"
+                + " is one field load. */\n")
+        .append("        public final ")
+        .append(carrier)
+        .append(" value;\n        ")
+        .append(e.name())
+        .append('(')
+        .append(carrier)
+        .append(" value) {\n            this.value = value;\n        }\n")
+        .append("        /** SVM's conversion, for consumer-written C-interface signatures. */\n")
+        .append("        @CEnumValue public native ")
+        .append(carrier)
+        .append(" cValue();\n")
+        .append("        @CEnumLookup public static native ")
+        .append(e.name())
+        .append(" lookup(")
+        .append(carrier)
+        .append(" value);\n")
+        .append(
+            "        /** A switch: no image-heap table, no virtual call. Null for an unlisted"
+                + " value. */\n")
+        .append("        public static ")
+        .append(e.name())
+        .append(" of(")
+        .append(carrier)
+        .append(" value) {\n");
+    if (carrier.equals("long")) {
+      for (EnumValue v : values)
+        out.append("            if (value == ")
+            .append(Types.javaLiteral(e.type(), v.value(), false))
+            .append(") return ")
+            .append(v.name().toUpperCase(Locale.ROOT))
+            .append(";\n");
+      out.append("            return null;\n");
+    } else {
+      out.append("            switch (value) {\n");
+      for (EnumValue v : values)
+        out.append("                case ")
+            .append(Types.javaLiteral(e.type(), v.value(), false))
+            .append(": return ")
+            .append(v.name().toUpperCase(Locale.ROOT))
+            .append(";\n");
+      out.append("                default: return null;\n            }\n");
+    }
+    out.append("        }\n    }\n");
+  }
+
+  /**
+   * The typed forms an import's {@code enum=} references add beside its raw binding: {@code
+   * <name>Enum} for an enum return, and one overload taking the enum types for enum parameters.
+   * Exports and callbacks keep raw carriers. Neither changes the import's transition: they call the
+   * raw binding.
+   */
+  private static List<String> typedWrappers(Function f) {
+    var forms = new ArrayList<String>();
+    if (f.direction() != Direction.IMPORT) return forms;
+    if (f.returnsGroup() != null && f.returnsGroup().kind() == GroupKind.ENUM) forms.add("return");
+    if (f.parameters().stream()
+        .anyMatch(p -> p.group() != null && p.group().kind() == GroupKind.ENUM))
+      forms.add("parameters");
+    return forms;
+  }
+
+  private static void typedWrappers(Module m, Function f, StringBuilder out) {
+    var forms = typedWrappers(f);
+    var ps = f.abiParameters();
+    String args = String.join(", ", ps.stream().map(Parameter::name).toList());
+    if (forms.contains("return")) {
+      EnumGroup e = enumGroup(m, f.returnsGroup());
+      out.append("    /** {@code ")
+          .append(f.name())
+          .append("} as enum ")
+          .append(e.name())
+          .append(": null for an unlisted value, which {@code ")
+          .append(f.name())
+          .append("} returns as is. */\n")
+          .append("    @AlwaysInline(\"Myna typed enum wrapper\")\n    public static ")
+          .append(e.name())
+          .append(' ')
+          .append(f.name())
+          .append("Enum(")
+          .append(params(m, ps))
+          .append(") {\n        return ")
+          .append(e.name())
+          .append(".of(")
+          .append(f.name())
+          .append('(')
+          .append(args)
+          .append("));\n    }\n");
+    }
+    if (forms.contains("parameters")) {
+      out.append("    @AlwaysInline(\"Myna typed enum overload\")\n    public static ")
+          .append(javaType(m, f.returns()))
+          .append(' ')
+          .append(f.name())
+          .append('(')
+          .append(
+              String.join(
+                  ", ",
+                  ps.stream()
+                      .map(p ->
+                          (enumGroup(m, p.group()) instanceof EnumGroup e
+                                  ? e.name()
+                                  : carrier(m, p))
+                              + " "
+                              + p.name())
+                      .toList()))
+          .append(") {\n        ")
+          .append(f.returns() == Scalar.VOID ? "" : "return ")
+          .append(f.name())
+          .append('(')
+          .append(
+              String.join(
+                  ", ",
+                  ps.stream()
+                      .map(p -> enumGroup(m, p.group()) != null ? p.name() + ".value" : p.name())
+                      .toList()))
+          .append(");\n    }\n");
+    }
   }
 }

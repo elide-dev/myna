@@ -8,9 +8,14 @@ import com.oracle.svm.shared.Uninterruptible;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.constant.CConstant;
+import org.graalvm.nativeimage.c.constant.CEnum;
+import org.graalvm.nativeimage.c.constant.CEnumConstant;
+import org.graalvm.nativeimage.c.constant.CEnumLookup;
+import org.graalvm.nativeimage.c.constant.CEnumValue;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
+import org.graalvm.nativeimage.c.struct.CBitfield;
 import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CFieldAddress;
 import org.graalvm.nativeimage.c.struct.CStruct;
@@ -31,6 +36,54 @@ public final class Consts {
     @CConstant("CONSTANTS_LIMIT") public static native long limit();
     /** const MAGIC: u32, from seam.h. */
     @CConstant("CONSTANTS_MAGIC") public static native int magic();
+    /** enum Level: u8. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_level_t")
+    public enum Level {
+        @CEnumConstant("CONSTANTS_LEVEL_LOW") LOW((byte) 0),
+        @CEnumConstant("CONSTANTS_LEVEL_HIGH") HIGH((byte) 255);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final byte value;
+        Level(byte value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native byte cValue();
+        @CEnumLookup public static native Level lookup(byte value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static Level of(byte value) {
+            switch (value) {
+                case (byte) 0: return LOW;
+                case (byte) 255: return HIGH;
+                default: return null;
+            }
+        }
+    }
+    /** enum Status: i32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_status_t")
+    public enum Status {
+        @CEnumConstant("CONSTANTS_STATUS_NULL_RESULT") NULL_RESULT(-1),
+        @CEnumConstant("CONSTANTS_STATUS_OK") OK(0),
+        @CEnumConstant("CONSTANTS_STATUS_INTERNAL_ERROR") INTERNAL_ERROR(3),
+        @CEnumConstant("CONSTANTS_STATUS_SYNTAX_ERROR") SYNTAX_ERROR(16);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final int value;
+        Status(int value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native int cValue();
+        @CEnumLookup public static native Status lookup(int value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static Status of(int value) {
+            switch (value) {
+                case -1: return NULL_RESULT;
+                case 0: return OK;
+                case 3: return INTERNAL_ERROR;
+                case 16: return SYNTAX_ERROR;
+                default: return null;
+            }
+        }
+    }
     public interface setLevel_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
@@ -70,6 +123,10 @@ public final class Consts {
         @CField("wide") long wide();
         @CField("wide") void wide(long value);
         @CFieldAddress("wide") CLongPointer addressOfWide();
+        @CBitfield("wideBits.first") boolean wideFirst();
+        @CBitfield("wideBits.first") void wideFirst(boolean value);
+        @CBitfield("wideBits.last") boolean wideLast();
+        @CBitfield("wideBits.last") void wideLast(boolean value);
         @CField("raw") long raw();
         @CField("raw") void raw(long value);
         @CFieldAddress("raw") CLongPointer addressOfRaw();
@@ -78,8 +135,17 @@ public final class Consts {
         @InvokeCFunctionPointer
         int invoke(IsolateThread isolate);
     }
+    /** {@code blockingStatus} as enum Status: null for an unlisted value, which {@code blockingStatus} returns as is. */
+    @AlwaysInline("Myna typed enum wrapper")
+    public static Status blockingStatusEnum(Session session) {
+        return Status.of(blockingStatus(session));
+    }
     @CFunction(value = "consts_blocking_status")
     public static native int blockingStatus(Session session);
+    @AlwaysInline("Myna typed enum overload")
+    public static void setLevel(Level level, Session session) {
+        setLevel(level.value, session);
+    }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
     public static setLevel_Leaf setLevelLeafPointer() {
@@ -88,6 +154,11 @@ public final class Consts {
     @AlwaysInline("Myna native leaf call")
     public static void setLevel(byte level, Session session) {
         MynaSymbols.setLevel.get().invoke(level & 0xff, session);
+    }
+    /** {@code status} as enum Status: null for an unlisted value, which {@code status} returns as is. */
+    @AlwaysInline("Myna typed enum wrapper")
+    public static Status statusEnum(Record view) {
+        return Status.of(status(view));
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
