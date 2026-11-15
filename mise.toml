@@ -12,9 +12,9 @@ version = "1.6.3"
 bin_path = "bin"
 
 [tools."github:elide-dev/elide".platforms]
-linux-x64 = { asset_pattern = "elide.linux-amd64.txz" }
-linux-arm64 = { asset_pattern = "elide.linux-arm64.txz" }
-macos-arm64 = { asset_pattern = "elide.macos-arm64.txz" }
+linux-x64 = { url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-amd64.txz" }
+linux-arm64 = { url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-arm64.txz" }
+macos-arm64 = { url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.macos-arm64.txz" }
 
 [tools."github:elide-dev/toolchain"]
 version = "2026.11.6"

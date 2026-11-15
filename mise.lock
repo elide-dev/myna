@@ -54,13 +54,12 @@ backend = "github:elide-dev/elide"
 specifiers = ["1.6.3"]
 
 [tools."github:elide-dev/elide".options]
-asset_pattern = "elide.linux-arm64.txz"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-arm64.txz"
 
 [tools."github:elide-dev/elide"."platforms.linux-arm64"]
-checksum = "sha256:43e53caa91a942afc1cc269a4aae6c0e9db27bd3e3ac0cb0e5a8adfdd0a7f301"
-checksum_source = "mise-versions"
-url = "https://github.com/elide-dev/elide/releases/download/1.6.3%2B20261111/elide.linux-arm64.txz"
-url_api = "https://api.github.com/repos/elide-dev/elide/releases/assets/734806194"
+checksum = "sha256:afa487adab66998bd785786d6df8a65f61d5ce0b33553e387db7e8682721d1b5"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-arm64.txz"
+url_api = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-arm64.txz"
 
 [[tools."github:elide-dev/elide"]]
 version = "1.6.3+20261111"
@@ -68,13 +67,12 @@ backend = "github:elide-dev/elide"
 specifiers = ["1.6.3"]
 
 [tools."github:elide-dev/elide".options]
-asset_pattern = "elide.linux-amd64.txz"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-amd64.txz"
 
 [tools."github:elide-dev/elide"."platforms.linux-x64"]
-checksum = "sha256:f5d82293b74025bda2782aef224e1bb726baaab7db066fe47bfc85421556c04a"
-checksum_source = "mise-versions"
-url = "https://github.com/elide-dev/elide/releases/download/1.6.3%2B20261111/elide.linux-amd64.txz"
-url_api = "https://api.github.com/repos/elide-dev/elide/releases/assets/734805696"
+checksum = "sha256:4d2cd8b921bb00913b8e148cf64fdb6b4455ee1319f50806954ad59242f3becf"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-amd64.txz"
+url_api = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.linux-amd64.txz"
 
 [[tools."github:elide-dev/elide"]]
 version = "1.6.3+20261111"
@@ -82,13 +80,12 @@ backend = "github:elide-dev/elide"
 specifiers = ["1.6.3"]
 
 [tools."github:elide-dev/elide".options]
-asset_pattern = "elide.macos-arm64.txz"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.macos-arm64.txz"
 
 [tools."github:elide-dev/elide"."platforms.macos-arm64"]
-checksum = "sha256:d1aec6c2c813e34529cecaea716f7be3ba6bbf9fc1d1950579c5a1b03349b255"
-checksum_source = "mise-versions"
-url = "https://github.com/elide-dev/elide/releases/download/1.6.3%2B20261111/elide.macos-arm64.txz"
-url_api = "https://api.github.com/repos/elide-dev/elide/releases/assets/734807877"
+checksum = "sha256:83ed7e95bb5bb5a71f8d3636a882e432b9a412867a8744c3b9e87340c83d6497"
+url = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.macos-arm64.txz"
+url_api = "https://github.com/elide-dev/elide/releases/download/v1.6.3/elide.macos-arm64.txz"
 
 [[tools."github:elide-dev/toolchain"]]
 version = "2026.11.6"
