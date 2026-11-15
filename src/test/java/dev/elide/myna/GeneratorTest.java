@@ -1080,11 +1080,47 @@ class GeneratorTest {
     assertFalse(ni.contains("import org.graalvm.word.Pointer;"), ni);
     assertTrue(ni.contains(" long first(Rec rec)"), ni);
     // Accessor names may not redeclare a word method or another field's address accessor.
-    for (String clash : List.of("isNull type=bool", "rawValue type=u8", "addressOfNext type=u8"))
-      assertThrows(
-          IllegalArgumentException.class,
-          () -> generate(source.replace("unsigned8 type=u8", clash)),
-          clash);
+    for (String method : List.of("isNull", "isNonNull", "rawValue", "equal", "notEqual"))
+      assertEquals(
+          "field collides with a Native Image word method: " + method,
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> generate(source.replace("unsigned8 type=u8", method + " type=u8")))
+              .getMessage());
+    assertEquals(
+        "field collides with the Native Image address accessor addressOfNext of next",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> generate(source.replace("unsigned8 type=u8", "addressOfNext type=u8")))
+            .getMessage());
+    // Fields x and X would both generate addressOfX.
+    assertEquals(
+        "field collides with the Native Image address accessor addressOfSigned8 of Signed8",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> generate(source.replace("unsigned8 type=u8", "Signed8 type=u8")))
+            .getMessage());
+    // Declared types are nested in the Native Image class: they may not shadow it or a name it
+    // imports or declares.
+    for (String type : List.of("PointerBase", "CStruct", "CField", "CCharPointer", "String")) {
+      for (String shadow :
+          List.of(
+              source.replace("opaque Handle", "opaque " + type),
+              source
+                  .replace("struct Rec", "struct " + type)
+                  .replace("ptr<Rec>", "ptr<" + type + ">")))
+        assertEquals(
+            "type shadows generated name: " + type,
+            assertThrows(IllegalArgumentException.class, () -> generate(shadow)).getMessage());
+    }
+    String named = source.replace(MODULE.strip(), MODULE.strip() + " java_class=Handle");
+    assertEquals(
+        "type shadows generated name: Handle",
+        assertThrows(IllegalArgumentException.class, () -> generate(named)).getMessage());
+    assertTrue(
+        generate(source.replace("opaque Handle", "opaque Pointer").replace("<Handle>", "<Pointer>"))
+            .get("MynaNative.java")
+            .contains("public interface Pointer extends PointerBase {}"));
   }
 
   @Test

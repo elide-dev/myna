@@ -42,6 +42,20 @@ public final class Validator {
   private static final Set<String> WORD_METHODS =
       Set.of("isNull", "isNonNull", "rawValue", "equal", "notEqual");
 
+  /**
+   * Every declared type is a nested type of the Native Image class, so it must not shadow a name
+   * that class imports or uses unqualified. (Its own name, and the {@code <function>_Leaf} and
+   * {@code <function>_Binding} classes it declares, are checked where they are known.)
+   */
+  static final Set<String> NATIVE_IMAGE_NAMES =
+      Set.of(
+          ("AlwaysInline Uninterruptible CGlobalData CGlobalDataFactory CFunction CFunctionPointer"
+               + " InvokeCFunctionPointer CEntryPoint CEntryPointLiteral CContext CLibrary CConst"
+               + " CStruct CField CFieldAddress PointerBase WordFactory IsolateThread VoidPointer"
+               + " WordPointer CCharPointer CCharPointerPointer CShortPointer CIntPointer"
+               + " CLongPointer CFloatPointer CDoublePointer String Throwable")
+              .split(" "));
+
   private static final Set<String> KEYWORDS =
       Set.of(
           ("abstract assert auto boolean break byte case catch char class const continue default do"
@@ -98,6 +112,7 @@ public final class Validator {
       require(types.add(opaque), "duplicate type: " + opaque);
       require(!isScalarName(opaque), "type shadows scalar: " + opaque);
       require(!RESERVED_TYPE_NAMES.contains(opaque), "type shadows generated name: " + opaque);
+      nativeImageType(module, opaque);
     }
     for (Struct struct : module.structs()) {
       identifier(struct.name());
@@ -106,6 +121,7 @@ public final class Validator {
       require(
           !RESERVED_TYPE_NAMES.contains(struct.name()),
           "type shadows generated name: " + struct.name());
+      nativeImageType(module, struct.name());
     }
     // Enum and flag-set names are types of the generated code, so every generated-name check
     // below sees them; they are not pointees, so references use `pointable`.
@@ -119,6 +135,7 @@ public final class Validator {
       require(types.add(group), "duplicate type: " + group);
       require(!isScalarName(group), "type shadows scalar: " + group);
       require(!RESERVED_TYPE_NAMES.contains(group), "type shadows generated name: " + group);
+      nativeImageType(module, group);
       groups.add(group);
     }
     Set<String> signatures = new HashSet<>();
@@ -147,6 +164,7 @@ public final class Validator {
       require(
           !RESERVED_TYPE_NAMES.contains(signature.name()),
           "type shadows generated name: " + signature.name());
+      nativeImageType(module, signature.name());
       signatures.add(signature.name());
     }
     Set<String> pointable = new HashSet<>(types);
@@ -197,12 +215,18 @@ public final class Validator {
             field.offset() <= struct.size() - size, "field exceeds struct size: " + field.name());
         end = field.offset() + size;
       }
+      // The record's Native Image interface: one getter/setter name per field, one address
+      // accessor per field, all distinct (fields x and X would both make addressOfX).
+      Set<String> members = new HashSet<>(fields);
       for (Field field : struct.fields()) {
         String address =
             "addressOf" + Character.toUpperCase(field.name().charAt(0)) + field.name().substring(1);
         require(
-            !fields.contains(address),
-            "field collides with the Native Image address accessor of " + field.name());
+            members.add(address),
+            "field collides with the Native Image address accessor "
+                + address
+                + " of "
+                + field.name());
       }
       require(
           struct.alignment() == naturalAlignment,
@@ -570,6 +594,12 @@ public final class Validator {
     long value = Long.parseLong(text);
     require(value > 0, "expected positive integer");
     return value;
+  }
+
+  private static void nativeImageType(Module module, String name) {
+    require(
+        !name.equals(module.nativeClass()) && !NATIVE_IMAGE_NAMES.contains(name),
+        "type shadows generated name: " + name);
   }
 
   static void identifier(String name) {
