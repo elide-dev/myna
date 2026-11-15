@@ -109,7 +109,11 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.constant.CEnumLookup");
       imports.add("org.graalvm.nativeimage.c.constant.CEnumValue");
     }
-    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty()))
+    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty())
+        || m.structs().stream()
+            .flatMap(st -> st.fields().stream())
+            .flatMap(f -> f.cases().stream())
+            .anyMatch(c -> c.group().kind() == GroupKind.ENUM))
       imports.add("com.oracle.svm.shared.AlwaysInline");
     if (m.structs().stream()
         .flatMap(st -> st.fields().stream())
@@ -292,7 +296,10 @@ public final class NativeImage implements Backend {
     leafBindings(m, out);
     for (String opaque : m.opaqueTypes())
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
-    for (Struct st : m.structs()) struct(m, st, out);
+    for (Struct st : m.structs()) {
+      struct(m, st, out);
+      caseAccessors(st, out);
+    }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
       out.append("    public interface ")
@@ -493,11 +500,28 @@ public final class NativeImage implements Backend {
             .append('.')
             .append(set.name())
             .append('.')
-            .append(Names.lowerCamel(set.bits().get(0).name()))
+            .append(
+                Names.lowerCamel(
+                    set.bits().isEmpty() ? set.ranges().get(0).name() : set.bits().get(0).name()))
             .append('(')
             .append(f.name())
             .append("()) */\n");
       }
+      if (!f.cases().isEmpty())
+        out.append("        /** ")
+            .append(
+                String.join(
+                    "; ",
+                    f.cases().stream()
+                        .map(c ->
+                            "when "
+                                + c.tagField()
+                                + "="
+                                + c.value()
+                                + (c.group().kind() == GroupKind.ENUM ? " enum=" : " flags=")
+                                + c.group().name())
+                        .toList()))
+            .append(" */\n");
       out.append("        @CField")
           .append(field)
           .append(carrier)
@@ -517,7 +541,7 @@ public final class NativeImage implements Backend {
           .append(f.name().substring(1))
           .append("();\n");
       FlagSet bits = bitfields(m, f);
-      if (bits != null) bitfieldAccessors(f, bits, out);
+      if (bits != null) bitfieldAccessors(m, f, bits, carrier, out);
     }
     if (Views.elementStructs(m).contains(st.name()))
       out.append("        /** Element {@code index} of the C array this record starts. */\n")
@@ -580,6 +604,47 @@ public final class NativeImage implements Backend {
         .append(";\n    }\n");
   }
 
+  /**
+   * One static accessor per tagged field and enum its {@code when} lines name: the field as that
+   * {@code @CEnum}, null for an unlisted value, like an import's {@code <name>Enum}. The tag is not
+   * checked. Flag cases keep the raw {@code @CField}, tested with {@code <Class>Constants}.
+   */
+  private static void caseAccessors(Struct st, StringBuilder out) {
+    var done = new HashSet<String>();
+    for (Field f : st.fields())
+      for (FieldCase c : f.cases()) {
+        if (c.group().kind() != GroupKind.ENUM) continue;
+        String accessor = Names.javaCaseAccessor(f.name(), c.group().name());
+        if (!done.add(accessor)) continue;
+        out.append("    /** {@code ")
+            .append(st.name())
+            .append('.')
+            .append(f.name())
+            .append("} as enum ")
+            .append(c.group().name())
+            .append(", its meaning when ")
+            .append(
+                String.join(
+                    " or ",
+                    f.cases().stream()
+                        .filter(o -> o.group().equals(c.group()))
+                        .map(o -> o.tagField() + " is " + o.value())
+                        .toList()))
+            .append(": null for an unlisted value. */\n")
+            .append("    @AlwaysInline(\"Myna tagged field accessor\")\n    public static ")
+            .append(c.group().name())
+            .append(' ')
+            .append(accessor)
+            .append('(')
+            .append(st.name())
+            .append(" record) {\n        return ")
+            .append(c.group().name())
+            .append(".of(record.")
+            .append(f.name())
+            .append("());\n    }\n");
+      }
+  }
+
   /** The {@code c_bitfields=true} flag set annotating a field, or null. */
   private static FlagSet bitfields(Module m, Field f) {
     if (f.group() == null || f.group().kind() != GroupKind.FLAGS) return null;
@@ -594,21 +659,36 @@ public final class NativeImage implements Backend {
    * struct that {@code seam.h} unions with the field. They read and write the same bits as the
    * masks in {@code <Class>Constants}, at one shift more per read than a mask test (spec 7a.9).
    */
-  private static void bitfieldAccessors(Field f, FlagSet set, StringBuilder out) {
-    for (FlagBit b : set.bits()) {
-      String camel = Names.lowerCamel(b.name());
-      String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
-      String annotation =
-          "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + b.name()) + ") ";
-      out.append(annotation)
-          .append("boolean ")
-          .append(accessor)
-          .append("();\n")
-          .append(annotation)
-          .append("void ")
-          .append(accessor)
-          .append("(boolean value);\n");
+  private static void bitfieldAccessors(
+      Module m, Field f, FlagSet set, String carrier, StringBuilder out) {
+    for (FlagBit b : set.bits()) bitfieldAccessor(f, b.name(), "boolean", out);
+    // A range is typed as <Class>Constants types it: the enum's Java carrier with enum=, else the
+    // flag carrier's. SVM reads the unsigned bit-field zero-extended and narrows it to that type,
+    // so a value with the type's top bit set reads negative, as the literals of an unsigned carrier
+    // are; a write stores the value's low bits.
+    for (FlagRange r : set.ranges()) {
+      String type = carrier;
+      if (r.enumName() != null)
+        type = Types.java(enumGroup(m, new GroupRef(GroupKind.ENUM, r.enumName())).type());
+      bitfieldAccessor(f, r.name(), type, out);
     }
+  }
+
+  private static void bitfieldAccessor(Field f, String member, String type, StringBuilder out) {
+    String camel = Names.lowerCamel(member);
+    String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
+    String annotation = "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + member) + ") ";
+    out.append(annotation)
+        .append(type)
+        .append(' ')
+        .append(accessor)
+        .append("();\n")
+        .append(annotation)
+        .append("void ")
+        .append(accessor)
+        .append('(')
+        .append(type)
+        .append(" value);\n");
   }
 
   private static EnumGroup enumGroup(Module m, GroupRef ref) {

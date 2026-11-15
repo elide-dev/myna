@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 
 public final class RustFfi implements Backend {
@@ -143,6 +145,7 @@ public final class RustFfi implements Backend {
             .append(");\n");
       out.append("};\n");
       views(m, s, out);
+      caseAccessors(s, out);
     }
     out.append("\nunsafe extern \"C\" {\n");
     for (Function declared : m.functions()) {
@@ -253,13 +256,14 @@ public final class RustFfi implements Backend {
       String n = f.name();
       newtype(out, n, carrier, "flags " + n + ": " + carrier + ".");
       constant(out, "NONE", "0");
-      BigInteger all = BigInteger.ZERO;
-      for (FlagBit b : f.bits()) {
-        BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
-        all = all.or(mask);
-        constant(out, b.name(), literal(f.type(), mask, true));
+      for (FlagBit b : f.bits())
+        constant(out, b.name(), literal(f.type(), BigInteger.ONE.shiftLeft(b.bit()), true));
+      for (FlagRange r : f.ranges()) {
+        rawConstant(out, r.name() + "_shift", carrier, Integer.toString(r.low()));
+        rawConstant(out, r.name() + "_mask", carrier, literal(f.type(), r.mask(), true));
       }
-      constant(out, "ALL", literal(f.type(), all, true));
+      constant(out, "ALL", literal(f.type(), f.all(), true));
+      for (FlagRange r : f.ranges()) rangeMethods(m, f, r, out);
       out.append(
               "    #[inline(always)] pub const fn contains(self, other: Self) -> bool { self.0 &"
                   + " other.0 == other.0 }\n"
@@ -284,6 +288,109 @@ public final class RustFfi implements Backend {
             .append(op[2])
             .append(" o.0) } }\n");
     }
+  }
+
+  /**
+   * One accessor per tagged field and group its {@code when} lines name: the field read as that
+   * group's newtype. Nothing checks the tag; the caller reads the case the tag selects.
+   */
+  private static void caseAccessors(Struct s, StringBuilder out) {
+    var accessors = new LinkedHashMap<String, String>();
+    for (Field f : s.fields())
+      for (FieldCase c : f.cases()) {
+        String name = Names.rustCaseAccessor(f.name(), c.group().name());
+        if (accessors.containsKey(name)) continue;
+        var tags =
+            f.cases().stream()
+                .filter(o -> o.group().equals(c.group()))
+                .map(o -> "`" + o.tagField() + " == " + o.value() + "`")
+                .toList();
+        accessors.put(
+            name,
+            "    /// `"
+                + f.name()
+                + "` as "
+                + (c.group().kind() == GroupKind.ENUM ? "enum " : "flags ")
+                + c.group().name()
+                + ", its meaning when "
+                + String.join(" or ", tags)
+                + ".\n    #[inline(always)] pub const fn "
+                + name
+                + "(&self) -> "
+                + c.group().name()
+                + " { "
+                + c.group().name()
+                + "(self."
+                + f.name()
+                + ") }\n");
+      }
+    if (accessors.isEmpty()) return;
+    out.append("impl ").append(s.name()).append(" {\n");
+    accessors.values().forEach(out::append);
+    out.append("}\n");
+  }
+
+  /**
+   * A range's getter and {@code with_} setter. The getter shifts down and masks to the width, so an
+   * arithmetic shift of a signed word leaves no sign bits; the setter masks the value to the range.
+   * An enum getter wraps the bits with the newtype's constructor: every value is valid.
+   */
+  private static void rangeMethods(Module m, FlagSet f, FlagRange r, StringBuilder out) {
+    String carrier = Types.rust(f.type());
+    String upper = r.name().toUpperCase(Locale.ROOT);
+    String raw =
+        r.width() == f.type().bytes * 8
+            ? "self.0"
+            : "(self.0 >> Self::" + upper + "_SHIFT) & " + literal(f.type(), r.valueMask(), true);
+    String valueType = carrier, read = raw, write = "value";
+    if (r.enumName() != null) {
+      EnumGroup e =
+          m.enums().stream().filter(g -> g.name().equals(r.enumName())).findFirst().orElseThrow();
+      String enumCarrier = Types.rust(e.type());
+      valueType = e.name();
+      String bits = raw.equals("self.0") ? raw : "(" + raw + ")";
+      read =
+          e.name() + "(" + (enumCarrier.equals(carrier) ? raw : bits + " as " + enumCarrier) + ")";
+      write = enumCarrier.equals(carrier) ? "value.0" : "(value.0 as " + carrier + ")";
+    }
+    out.append("    /// Range `")
+        .append(r.name())
+        .append("`, bits ")
+        .append(r.low())
+        .append("..=")
+        .append(r.high())
+        .append(r.enumName() == null ? "" : ", as `" + r.enumName() + "`")
+        .append(".\n    #[inline(always)] pub const fn ")
+        .append(r.name())
+        .append("(self) -> ")
+        .append(valueType)
+        .append(" { ")
+        .append(read)
+        .append(" }\n    /// `self` with the range set to the low ")
+        .append(r.width())
+        .append(" bits of `value`.\n    #[inline(always)] pub const fn with_")
+        .append(r.name())
+        .append("(self, value: ")
+        .append(valueType)
+        .append(") -> Self { Self((self.0 & !Self::")
+        .append(upper)
+        .append("_MASK) | ((")
+        .append(write)
+        .append(" << Self::")
+        .append(upper)
+        .append("_SHIFT) & Self::")
+        .append(upper)
+        .append("_MASK)) }\n");
+  }
+
+  private static void rawConstant(StringBuilder out, String name, String type, String value) {
+    out.append("    pub const ")
+        .append(name.toUpperCase(Locale.ROOT))
+        .append(": ")
+        .append(type)
+        .append(" = ")
+        .append(value)
+        .append(";\n");
   }
 
   private static void newtype(StringBuilder out, String name, String carrier, String doc) {

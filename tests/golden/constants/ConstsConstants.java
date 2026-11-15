@@ -11,6 +11,36 @@ public final class ConstsConstants {
     /** const MAGIC: u32 */
     public static final int MAGIC = 0x3141514b;
 
+    /** enum BinaryOp: u64 */
+    public static final class BinaryOp {
+        private BinaryOp() {}
+        public static final long ADD = 0L;
+        public static final long SUB = 1L;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(long value) {
+            if (value == ADD) return "add";
+            if (value == SUB) return "sub";
+            return null;
+        }
+    }
+
+    /** enum Kind: u8 */
+    public static final class Kind {
+        private Kind() {}
+        public static final byte PLAIN = (byte) 0;
+        public static final byte BOXED = (byte) 5;
+        public static final byte LAST = (byte) 255;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(byte value) {
+            return switch (value) {
+                case PLAIN -> "plain";
+                case BOXED -> "boxed";
+                case LAST -> "last";
+                default -> null;
+            };
+        }
+    }
+
     /** enum Level: u8 */
     public static final class Level {
         private Level() {}
@@ -21,6 +51,25 @@ public final class ConstsConstants {
             return switch (value) {
                 case LOW -> "low";
                 case HIGH -> "high";
+                default -> null;
+            };
+        }
+    }
+
+    /** enum NodeTag: u32 */
+    public static final class NodeTag {
+        private NodeTag() {}
+        public static final int READ = 0;
+        public static final int BINARY = 1;
+        public static final int UNARY = 2;
+        public static final int WRITE = 3;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(int value) {
+            return switch (value) {
+                case READ -> "read";
+                case BINARY -> "binary";
+                case UNARY -> "unary";
+                case WRITE -> "write";
                 default -> null;
             };
         }
@@ -45,6 +94,57 @@ public final class ConstsConstants {
         }
     }
 
+    /** enum UnaryOp: u64 */
+    public static final class UnaryOp {
+        private UnaryOp() {}
+        public static final long NEGATE = 0L;
+        public static final long INVERT = 1L;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(long value) {
+            if (value == NEGATE) return "negate";
+            if (value == INVERT) return "invert";
+            return null;
+        }
+    }
+
+    /** flags Octet: u8 */
+    public static final class Octet {
+        private Octet() {}
+        public static final byte CODE_SHIFT = (byte) 0;
+        public static final byte CODE_MASK = (byte) 0xff;
+        public static final byte ALL = (byte) 0xff;
+        /** Range code (bits 0..7) of {@code flags}. */
+        public static byte code(byte flags) { return (byte) ((flags >>> CODE_SHIFT) & 0xff); }
+        /** {@code flags} with range code set to the low 8 bits of {@code value}. */
+        public static byte withCode(byte flags, byte value) { return (byte) ((flags & ~CODE_MASK) | ((value << CODE_SHIFT) & CODE_MASK)); }
+        /** True when {@code flags} has a bit no declared flag names. */
+        public static boolean hasUnknown(byte flags) { return (flags & ~ALL) != 0; }
+    }
+
+    /** flags Packed: u32 */
+    public static final class Packed {
+        private Packed() {}
+        public static final int OPEN = 0x1;
+        public static final int EXTERNAL = 0x4;
+        public static final int KIND_SHIFT = 8;
+        public static final int KIND_MASK = 0xff00;
+        public static final int DEPTH_SHIFT = 16;
+        public static final int DEPTH_MASK = 0xf0000;
+        public static final int ALL = 0xfff05;
+        public static boolean open(int flags) { return (flags & OPEN) != 0; }
+        public static boolean external(int flags) { return (flags & EXTERNAL) != 0; }
+        /** Range kind (bits 8..15, enum Kind) of {@code flags}. */
+        public static byte kind(int flags) { return (byte) ((flags >>> KIND_SHIFT) & 0xff); }
+        /** {@code flags} with range kind set to the low 8 bits of {@code value}. */
+        public static int withKind(int flags, byte value) { return (flags & ~KIND_MASK) | ((value << KIND_SHIFT) & KIND_MASK); }
+        /** Range depth (bits 16..19) of {@code flags}. */
+        public static int depth(int flags) { return (flags >>> DEPTH_SHIFT) & 0xf; }
+        /** {@code flags} with range depth set to the low 4 bits of {@code value}. */
+        public static int withDepth(int flags, int value) { return (flags & ~DEPTH_MASK) | ((value << DEPTH_SHIFT) & DEPTH_MASK); }
+        /** True when {@code flags} has a bit no declared flag names. */
+        public static boolean hasUnknown(int flags) { return (flags & ~ALL) != 0; }
+    }
+
     /** flags Perms: u32 */
     public static final class Perms {
         private Perms() {}
@@ -67,6 +167,18 @@ public final class ConstsConstants {
         public static final long ALL = 0x8000000000000001L;
         public static boolean first(long flags) { return (flags & FIRST) != 0; }
         public static boolean last(long flags) { return (flags & LAST) != 0; }
+        /** True when {@code flags} has a bit no declared flag names. */
+        public static boolean hasUnknown(long flags) { return (flags & ~ALL) != 0; }
+    }
+
+    /** flags WriteFlags: u64 */
+    public static final class WriteFlags {
+        private WriteFlags() {}
+        public static final long VOLATILE_STORE = 0x1L;
+        public static final long RELEASE = 0x2L;
+        public static final long ALL = 0x3L;
+        public static boolean volatileStore(long flags) { return (flags & VOLATILE_STORE) != 0; }
+        public static boolean release(long flags) { return (flags & RELEASE) != 0; }
         /** True when {@code flags} has a bit no declared flag names. */
         public static boolean hasUnknown(long flags) { return (flags & ~ALL) != 0; }
     }

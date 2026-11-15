@@ -23,6 +23,49 @@ flags Wide type=u64 c_bitfields=true
   bit first = 0
   bit last = 63
 end
+enum Kind type=u8
+  value plain = 0
+  value boxed = 5
+  value last = 255
+end
+# A kind code and a raw depth packed beside two one-bit flags.
+flags Packed type=u32 c_bitfields=true
+  bit open = 0
+  bit external = 2
+  range kind = 8..15 enum=Kind
+  range depth = 16..19
+end
+# One range over a whole u8 word, reaching its top bit.
+flags Octet type=u8
+  range code = 0..7
+end
+# A tagged record: the tag says how to read the operand.
+enum NodeTag type=u32
+  value read = 0
+  value binary = 1
+  value unary = 2
+  value write = 3
+end
+enum BinaryOp type=u64
+  value add = 0
+  value sub = 1
+end
+enum UnaryOp type=u64
+  value negate = 0
+  value invert = 1
+end
+flags WriteFlags type=u64
+  bit volatile_store = 0
+  bit release = 1
+end
+struct Node size=16 align=8
+  field tag type=u32 offset=0 enum=NodeTag
+  field packed type=u32 offset=4 flags=Packed
+  field operand type=u64 offset=8
+    when tag=binary enum=BinaryOp
+    when tag=unary enum=UnaryOp
+    when tag=write flags=WriteFlags
+end
 struct Record size=24 align=8
   field status type=i32 offset=0 enum=Status
   field perms type=u32 offset=4 flags=Perms

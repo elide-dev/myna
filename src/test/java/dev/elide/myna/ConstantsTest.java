@@ -81,8 +81,9 @@ class ConstantsTest {
     assertEquals(new BigInteger("18446744073709551615"), m.constants().get(1).value());
     assertEquals(new BigInteger("-9223372036854775808"), m.constants().get(0).value());
     assertEquals(
-        java.util.List.of("Level", "Status"), m.enums().stream().map(EnumGroup::name).toList());
-    var status = m.enums().get(1);
+        java.util.List.of("BinaryOp", "Kind", "Level", "NodeTag", "Status", "UnaryOp"),
+        m.enums().stream().map(EnumGroup::name).toList());
+    var status = m.enums().get(4);
     assertEquals(Scalar.I32, status.type());
     assertEquals(
         java.util.List.of(
@@ -92,16 +93,22 @@ class ConstantsTest {
             new EnumValue("syntax_error", BigInteger.valueOf(16))),
         status.values());
     assertEquals(
-        java.util.List.of("Perms", "Wide"), m.flagSets().stream().map(FlagSet::name).toList());
-    assertFalse(m.flagSets().get(0).cBitfields());
+        java.util.List.of("Octet", "Packed", "Perms", "Wide", "WriteFlags"),
+        m.flagSets().stream().map(FlagSet::name).toList());
+    assertEquals(
+        java.util.List.of(
+            new FlagRange("kind", 8, 15, "Kind"), new FlagRange("depth", 16, 19, null)),
+        m.flagSets().get(1).ranges());
+    assertFalse(m.flagSets().get(2).cBitfields());
     assertEquals(
         java.util.List.of(
             new FlagBit("read", 0), new FlagBit("write", 1), new FlagBit("sticky", 31)),
-        m.flagSets().get(0).bits());
-    assertTrue(m.flagSets().get(1).cBitfields());
-    assertEquals(63, m.flagSets().get(1).bits().get(1).bit());
+        m.flagSets().get(2).bits());
+    assertTrue(m.flagSets().get(2).ranges().isEmpty());
+    assertTrue(m.flagSets().get(3).cBitfields());
+    assertEquals(63, m.flagSets().get(3).bits().get(1).bit());
 
-    var record = m.structs().get(0);
+    var record = m.structs().stream().filter(s -> s.name().equals("Record")).findFirst().get();
     assertEquals(new GroupRef(GroupKind.ENUM, "Status"), record.fields().get(0).group());
     assertEquals(new GroupRef(GroupKind.FLAGS, "Perms"), record.fields().get(1).group());
     assertEquals(new GroupRef(GroupKind.FLAGS, "Wide"), record.fields().get(2).group());
@@ -589,7 +596,213 @@ class ConstantsTest {
             "flags F type=u8 c_bitfields=true\n bit a_b = 0\n bit a__b = 1\nend\n"
                 + "struct S size=1 align=1\n field f type=u8 offset=0 flags=F\nend\n",
             "struct S: accessor fAB of field f bit a__b collides with accessor of field f bit"
-                + " a_b"));
+                + " a_b"),
+        Arguments.of(
+            "flags F type=u32 c_bitfields=true\n range kind = 0..3\nend\n"
+                + "struct S size=8 align=4\n field f type=u32 offset=0 flags=F\n"
+                + " field fKind type=u32 offset=4\nend\n",
+            "struct S: accessor fKind of field f range kind collides with field fKind"),
+        // Bit ranges.
+        Arguments.of(
+            "flags ClassFlags type=u32\n bit open = 0\n bit external = 9\n"
+                + " range kind = 8..15\nend\n",
+            "flags ClassFlags: range kind = 8..15 and bit external = 9 overlap"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..3\n range b = 3..5\nend\n",
+            "flags F: ranges a = 0..3 and b = 3..5 overlap"),
+        Arguments.of(
+            "flags F type=u32\n range a = 8..32\nend\n",
+            "flags F: range a = 8..32 is outside u32 (bits 0..31)"),
+        Arguments.of(
+            "flags F type=u8\n range a = 5..4\nend\n",
+            "flags F: range a = 5..4 is empty (LOW > HIGH)"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: undeclared enum: Kind"),
+        Arguments.of(
+            FL + "flags F type=u32\n range a = 0..3 enum=FunctionFlags\nend\n",
+            "flags F: range a = 0..3: enum=FunctionFlags names a flag set"),
+        Arguments.of(
+            "enum Kind type=u8\n value a = 0\n value b = 16\nend\n"
+                + "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: enum=Kind value b = 16 does not fit 4 bits"),
+        Arguments.of(
+            "enum Kind type=i8\n value a = -1\nend\n"
+                + "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: enum=Kind value a = -1 does not fit 4 bits"),
+        Arguments.of(
+            "enum Kind type=i8\n value a = 0\nend\n"
+                + "flags F type=u32\n range a = 0..7 enum=Kind\nend\n",
+            "flags F: range a = 0..7: enum=Kind has carrier i8, too narrow for 8 bits"),
+        Arguments.of(
+            "flags F type=u32\n bit kind = 0\n range kind = 1..3\nend\n",
+            "flags F: bit kind and range kind both use the name kind"),
+        Arguments.of(
+            "flags F type=u32\n bit kind_mask = 0\n range kind = 1..3\nend\n",
+            "flags F: bit kind_mask and range kind both use the name kind_mask"),
+        Arguments.of(
+            "flags F type=u32\n range a_shift = 0..1\n range a = 2..3\nend\n",
+            "flags F: range a_shift and range a both use the name a_shift"),
+        Arguments.of(
+            "flags F type=u32\n range none = 0..1\nend\n", "flags F: range name is reserved: none"),
+        Arguments.of(
+            "flags F type=u32\n range type = 0..1\nend\n", "invalid or reserved identifier: type"),
+        Arguments.of(
+            "flags F type=u32\n range contains = 0..1\nend\n",
+            "flags F: range contains: Rust method contains collides with the flag method contains"),
+        Arguments.of(
+            "flags F type=u32\n range hash = 0..1\nend\n",
+            "flags F: range hash: Rust method hash collides with the flag method hash"),
+        Arguments.of(
+            "flags F type=u32\n range has_unknown = 0..1\nend\n",
+            "flags F: range has_unknown: Java method hasUnknown collides with hasUnknown"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..1\n range with_a = 2..3\nend\n",
+            "flags F: range with_a: Java method withA collides with range a"),
+        Arguments.of(
+            "flags F type=u32\n range t = 0..1\nend\n",
+            "C name komodo_frontend_f_t is generated by both flags F range t getter and flags F"
+                + " typedef"),
+        // Tagged fields.
+        Arguments.of(
+            TAGGED + " when tag=bogus enum=BinaryOp\nend\n",
+            "field Node.operand when tag=bogus: enum NodeTag declares no value bogus"),
+        Arguments.of(
+            TAGGED + " when tag=binary enum=BinaryOp\n when tag=binary enum=UnaryOp\nend\n",
+            "field Node.operand: two when lines for tag=binary"),
+        Arguments.of(
+            TAGGED + " when kind=binary enum=BinaryOp\nend\n",
+            "field Node.operand when kind=binary: struct Node has no field kind"),
+        Arguments.of(
+            TAGGED + " when raw=binary enum=BinaryOp\nend\n",
+            "field Node.operand when raw=binary: tag field raw carries no enum="),
+        Arguments.of(
+            TAGGED + " when operand=binary enum=BinaryOp\nend\n",
+            "field Node.operand when operand=binary: tag field operand carries no enum="),
+        Arguments.of(
+            TAGGED + " when tag=binary enum=BinaryOp\n when zeta=unary enum=UnaryOp\nend\n",
+            "field Node.operand: when lines name tag fields tag and zeta; use one"),
+        Arguments.of(
+            TAGGED + " when tag=binary enum=Narrow\nend\n",
+            "field Node.operand when tag=binary: enum=Narrow has carrier u8, but the field's type"
+                + " is u64"),
+        Arguments.of(
+            TAGGED + " when tag=binary enum=Missing\nend\n",
+            "field Node.operand when tag=binary: undeclared enum: Missing"),
+        Arguments.of(
+            TAGGED + " when tag=binary flags=BinaryOp\nend\n",
+            "field Node.operand when tag=binary: flags=BinaryOp names an enum; use enum=BinaryOp"),
+        Arguments.of(
+            TAGGED.replace("offset=8\n", "offset=8 enum=BinaryOp\n")
+                + " when tag=binary enum=BinaryOp\nend\n",
+            "field Node.operand: when lines and enum=/flags= are mutually exclusive"),
+        Arguments.of(
+            TAGGED
+                + " when tag=binary enum=BinaryOp\nend\n"
+                + "import operandAsBinaryOp symbol=o return=void error=no_failure\nend\n",
+            "field Node.operand enum BinaryOp: Native Image accessor operandAsBinaryOp collides"
+                + " with function operandAsBinaryOp"),
+        Arguments.of(
+            "enum AsB type=u64\n value x = 0\nend\nenum B type=u64\n value x = 0\nend\n"
+                + "enum T type=u8\n value a = 0\n value b = 1\nend\n"
+                + "struct S size=24 align=8\n field t type=u8 offset=0 enum=T\n"
+                + " field x type=u64 offset=8\n  when t=a enum=AsB\n"
+                + " field x_as type=u64 offset=16\n  when t=b enum=B\nend\n",
+            "struct S: Rust accessor x_as_as_b of field x_as group B collides with the accessor"
+                + " of field x group AsB"));
+  }
+
+  static final String TAGGED =
+      "enum NodeTag type=u32\n value binary = 1\n value unary = 2\nend\n"
+          + "enum BinaryOp type=u64\n value add = 0\nend\n"
+          + "enum UnaryOp type=u64\n value negate = 0\nend\n"
+          + "enum Narrow type=u8\n value a = 0\nend\n"
+          + "struct Node size=24 align=8\n field tag type=u32 offset=0 enum=NodeTag\n"
+          + " field raw type=u32 offset=4\n field operand type=u64 offset=8\n";
+
+  @Test
+  void whenLinesParseAndSerialize() {
+    var m =
+        Dsl.parse(
+            HEAD
+                + TAGGED
+                + "  when tag=binary enum=BinaryOp # a comment\n\n"
+                + " when tag=unary enum=UnaryOp\n"
+                + " field after type=u64 offset=16\nend\n");
+    Validator.validate(m, true);
+    var fields = m.structs().get(0).fields();
+    assertEquals(
+        List.of(
+            new FieldCase("tag", "binary", new GroupRef(GroupKind.ENUM, "BinaryOp")),
+            new FieldCase("tag", "unary", new GroupRef(GroupKind.ENUM, "UnaryOp"))),
+        fields.get(2).cases());
+    assertNull(fields.get(2).group());
+    assertTrue(fields.get(3).cases().isEmpty());
+    String json = SeamJson.canonical(m);
+    assertTrue(
+        json.contains(
+            "{\"name\":\"operand\",\"type\":\"u64\",\"offset\":8,\"cases\":[{\"tag\":\"tag\","
+                + "\"value\":\"binary\",\"enum\":\"BinaryOp\"},{\"tag\":\"tag\",\"value\":\"unary\","
+                + "\"enum\":\"UnaryOp\"}]}"),
+        json);
+    assertEquals(1, json.split("\"cases\"", -1).length - 1);
+    // Cases are canonical: by the tag enum's value, whatever the order of the when lines.
+    var reordered =
+        Dsl.parse(
+            HEAD
+                + TAGGED
+                + " when tag=unary enum=UnaryOp\n"
+                + " when tag=binary enum=BinaryOp\n"
+                + " field after type=u64 offset=16\nend\n");
+    assertEquals(fields.get(2).cases(), reordered.structs().get(0).fields().get(2).cases());
+    assertEquals(SeamJson.fingerprint(m), SeamJson.fingerprint(reordered));
+    assertNotEquals(
+        SeamJson.fingerprint(m),
+        SeamJson.fingerprint(Dsl.parse(HEAD + TAGGED + " field after type=u64 offset=16\nend\n")));
+    assertEquals(
+        "line 3: when must directly follow a field or another when",
+        parseError("struct S size=8 align=8\n when t=a enum=E\nend\n"));
+    assertEquals(
+        "line 2: when must directly follow a field or another when",
+        parseError("when t=a enum=E\n"));
+    assertEquals(
+        "line 4: expected: when FIELD=VALUE enum=ENUM|flags=FLAGS",
+        parseError("struct S size=8 align=8\n field f type=u64 offset=0\n when t enum=E\nend\n"));
+    assertEquals(
+        "line 4: when requires enum= or flags=",
+        parseError("struct S size=8 align=8\n field f type=u64 offset=0\n when t=a\nend\n"));
+    assertEquals(
+        "line 4: enum= and flags= are mutually exclusive",
+        parseError(
+            "struct S size=8 align=8\n"
+                + " field f type=u64 offset=0\n"
+                + " when t=a enum=E flags=F\n"
+                + "end\n"));
+  }
+
+  @Test
+  void rangesParse() {
+    var set =
+        Dsl.parse(HEAD + "flags F type=u32\n range b = 4..7\n range a = 0..3 enum=E\nend\n")
+            .flagSets()
+            .get(0);
+    assertEquals(
+        List.of(new FlagRange("a", 0, 3, "E"), new FlagRange("b", 4, 7, null)), set.ranges());
+    assertEquals(BigInteger.valueOf(0xf0), set.ranges().get(1).mask());
+    assertEquals(BigInteger.valueOf(0xff), set.all());
+    assertEquals(
+        "line 3: expected: range NAME = LOW..HIGH [enum=ENUM]",
+        parseError("flags F type=u8\n range a 0..3\nend\n"));
+    assertEquals(
+        "line 3: invalid bit range: 0-3", parseError("flags F type=u8\n range a = 0-3\nend\n"));
+    assertEquals(
+        "line 3: unknown options: [flags]",
+        parseError("flags F type=u8\n range a = 0..3 flags=G\nend\n"));
+    assertEquals(
+        "line 3: range requires a flags block",
+        parseError("enum E type=i32\n range a = 0..3\nend\n"));
+    // A set of ranges alone is a flag set.
+    Validator.validate(Dsl.parse(HEAD + "flags F type=u8\n range a = 0..7\nend\n"), true);
   }
 
   @ParameterizedTest
@@ -773,11 +986,16 @@ class ConstantsTest {
     assertTrue(
         json.contains(
             "\"flagSets\":"
-                + " [{\"name\":\"Perms\",\"type\":\"u32\",\"bits\":[{\"name\":\"read\",\"bit\":0},"
+                + " [{\"name\":\"Octet\",\"type\":\"u8\",\"bits\":[],\"ranges\":[{\"name\":\"code\",\"low\":0,\"high\":7}]},{\"name\":\"Packed\",\"type\":\"u32\",\"cBitfields\":true,\"bits\":"
+                + "[{\"name\":\"open\",\"bit\":0},{\"name\":\"external\",\"bit\":2}],\"ranges\":"
+                + "[{\"name\":\"kind\",\"low\":8,\"high\":15,\"enum\":\"Kind\"},"
+                + "{\"name\":\"depth\",\"low\":16,\"high\":19}]},"
+                + "{\"name\":\"Perms\",\"type\":\"u32\",\"bits\":[{\"name\":\"read\",\"bit\":0},"
                 + "{\"name\":\"write\",\"bit\":1},{\"name\":\"sticky\",\"bit\":31}]},"
                 + "{\"name\":\"Wide\",\"type\":\"u64\",\"cBitfields\":true,\"bits\":"),
         json);
-    assertEquals(1, json.split("\"cBitfields\"", -1).length - 1);
+    assertEquals(2, json.split("\"cBitfields\"", -1).length - 1);
+    assertEquals(2, json.split("\"ranges\"", -1).length - 1);
     assertTrue(
         json.contains("{\"name\":\"perms\",\"type\":\"u32\",\"offset\":4,\"flags\":\"Perms\"}"));
     assertTrue(
@@ -987,10 +1205,90 @@ class ConstantsTest {
                 .append(Perms.hasUnknown(perms)).append(Perms.hasUnknown(perms | 0x4)).append(' ');
             out.append(Wide.last(Wide.LAST)).append(Wide.first(Wide.LAST)).append(Wide.hasUnknown(2L))
                 .append(' ').append(MAGIC).append(' ').append(LIMIT).append(' ').append(FLOOR);
+            int packed = Packed.withDepth(Packed.withKind(Packed.OPEN, Kind.BOXED), 9);
+            out.append(' ').append(Integer.toHexString(packed)).append(' ').append(Packed.kind(packed))
+                .append(Packed.depth(packed)).append(Kind.name(Packed.kind(packed)));
+            packed = Packed.withKind(Packed.withDepth(packed, 0x13), Kind.LAST);
+            out.append(' ').append(Integer.toHexString(packed)).append(Kind.name(Packed.kind(packed)))
+                .append(Packed.hasUnknown(packed)).append(Packed.hasUnknown(packed | 0x2))
+                .append(Packed.hasUnknown(packed | 0x100000));
+            byte octet = Octet.withCode((byte) 0x12, (byte) 0xa5);
+            out.append(' ').append(octet).append(Octet.code(octet)).append(Octet.hasUnknown(octet));
             return out.toString();
           }
         }
         """;
+    assertEquals(
+        "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
+            + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
+            + " -9223372036854775808 90501 59boxed 3ff01lastfalsetruetrue -91-91false",
+        runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * Range edges the fixture does not reach: a {@code u64} range above bit 32 written from a
+   * narrower enum (the setter widens before it shifts), a signed carrier's range over its sign bit
+   * (a negative mask in every backend), and a {@code u8} range reaching bit 7 beside a bit.
+   */
+  @Test
+  void rangeEdgesRunOnHotSpot() throws Exception {
+    var module =
+        Dsl.parse(
+            "module edge target=x86_64-unknown-linux-gnu java_package=fixture.edge"
+                + " java_class=Edge truffle_cells=true\n"
+                + "enum Small type=u8\n value a = 0\n value b = 200\nend\n"
+                + "flags Big type=u64\n range hi = 40..47 enum=Small\n range mid = 4..9\nend\n"
+                + "flags Neg type=i32\n bit low = 0\n range top = 24..31 enum=Small\nend\n"
+                + "flags Nibble type=u8\n bit low = 0\n range high = 4..7\nend\n");
+    Validator.validate(module, true);
+    var out = Generator.generate(module, true);
+    String constants = out.get("EdgeConstants.java");
+    assertTrue(
+        constants.contains(
+            "public static long withHi(long flags, byte value) { return (flags & ~HI_MASK) |"
+                + " (((long) value << HI_SHIFT) & HI_MASK); }"),
+        constants);
+    assertTrue(constants.contains("public static final int TOP_MASK = 0xff000000;"), constants);
+    assertTrue(
+        out.get("seam.h").contains("#define EDGE_NEG_TOP_MASK (INT32_C(-16777216))"),
+        out.get("seam.h"));
+    assertTrue(out.get("seam.rs").contains("pub const TOP_MASK: i32 = -16777216;"));
+    assertTrue(
+        out.get("EdgeTruffle.java").contains("new String[] {\"low\", \"top_shift\", \"top_mask\"}"),
+        out.get("EdgeTruffle.java"));
+    assertTrue(out.get("EdgeTruffle.java").contains("-16777216"), out.get("EdgeTruffle.java"));
+    String consumer =
+        """
+        package fixture.edge;
+        import static fixture.edge.EdgeConstants.*;
+        public final class Consumer {
+          public static String run() {
+            StringBuilder out = new StringBuilder();
+            long big = Big.withMid(Big.withHi(-1L, Small.A), 0x3c5);
+            out.append(Long.toHexString(big)).append(' ');
+            big = Big.withHi(0, Small.B);
+            out.append(Long.toHexString(big)).append(Big.hi(big) == Small.B).append(Big.mid(big)).append(' ');
+            int neg = Neg.withTop(Neg.LOW, Small.B);
+            out.append(neg).append(Neg.top(neg) == Small.B).append(Neg.hasUnknown(neg))
+                .append(Neg.hasUnknown(neg | 2)).append(Neg.top(Neg.withTop(neg, Small.A))).append(' ');
+            byte nibble = Nibble.withHigh((byte) 1, (byte) 0xff);
+            out.append(nibble).append(Nibble.high(nibble)).append(Nibble.hasUnknown(nibble))
+                .append(Nibble.hasUnknown((byte) (nibble | 2)));
+            return out.toString();
+          }
+        }
+        """;
+    assertEquals(
+        "ffff00fffffffc5f c80000000000true0 -939524095truefalsetrue0 -1515falsetrue",
+        runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * Compiles {@code <Class>Constants} and a {@code Consumer} in the module's package with every
+   * warning fatal, and returns what {@code Consumer.run()} returns on HotSpot.
+   */
+  static Object runOnHotSpot(Module module, String constants, String consumer) throws Exception {
+    String pkg = module.javaPackageName();
     Path out = Files.createTempDirectory("myna-constants");
     try {
       var compiler = ToolProvider.getSystemJavaCompiler();
@@ -1006,7 +1304,7 @@ class ConstantsTest {
                   List.of(
                       source(module, constants),
                       new SimpleJavaFileObject(
-                          URI.create("string:///fixture/constants/Consumer.java"),
+                          URI.create("string:///" + pkg.replace('.', '/') + "/Consumer.java"),
                           JavaFileObject.Kind.SOURCE) {
                         @Override
                         public CharSequence getCharContent(boolean ignoreEncodingErrors) {
@@ -1016,13 +1314,7 @@ class ConstantsTest {
               .call();
       assertTrue(ok, diagnostics.getDiagnostics().toString());
       try (var loader = new URLClassLoader(new URL[] {out.toUri().toURL()}, null)) {
-        Object result =
-            loader.loadClass("fixture.constants.Consumer").getMethod("run").invoke(null);
-        assertEquals(
-            "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
-                + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
-                + " -9223372036854775808",
-            result);
+        return loader.loadClass(pkg + ".Consumer").getMethod("run").invoke(null);
       }
     } finally {
       try (var walk = Files.walk(out)) {

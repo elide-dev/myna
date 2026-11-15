@@ -6,7 +6,10 @@
 mod seam {
     include!(concat!(env!("SEAM_GENERATED"), "/seam.rs"));
 }
-use seam::{Level, Perms, Record, Session, Status, Wide};
+use seam::{
+    BinaryOp, Kind, Level, Node, NodeTag, Packed, Perms, Record, Session, Status, UnaryOp, Wide,
+    WriteFlags,
+};
 
 const _: () = assert!(seam::MAGIC == 0x3141514b);
 const _: () = assert!(seam::LIMIT == u64::MAX);
@@ -30,6 +33,15 @@ const _: () = assert!(core::mem::size_of::<Level>() == 1);
 const _: () = assert!(core::mem::size_of::<Perms>() == 4);
 const _: () = assert!(core::mem::size_of::<Wide>() == 8);
 const _: () = assert!(core::mem::offset_of!(Record, perms) == 4);
+const _: () = assert!(Packed::KIND_SHIFT == 8 && Packed::KIND_MASK == 0xff00);
+const _: () = assert!(Packed::DEPTH_SHIFT == 16 && Packed::DEPTH_MASK == 0xf_0000);
+const _: () = assert!(Packed::ALL.0 == 0xf_ff05);
+const _: () = assert!(Packed(0x0005_2a01).kind().0 == 0x2a);
+// A whole u8 word as one range: the getter is the word, the setter replaces it.
+const _: () = assert!(seam::Octet::CODE_SHIFT == 0 && seam::Octet::CODE_MASK == 0xff);
+const _: () = assert!(seam::Octet::ALL.0 == 0xff);
+const _: () = assert!(seam::Octet(0xa5).code() == 0xa5);
+const _: () = assert!(seam::Octet(0x12).with_code(0xa5).0 == 0xa5);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn consts_status(view: *const Record) -> Status {
@@ -85,4 +97,51 @@ fn record_fields_use_newtypes() {
     assert_eq!(r.status, Status::OK);
     assert!(r.perms.contains(Perms::READ));
     assert_eq!(consts_status(&r), Status::OK);
+}
+
+#[test]
+fn ranges_read_and_write_their_bits() {
+    let p = Packed::OPEN.with_kind(Kind::BOXED).with_depth(9);
+    assert_eq!(p.0, 0x0009_0501);
+    assert_eq!(p.kind(), Kind::BOXED);
+    assert_eq!(p.depth(), 9);
+    assert!(p.contains(Packed::OPEN));
+    // The setter keeps the other bits and masks the value to the width.
+    let q = p.with_kind(Kind::LAST).with_depth(0x13);
+    assert_eq!(q.0, 0x0003_ff01);
+    assert_eq!(q.kind(), Kind::LAST);
+    assert_eq!(q.with_kind(Kind::PLAIN).kind(), Kind::PLAIN);
+    // An undeclared kind is still a Kind; a bit outside every bit and range is unknown.
+    assert_eq!(Packed(0x7700).kind(), Kind(0x77));
+    assert_eq!(Packed(0x7700).kind().name(), None);
+    assert_eq!(q.0 & !Packed::ALL.0, 0);
+    assert_ne!(Packed(q.0 | 0x2).0 & !Packed::ALL.0, 0);
+    let n = Node { tag: NodeTag::READ, packed: p, operand: 0 };
+    assert_eq!(n.packed.kind(), Kind::BOXED);
+}
+
+fn describe(n: &Node) -> String {
+    match n.tag {
+        NodeTag::BINARY => format!("binary {:?}", n.operand_as_binary_op().name()),
+        NodeTag::UNARY => format!("unary {:?}", n.operand_as_unary_op().name()),
+        NodeTag::WRITE => format!("write {}", n.operand_as_write_flags().contains(WriteFlags::RELEASE)),
+        _ => format!("other {}", n.operand),
+    }
+}
+
+#[test]
+fn tagged_fields_read_through_the_case_group() {
+    let mut n = Node { tag: NodeTag::BINARY, packed: Packed::NONE, operand: 1 };
+    assert_eq!(n.operand_as_binary_op(), BinaryOp::SUB);
+    assert_eq!(describe(&n), "binary Some(\"sub\")");
+    n.tag = NodeTag::UNARY;
+    assert_eq!(n.operand_as_unary_op(), UnaryOp::INVERT);
+    assert_eq!(describe(&n), "unary Some(\"invert\")");
+    n.tag = NodeTag::WRITE;
+    n.operand = (WriteFlags::RELEASE | WriteFlags::VOLATILE_STORE).0;
+    assert_eq!(describe(&n), "write true");
+    // No check of the tag: an accessor reads the field as its group whatever the tag says.
+    assert_eq!(n.operand_as_binary_op(), BinaryOp(3));
+    n.tag = NodeTag(9);
+    assert_eq!(describe(&n), "other 3");
 }

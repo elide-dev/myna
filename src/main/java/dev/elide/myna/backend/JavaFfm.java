@@ -69,7 +69,14 @@ public final class JavaFfm implements Backend {
           .append("_LAYOUT = MemoryLayout.structLayout(\n        ")
           .append(String.join(",\n        ", elements))
           .append(");\n");
-      for (Field f : s.fields())
+      for (Field f : s.fields()) {
+        for (FieldCase c : f.cases())
+          out.append("    // when ")
+              .append(c.tagField())
+              .append('=')
+              .append(c.value())
+              .append(": ")
+              .append(groupComment(m, c.group()));
         out.append(f.group() == null ? "" : "    // " + groupComment(m, f.group()))
             .append("    public static final long ")
             .append(s.name())
@@ -78,6 +85,7 @@ public final class JavaFfm implements Backend {
             .append("_OFFSET = ")
             .append(f.offset())
             .append("L;\n");
+      }
       for (Views v : Views.of(m, s)) view(v, out);
     }
     for (FfmFunction prepared : functions) {

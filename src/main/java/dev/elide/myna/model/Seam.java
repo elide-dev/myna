@@ -304,9 +304,19 @@ public final class Seam {
   /**
    * A struct field; {@code group} names the enum or flag set annotating it, or is null. {@code
    * count}, on a {@code ptr<T>} field, names the integer field of the same struct that counts the
-   * elements it points to, or is null.
+   * elements it points to, or is null. {@code cases} name the group that applies for each value of
+   * a tag field ({@code when tag=binary enum=BinaryOp}); a field has cases or a group, not both.
    */
-  public record Field(String name, Type type, long offset, GroupRef group, String count) {
+  public record Field(
+      String name, Type type, long offset, GroupRef group, String count, List<FieldCase> cases) {
+    public Field {
+      cases = List.copyOf(cases);
+    }
+
+    public Field(String name, Type type, long offset, GroupRef group, String count) {
+      this(name, type, offset, group, count, List.of());
+    }
+
     public Field(String name, Type type, long offset) {
       this(name, type, offset, null);
     }
@@ -314,7 +324,22 @@ public final class Seam {
     public Field(String name, Type type, long offset, GroupRef group) {
       this(name, type, offset, group, null);
     }
+
+    /** This field with {@code c} appended to its cases. */
+    public Field withCase(FieldCase c) {
+      var all = new ArrayList<>(cases);
+      all.add(c);
+      return withCases(all);
+    }
+
+    /** This field with {@code cases} in place of its own. */
+    public Field withCases(List<FieldCase> cases) {
+      return new Field(name, type, offset, group, count, cases);
+    }
   }
+
+  /** {@code when TAG=VALUE enum=E}: while field {@code tagField} holds {@code value}, read as E. */
+  public record FieldCase(String tagField, String value, GroupRef group) {}
 
   /** A named integer constant: {@code const NAME type=u32 value=0x10}. */
   public record Constant(String name, Scalar type, BigInteger value) {}
@@ -331,16 +356,51 @@ public final class Seam {
   public record FlagBit(String name, int bit) {}
 
   /**
-   * A set of named bit indices over an integer carrier; bits are sorted by index. {@code
-   * cBitfields} opts the set into a generated {@code @CBitfield} accessor struct.
+   * A multi-bit field of a flag word, bits {@code low..high} inclusive: {@code range kind = 8..15}.
+   * {@code enumName} names the enum its values belong to, or is null for a raw number.
    */
-  public record FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+  public record FlagRange(String name, int low, int high, String enumName) {
+    public int width() {
+      return high - low + 1;
+    }
+
+    /** The range's bits in place: {@code ((1 << width) - 1) << low}. */
+    public BigInteger mask() {
+      return valueMask().shiftLeft(low);
+    }
+
+    /** The range's bits shifted down to bit 0: {@code (1 << width) - 1}. */
+    public BigInteger valueMask() {
+      return BigInteger.ONE.shiftLeft(width()).subtract(BigInteger.ONE);
+    }
+  }
+
+  /**
+   * A set of named bit indices over an integer carrier; bits are sorted by index and ranges by
+   * their low bit. {@code cBitfields} opts the set into a generated {@code @CBitfield} accessor
+   * struct.
+   */
+  public record FlagSet(
+      String name, Scalar type, List<FlagBit> bits, boolean cBitfields, List<FlagRange> ranges) {
     public FlagSet {
       bits = bits.stream().sorted(Comparator.comparingInt(FlagBit::bit)).toList();
+      ranges = ranges.stream().sorted(Comparator.comparingInt(FlagRange::low)).toList();
+    }
+
+    public FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+      this(name, type, bits, cBitfields, List.of());
     }
 
     public FlagSet(String name, Scalar type, List<FlagBit> bits) {
       this(name, type, bits, false);
+    }
+
+    /** Every declared bit: the bits' masks and the ranges' masks. */
+    public BigInteger all() {
+      BigInteger all = BigInteger.ZERO;
+      for (FlagBit b : bits) all = all.setBit(b.bit());
+      for (FlagRange r : ranges) all = all.or(r.mask());
+      return all;
     }
   }
 
@@ -632,6 +692,42 @@ public final class Seam {
       constants = constants.stream().sorted(Comparator.comparing(Constant::name)).toList();
       enums = enums.stream().sorted(Comparator.comparing(EnumGroup::name)).toList();
       flagSets = flagSets.stream().sorted(Comparator.comparing(FlagSet::name)).toList();
+      structs = canonicalCases(structs, enums);
+    }
+
+    /**
+     * Each tagged field's cases in canonical order: by tag field, then by the tag enum's value
+     * number, so the order of {@code when} lines never changes the fingerprint. Values the enum
+     * does not declare (rejected by validation) sort last, by name.
+     */
+    private static List<Struct> canonicalCases(List<Struct> structs, List<EnumGroup> enums) {
+      if (structs.stream().flatMap(s -> s.fields().stream()).allMatch(f -> f.cases().size() < 2))
+        return structs;
+      var result = new ArrayList<Struct>();
+      for (Struct s : structs) {
+        var fields = new ArrayList<Field>();
+        for (Field f : s.fields()) {
+          Comparator<FieldCase> order =
+              Comparator.comparing(FieldCase::tagField)
+                  .thenComparing(
+                      c -> caseValue(s, enums, c), Comparator.nullsLast(Comparator.naturalOrder()))
+                  .thenComparing(FieldCase::value);
+          fields.add(f.withCases(f.cases().stream().sorted(order).toList()));
+        }
+        result.add(new Struct(s.name(), s.size(), s.alignment(), fields));
+      }
+      return List.copyOf(result);
+    }
+
+    private static BigInteger caseValue(Struct s, List<EnumGroup> enums, FieldCase c) {
+      for (Field tag : s.fields())
+        if (tag.name().equals(c.tagField())
+            && tag.group() != null
+            && tag.group().kind() == GroupKind.ENUM)
+          for (EnumGroup e : enums)
+            if (e.name().equals(tag.group().name()))
+              for (EnumValue v : e.values()) if (v.name().equals(c.value())) return v.value();
+      return null;
     }
 
     public Module withTarget(String target) {

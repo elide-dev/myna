@@ -1695,7 +1695,7 @@ class GeneratorTest {
   @Test
   void enumReferencesNeverChangeTransition() throws Exception {
     String typed = Files.readString(Path.of("examples/constants.seam"));
-    String raw = typed.replaceAll(" (enum|flags)=[A-Za-z]+", "");
+    String raw = typed.replaceAll("(?m)^ *when .*\n", "").replaceAll(" (enum|flags)=[A-Za-z]+", "");
     assertNotEquals(typed, raw);
     var withRefs = generate(typed);
     var without = generate(raw);
