@@ -23,7 +23,11 @@ def disassembly(app, prefix, method, evidence):
     evidence.mkdir(parents=True, exist_ok=True)
     (evidence / f"{method}.disassembly.txt").write_text(listing)
     lines = listing.split(f"<{name}>:", 1)[1].strip().splitlines()
-    code = [" ".join(line.split()) for line in lines if line.strip()]
+    # Branch targets print as an absolute address and a symbol. A target inside the measured
+    # method itself (AArch64's out-of-line stack-overflow stub) names that method, so it is
+    # rewritten to `self`, and absolute addresses are dropped, so equal code compares equal.
+    code = [re.sub(r"\b0x[0-9a-f]+ <", "<", " ".join(line.split())).replace(f"<{name}", "<self")
+            for line in lines if line.strip()]
     while code and code[-1].startswith(("int3", "nop", "udf")):
         code.pop()  # alignment padding
     return code
