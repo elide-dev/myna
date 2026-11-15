@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 
 public final class RustFfi implements Backend {
@@ -82,6 +84,7 @@ public final class RustFfi implements Backend {
             .append(f.offset())
             .append(");\n");
       out.append("};\n");
+      caseAccessors(s, out);
     }
     out.append("\nunsafe extern \"C\" {\n");
     for (Function declared : m.functions()) {
@@ -224,6 +227,46 @@ public final class RustFfi implements Backend {
             .append(op[2])
             .append(" o.0) } }\n");
     }
+  }
+
+  /**
+   * One accessor per tagged field and group its {@code when} lines name: the field read as that
+   * group's newtype. Nothing checks the tag; the caller reads the case the tag selects.
+   */
+  private static void caseAccessors(Struct s, StringBuilder out) {
+    var accessors = new LinkedHashMap<String, String>();
+    for (Field f : s.fields())
+      for (FieldCase c : f.cases()) {
+        String name = Names.rustCaseAccessor(f.name(), c.group().name());
+        if (accessors.containsKey(name)) continue;
+        var tags =
+            f.cases().stream()
+                .filter(o -> o.group().equals(c.group()))
+                .map(o -> "`" + o.tagField() + " == " + o.value() + "`")
+                .toList();
+        accessors.put(
+            name,
+            "    /// `"
+                + f.name()
+                + "` as "
+                + (c.group().kind() == GroupKind.ENUM ? "enum " : "flags ")
+                + c.group().name()
+                + ", its meaning when "
+                + String.join(" or ", tags)
+                + ".\n    #[inline(always)] pub const fn "
+                + name
+                + "(&self) -> "
+                + c.group().name()
+                + " { "
+                + c.group().name()
+                + "(self."
+                + f.name()
+                + ") }\n");
+      }
+    if (accessors.isEmpty()) return;
+    out.append("impl ").append(s.name()).append(" {\n");
+    accessors.values().forEach(out::append);
+    out.append("}\n");
   }
 
   /**

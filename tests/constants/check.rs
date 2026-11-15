@@ -6,7 +6,10 @@
 mod seam {
     include!(concat!(env!("SEAM_GENERATED"), "/seam.rs"));
 }
-use seam::{Kind, Level, Node, Packed, Perms, Record, Session, Status, Wide};
+use seam::{
+    BinaryOp, Kind, Level, Node, NodeTag, Packed, Perms, Record, Session, Status, UnaryOp, Wide,
+    WriteFlags,
+};
 
 const _: () = assert!(seam::MAGIC == 0x3141514b);
 const _: () = assert!(seam::LIMIT == u64::MAX);
@@ -108,6 +111,32 @@ fn ranges_read_and_write_their_bits() {
     assert_eq!(Packed(0x7700).kind().name(), None);
     assert_eq!(q.0 & !Packed::ALL.0, 0);
     assert_ne!(Packed(q.0 | 0x2).0 & !Packed::ALL.0, 0);
-    let n = Node { tag: 0, packed: p, operand: 0 };
+    let n = Node { tag: NodeTag::READ, packed: p, operand: 0 };
     assert_eq!(n.packed.kind(), Kind::BOXED);
+}
+
+fn describe(n: &Node) -> String {
+    match n.tag {
+        NodeTag::BINARY => format!("binary {:?}", n.operand_as_binary_op().name()),
+        NodeTag::UNARY => format!("unary {:?}", n.operand_as_unary_op().name()),
+        NodeTag::WRITE => format!("write {}", n.operand_as_write_flags().contains(WriteFlags::RELEASE)),
+        _ => format!("other {}", n.operand),
+    }
+}
+
+#[test]
+fn tagged_fields_read_through_the_case_group() {
+    let mut n = Node { tag: NodeTag::BINARY, packed: Packed::NONE, operand: 1 };
+    assert_eq!(n.operand_as_binary_op(), BinaryOp::SUB);
+    assert_eq!(describe(&n), "binary Some(\"sub\")");
+    n.tag = NodeTag::UNARY;
+    assert_eq!(n.operand_as_unary_op(), UnaryOp::INVERT);
+    assert_eq!(describe(&n), "unary Some(\"invert\")");
+    n.tag = NodeTag::WRITE;
+    n.operand = (WriteFlags::RELEASE | WriteFlags::VOLATILE_STORE).0;
+    assert_eq!(describe(&n), "write true");
+    // No check of the tag: an accessor reads the field as its group whatever the tag says.
+    assert_eq!(n.operand_as_binary_op(), BinaryOp(3));
+    n.tag = NodeTag(9);
+    assert_eq!(describe(&n), "other 3");
 }

@@ -81,6 +81,16 @@ public final class Names {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_" + member;
   }
 
+  /** The Rust accessor of a tagged field's case: {@code operand_as_binary_op}. */
+  public static String rustCaseAccessor(String field, String group) {
+    return field + "_as_" + lowerSnake(group);
+  }
+
+  /** The Native Image accessor of a tagged field's enum case: {@code operandAsBinaryOp}. */
+  public static String javaCaseAccessor(String field, String group) {
+    return field + "As" + group;
+  }
+
   /** The C bitfield struct of a flag set: {@code komodo_frontend_function_flags_bits}. */
   public static String cBitsStruct(Module m, String group) {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_bits";

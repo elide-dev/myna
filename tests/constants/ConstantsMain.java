@@ -107,6 +107,14 @@ public final class ConstantsMain {
     check(node.packedOpen() && !ConstsConstants.Packed.hasUnknown(node.packed()), "no unknown bits");
     check(ConstsConstants.Packed.hasUnknown(node.packed() | 0x2), "bit 1 is unknown");
 
+    // A tagged field reads through the enum its tag selects; nothing checks the tag.
+    node.tag(ConstsConstants.NodeTag.BINARY);
+    node.operand(ConstsConstants.BinaryOp.SUB);
+    check(Consts.operandAsBinaryOp(node) == Consts.BinaryOp.SUB, "operand as BinaryOp");
+    check(Consts.operandAsUnaryOp(node) == Consts.UnaryOp.INVERT, "operand as UnaryOp");
+    node.operand(7);
+    check(Consts.operandAsBinaryOp(node) == null, "an unlisted operand is null");
+
     System.out.println("Native Image constants, @CEnum enums and @CBitfield passed");
   }
 }

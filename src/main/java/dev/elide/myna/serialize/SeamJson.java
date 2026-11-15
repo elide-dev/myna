@@ -57,6 +57,7 @@ public final class SeamJson {
                                         + ",\"offset\":"
                                         + f.offset()
                                         + reference(f.group(), "")
+                                        + cases(f)
                                         + "}")
                                 .toList())
                         + "}")
@@ -266,6 +267,22 @@ public final class SeamJson {
                               + "}")
                       .toList());
     return result;
+  }
+
+  /** A field's tag cases, omitted when it has none so other fields keep their fingerprints. */
+  private static String cases(Field f) {
+    if (f.cases().isEmpty()) return "";
+    return ",\"cases\":"
+        + array(
+            f.cases().stream()
+                .map(c ->
+                    "{\"tag\":"
+                        + quote(c.tagField())
+                        + ",\"value\":"
+                        + quote(c.value())
+                        + reference(c.group(), "")
+                        + "}")
+                .toList());
   }
 
   /** A flag set's bit ranges, omitted when it has none so older sets keep their fingerprints. */

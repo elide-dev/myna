@@ -26,20 +26,40 @@ import org.graalvm.word.PointerBase;
 @CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
-    public static final String ABI_FINGERPRINT = "53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f";
+    public static final String ABI_FINGERPRINT = "7b304aed893204e51678b962cd63aaafc0f1d4cd3e5891ee11ead4c253ed6bb3";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_SEAM_ABI_53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_SEAM_ABI_7b304aed893204e51678b962cd63aaafc0f1d4cd3e5891ee11ead4c253ed6bb3") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */
     @CConstant("CONSTANTS_LIMIT") public static native long limit();
     /** const MAGIC: u32, from seam.h. */
     @CConstant("CONSTANTS_MAGIC") public static native int magic();
+    /** enum BinaryOp: u64. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_binary_op_t")
+    public enum BinaryOp {
+        @CEnumConstant("CONSTANTS_BINARY_OP_ADD") ADD(0L),
+        @CEnumConstant("CONSTANTS_BINARY_OP_SUB") SUB(1L);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final long value;
+        BinaryOp(long value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native long cValue();
+        @CEnumLookup public static native BinaryOp lookup(long value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static BinaryOp of(long value) {
+            if (value == 0L) return ADD;
+            if (value == 1L) return SUB;
+            return null;
+        }
+    }
     /** enum Kind: u8. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_kind_t")
     public enum Kind {
@@ -86,6 +106,32 @@ public final class Consts {
             }
         }
     }
+    /** enum NodeTag: u32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_node_tag_t")
+    public enum NodeTag {
+        @CEnumConstant("CONSTANTS_NODE_TAG_READ") READ(0),
+        @CEnumConstant("CONSTANTS_NODE_TAG_BINARY") BINARY(1),
+        @CEnumConstant("CONSTANTS_NODE_TAG_UNARY") UNARY(2),
+        @CEnumConstant("CONSTANTS_NODE_TAG_WRITE") WRITE(3);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final int value;
+        NodeTag(int value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native int cValue();
+        @CEnumLookup public static native NodeTag lookup(int value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static NodeTag of(int value) {
+            switch (value) {
+                case 0: return READ;
+                case 1: return BINARY;
+                case 2: return UNARY;
+                case 3: return WRITE;
+                default: return null;
+            }
+        }
+    }
     /** enum Status: i32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_status_t")
     public enum Status {
@@ -110,6 +156,26 @@ public final class Consts {
                 case 16: return SYNTAX_ERROR;
                 default: return null;
             }
+        }
+    }
+    /** enum UnaryOp: u64. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_unary_op_t")
+    public enum UnaryOp {
+        @CEnumConstant("CONSTANTS_UNARY_OP_NEGATE") NEGATE(0L),
+        @CEnumConstant("CONSTANTS_UNARY_OP_INVERT") INVERT(1L);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final long value;
+        UnaryOp(long value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native long cValue();
+        @CEnumLookup public static native UnaryOp lookup(long value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static UnaryOp of(long value) {
+            if (value == 0L) return NEGATE;
+            if (value == 1L) return INVERT;
+            return null;
         }
     }
     public interface setLevel_Leaf extends CFunctionPointer {
@@ -157,9 +223,20 @@ public final class Consts {
         @CBitfield("packedBits.kind") void packedKind(int value);
         @CBitfield("packedBits.depth") int packedDepth();
         @CBitfield("packedBits.depth") void packedDepth(int value);
+        /** when tag=binary enum=BinaryOp; when tag=unary enum=UnaryOp; when tag=write flags=WriteFlags */
         @CField("operand") long operand();
         @CField("operand") void operand(long value);
         @CFieldAddress("operand") CLongPointer addressOfOperand();
+    }
+    /** {@code Node.operand} as enum BinaryOp, its meaning when tag is binary: null for an unlisted value. */
+    @AlwaysInline("Myna tagged field accessor")
+    public static BinaryOp operandAsBinaryOp(Node record) {
+        return BinaryOp.of(record.operand());
+    }
+    /** {@code Node.operand} as enum UnaryOp, its meaning when tag is unary: null for an unlisted value. */
+    @AlwaysInline("Myna tagged field accessor")
+    public static UnaryOp operandAsUnaryOp(Node record) {
+        return UnaryOp.of(record.operand());
     }
     @CStruct(value = "Record", addStructKeyword = true)
     public interface Record extends PointerBase {

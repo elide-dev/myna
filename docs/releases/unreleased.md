@@ -26,6 +26,10 @@ parameters, returns and callback types reference them (see
   constants, getters and `with` setters in C, Rust and Java, and a `@CBitfield` member with
   `c_bitfields=true`. `<GROUP>_ALL` and `hasUnknown` count the ranges as declared bits (see
   [bit ranges](../dsl.md#bit-ranges)).
+- A struct field can name the group that applies per value of a tag field with `when tag=binary
+  enum=BinaryOp` lines (#134). Rust gains `<field>_as_<group>()` record accessors and Native Image
+  `<field>As<Enum>(record)`; the layout and ABI are unchanged and nothing checks the tag (see
+  [fields whose meaning depends on a tag](../dsl.md#fields-whose-meaning-depends-on-a-tag)).
 
 ## Breaking changes
 

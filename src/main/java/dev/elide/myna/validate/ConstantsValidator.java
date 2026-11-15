@@ -159,6 +159,24 @@ final class ConstantsValidator {
           && f.returnsGroup().kind() == GroupKind.ENUM)
         methods.putIfAbsent(f.name() + "Enum", "typed enum wrapper of function " + f.name());
     }
+    // Native Image enum case accessors: one per record, field and enum; overloads across records.
+    var cases = new HashMap<String, String>();
+    for (Struct s : m.structs())
+      for (Field f : s.fields())
+        for (FieldCase c : f.cases()) {
+          if (c.group().kind() != GroupKind.ENUM) continue;
+          String accessor = Names.javaCaseAccessor(f.name(), c.group().name());
+          String owner = "field " + s.name() + "." + f.name() + " enum " + c.group().name();
+          String other = cases.putIfAbsent(accessor + "(" + s.name() + ")", owner);
+          require(
+              other == null || other.equals(owner),
+              owner + ": Native Image accessor " + accessor + " collides with " + other);
+          other = methods.get(accessor);
+          require(
+              other == null || other.startsWith("field "),
+              owner + ": Native Image accessor " + accessor + " collides with " + other);
+          methods.putIfAbsent(accessor, owner);
+        }
     for (Constant c : m.constants()) {
       String accessor = Names.lowerCamel(c.name());
       String where = "const " + c.name() + ": Native Image accessor " + accessor;
@@ -345,8 +363,11 @@ final class ConstantsValidator {
 
   private static void references(Module m) {
     for (Struct s : m.structs())
-      for (Field f : s.fields())
+      for (Field f : s.fields()) {
         reference(m, "field " + s.name() + "." + f.name(), f.group(), f.type(), "field's type");
+        cases(m, s, f);
+      }
+    caseAccessors(m);
     for (Function f : m.functions()) {
       String owner = f.direction().name().toLowerCase(Locale.ROOT) + " " + f.name();
       reference(m, owner, f.returnsGroup(), f.returns(), "return type");
@@ -368,6 +389,69 @@ final class ConstantsValidator {
         if (f.name().equals(base + "Enum"))
           throw new IllegalArgumentException(
               "logical name collides with the typed enum wrapper of " + base + ": " + f.name());
+  }
+
+  /**
+   * {@code when} lines: one tag field of the same struct that carries {@code enum=}, one of its
+   * values per line and at most one line per value, each naming a group whose carrier is the
+   * field's type.
+   */
+  private static void cases(Module m, Struct s, Field f) {
+    if (f.cases().isEmpty()) return;
+    String where = "field " + s.name() + "." + f.name();
+    require(f.group() == null, where + ": when lines and enum=/flags= are mutually exclusive");
+    String tagName = f.cases().get(0).tagField();
+    var values = new HashSet<String>();
+    for (FieldCase c : f.cases()) {
+      String when = where + " when " + c.tagField() + "=" + c.value();
+      require(
+          c.tagField().equals(tagName),
+          where + ": when lines name tag fields " + tagName + " and " + c.tagField() + "; use one");
+      Field tag =
+          s.fields().stream().filter(x -> x.name().equals(c.tagField())).findFirst().orElse(null);
+      require(tag != null, when + ": struct " + s.name() + " has no field " + c.tagField());
+      require(
+          tag.group() != null && tag.group().kind() == GroupKind.ENUM,
+          when + ": tag field " + c.tagField() + " carries no enum=");
+      EnumGroup e =
+          m.enums().stream()
+              .filter(g -> g.name().equals(tag.group().name()))
+              .findFirst()
+              .orElse(null);
+      require(e != null, when + ": undeclared enum: " + tag.group().name());
+      require(
+          e.values().stream().anyMatch(v -> v.name().equals(c.value())),
+          when + ": enum " + e.name() + " declares no value " + c.value());
+      require(values.add(c.value()), where + ": two when lines for " + tagName + "=" + c.value());
+      reference(m, when, c.group(), f.type(), "field's type");
+    }
+  }
+
+  /**
+   * The per-case accessors: Rust {@code <field>_as_<group>()} on the record, one per field and
+   * group, and Native Image {@code <field>As<Group>(record)} for enum cases. Neither may collide
+   * with another accessor of the record or, in Java, with another method of the class.
+   */
+  private static void caseAccessors(Module m) {
+    for (Struct s : m.structs()) {
+      var rust = new HashMap<String, String>();
+      for (Field f : s.fields())
+        for (FieldCase c : f.cases()) {
+          String owner = "field " + f.name() + " group " + c.group().name();
+          String other =
+              rust.putIfAbsent(Names.rustCaseAccessor(f.name(), c.group().name()), owner);
+          require(
+              other == null || other.equals(owner),
+              "struct "
+                  + s.name()
+                  + ": Rust accessor "
+                  + Names.rustCaseAccessor(f.name(), c.group().name())
+                  + " of "
+                  + owner
+                  + " collides with the accessor of "
+                  + other);
+        }
+    }
   }
 
   private static void reference(Module m, String where, GroupRef ref, Type type, String what) {

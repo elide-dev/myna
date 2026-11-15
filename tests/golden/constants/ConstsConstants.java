@@ -11,6 +11,19 @@ public final class ConstsConstants {
     /** const MAGIC: u32 */
     public static final int MAGIC = 0x3141514b;
 
+    /** enum BinaryOp: u64 */
+    public static final class BinaryOp {
+        private BinaryOp() {}
+        public static final long ADD = 0L;
+        public static final long SUB = 1L;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(long value) {
+            if (value == ADD) return "add";
+            if (value == SUB) return "sub";
+            return null;
+        }
+    }
+
     /** enum Kind: u8 */
     public static final class Kind {
         private Kind() {}
@@ -43,6 +56,25 @@ public final class ConstsConstants {
         }
     }
 
+    /** enum NodeTag: u32 */
+    public static final class NodeTag {
+        private NodeTag() {}
+        public static final int READ = 0;
+        public static final int BINARY = 1;
+        public static final int UNARY = 2;
+        public static final int WRITE = 3;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(int value) {
+            return switch (value) {
+                case READ -> "read";
+                case BINARY -> "binary";
+                case UNARY -> "unary";
+                case WRITE -> "write";
+                default -> null;
+            };
+        }
+    }
+
     /** enum Status: i32 */
     public static final class Status {
         private Status() {}
@@ -59,6 +91,19 @@ public final class ConstsConstants {
                 case SYNTAX_ERROR -> "syntax_error";
                 default -> null;
             };
+        }
+    }
+
+    /** enum UnaryOp: u64 */
+    public static final class UnaryOp {
+        private UnaryOp() {}
+        public static final long NEGATE = 0L;
+        public static final long INVERT = 1L;
+        /** The declared name of {@code value}, or null for an unlisted value. */
+        public static String name(long value) {
+            if (value == NEGATE) return "negate";
+            if (value == INVERT) return "invert";
+            return null;
         }
     }
 
@@ -108,6 +153,18 @@ public final class ConstsConstants {
         public static final long ALL = 0x8000000000000001L;
         public static boolean first(long flags) { return (flags & FIRST) != 0; }
         public static boolean last(long flags) { return (flags & LAST) != 0; }
+        /** True when {@code flags} has a bit no declared flag names. */
+        public static boolean hasUnknown(long flags) { return (flags & ~ALL) != 0; }
+    }
+
+    /** flags WriteFlags: u64 */
+    public static final class WriteFlags {
+        private WriteFlags() {}
+        public static final long VOLATILE_STORE = 0x1L;
+        public static final long RELEASE = 0x2L;
+        public static final long ALL = 0x3L;
+        public static boolean volatileStore(long flags) { return (flags & VOLATILE_STORE) != 0; }
+        public static boolean release(long flags) { return (flags & RELEASE) != 0; }
         /** True when {@code flags} has a bit no declared flag names. */
         public static boolean hasUnknown(long flags) { return (flags & ~ALL) != 0; }
     }

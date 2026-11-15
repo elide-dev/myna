@@ -109,7 +109,11 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.constant.CEnumLookup");
       imports.add("org.graalvm.nativeimage.c.constant.CEnumValue");
     }
-    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty()))
+    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty())
+        || m.structs().stream()
+            .flatMap(st -> st.fields().stream())
+            .flatMap(f -> f.cases().stream())
+            .anyMatch(c -> c.group().kind() == GroupKind.ENUM))
       imports.add("com.oracle.svm.shared.AlwaysInline");
     if (m.structs().stream()
         .flatMap(st -> st.fields().stream())
@@ -286,7 +290,10 @@ public final class NativeImage implements Backend {
     leafBindings(m, out);
     for (String opaque : m.opaqueTypes())
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
-    for (Struct st : m.structs()) struct(m, st, out);
+    for (Struct st : m.structs()) {
+      struct(m, st, out);
+      caseAccessors(st, out);
+    }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
       out.append("    public interface ")
@@ -494,6 +501,21 @@ public final class NativeImage implements Backend {
             .append(f.name())
             .append("()) */\n");
       }
+      if (!f.cases().isEmpty())
+        out.append("        /** ")
+            .append(
+                String.join(
+                    "; ",
+                    f.cases().stream()
+                        .map(c ->
+                            "when "
+                                + c.tagField()
+                                + "="
+                                + c.value()
+                                + (c.group().kind() == GroupKind.ENUM ? " enum=" : " flags=")
+                                + c.group().name())
+                        .toList()))
+            .append(" */\n");
       out.append("        @CField")
           .append(field)
           .append(carrier)
@@ -516,6 +538,47 @@ public final class NativeImage implements Backend {
       if (bits != null) bitfieldAccessors(f, bits, carrier, out);
     }
     out.append("    }\n");
+  }
+
+  /**
+   * One static accessor per tagged field and enum its {@code when} lines name: the field as that
+   * {@code @CEnum}, null for an unlisted value, like an import's {@code <name>Enum}. The tag is not
+   * checked. Flag cases keep the raw {@code @CField}, tested with {@code <Class>Constants}.
+   */
+  private static void caseAccessors(Struct st, StringBuilder out) {
+    var done = new HashSet<String>();
+    for (Field f : st.fields())
+      for (FieldCase c : f.cases()) {
+        if (c.group().kind() != GroupKind.ENUM) continue;
+        String accessor = Names.javaCaseAccessor(f.name(), c.group().name());
+        if (!done.add(accessor)) continue;
+        out.append("    /** {@code ")
+            .append(st.name())
+            .append('.')
+            .append(f.name())
+            .append("} as enum ")
+            .append(c.group().name())
+            .append(", its meaning when ")
+            .append(
+                String.join(
+                    " or ",
+                    f.cases().stream()
+                        .filter(o -> o.group().equals(c.group()))
+                        .map(o -> o.tagField() + " is " + o.value())
+                        .toList()))
+            .append(": null for an unlisted value. */\n")
+            .append("    @AlwaysInline(\"Myna tagged field accessor\")\n    public static ")
+            .append(c.group().name())
+            .append(' ')
+            .append(accessor)
+            .append('(')
+            .append(st.name())
+            .append(" record) {\n        return ")
+            .append(c.group().name())
+            .append(".of(record.")
+            .append(f.name())
+            .append("());\n    }\n");
+      }
   }
 
   /** The {@code c_bitfields=true} flag set annotating a field, or null. */

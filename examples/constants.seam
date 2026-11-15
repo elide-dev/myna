@@ -35,10 +35,32 @@ flags Packed type=u32 c_bitfields=true
   range kind = 8..15 enum=Kind
   range depth = 16..19
 end
+# A tagged record: the tag says how to read the operand.
+enum NodeTag type=u32
+  value read = 0
+  value binary = 1
+  value unary = 2
+  value write = 3
+end
+enum BinaryOp type=u64
+  value add = 0
+  value sub = 1
+end
+enum UnaryOp type=u64
+  value negate = 0
+  value invert = 1
+end
+flags WriteFlags type=u64
+  bit volatile_store = 0
+  bit release = 1
+end
 struct Node size=16 align=8
-  field tag type=u32 offset=0
+  field tag type=u32 offset=0 enum=NodeTag
   field packed type=u32 offset=4 flags=Packed
   field operand type=u64 offset=8
+    when tag=binary enum=BinaryOp
+    when tag=unary enum=UnaryOp
+    when tag=write flags=WriteFlags
 end
 struct Record size=24 align=8
   field status type=i32 offset=0 enum=Status

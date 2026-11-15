@@ -34,11 +34,15 @@ public final class Dsl {
     var parameters = new ArrayList<Parameter>();
     var fields = new ArrayList<Field>();
     var lines = source.split("\\R");
+    String previous = null; // the directive of the previous non-blank line
+
     for (int i = 0; i < lines.length; i++) {
       String line = lines[i].split("#", 2)[0].strip();
       if (line.isEmpty()) continue;
       try {
         String[] words = line.split("\\s+");
+        String directive = previous;
+        previous = words[0];
         switch (words[0]) {
           case "module" -> {
             if (name != null
@@ -210,6 +214,22 @@ public final class Dsl {
             long offset = Long.parseLong(takeRequired(opts, "offset"));
             fields.add(new Field(words[1], type, offset, group(opts)));
             empty(opts);
+          }
+          case "when" -> {
+            require(
+                header != null
+                    && header[0].equals("struct")
+                    && ("field".equals(directive) || "when".equals(directive)),
+                "when must directly follow a field or another when");
+            String[] tag = words.length >= 2 ? words[1].split("=", 2) : new String[0];
+            require(
+                tag.length == 2 && !tag[0].isEmpty() && !tag[1].isEmpty(),
+                "expected: when FIELD=VALUE enum=ENUM|flags=FLAGS");
+            var opts = options(words, 2);
+            var group = group(opts);
+            require(group != null, "when requires enum= or flags=");
+            empty(opts);
+            fields.add(fields.removeLast().withCase(new FieldCase(tag[0], tag[1], group)));
           }
           case "end" -> {
             require(header != null && words.length == 1, "unexpected end");

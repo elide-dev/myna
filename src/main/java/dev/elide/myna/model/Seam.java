@@ -301,12 +301,34 @@ public final class Seam {
     }
   }
 
-  /** A struct field; {@code group} names the enum or flag set annotating it, or is null. */
-  public record Field(String name, Type type, long offset, GroupRef group) {
+  /**
+   * A struct field; {@code group} names the enum or flag set annotating it, or is null. {@code
+   * cases} name the group that applies for each value of a tag field ({@code when tag=binary
+   * enum=BinaryOp}), in declaration order; a field has cases or a group, not both.
+   */
+  public record Field(String name, Type type, long offset, GroupRef group, List<FieldCase> cases) {
+    public Field {
+      cases = List.copyOf(cases);
+    }
+
+    public Field(String name, Type type, long offset, GroupRef group) {
+      this(name, type, offset, group, List.of());
+    }
+
     public Field(String name, Type type, long offset) {
       this(name, type, offset, null);
     }
+
+    /** This field with {@code c} appended to its cases. */
+    public Field withCase(FieldCase c) {
+      var all = new ArrayList<>(cases);
+      all.add(c);
+      return new Field(name, type, offset, group, all);
+    }
   }
+
+  /** {@code when TAG=VALUE enum=E}: while field {@code tagField} holds {@code value}, read as E. */
+  public record FieldCase(String tagField, String value, GroupRef group) {}
 
   /** A named integer constant: {@code const NAME type=u32 value=0x10}. */
   public record Constant(String name, Scalar type, BigInteger value) {}

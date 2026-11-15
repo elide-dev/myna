@@ -190,6 +190,35 @@ end
   `<name>_mask` in the flag set's object. The canonical JSON records `ranges` under a flag set only when it has
   some, so sets without ranges keep their fingerprints.
 
+### Fields whose meaning depends on a tag
+
+A field of a tagged record can name the group that applies for each value of the record's discriminant:
+
+```text
+struct Node size=80 align=8
+  field tag type=u32 offset=0 enum=NodeTag
+  field operand type=u64 offset=24
+    when tag=binary enum=BinaryOp
+    when tag=unary enum=UnaryOp
+  field flags type=u64 offset=56
+    when tag=write flags=WriteFlags
+end
+```
+
+- `when TAG=VALUE enum=ENUM` or `flags=FLAGS` lines directly follow the `field` line they annotate. `TAG` is
+  another field of the same struct that carries `enum=`, and `VALUE` one of that enum's values. A field's
+  `when` lines all name the same tag field, name each value at most once, and reference groups whose carrier is
+  the field's type. A field with `when` lines carries no `enum=`/`flags=` of its own.
+- Nothing changes in the layout or the ABI, and nothing checks the tag: an accessor reads the field as the
+  named group whatever the tag holds. The caller reads the case the tag selects.
+- Rust: `<field>_as_<group>()` on the record (`operand_as_binary_op()`), one per field and group, returning
+  the group's newtype. Native Image: a static `<field>As<Group>(record)` on the class for each enum case
+  (`operandAsBinaryOp(node)`), returning the `@CEnum` or `null` for an unlisted value, like `<name>Enum`.
+  Flag cases keep the raw `@CField`, tested with `<Class>Constants`. The `@CField` and the FFM offset name
+  each case in a comment. C and Truffle cells are unchanged.
+- The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
+  so they are part of the fingerprint.
+
 The canonical JSON gains `constants`, `enums` and `flagSets` sections and `enum`/`flags` keys on references.
 Entries are sorted by name and values are decimal strings, so the fingerprint is stable.
 
