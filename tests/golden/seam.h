@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #define BUFFER_SEAM_ABI "9e33817b743fbb450bd61ab362d1d891db5ba16ab29f8dccf7b0b1740ffd4d18"
+#define BUFFER_SEAM_ABI_9e33817b743fbb450bd61ab362d1d891db5ba16ab29f8dccf7b0b1740ffd4d18 1
 #define BUFFER_BINDING_ABI_VERSION 2
 SEAM_ASSERT(sizeof(void *) == 8, "seam target requires 64-bit pointers");
 

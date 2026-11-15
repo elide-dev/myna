@@ -3,21 +3,20 @@
 package dev.elide.myna.backend;
 
 import dev.elide.myna.model.Seam.Module;
-import dev.elide.myna.serialize.SeamJson;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The C context of the Native Image class, {@code <Class>Directives}. It embeds this generation's
  * {@code seam.h}, writes it to a temporary directory when the image builder first asks for headers
- * and delegates everything else to the consumer's {@code c_context}, if one is named. As a hosted
- * {@code Feature}, which consumers enable with {@code --features=<package>.<Class>Directives}, it
- * fails the image build when the header's fingerprint is not the Native Image class's own.
+ * and delegates everything else to the consumer's {@code c_context}, if one is named. It is not a
+ * {@code Feature}: the header check is the Native Image class's {@code seamHeaderCheck()}, a
+ * {@code @CConstant} naming a macro only this generation's header defines.
  *
- * <p>Only the image builder uses the class: run-time code never reaches it, so no header text
- * reaches an image. The class names everything qualified, so neither a declared type nor a consumer
- * class in the package can shadow an import, and it refers to the Native Image class only by name,
- * so an image of the FFM or Truffle bindings alone compiles it without that class.
+ * <p>Only the image builder uses the class, and only when the Native Image class is in the image:
+ * that class's {@code @CContext} is the sole reference. Run-time code never reaches it, so no
+ * header text reaches an image. The class names everything qualified, so neither a declared type
+ * nor a consumer class in the package can shadow an import.
  */
 public final class NativeImageDirectives implements Backend {
   /**
@@ -32,7 +31,6 @@ public final class NativeImageDirectives implements Backend {
 
   public String generate(Module m) {
     String self = m.directivesClass();
-    String bindings = m.javaPackageName() + "." + m.nativeClass();
     String delegate = m.nativeConfig() == null ? null : m.nativeConfig().cContext();
     List<String> pieces = pieces(new CHeader().generate(m), PIECE);
     var out =
@@ -48,18 +46,12 @@ public final class NativeImageDirectives implements Backend {
                 + "}: the seam.h these bindings were generated with,"
                 + (delegate == null ? "" : " after the headers of {@code " + delegate + "},")
                 + "\n"
-                + " * and, as a hosted Feature that native-image runs with {@code --features="
-                + m.javaPackageName()
-                + "."
-                + self
-                + "},\n"
-                + " * the check that fails the image build when that header's fingerprint is not"
-                + " the bindings' own.\n"
+                + " * which the image build's C query checks against the fingerprinted macro the"
+                + " bindings read.\n"
                 + " */\n"
                 + "public final class "
                 + self
-                + "\n    implements org.graalvm.nativeimage.c.CContext.Directives,"
-                + " org.graalvm.nativeimage.hosted.Feature {\n");
+                + " implements org.graalvm.nativeimage.c.CContext.Directives {\n");
     out.append("    /** seam.h, in pieces of at most ")
         .append(PIECE / 1024)
         .append(" KiB: one class-file string constant holds at most 64 KiB. */\n");
@@ -132,40 +124,9 @@ public final class NativeImageDirectives implements Backend {
             .append(method)
             .append("();\n    }\n\n");
     }
-    out.append(
-        "    /**\n"
-            + "     * Fails the image build when the seam.h of this context is not the one the"
-            + " loaded bindings\n"
-            + "     * were generated with. An image without the Native Image class has no C"
-            + " elements here.\n"
-            + "     */\n"
-            + "    @Override\n"
-            + "    public void beforeAnalysis(BeforeAnalysisAccess access) {\n"
-            + "        Class<?> bindings = access.findClassByName("
-            + SeamJson.quote(bindings)
-            + ");\n"
-            + "        if (bindings == null || !isInConfiguration()) return;\n"
-            + "        String header ="
-            + " org.graalvm.nativeimage.c.constant.CConstant.ValueAccess.get(\n"
-            + "                bindings, \"seamHeaderAbi\", String.class);\n"
-            + "        // Read from the loaded class, not a constant javac inlined here, so"
-            + " separately compiled\n"
-            + "        // generations are caught too. This initializes it in the builder, where SVM"
-            + " always\n"
-            + "        // initializes a @CContext class anyway; it has no static initializer of its"
-            + " own.\n"
-            + "        String generated;\n"
-            + "        try {\n"
-            + "            generated = (String) bindings.getField(\"ABI_FINGERPRINT\").get(null);\n"
-            + "        } catch (ReflectiveOperationException e) {\n"
-            + "            throw new IllegalStateException(e);\n"
-            + "        }\n"
-            + "        if (!header.equals(generated))\n"
-            + "            throw new IllegalStateException(\n"
-            + "                \"seam.h fingerprint \" + header + \" differs from generated"
-            + " bindings \" + generated);\n"
-            + "    }\n"
-            + "}\n");
+    // Drop the blank line after the last method.
+    out.setLength(out.length() - 1);
+    out.append("}\n");
     return out.toString();
   }
 

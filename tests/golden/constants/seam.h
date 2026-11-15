@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #define CONSTANTS_SEAM_ABI "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe"
+#define CONSTANTS_SEAM_ABI_4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe 1
 #define CONSTANTS_BINDING_ABI_VERSION 2
 SEAM_ASSERT(sizeof(void *) == 8, "seam target requires 64-bit pointers");
 

@@ -17,8 +17,12 @@ public final class Owned {
     private Owned() {}
     public static final String ABI_FINGERPRINT = "db1131847a802043558af025069ae4fadcab2ffb194a8308febb20f8e1807e31";
     public static final int BINDING_ABI_VERSION = 2;
-    /** Read by the image build's header check in OwnedDirectives; never called at run time. */
-    @CConstant("CONSTANTS_OWNED_SEAM_ABI") static native String seamHeaderAbi();
+    /**
+     * The seam.h check. Only this generation's header defines the macro, and the image build's
+     * C query resolves every @CConstant of this class, so mixing generations fails the build.
+     * Never called; it costs the image nothing.
+     */
+    @CConstant("CONSTANTS_OWNED_SEAM_ABI_db1131847a802043558af025069ae4fadcab2ffb194a8308febb20f8e1807e31") static native int seamHeaderCheck();
     /** enum Status: i32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_owned_status_t")
     public enum Status {

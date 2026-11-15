@@ -44,6 +44,8 @@ public final class CHeader implements Backend {
         .append("_SEAM_ABI ")
         .append(SeamJson.quote(fingerprint))
         .append('\n');
+    // Defined only by this generation's header; the Native Image class reads it with @CConstant.
+    out.append("#define ").append(Names.seamAbiCheck(m, fingerprint)).append(" 1\n");
     out.append("#define ")
         .append(m.name().toUpperCase(Locale.ROOT))
         .append("_BINDING_ABI_VERSION ")

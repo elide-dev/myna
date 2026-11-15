@@ -28,8 +28,12 @@ public final class Consts {
     private Consts() {}
     public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
     public static final int BINDING_ABI_VERSION = 2;
-    /** Read by the image build's header check in ConstsDirectives; never called at run time. */
-    @CConstant("CONSTANTS_SEAM_ABI") static native String seamHeaderAbi();
+    /**
+     * The seam.h check. Only this generation's header defines the macro, and the image build's
+     * C query resolves every @CConstant of this class, so mixing generations fails the build.
+     * Never called; it costs the image nothing.
+     */
+    @CConstant("CONSTANTS_SEAM_ABI_4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */

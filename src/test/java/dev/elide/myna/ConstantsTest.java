@@ -314,8 +314,13 @@ class ConstantsTest {
             "const HASH_CODE type=u32 value=1\n",
             "const HASH_CODE: Native Image accessor hashCode is a reserved Java name"),
         Arguments.of(
-            "const SEAM_HEADER_ABI type=u32 value=1\n",
-            "const SEAM_HEADER_ABI: Native Image accessor seamHeaderAbi is a reserved Java name"),
+            "const SEAM_HEADER_CHECK type=u32 value=1\n",
+            "const SEAM_HEADER_CHECK: Native Image accessor seamHeaderCheck is a reserved Java"
+                + " name"),
+        Arguments.of(
+            "import seamHeaderCheck symbol=s return=i32 error=no_failure\nend\n",
+            "function seamHeaderCheck: name collides with the generated seam.h check of the Native"
+                + " Image class"),
         Arguments.of(
             "const A_B type=u32 value=1\nconst A__B type=u32 value=2\n",
             "const A__B: Native Image accessor aB collides with const A_B"),

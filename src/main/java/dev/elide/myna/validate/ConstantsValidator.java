@@ -6,6 +6,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.SeamJson;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -124,7 +125,7 @@ final class ConstantsValidator {
 
   /**
    * Java keywords and literals, the instance methods of {@code Object} (a static method may not
-   * hide one), and the header-fingerprint accessor: names a const accessor cannot take.
+   * hide one), and the seam.h check: names a const accessor cannot take.
    */
   private static final Set<String> RESERVED_ACCESSORS =
       Set.of(
@@ -133,7 +134,7 @@ final class ConstantsValidator {
                   + " instanceof int interface long native new package private protected public"
                   + " return short static strictfp super switch synchronized this throw throws"
                   + " transient try void volatile while true false null getClass hashCode equals"
-                  + " toString clone finalize notify notifyAll wait seamHeaderAbi")
+                  + " toString clone finalize notify notifyAll wait seamHeaderCheck")
               .split(" "));
 
   /**
@@ -143,6 +144,10 @@ final class ConstantsValidator {
   private static void accessors(Module m) {
     var methods = new HashMap<String, String>();
     for (Function f : m.functions()) {
+      require(
+          !f.name().equals("seamHeaderCheck"),
+          "function seamHeaderCheck: name collides with the generated seam.h check of the Native"
+              + " Image class");
       methods.putIfAbsent(f.name(), "function " + f.name());
       methods.putIfAbsent(f.name() + "Native", "function " + f.name());
       if (Seam.nativeLeaf(f)) methods.putIfAbsent(f.name() + "LeafPointer", "function " + f.name());
@@ -322,7 +327,12 @@ final class ConstantsValidator {
 
   private static void cNames(Module m, Set<String> functionSymbols) {
     String upper = m.name().toUpperCase(Locale.ROOT);
-    var reserved = Set.of(upper + "_SEAM_ABI", upper + "_BINDING_ABI_VERSION", upper + "_SEAM_H");
+    var reserved =
+        Set.of(
+            upper + "_SEAM_ABI",
+            Names.seamAbiCheck(m, SeamJson.fingerprint(m)),
+            upper + "_BINDING_ABI_VERSION",
+            upper + "_SEAM_H");
     var claimed = new HashMap<String, String>();
     for (String symbol : new TreeSet<>(functionSymbols))
       claimed.put(symbol, "function symbol " + symbol);

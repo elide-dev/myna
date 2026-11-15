@@ -410,20 +410,24 @@ public final class NativeImage implements Backend {
   }
 
   /**
-   * The header's fingerprint and one accessor per const, each read from {@code seam.h} at image
-   * build. SVM replaces a {@code @CConstant} call with the value while parsing bytecode, so an
-   * accessor compiles to the same immediate as the literal (tests/native_image_integration.py
-   * compares the code). Narrow macros have type {@code int} in C and need {@code
-   * AllowNarrowingCast}; the value keeps its raw bits, as the literal {@code (byte) 0xc8} does.
+   * The header check and one accessor per const, each read from {@code seam.h} at image build. SVM
+   * replaces a {@code @CConstant} call with the value while parsing bytecode, so an accessor
+   * compiles to the same immediate as the literal (tests/native_image_integration.py compares the
+   * code). Narrow macros have type {@code int} in C and need {@code AllowNarrowingCast}; the value
+   * keeps its raw bits, as the literal {@code (byte) 0xc8} does.
    */
   private static void constants(Module m, StringBuilder out) {
     out.append(
-            "    /** Read by the image build's header check in "
-                + m.directivesClass()
-                + "; never called at run time. */\n")
+            "    /**\n"
+                + "     * The seam.h check. Only this generation's header defines the macro, and"
+                + " the image build's\n"
+                + "     * C query resolves every @CConstant of this class, so mixing generations"
+                + " fails the build.\n"
+                + "     * Never called; it costs the image nothing.\n"
+                + "     */\n")
         .append("    @CConstant(")
-        .append(SeamJson.quote(m.name().toUpperCase(Locale.ROOT) + "_SEAM_ABI"))
-        .append(") static native String seamHeaderAbi();\n");
+        .append(SeamJson.quote(Names.seamAbiCheck(m, SeamJson.fingerprint(m))))
+        .append(") static native int seamHeaderCheck();\n");
     for (Constant c : m.constants())
       out.append("    /** const ")
           .append(c.name())

@@ -24,6 +24,12 @@ class NativeConfigurationTest {
     assertTrue(java.contains("@CContext(BemoImportsDirectives.class)"));
     assertTrue(
         outputs.get("BemoImportsDirectives.java").contains("new fixture.bemo.BemoDirectives()"));
+    // With a consumer context too, the check is the bindings' fingerprinted @CConstant, not a
+    // Feature of the context.
+    assertFalse(outputs.get("BemoImportsDirectives.java").contains("Feature"));
+    String check = "BEMO_FIXTURE_SEAM_ABI_" + outputs.get("seam.abi").strip();
+    assertTrue(java.contains("@CConstant(\"" + check + "\") static native int seamHeaderCheck();"));
+    assertTrue(outputs.get("seam.h").contains("#define " + check + " 1\n"));
     assertTrue(java.contains("@CLibrary(value = \"bemofixture\", requireStatic = true)"));
     assertTrue(java.contains("fixture.bemo.HandwrittenSink callback"));
     assertFalse(java.contains("interface Sink"));

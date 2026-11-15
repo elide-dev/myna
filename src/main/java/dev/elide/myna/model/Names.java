@@ -54,6 +54,15 @@ public final class Names {
     return base + (group == null ? "" : upperSnake(group) + "_") + name.toUpperCase(Locale.ROOT);
   }
 
+  /**
+   * The header check macro, {@code BUFFER_SEAM_ABI_<fingerprint>}: {@code seam.h} defines it as 1
+   * and the Native Image class reads it as a C constant. Bindings and a header from different
+   * generations name different macros, so the image build's C query fails.
+   */
+  public static String seamAbiCheck(Module m, String fingerprint) {
+    return prefix(m) + "_SEAM_ABI_" + fingerprint;
+  }
+
   /** The C carrier typedef of a group: {@code komodo_frontend_status_t}. */
   public static String cTypedef(Module m, String group) {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_t";

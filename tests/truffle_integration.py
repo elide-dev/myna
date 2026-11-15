@@ -65,6 +65,8 @@ def build_truffle_fixture():
     compile_native(classes_ffm, generated_ffm, generated_ffm / "CellApiFFM.java", generated_ffm / "CellApiTruffle.java",
                    generated_ffm / "CellApiForeignFeature.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
                    classpath=classpath)
+    # Truffle cells over FFM need no C context: nothing compiles CellApiDirectives.
+    assert not list(classes_ffm.rglob("*Directives.class")), list(classes_ffm.rglob("*Directives.class"))
     return work, classes, classes_ffm, library, jars
 
 

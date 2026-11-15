@@ -82,6 +82,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
             (generated / "libownership_demo_jni.a.symbols").read_text() + "Java_JniMain_nativeErrors\n")
         classes = work / "classes"
         compile_native(classes, generated, generated / "NativeApiJNI.java", ROOT / "tests/ownership/JniMain.java")
+        self.assertEqual(list(classes.rglob("*Directives.class")), [])  # JNI images need no C context
         native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}",
                      "-H:-UnlockExperimentalVMOptions", "JniMain", "-o", work / "jni-app")
         self.assertIn("Static JNI scalar, ownership and direct buffer calls passed", run(work / "jni-app").stdout)
@@ -90,6 +91,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
     def test_explicit_ffm_library_binding(self):
         from ffm_binding import build_binding_fixture
         work, classes, library = build_binding_fixture()
+        self.assertEqual(list(classes.rglob("*Directives.class")), [])  # FFM images need no C context
         native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                      "--features=fixture.owned.NativeApiForeignFeature,fixture.owned.ConfinedApiForeignFeature", "FfmBindingMain",
                      "-o", work / "binding-app")
@@ -239,7 +241,6 @@ class NativeImageIntegrationTests(unittest.TestCase):
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         native_image( "-O1", "-cp", classes,
             "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
-            "--features=fixture.bemo.BemoImportsDirectives",  # the opt-in seam.h check
             f"-Dmyna.bemo.libraryPath={work}", f"-Dmyna.bemo.contextHeader={fixture / 'context.h'}",
             "fixture.bemo.BemoMain", "-o", app)
         self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
@@ -314,6 +315,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         classes.mkdir()
         compile_native(classes, generated, generated / "MynaFFM.java", generated / "MynaNativeJNI.java",
                        generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
+        self.assertEqual(list(classes.rglob("*Directives.class")), [])  # nor do AOT FFM images
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -369,10 +371,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
 
 
 class GeneratedContextTests(unittest.TestCase):
-    """The generated C context: seam.h reaches the image build and nothing else, its fingerprint is
-    checked there when the consumer enables the context as a Feature, and the @CConstant accessors
-    fold to the descriptor's literals."""
-    CHECK = "--features=fixture.header.HeaderApiDirectives"
+    """The generated C context: seam.h reaches the image build and nothing else, the bindings'
+    fingerprinted @CConstant checks it there with no flag, and the @CConstant accessors fold to the
+    descriptor's literals."""
 
     @classmethod
     def setUpClass(cls):
@@ -388,7 +389,8 @@ class GeneratedContextTests(unittest.TestCase):
                        cls.generated / "HeaderApiDirectives.java", HEADER / "HeaderMain.java",
                        HEADER / "DirectivesProbe.java")
         cls.app = cls.work / "header-app"
-        native_image("-O2", "-cp", cls.classes, *cls.builder_tmp(cls), cls.CHECK,
+        # No --features: the header check is the bindings' own @CConstant.
+        native_image("-O2", "-cp", cls.classes, *cls.builder_tmp(cls),
                      "-H:+UnlockExperimentalVMOptions", "-H:+PrintAnalysisCallTree", "-H:-DeleteLocalSymbols",
                      "-H:-UnlockExperimentalVMOptions", "fixture.header.HeaderMain", "-o", cls.app)
 
@@ -435,8 +437,8 @@ class GeneratedContextTests(unittest.TestCase):
             self.assertNotIn(abi, strings)
 
     def test_header_check_rejects_stale_header(self):
-        """This generation's bindings with another generation's context: the build fails, naming both
-        fingerprints."""
+        """This generation's bindings with another generation's context: with no flag, the build's C
+        query fails on the fingerprinted macro the bindings ask for and the header never defines."""
         source = self.work / "stale.seam"
         source.write_text((HEADER / "header.seam").read_text().replace("value failed = 1", "value failed = 2"))
         stale = self.work / "stale"
@@ -446,14 +448,13 @@ class GeneratedContextTests(unittest.TestCase):
         classes = self.work / "stale-classes"
         compile_native(classes, self.generated, self.generated / "HeaderApi.java", stale / "HeaderApiDirectives.java",
                        HEADER / "HeaderMain.java")
-        result = native_image("-O1", "-cp", classes, *self.builder_tmp(), self.CHECK, "fixture.header.HeaderMain",
+        result = native_image("-O1", "-cp", classes, *self.builder_tmp(), "fixture.header.HeaderMain",
                               "-o", self.work / "stale-app", ok=False)
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn(f"seam.h fingerprint {header} differs from generated bindings {bindings}", output)
-        # The check is opt-in: without the Feature the same mixed classes build.
-        native_image("-O1", "-cp", classes, *self.builder_tmp(), "fixture.header.HeaderMain",
-                     "-o", self.work / "unchecked-app")
+        self.assertIn("Error compiling query code", output)
+        self.assertIn(f"HEADER_FIXTURE_SEAM_ABI_{bindings}", output)
+        self.assertFalse((self.work / "stale-app").exists())
 
     def test_large_header(self):
         """A seam.h over 64 KiB, beyond one class-file string constant, is embedded in pieces."""

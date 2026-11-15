@@ -103,7 +103,7 @@ class GeneratorTest {
     assertTrue(
         output
             .get("IoNativesDirectives.java")
-            .contains("findClassByName(\"dev.example.io.IoNatives\")"));
+            .contains("package dev.example.io;\n\n/**\n * The C context of {@link IoNatives}:"));
     assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Downcall.HANDLE"));
     assertTrue(
         output
@@ -1467,10 +1467,18 @@ class GeneratorTest {
     assertTrue(
         java.contains("import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;\n"), java);
     assertTrue(java.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), java);
+    // The seam.h check: a macro only this generation's header defines, resolved by the C query.
+    var outputs = generate(constants);
+    String check = "SAMPLE_SEAM_ABI_" + outputs.get("seam.abi").strip();
     assertTrue(
-        java.contains(
-            "    @CConstant(\"SAMPLE_SEAM_ABI\") static native String seamHeaderAbi();\n"),
+        java.contains("    @CConstant(\"" + check + "\") static native int seamHeaderCheck();\n"),
         java);
+    assertTrue(
+        outputs.get("seam.h").contains("\n#define " + check + " 1\n"), outputs.get("seam.h"));
+    assertTrue(
+        outputs.get("seam.h").contains("\n#define SAMPLE_SEAM_ABI \""), outputs.get("seam.h"));
+    // Nothing calls it: wrappers, leaf or not, are unchanged by the check.
+    assertEquals(1, java.split("seamHeaderCheck", -1).length - 1, java);
     // Each const reads its macro from seam.h; SVM replaces the call with the value at parse time.
     assertTrue(
         java.contains(
@@ -1497,11 +1505,12 @@ class GeneratorTest {
     assertTrue(
         java.contains("    @CConstant(\"SAMPLE_SPAN\") public static native long span();\n"), java);
     // Without constants or a consumer context the class still names the generated context and
-    // reads the header fingerprint; nothing needs narrowing.
+    // checks the header; nothing needs narrowing.
     String plain = generate(VALID).get("MynaNative.java");
     assertTrue(
         plain.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), plain);
-    assertTrue(plain.contains("static native String seamHeaderAbi();"), plain);
+    assertTrue(plain.contains("static native int seamHeaderCheck();"), plain);
+    assertFalse(plain.contains("seamHeaderAbi"), plain);
     assertFalse(plain.contains("AllowNarrowingCast"), plain);
     // A consumer context is delegated to, never the annotation value.
     String bemo =
@@ -1563,7 +1572,7 @@ class GeneratorTest {
   }
 
   @Test
-  void directivesSupplyTheHeaderAndCheckItsFingerprintAtImageBuild() {
+  void directivesSupplyTheHeaderAndAreNoFeature() {
     var output = generate(VALID);
     String directives = output.get("MynaNativeDirectives.java");
     assertNotNull(directives, output.keySet().toString());
@@ -1571,39 +1580,28 @@ class GeneratorTest {
     assertFalse(directives.contains("\nimport "), directives);
     assertTrue(
         directives.contains(
-            "public final class MynaNativeDirectives\n"
-                + "    implements org.graalvm.nativeimage.c.CContext.Directives,"
-                + " org.graalvm.nativeimage.hosted.Feature {\n"),
+            "public final class MynaNativeDirectives implements"
+                + " org.graalvm.nativeimage.c.CContext.Directives {\n"),
         directives);
     assertTrue(directives.contains("    public MynaNativeDirectives() {}\n"), directives);
+    assertTrue(directives.endsWith("    }\n}\n"), directives);
     assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
     // Written once per builder JVM into a directory the builder removes when it exits.
     assertTrue(directives.contains("createTempDirectory(\"myna-seam\")"), directives);
     assertTrue(directives.contains("Runtime.getRuntime().addShutdownHook("), directives);
     assertTrue(
         directives.contains("        return java.util.List.of(Header.INCLUDE);\n"), directives);
-    // The check reads the loaded bindings, so mixed generations of class files are caught too, and
-    // an image without the Native Image class (FFM or Truffle only) has nothing to check.
-    assertTrue(
-        directives.contains("access.findClassByName(\"dev.elide.myna.generated.MynaNative\")"),
-        directives);
-    assertTrue(
-        directives.contains(
-            "org.graalvm.nativeimage.c.constant.CConstant.ValueAccess.get(\n"
-                + "                bindings, \"seamHeaderAbi\", String.class)"),
-        directives);
-    assertTrue(directives.contains("bindings.getField(\"ABI_FINGERPRINT\").get(null)"), directives);
-    assertTrue(
-        directives.contains(
-            "throw new IllegalStateException(\n"
-                + "                \"seam.h fingerprint \" + header + \" differs from generated"
-                + " bindings \" + generated);"),
-        directives);
+    // The check is the bindings' fingerprinted @CConstant, not a hosted Feature: nothing here reads
+    // the bindings, and an image without the Native Image class never touches this class.
+    for (String gone :
+        List.of("Feature", "beforeAnalysis", "ABI_FINGERPRINT", "seamHeaderAbi", "MynaNative\""))
+      assertFalse(directives.contains(gone), gone);
     // Without a consumer context nothing is delegated.
     assertFalse(directives.contains("Directives context ="), directives);
     assertFalse(directives.contains("return context."), directives);
-    // Consumers opt into the check with --features; the generated properties do not register it.
+    // The check needs no flag: the generated properties register no Feature.
     assertFalse(output.get(PROPERTIES).contains("--features"), output.get(PROPERTIES));
+    assertFalse(output.get(PROPERTIES).contains("Directives"), output.get(PROPERTIES));
   }
 
   @Test
