@@ -74,7 +74,7 @@ public final class BufferOps {
   /** Java -> Rust by-value imports through their reference-form shims; one bit per check. */
   public static int structProbe() {
     MynaNative.Pair pair = StackValue.get(MynaNative.Pair.class);
-    MynaNative.Pair swapped = StackValue.get(MynaNative.Pair.SIZE);
+    MynaNative.Pair swapped = StackValue.get(MynaNative.Pair.class);
     pair.left(-5L);
     pair.right(1 << 30);
     MynaNative.swapPair(pair, swapped);
