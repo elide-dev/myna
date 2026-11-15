@@ -253,8 +253,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
                  "textAt": (r"^\S+ 0x10\(%rdi\), %r", r"^ldr x\d+, \[x0, #(0x10|16)\]$")}
         # The scaled access: Function is 16 bytes, so its address is pointer + (i << 4); a u16 is
         # one 2-scaled halfword load.
-        scaled = {"functionAt": r"(shl\w* \$0x4, %r|lsl #4\b|lsl #0x4\b)",
-                  "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #1\]|lsl #0x1\])"}
+        # AArch64 may fold the shift into the add or load, or emit it alone (lsl/ubfiz/sbfiz).
+        scaled = {"functionAt": r"(shl\w* \$0x4, %r|lsl #(4|0x4)\b|^(lsl|[su]bfiz) x\d+, x\d+, #(4|0x4)\b)",
+                  "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #(1|0x1)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(1|0x1)\b)"}
         for name in ("functionAt", "textAt"):
             helper = body(name)
             raw = body("raw" + name[0].upper() + name[1:])
