@@ -28,6 +28,7 @@ public final class Dsl {
     var flagSets = new ArrayList<FlagSet>();
     var enumValues = new ArrayList<EnumValue>();
     var flagBits = new ArrayList<FlagBit>();
+    var flagRanges = new ArrayList<FlagRange>();
     String[] header = null;
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
@@ -153,6 +154,7 @@ public final class Dsl {
             fields.clear();
             enumValues.clear();
             flagBits.clear();
+            flagRanges.clear();
           }
           case "value" -> {
             require(header != null && header[0].equals("enum"), "value requires an enum block");
@@ -164,6 +166,21 @@ public final class Dsl {
             require(words.length == 4 && words[2].equals("="), "expected: bit NAME = INDEX");
             require(words[3].matches("[0-9]{1,9}"), "invalid bit index: " + words[3]);
             flagBits.add(new FlagBit(words[1], Integer.parseInt(words[3])));
+          }
+          case "range" -> {
+            require(header != null && header[0].equals("flags"), "range requires a flags block");
+            require(
+                words.length >= 4 && words[2].equals("="),
+                "expected: range NAME = LOW..HIGH [enum=ENUM]");
+            require(
+                words[3].matches("[0-9]{1,9}\\.\\.[0-9]{1,9}"), "invalid bit range: " + words[3]);
+            String[] bounds = words[3].split("\\.\\.");
+            var opts = options(words, 4);
+            String enumName = take(opts, "enum", null);
+            empty(opts);
+            flagRanges.add(
+                new FlagRange(
+                    words[1], Integer.parseInt(bounds[0]), Integer.parseInt(bounds[1]), enumName));
           }
           case "param" -> {
             require(
@@ -215,7 +232,7 @@ public final class Dsl {
             } else if (header[0].equals("flags")) {
               var type = integerScalar(takeRequired(options, "type"));
               boolean bitfields = bool(take(options, "c_bitfields", "false"));
-              flagSets.add(new FlagSet(header[1], type, flagBits, bitfields));
+              flagSets.add(new FlagSet(header[1], type, flagBits, bitfields, flagRanges));
               empty(options);
             } else if (header[0].equals("struct")) {
               structs.add(

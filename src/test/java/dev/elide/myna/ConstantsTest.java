@@ -81,8 +81,9 @@ class ConstantsTest {
     assertEquals(new BigInteger("18446744073709551615"), m.constants().get(1).value());
     assertEquals(new BigInteger("-9223372036854775808"), m.constants().get(0).value());
     assertEquals(
-        java.util.List.of("Level", "Status"), m.enums().stream().map(EnumGroup::name).toList());
-    var status = m.enums().get(1);
+        java.util.List.of("Kind", "Level", "Status"),
+        m.enums().stream().map(EnumGroup::name).toList());
+    var status = m.enums().get(2);
     assertEquals(Scalar.I32, status.type());
     assertEquals(
         java.util.List.of(
@@ -92,16 +93,22 @@ class ConstantsTest {
             new EnumValue("syntax_error", BigInteger.valueOf(16))),
         status.values());
     assertEquals(
-        java.util.List.of("Perms", "Wide"), m.flagSets().stream().map(FlagSet::name).toList());
-    assertFalse(m.flagSets().get(0).cBitfields());
+        java.util.List.of("Packed", "Perms", "Wide"),
+        m.flagSets().stream().map(FlagSet::name).toList());
+    assertEquals(
+        java.util.List.of(
+            new FlagRange("kind", 8, 15, "Kind"), new FlagRange("depth", 16, 19, null)),
+        m.flagSets().get(0).ranges());
+    assertFalse(m.flagSets().get(1).cBitfields());
     assertEquals(
         java.util.List.of(
             new FlagBit("read", 0), new FlagBit("write", 1), new FlagBit("sticky", 31)),
-        m.flagSets().get(0).bits());
-    assertTrue(m.flagSets().get(1).cBitfields());
-    assertEquals(63, m.flagSets().get(1).bits().get(1).bit());
+        m.flagSets().get(1).bits());
+    assertTrue(m.flagSets().get(1).ranges().isEmpty());
+    assertTrue(m.flagSets().get(2).cBitfields());
+    assertEquals(63, m.flagSets().get(2).bits().get(1).bit());
 
-    var record = m.structs().get(0);
+    var record = m.structs().stream().filter(s -> s.name().equals("Record")).findFirst().get();
     assertEquals(new GroupRef(GroupKind.ENUM, "Status"), record.fields().get(0).group());
     assertEquals(new GroupRef(GroupKind.FLAGS, "Perms"), record.fields().get(1).group());
     assertEquals(new GroupRef(GroupKind.FLAGS, "Wide"), record.fields().get(2).group());
@@ -589,7 +596,95 @@ class ConstantsTest {
             "flags F type=u8 c_bitfields=true\n bit a_b = 0\n bit a__b = 1\nend\n"
                 + "struct S size=1 align=1\n field f type=u8 offset=0 flags=F\nend\n",
             "struct S: accessor fAB of field f bit a__b collides with accessor of field f bit"
-                + " a_b"));
+                + " a_b"),
+        Arguments.of(
+            "flags F type=u32 c_bitfields=true\n range kind = 0..3\nend\n"
+                + "struct S size=8 align=4\n field f type=u32 offset=0 flags=F\n"
+                + " field fKind type=u32 offset=4\nend\n",
+            "struct S: accessor fKind of field f range kind collides with field fKind"),
+        // Bit ranges.
+        Arguments.of(
+            "flags ClassFlags type=u32\n bit open = 0\n bit external = 9\n"
+                + " range kind = 8..15\nend\n",
+            "flags ClassFlags: range kind = 8..15 and bit external = 9 overlap"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..3\n range b = 3..5\nend\n",
+            "flags F: ranges a = 0..3 and b = 3..5 overlap"),
+        Arguments.of(
+            "flags F type=u32\n range a = 8..32\nend\n",
+            "flags F: range a = 8..32 is outside u32 (bits 0..31)"),
+        Arguments.of(
+            "flags F type=u8\n range a = 5..4\nend\n",
+            "flags F: range a = 5..4 is empty (LOW > HIGH)"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: undeclared enum: Kind"),
+        Arguments.of(
+            FL + "flags F type=u32\n range a = 0..3 enum=FunctionFlags\nend\n",
+            "flags F: range a = 0..3: enum=FunctionFlags names a flag set"),
+        Arguments.of(
+            "enum Kind type=u8\n value a = 0\n value b = 16\nend\n"
+                + "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: enum=Kind value b = 16 does not fit 4 bits"),
+        Arguments.of(
+            "enum Kind type=i8\n value a = -1\nend\n"
+                + "flags F type=u32\n range a = 0..3 enum=Kind\nend\n",
+            "flags F: range a = 0..3: enum=Kind value a = -1 does not fit 4 bits"),
+        Arguments.of(
+            "enum Kind type=i8\n value a = 0\nend\n"
+                + "flags F type=u32\n range a = 0..7 enum=Kind\nend\n",
+            "flags F: range a = 0..7: enum=Kind has carrier i8, too narrow for 8 bits"),
+        Arguments.of(
+            "flags F type=u32\n bit kind = 0\n range kind = 1..3\nend\n",
+            "flags F: bit kind and range kind both use the name kind"),
+        Arguments.of(
+            "flags F type=u32\n bit kind_mask = 0\n range kind = 1..3\nend\n",
+            "flags F: bit kind_mask and range kind both use the name kind_mask"),
+        Arguments.of(
+            "flags F type=u32\n range a_shift = 0..1\n range a = 2..3\nend\n",
+            "flags F: range a_shift and range a both use the name a_shift"),
+        Arguments.of(
+            "flags F type=u32\n range none = 0..1\nend\n", "flags F: range name is reserved: none"),
+        Arguments.of(
+            "flags F type=u32\n range type = 0..1\nend\n", "invalid or reserved identifier: type"),
+        Arguments.of(
+            "flags F type=u32\n range contains = 0..1\nend\n",
+            "flags F: range contains: Rust method contains collides with the flag method contains"),
+        Arguments.of(
+            "flags F type=u32\n range has_unknown = 0..1\nend\n",
+            "flags F: range has_unknown: Java method hasUnknown collides with hasUnknown"),
+        Arguments.of(
+            "flags F type=u32\n range a = 0..1\n range with_a = 2..3\nend\n",
+            "flags F: range with_a: Java method withA collides with range a"),
+        Arguments.of(
+            "flags F type=u32\n range t = 0..1\nend\n",
+            "C name komodo_frontend_f_t is generated by both flags F range t getter and flags F"
+                + " typedef"));
+  }
+
+  @Test
+  void rangesParse() {
+    var set =
+        Dsl.parse(HEAD + "flags F type=u32\n range b = 4..7\n range a = 0..3 enum=E\nend\n")
+            .flagSets()
+            .get(0);
+    assertEquals(
+        List.of(new FlagRange("a", 0, 3, "E"), new FlagRange("b", 4, 7, null)), set.ranges());
+    assertEquals(BigInteger.valueOf(0xf0), set.ranges().get(1).mask());
+    assertEquals(BigInteger.valueOf(0xff), set.all());
+    assertEquals(
+        "line 3: expected: range NAME = LOW..HIGH [enum=ENUM]",
+        parseError("flags F type=u8\n range a 0..3\nend\n"));
+    assertEquals(
+        "line 3: invalid bit range: 0-3", parseError("flags F type=u8\n range a = 0-3\nend\n"));
+    assertEquals(
+        "line 3: unknown options: [flags]",
+        parseError("flags F type=u8\n range a = 0..3 flags=G\nend\n"));
+    assertEquals(
+        "line 3: range requires a flags block",
+        parseError("enum E type=i32\n range a = 0..3\nend\n"));
+    // A set of ranges alone is a flag set.
+    Validator.validate(Dsl.parse(HEAD + "flags F type=u8\n range a = 0..7\nend\n"), true);
   }
 
   @ParameterizedTest
@@ -772,12 +867,16 @@ class ConstantsTest {
         json);
     assertTrue(
         json.contains(
-            "\"flagSets\":"
-                + " [{\"name\":\"Perms\",\"type\":\"u32\",\"bits\":[{\"name\":\"read\",\"bit\":0},"
+            "\"flagSets\": [{\"name\":\"Packed\",\"type\":\"u32\",\"cBitfields\":true,\"bits\":"
+                + "[{\"name\":\"open\",\"bit\":0},{\"name\":\"external\",\"bit\":2}],\"ranges\":"
+                + "[{\"name\":\"kind\",\"low\":8,\"high\":15,\"enum\":\"Kind\"},"
+                + "{\"name\":\"depth\",\"low\":16,\"high\":19}]},"
+                + "{\"name\":\"Perms\",\"type\":\"u32\",\"bits\":[{\"name\":\"read\",\"bit\":0},"
                 + "{\"name\":\"write\",\"bit\":1},{\"name\":\"sticky\",\"bit\":31}]},"
                 + "{\"name\":\"Wide\",\"type\":\"u64\",\"cBitfields\":true,\"bits\":"),
         json);
-    assertEquals(1, json.split("\"cBitfields\"", -1).length - 1);
+    assertEquals(2, json.split("\"cBitfields\"", -1).length - 1);
+    assertEquals(1, json.split("\"ranges\"", -1).length - 1);
     assertTrue(
         json.contains("{\"name\":\"perms\",\"type\":\"u32\",\"offset\":4,\"flags\":\"Perms\"}"));
     assertTrue(
@@ -987,6 +1086,13 @@ class ConstantsTest {
                 .append(Perms.hasUnknown(perms)).append(Perms.hasUnknown(perms | 0x4)).append(' ');
             out.append(Wide.last(Wide.LAST)).append(Wide.first(Wide.LAST)).append(Wide.hasUnknown(2L))
                 .append(' ').append(MAGIC).append(' ').append(LIMIT).append(' ').append(FLOOR);
+            int packed = Packed.withDepth(Packed.withKind(Packed.OPEN, Kind.BOXED), 9);
+            out.append(' ').append(Integer.toHexString(packed)).append(' ').append(Packed.kind(packed))
+                .append(Packed.depth(packed)).append(Kind.name(Packed.kind(packed)));
+            packed = Packed.withKind(Packed.withDepth(packed, 0x13), Kind.LAST);
+            out.append(' ').append(Integer.toHexString(packed)).append(Kind.name(Packed.kind(packed)))
+                .append(Packed.hasUnknown(packed)).append(Packed.hasUnknown(packed | 0x2))
+                .append(Packed.hasUnknown(packed | 0x100000));
             return out.toString();
           }
         }
@@ -1021,7 +1127,7 @@ class ConstantsTest {
         assertEquals(
             "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
                 + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
-                + " -9223372036854775808",
+                + " -9223372036854775808 90501 59boxed 3ff01lastfalsetruetrue",
             result);
       }
     } finally {

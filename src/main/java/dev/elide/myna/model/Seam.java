@@ -323,16 +323,51 @@ public final class Seam {
   public record FlagBit(String name, int bit) {}
 
   /**
-   * A set of named bit indices over an integer carrier; bits are sorted by index. {@code
-   * cBitfields} opts the set into a generated {@code @CBitfield} accessor struct.
+   * A multi-bit field of a flag word, bits {@code low..high} inclusive: {@code range kind = 8..15}.
+   * {@code enumName} names the enum its values belong to, or is null for a raw number.
    */
-  public record FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+  public record FlagRange(String name, int low, int high, String enumName) {
+    public int width() {
+      return high - low + 1;
+    }
+
+    /** The range's bits in place: {@code ((1 << width) - 1) << low}. */
+    public BigInteger mask() {
+      return valueMask().shiftLeft(low);
+    }
+
+    /** The range's bits shifted down to bit 0: {@code (1 << width) - 1}. */
+    public BigInteger valueMask() {
+      return BigInteger.ONE.shiftLeft(width()).subtract(BigInteger.ONE);
+    }
+  }
+
+  /**
+   * A set of named bit indices over an integer carrier; bits are sorted by index and ranges by
+   * their low bit. {@code cBitfields} opts the set into a generated {@code @CBitfield} accessor
+   * struct.
+   */
+  public record FlagSet(
+      String name, Scalar type, List<FlagBit> bits, boolean cBitfields, List<FlagRange> ranges) {
     public FlagSet {
       bits = bits.stream().sorted(Comparator.comparingInt(FlagBit::bit)).toList();
+      ranges = ranges.stream().sorted(Comparator.comparingInt(FlagRange::low)).toList();
+    }
+
+    public FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+      this(name, type, bits, cBitfields, List.of());
     }
 
     public FlagSet(String name, Scalar type, List<FlagBit> bits) {
       this(name, type, bits, false);
+    }
+
+    /** Every declared bit: the bits' masks and the ranges' masks. */
+    public BigInteger all() {
+      BigInteger all = BigInteger.ZERO;
+      for (FlagBit b : bits) all = all.setBit(b.bit());
+      for (FlagRange r : ranges) all = all.or(r.mask());
+      return all;
     }
   }
 

@@ -625,6 +625,10 @@ CHECK(sizeof(CONSTANTS_LEVEL_HIGH) >= 1, "u8");
 CHECK(sizeof(constants_status_t) == 4 && sizeof(constants_level_t) == 1, "typedef sizes");
 CHECK(sizeof(struct constants_wide_bits) == 8, "bits size");
 CHECK(offsetof(struct Record, wide) == 8 && offsetof(struct Record, wideBits) == 8, "union offset");
+CHECK(CONSTANTS_PACKED_KIND_SHIFT == 8 && CONSTANTS_PACKED_KIND_MASK == 0xff00u, "kind range");
+CHECK(CONSTANTS_PACKED_DEPTH_SHIFT == 16 && CONSTANTS_PACKED_DEPTH_MASK == 0xf0000u, "depth range");
+CHECK(CONSTANTS_PACKED_ALL == 0xfff05u && sizeof(CONSTANTS_PACKED_KIND_MASK) == 4, "packed all");
+CHECK(sizeof(struct constants_packed_bits) == 4, "packed bits size");
 #if CONSTANTS_STATUS_OK != 0
 #error "macros must work in #if"
 #endif
@@ -650,6 +654,17 @@ int main(void) {
   if (classify(-1) != 1 || classify(16) != 4 || classify(5) != 0) return 4;
   if (strcmp(constants_status_name(CONSTANTS_STATUS_OK), "ok") != 0) return 5;
   if (constants_status_name(99) != NULL || constants_level_name(7) != NULL) return 6;
+  struct Node n;
+  memset(&n, 0, sizeof n);
+  n.packed = constants_packed_with_depth(
+      constants_packed_with_kind(CONSTANTS_PACKED_OPEN, CONSTANTS_KIND_BOXED), 9);
+  if (n.packed != 0x90501u) return 7;
+  if (constants_packed_kind(n.packed) != CONSTANTS_KIND_BOXED) return 8;
+  if (constants_packed_depth(n.packed) != 9 || n.packedBits.depth != 9) return 9;
+  if (n.packedBits.kind != CONSTANTS_KIND_BOXED || !n.packedBits.open) return 10;
+  n.packed = constants_packed_with_kind(constants_packed_with_depth(n.packed, 0x13), CONSTANTS_KIND_LAST);
+  if (n.packed != 0x3ff01u || (n.packed & ~CONSTANTS_PACKED_ALL) != 0) return 11;
+  if (((n.packed | 0x2u) & ~CONSTANTS_PACKED_ALL) == 0) return 12;
   return 0;
 }
 ''')

@@ -190,13 +190,20 @@ public final class TruffleCells implements Backend {
     }
     for (FlagSet f : m.flagSets()) {
       names.add(f.name());
-      values.add(
-          group(
-              f.bits().stream().map(FlagBit::name).toList(),
-              f.bits().stream()
-                  .map(b -> guestLiteral(f.type(), flagMask(f.type(), b.bit())))
-                  .toList(),
-              "                    "));
+      var members = new ArrayList<String>();
+      var masks = new ArrayList<String>();
+      for (FlagBit b : f.bits()) {
+        members.add(b.name());
+        masks.add(guestLiteral(f.type(), flagMask(f.type(), b.bit())));
+      }
+      // A range is its shift and its in-place mask, as the other backends name them.
+      for (FlagRange r : f.ranges()) {
+        members.add(r.name() + "_shift");
+        masks.add(guestLiteral(f.type(), BigInteger.valueOf(r.low())));
+        members.add(r.name() + "_mask");
+        masks.add(guestLiteral(f.type(), carrierBits(f.type(), r.mask())));
+      }
+      values.add(group(members, masks, "                    "));
     }
     out.append("    private static final NativeConstants CONSTANTS =\n")
         .append("            ")
@@ -322,14 +329,20 @@ public final class TruffleCells implements Backend {
    * two.
    */
   private static BigInteger flagMask(Scalar type, int bit) {
-    BigInteger mask = BigInteger.ONE.shiftLeft(bit);
+    return carrierBits(type, BigInteger.ONE.shiftLeft(bit));
+  }
+
+  /** A mask as a value of {@code type}: with the sign bit set, a signed carrier's negative. */
+  private static BigInteger carrierBits(Scalar type, BigInteger mask) {
     int width = type.bytes * 8;
     boolean signed =
         switch (type) {
           case I8, I16, I32, I64, ISIZE -> true;
           default -> false;
         };
-    return signed && bit == width - 1 ? mask.subtract(BigInteger.ONE.shiftLeft(width)) : mask;
+    return signed && mask.testBit(width - 1)
+        ? mask.subtract(BigInteger.ONE.shiftLeft(width))
+        : mask;
   }
 
   /**

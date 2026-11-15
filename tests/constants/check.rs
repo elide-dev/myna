@@ -6,7 +6,7 @@
 mod seam {
     include!(concat!(env!("SEAM_GENERATED"), "/seam.rs"));
 }
-use seam::{Level, Perms, Record, Session, Status, Wide};
+use seam::{Kind, Level, Node, Packed, Perms, Record, Session, Status, Wide};
 
 const _: () = assert!(seam::MAGIC == 0x3141514b);
 const _: () = assert!(seam::LIMIT == u64::MAX);
@@ -30,6 +30,10 @@ const _: () = assert!(core::mem::size_of::<Level>() == 1);
 const _: () = assert!(core::mem::size_of::<Perms>() == 4);
 const _: () = assert!(core::mem::size_of::<Wide>() == 8);
 const _: () = assert!(core::mem::offset_of!(Record, perms) == 4);
+const _: () = assert!(Packed::KIND_SHIFT == 8 && Packed::KIND_MASK == 0xff00);
+const _: () = assert!(Packed::DEPTH_SHIFT == 16 && Packed::DEPTH_MASK == 0xf_0000);
+const _: () = assert!(Packed::ALL.0 == 0xf_ff05);
+const _: () = assert!(Packed(0x0005_2a01).kind().0 == 0x2a);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn consts_status(view: *const Record) -> Status {
@@ -85,4 +89,25 @@ fn record_fields_use_newtypes() {
     assert_eq!(r.status, Status::OK);
     assert!(r.perms.contains(Perms::READ));
     assert_eq!(consts_status(&r), Status::OK);
+}
+
+#[test]
+fn ranges_read_and_write_their_bits() {
+    let p = Packed::OPEN.with_kind(Kind::BOXED).with_depth(9);
+    assert_eq!(p.0, 0x0009_0501);
+    assert_eq!(p.kind(), Kind::BOXED);
+    assert_eq!(p.depth(), 9);
+    assert!(p.contains(Packed::OPEN));
+    // The setter keeps the other bits and masks the value to the width.
+    let q = p.with_kind(Kind::LAST).with_depth(0x13);
+    assert_eq!(q.0, 0x0003_ff01);
+    assert_eq!(q.kind(), Kind::LAST);
+    assert_eq!(q.with_kind(Kind::PLAIN).kind(), Kind::PLAIN);
+    // An undeclared kind is still a Kind; a bit outside every bit and range is unknown.
+    assert_eq!(Packed(0x7700).kind(), Kind(0x77));
+    assert_eq!(Packed(0x7700).kind().name(), None);
+    assert_eq!(q.0 & !Packed::ALL.0, 0);
+    assert_ne!(Packed(q.0 | 0x2).0 & !Packed::ALL.0, 0);
+    let n = Node { tag: 0, packed: p, operand: 0 };
+    assert_eq!(n.packed.kind(), Kind::BOXED);
 }

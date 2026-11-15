@@ -14,7 +14,7 @@ import org.graalvm.word.WordFactory;
 
 public final class ConstsTruffle {
     private ConstsTruffle() {}
-    public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
+    public static final String ABI_FINGERPRINT = "53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f";
     /** Logical names of every generated cell, in symbol order. */
     public static final String[] CELLS = {"blockingStatus", "setLevel", "status"};
     /** A fresh executable per call: a cell holds call-site profiles and is adopted once. */
@@ -37,11 +37,18 @@ public final class ConstsTruffle {
     }
     private static final NativeConstants CONSTANTS =
             new NativeConstants(
-                new String[] {"FLOOR", "LIMIT", "MAGIC", "Level", "Status", "Perms", "Wide"},
+                new String[] {"FLOOR", "LIMIT", "MAGIC", "Kind", "Level", "Status", "Packed", "Perms", "Wide"},
                 new Object[] {
                     -9223372036854775808L,
                     -1L,
                     826364235L,
+                    new NativeConstants(
+                            new String[] {"plain", "boxed", "last"},
+                            new Object[] {
+                                0,
+                                5,
+                                255
+                            }),
                     new NativeConstants(
                             new String[] {"low", "high"},
                             new Object[] {
@@ -55,6 +62,16 @@ public final class ConstsTruffle {
                                 0,
                                 3,
                                 16
+                            }),
+                    new NativeConstants(
+                            new String[] {"open", "external", "kind_shift", "kind_mask", "depth_shift", "depth_mask"},
+                            new Object[] {
+                                1L,
+                                4L,
+                                8L,
+                                65280L,
+                                16L,
+                                983040L
                             }),
                     new NativeConstants(
                             new String[] {"read", "write", "sticky"},
@@ -78,6 +95,37 @@ public final class ConstsTruffle {
      */
     public static NativeConstants constants() {
         return CONSTANTS;
+    }
+    /** Names of enum Kind: u8. */
+    public static final class KindNames {
+        private KindNames() {}
+        private static final TruffleString PLAIN =
+                TruffleString.fromConstant("plain", TruffleString.Encoding.UTF_8);
+        private static final TruffleString BOXED =
+                TruffleString.fromConstant("boxed", TruffleString.Encoding.UTF_8);
+        private static final TruffleString LAST =
+                TruffleString.fromConstant("last", TruffleString.Encoding.UTF_8);
+        /**
+         * The declared name of a value, or null when the enum does not list it. Folds to a
+         * constant for a constant value; no boundary.
+         */
+        public static TruffleString name(byte value) {
+            switch (value) {
+                case 0: return PLAIN;
+                case 5: return BOXED;
+                case -1: return LAST;
+                default: return null;
+            }
+        }
+        /** The same, for the value as a cell returns it: no narrowing needed. */
+        public static TruffleString name(int value) {
+            switch (value) {
+                case 0: return PLAIN;
+                case 5: return BOXED;
+                case 255: return LAST;
+                default: return null;
+            }
+        }
     }
     /** Names of enum Level: u8. */
     public static final class LevelNames {

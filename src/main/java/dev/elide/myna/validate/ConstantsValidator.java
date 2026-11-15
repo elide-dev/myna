@@ -65,6 +65,7 @@ final class ConstantsValidator {
     accessors(m);
     for (EnumGroup e : m.enums()) enumValues(e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
+    for (FlagSet f : m.flagSets()) flagRanges(m, f);
 
     references(m);
     bitfieldAccessors(m);
@@ -120,7 +121,8 @@ final class ConstantsValidator {
     for (EnumGroup e : m.enums())
       require(!e.values().isEmpty(), "enum " + e.name() + ": declares no values");
     for (FlagSet f : m.flagSets())
-      require(!f.bits().isEmpty(), "flags " + f.name() + ": declares no bits");
+      require(
+          !f.bits().isEmpty() || !f.ranges().isEmpty(), "flags " + f.name() + ": declares no bits");
   }
 
   /**
@@ -217,6 +219,128 @@ final class ConstantsValidator {
         where + "c_bitfields requires an unsigned carrier, found " + f.type().text());
   }
 
+  /** Methods of every Rust flag newtype, which a range's getter may not take. */
+  private static final Set<String> RUST_FLAG_METHODS =
+      Set.of("contains", "intersects", "union", "when");
+
+  /**
+   * Bit ranges: inside the carrier, disjoint from every bit and other range, with an enum whose
+   * carrier holds every value of the width and whose values fit it. Bit and range names, and each
+   * range's derived {@code <name>_shift} and {@code <name>_mask} constants, share one namespace;
+   * each range's getter and {@code with} setter must be free method names in Java and Rust.
+   */
+  private static void flagRanges(Module m, FlagSet f) {
+    if (f.ranges().isEmpty()) return;
+    String where = "flags " + f.name() + ": ";
+    int width = f.type().bytes * 8;
+    // Owner of each member name: bits, ranges, and the ranges' derived constants.
+    var members = new HashMap<String, String>();
+    for (FlagBit b : f.bits()) members.put(b.name(), "bit " + b.name());
+    var javaMethods = new HashMap<String, String>();
+    for (FlagBit b : f.bits())
+      javaMethods.putIfAbsent(Names.lowerCamel(b.name()), "predicate of bit " + b.name());
+    javaMethods.put("hasUnknown", "hasUnknown");
+    var rustMethods = new HashMap<String, String>();
+    for (String method : RUST_FLAG_METHODS) rustMethods.put(method, "the flag method " + method);
+    for (FlagRange r : f.ranges()) {
+      String range = "range " + r.name() + " = " + r.low() + ".." + r.high();
+      require(MEMBER.matcher(r.name()).matches(), where + "invalid range name: " + r.name());
+      require(!RESERVED_BITS.contains(r.name()), where + "range name is reserved: " + r.name());
+      Validator.identifier(r.name());
+      require(r.low() <= r.high(), where + range + " is empty (LOW > HIGH)");
+      require(
+          r.high() < width,
+          where + range + " is outside " + f.type().text() + " (bits 0.." + (width - 1) + ")");
+      // C, Rust and Java spell the derived constants NAME_SHIFT and NAME_MASK.
+      for (String member : List.of(r.name(), r.name() + "_shift", r.name() + "_mask")) {
+        String other = members.putIfAbsent(member, "range " + r.name());
+        require(
+            other == null,
+            where + other + " and range " + r.name() + " both use the name " + member);
+      }
+      String getter = Names.lowerCamel(r.name());
+      String setter = "with" + Character.toUpperCase(getter.charAt(0)) + getter.substring(1);
+      require(
+          !RESERVED_ACCESSORS.contains(getter),
+          where + "range " + r.name() + ": getter " + getter + " is a reserved Java name");
+      for (String method : List.of(getter, setter)) {
+        String other = javaMethods.putIfAbsent(method, "range " + r.name());
+        require(
+            other == null,
+            where + "range " + r.name() + ": Java method " + method + " collides with " + other);
+      }
+      for (String method : List.of(r.name(), "with_" + r.name())) {
+        String other = rustMethods.putIfAbsent(method, "range " + r.name());
+        require(
+            other == null,
+            where + "range " + r.name() + ": Rust method " + method + " collides with " + other);
+      }
+      for (FlagBit b : f.bits())
+        require(
+            b.bit() < r.low() || b.bit() > r.high(),
+            where + range + " and bit " + b.name() + " = " + b.bit() + " overlap");
+      if (r.enumName() != null) rangeEnum(m, where + range, r);
+    }
+    for (int i = 1; i < f.ranges().size(); i++) {
+      FlagRange a = f.ranges().get(i - 1), b = f.ranges().get(i);
+      require(
+          b.low() > a.high(),
+          where
+              + "ranges "
+              + a.name()
+              + " = "
+              + a.low()
+              + ".."
+              + a.high()
+              + " and "
+              + b.name()
+              + " = "
+              + b.low()
+              + ".."
+              + b.high()
+              + " overlap");
+    }
+  }
+
+  private static void rangeEnum(Module m, String where, FlagRange r) {
+    EnumGroup e =
+        m.enums().stream().filter(g -> g.name().equals(r.enumName())).findFirst().orElse(null);
+    if (e == null) {
+      boolean flagSet = m.flagSets().stream().anyMatch(g -> g.name().equals(r.enumName()));
+      throw new IllegalArgumentException(
+          where
+              + ": "
+              + (flagSet
+                  ? "enum=" + r.enumName() + " names a flag set"
+                  : "undeclared enum: " + r.enumName()));
+    }
+    // The getter returns the enum's carrier: it must hold every value of the range's width.
+    int carrierBits = e.type().bytes * 8 - (unsigned(e.type()) ? 0 : 1);
+    require(
+        carrierBits >= r.width(),
+        where
+            + ": enum="
+            + e.name()
+            + " has carrier "
+            + e.type().text()
+            + ", too narrow for "
+            + r.width()
+            + " bits");
+    for (EnumValue v : e.values())
+      require(
+          v.value().signum() >= 0 && v.value().bitLength() <= r.width(),
+          where
+              + ": enum="
+              + e.name()
+              + " value "
+              + v.name()
+              + " = "
+              + v.value()
+              + " does not fit "
+              + r.width()
+              + " bits");
+  }
+
   // ---- references ----
 
   private static void references(Module m) {
@@ -298,13 +422,15 @@ final class ConstantsValidator {
         if (f.group() == null || f.group().kind() != GroupKind.FLAGS) continue;
         for (FlagSet set : m.flagSets()) {
           if (!set.name().equals(f.group().name()) || !set.cBitfields()) continue;
-          for (FlagBit b : set.bits()) {
-            String camel = Names.lowerCamel(b.name());
+          var members = new ArrayList<String>();
+          for (FlagBit b : set.bits()) members.add("bit " + b.name());
+          for (FlagRange r : set.ranges()) members.add("range " + r.name());
+          for (String member : members) {
+            String camel = Names.lowerCamel(member.substring(member.indexOf(' ') + 1));
             String accessor =
                 f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
             String other =
-                accessors.putIfAbsent(
-                    accessor, "accessor of field " + f.name() + " bit " + b.name());
+                accessors.putIfAbsent(accessor, "accessor of field " + f.name() + " " + member);
             require(
                 other == null,
                 "struct "
@@ -313,8 +439,8 @@ final class ConstantsValidator {
                     + accessor
                     + " of field "
                     + f.name()
-                    + " bit "
-                    + b.name()
+                    + " "
+                    + member
                     + " collides with "
                     + other);
           }
@@ -371,6 +497,18 @@ final class ConstantsValidator {
             !reserved.contains(name),
             where + ": C name " + name + " is reserved by the generated header");
         claim(claimed, name, where);
+      }
+      for (FlagRange r : f.ranges()) {
+        String where = "flags " + f.name() + " range " + r.name();
+        for (String suffix : List.of("_shift", "_mask")) {
+          String name = Names.cMacro(m, f.name(), r.name() + suffix);
+          require(
+              !reserved.contains(name),
+              where + ": C name " + name + " is reserved by the generated header");
+          claim(claimed, name, where + suffix.toUpperCase(Locale.ROOT));
+        }
+        claim(claimed, Names.cFlagFunction(m, f.name(), r.name()), where + " getter");
+        claim(claimed, Names.cFlagFunction(m, f.name(), "with_" + r.name()), where + " setter");
       }
       claim(claimed, Names.cMacro(m, f.name(), "ALL"), "flags " + f.name() + " _ALL");
       claim(claimed, Names.cTypedef(m, f.name()), "flags " + f.name() + " typedef");

@@ -154,6 +154,42 @@ end
   accessors. Offsets and sizes are unchanged. It costs an extra shift and a narrower load over a mask test, so
   leave it off unless a reader wants named bits.
 
+### Bit ranges
+
+A flag set may also pack small numbers into ranges of bits beside its one-bit flags:
+
+```text
+flags ClassFlags type=u32
+  bit open = 0
+  bit interface = 1
+  bit external = 2
+  range kind = 8..15 enum=ExceptionKind
+  range depth = 16..19
+end
+```
+
+- `range name = LOW..HIGH` declares the bits `LOW` to `HIGH` inclusive (`HIGH - LOW + 1` bits) inside the
+  carrier. Ranges and bits may not overlap. A flag set may consist of ranges alone.
+- `enum=ENUM` is optional. The enum's carrier must hold every value of the width (an unsigned carrier of at
+  least that many bits, a signed one of more), and each declared value must be non-negative and fit the width.
+- Range names follow the bit-name rule and share a namespace with the set's bits, including each range's
+  derived `<name>_shift` and `<name>_mask`. `all` and `none` are reserved, and a range may not be named after a
+  Rust flag method (`contains`, `intersects`, `union`, `when`) or take another member's Java getter or `with`
+  setter name.
+- Every backend that emits bit constants also emits `<GROUP>_<NAME>_SHIFT` (`LOW`) and `<GROUP>_<NAME>_MASK`
+  (the range in place), typed with the carrier. `<GROUP>_ALL` includes every range, so `hasUnknown` means a bit
+  outside every declared bit and range.
+- C: `static inline` getter `<module>_<group>_<name>(flags)` and setter
+  `<module>_<group>_with_<name>(flags, value)`, which returns the new word. With `enum=` they use the enum's
+  typedef. With `c_bitfields=true` the bits struct gains a member of the range's width, and Native Image a
+  `@CBitfield` accessor of the carrier's Java type that reads the range zero-extended.
+- Rust: `fn <name>(self)` returns the enum newtype (built directly, every value is valid) or the carrier, and
+  `fn with_<name>(self, value) -> Self`. Java `<Class>Constants.<Flags>`: `<name>(flags)` and
+  `with<Name>(flags, value)`, with the enum's carrier as the value type.
+- Setters mask the value to the width without checking it. Truffle `constants()` exposes `<name>_shift` and
+  `<name>_mask` in the flag set's object. The canonical JSON records `ranges` under a flag set only when it has
+  some, so sets without ranges keep their fingerprints.
+
 The canonical JSON gains `constants`, `enums` and `flagSets` sections and `enum`/`flags` keys on references.
 Entries are sorted by name and values are decimal strings, so the fingerprint is stable.
 

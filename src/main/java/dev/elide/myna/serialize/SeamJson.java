@@ -262,9 +262,28 @@ public final class SeamJson {
                                               + b.bit()
                                               + "}")
                                       .toList())
+                              + ranges(f)
                               + "}")
                       .toList());
     return result;
+  }
+
+  /** A flag set's bit ranges, omitted when it has none so older sets keep their fingerprints. */
+  private static String ranges(FlagSet f) {
+    if (f.ranges().isEmpty()) return "";
+    return ",\"ranges\":"
+        + array(
+            f.ranges().stream()
+                .map(r ->
+                    "{\"name\":"
+                        + quote(r.name())
+                        + ",\"low\":"
+                        + r.low()
+                        + ",\"high\":"
+                        + r.high()
+                        + (r.enumName() == null ? "" : ",\"enum\":" + quote(r.enumName()))
+                        + "}")
+                .toList());
   }
 
   /** Appended only when present: {@code "enum"}/{@code "flags"}, or {@code "returnEnum"} etc. */

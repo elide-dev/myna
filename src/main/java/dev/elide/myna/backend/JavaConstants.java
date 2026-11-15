@@ -50,7 +50,7 @@ public final class JavaConstants implements Backend {
           c.name().toUpperCase(Locale.ROOT),
           Types.javaLiteral(c.type(), c.value(), c.type().text().startsWith("u")));
     for (EnumGroup e : m.enums()) enumGroup(e, out);
-    for (FlagSet f : m.flagSets()) flagSet(f, out);
+    for (FlagSet f : m.flagSets()) flagSet(m, f, out);
     return out.append("}\n").toString();
   }
 
@@ -119,27 +119,114 @@ public final class JavaConstants implements Backend {
     out.append("        }\n    }\n");
   }
 
-  private static void flagSet(FlagSet f, StringBuilder out) {
+  private static void flagSet(Module m, FlagSet f, StringBuilder out) {
     nested(out, "flags", f.name(), f.type());
-    BigInteger all = BigInteger.ZERO;
-    for (FlagBit b : f.bits()) {
-      BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
-      all = all.or(mask);
+    for (FlagBit b : f.bits())
       field(
           out,
           "        ",
           null,
           f.type(),
           b.name().toUpperCase(Locale.ROOT),
-          Types.javaLiteral(f.type(), mask, true));
+          Types.javaLiteral(f.type(), BigInteger.ONE.shiftLeft(b.bit()), true));
+    for (FlagRange r : f.ranges()) {
+      String upper = r.name().toUpperCase(Locale.ROOT);
+      field(
+          out,
+          "        ",
+          null,
+          f.type(),
+          upper + "_SHIFT",
+          Types.javaLiteral(f.type(), BigInteger.valueOf(r.low()), false));
+      field(
+          out,
+          "        ",
+          null,
+          f.type(),
+          upper + "_MASK",
+          Types.javaLiteral(f.type(), r.mask(), true));
     }
-    field(out, "        ", null, f.type(), "ALL", Types.javaLiteral(f.type(), all, true));
+    field(out, "        ", null, f.type(), "ALL", Types.javaLiteral(f.type(), f.all(), true));
     String carrier = Types.java(f.type());
     for (FlagBit b : f.bits())
       predicate(out, Names.lowerCamel(b.name()), carrier, b.name().toUpperCase(Locale.ROOT));
+    for (FlagRange r : f.ranges()) range(m, f, r, carrier, out);
     out.append("        /** True when {@code flags} has a bit no declared flag names. */\n");
     predicate(out, "hasUnknown", carrier, "~ALL");
     out.append("    }\n");
+  }
+
+  /**
+   * A range's getter and {@code with} setter over the carrier: the getter shifts down unsigned and
+   * masks to the width, the setter masks the value into the range. With {@code enum=} the value is
+   * the enum's carrier, as its constants are.
+   */
+  private static void range(Module m, FlagSet f, FlagRange r, String carrier, StringBuilder out) {
+    String upper = r.name().toUpperCase(Locale.ROOT);
+    String getter = Names.lowerCamel(r.name());
+    String setter = "with" + Character.toUpperCase(getter.charAt(0)) + getter.substring(1);
+    String value = carrier;
+    if (r.enumName() != null)
+      value =
+          Types.java(
+              m.enums().stream()
+                  .filter(e -> e.name().equals(r.enumName()))
+                  .findFirst()
+                  .orElseThrow()
+                  .type());
+    // Shifts and masks promote byte and short to int.
+    String work = carrier.equals("long") ? "long" : "int";
+    String low = "0x" + r.valueMask().toString(16) + (work.equals("long") ? "L" : "");
+    String read = "(flags >>> " + upper + "_SHIFT) & " + low;
+    out.append("        /** Range ")
+        .append(r.name())
+        .append(" (bits ")
+        .append(r.low())
+        .append("..")
+        .append(r.high())
+        .append(r.enumName() == null ? "" : ", enum " + r.enumName())
+        .append(") of {@code flags}. */\n        public static ")
+        .append(value)
+        .append(' ')
+        .append(getter)
+        .append('(')
+        .append(carrier)
+        .append(" flags) { return ")
+        .append(convert(work, value, read))
+        .append("; }\n");
+    String wide = carrier.equals("long") || value.equals("long") ? "long" : "int";
+    String shifted = (wide.equals("long") && !value.equals("long") ? "(long) " : "") + "value";
+    String write =
+        "(flags & ~"
+            + upper
+            + "_MASK) | (("
+            + shifted
+            + " << "
+            + upper
+            + "_SHIFT) & "
+            + upper
+            + "_MASK)";
+    out.append("        /** {@code flags} with range ")
+        .append(r.name())
+        .append(" set to the low ")
+        .append(r.width())
+        .append(" bits of {@code value}. */\n        public static ")
+        .append(carrier)
+        .append(' ')
+        .append(setter)
+        .append('(')
+        .append(carrier)
+        .append(" flags, ")
+        .append(value)
+        .append(" value) { return ")
+        .append(convert(wide, carrier, write))
+        .append("; }\n");
+  }
+
+  /** {@code expression} of type {@code from} as {@code to}: a cast only where one narrows. */
+  private static String convert(String from, String to, String expression) {
+    if (from.equals(to) || (from.equals("int") && to.equals("long"))) return expression;
+    return "(" + to + ") (" + expression + ")";
   }
 
   private static void predicate(StringBuilder out, String name, String carrier, String mask) {

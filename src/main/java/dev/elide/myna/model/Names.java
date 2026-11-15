@@ -73,6 +73,14 @@ public final class Names {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_name";
   }
 
+  /**
+   * A C helper function of a flag set's member: the range getter {@code
+   * komodo_frontend_class_flags_kind} and setter {@code komodo_frontend_class_flags_with_kind}.
+   */
+  public static String cFlagFunction(Module m, String group, String member) {
+    return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_" + member;
+  }
+
   /** The C bitfield struct of a flag set: {@code komodo_frontend_function_flags_bits}. */
   public static String cBitsStruct(Module m, String group) {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_bits";

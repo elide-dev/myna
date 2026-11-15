@@ -192,13 +192,14 @@ public final class RustFfi implements Backend {
       String n = f.name();
       newtype(out, n, carrier, "flags " + n + ": " + carrier + ".");
       constant(out, "NONE", "0");
-      BigInteger all = BigInteger.ZERO;
-      for (FlagBit b : f.bits()) {
-        BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
-        all = all.or(mask);
-        constant(out, b.name(), literal(f.type(), mask, true));
+      for (FlagBit b : f.bits())
+        constant(out, b.name(), literal(f.type(), BigInteger.ONE.shiftLeft(b.bit()), true));
+      for (FlagRange r : f.ranges()) {
+        rawConstant(out, r.name() + "_shift", carrier, Integer.toString(r.low()));
+        rawConstant(out, r.name() + "_mask", carrier, literal(f.type(), r.mask(), true));
       }
-      constant(out, "ALL", literal(f.type(), all, true));
+      constant(out, "ALL", literal(f.type(), f.all(), true));
+      for (FlagRange r : f.ranges()) rangeMethods(m, f, r, out);
       out.append(
               "    #[inline(always)] pub const fn contains(self, other: Self) -> bool { self.0 &"
                   + " other.0 == other.0 }\n"
@@ -223,6 +224,62 @@ public final class RustFfi implements Backend {
             .append(op[2])
             .append(" o.0) } }\n");
     }
+  }
+
+  /**
+   * A range's getter and {@code with_} setter. The getter shifts down and masks to the width, so an
+   * arithmetic shift of a signed word leaves no sign bits; the setter masks the value to the range.
+   * An enum getter wraps the bits with the newtype's constructor: every value is valid.
+   */
+  private static void rangeMethods(Module m, FlagSet f, FlagRange r, StringBuilder out) {
+    String carrier = Types.rust(f.type());
+    String upper = r.name().toUpperCase(Locale.ROOT);
+    String raw =
+        r.width() == f.type().bytes * 8
+            ? "self.0"
+            : "(self.0 >> Self::" + upper + "_SHIFT) & " + literal(f.type(), r.valueMask(), true);
+    String valueType = carrier, read = raw, write = "value";
+    if (r.enumName() != null) {
+      EnumGroup e =
+          m.enums().stream().filter(g -> g.name().equals(r.enumName())).findFirst().orElseThrow();
+      String enumCarrier = Types.rust(e.type());
+      valueType = e.name();
+      String bits = raw.equals("self.0") ? raw : "(" + raw + ")";
+      read =
+          e.name() + "(" + (enumCarrier.equals(carrier) ? raw : bits + " as " + enumCarrier) + ")";
+      write = enumCarrier.equals(carrier) ? "value.0" : "(value.0 as " + carrier + ")";
+    }
+    out.append("    #[inline(always)] pub const fn ")
+        .append(r.name())
+        .append("(self) -> ")
+        .append(valueType)
+        .append(" { ")
+        .append(read)
+        .append(" }\n    /// `self` with the range set to the low ")
+        .append(r.width())
+        .append(" bits of `value`.\n    #[inline(always)] pub const fn with_")
+        .append(r.name())
+        .append("(self, value: ")
+        .append(valueType)
+        .append(") -> Self { Self((self.0 & !Self::")
+        .append(upper)
+        .append("_MASK) | ((")
+        .append(write)
+        .append(" << Self::")
+        .append(upper)
+        .append("_SHIFT) & Self::")
+        .append(upper)
+        .append("_MASK)) }\n");
+  }
+
+  private static void rawConstant(StringBuilder out, String name, String type, String value) {
+    out.append("    pub const ")
+        .append(name.toUpperCase(Locale.ROOT))
+        .append(": ")
+        .append(type)
+        .append(" = ")
+        .append(value)
+        .append(";\n");
   }
 
   private static void newtype(StringBuilder out, String name, String carrier, String doc) {

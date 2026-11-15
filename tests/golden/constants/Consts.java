@@ -26,20 +26,44 @@ import org.graalvm.word.PointerBase;
 @CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
-    public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
+    public static final String ABI_FINGERPRINT = "53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_SEAM_ABI_4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_SEAM_ABI_53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */
     @CConstant("CONSTANTS_LIMIT") public static native long limit();
     /** const MAGIC: u32, from seam.h. */
     @CConstant("CONSTANTS_MAGIC") public static native int magic();
+    /** enum Kind: u8. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    @CEnum("constants_kind_t")
+    public enum Kind {
+        @CEnumConstant("CONSTANTS_KIND_PLAIN") PLAIN((byte) 0),
+        @CEnumConstant("CONSTANTS_KIND_BOXED") BOXED((byte) 5),
+        @CEnumConstant("CONSTANTS_KIND_LAST") LAST((byte) 255);
+        /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
+        public final byte value;
+        Kind(byte value) {
+            this.value = value;
+        }
+        /** SVM's conversion, for consumer-written C-interface signatures. */
+        @CEnumValue public native byte cValue();
+        @CEnumLookup public static native Kind lookup(byte value);
+        /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
+        public static Kind of(byte value) {
+            switch (value) {
+                case (byte) 0: return PLAIN;
+                case (byte) 5: return BOXED;
+                case (byte) 255: return LAST;
+                default: return null;
+            }
+        }
+    }
     /** enum Level: u8. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_level_t")
     public enum Level {
@@ -114,6 +138,29 @@ public final class Consts {
         static final status_Leaf ADDRESS = MynaSymbols.status.get();
     }
     public interface Session extends PointerBase {}
+    @CStruct(value = "Node", addStructKeyword = true)
+    public interface Node extends PointerBase {
+        int SIZE = 16;
+        int ALIGNMENT = 8;
+        @CField("tag") int tag();
+        @CField("tag") void tag(int value);
+        @CFieldAddress("tag") CIntPointer addressOfTag();
+        /** flags Packed: test with ConstsConstants.Packed.open(packed()) */
+        @CField("packed") int packed();
+        @CField("packed") void packed(int value);
+        @CFieldAddress("packed") CIntPointer addressOfPacked();
+        @CBitfield("packedBits.open") boolean packedOpen();
+        @CBitfield("packedBits.open") void packedOpen(boolean value);
+        @CBitfield("packedBits.external") boolean packedExternal();
+        @CBitfield("packedBits.external") void packedExternal(boolean value);
+        @CBitfield("packedBits.kind") int packedKind();
+        @CBitfield("packedBits.kind") void packedKind(int value);
+        @CBitfield("packedBits.depth") int packedDepth();
+        @CBitfield("packedBits.depth") void packedDepth(int value);
+        @CField("operand") long operand();
+        @CField("operand") void operand(long value);
+        @CFieldAddress("operand") CLongPointer addressOfOperand();
+    }
     @CStruct(value = "Record", addStructKeyword = true)
     public interface Record extends PointerBase {
         int SIZE = 24;

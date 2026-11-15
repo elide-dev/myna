@@ -93,6 +93,20 @@ public final class ConstantsMain {
     check(!ConstsConstants.Wide.hasUnknown(view.wide()), "no unknown bits");
     check(Consts.magic() == ConstsConstants.MAGIC, "@CConstant agrees with the literal");
 
+    // A range's @CBitfield accessor and the static getter and setter name the same bits.
+    Consts.Node node = StackValue.get(Consts.Node.class);
+    node.packed(
+        ConstsConstants.Packed.withDepth(
+            ConstsConstants.Packed.withKind(ConstsConstants.Packed.OPEN, ConstsConstants.Kind.LAST),
+            9));
+    check(node.packed() == 0x9ff01, "range setters");
+    check(node.packedKind() == 0xff && node.packedDepth() == 9, "range bitfields read zero-extended");
+    check(ConstsConstants.Packed.kind(node.packed()) == ConstsConstants.Kind.LAST, "range getter");
+    node.packedKind(ConstsConstants.Kind.BOXED);
+    check(ConstsConstants.Packed.kind(node.packed()) == ConstsConstants.Kind.BOXED, "range bitfield write");
+    check(node.packedOpen() && !ConstsConstants.Packed.hasUnknown(node.packed()), "no unknown bits");
+    check(ConstsConstants.Packed.hasUnknown(node.packed() | 0x2), "bit 1 is unknown");
+
     System.out.println("Native Image constants, @CEnum enums and @CBitfield passed");
   }
 }

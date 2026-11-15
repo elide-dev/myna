@@ -487,7 +487,9 @@ public final class NativeImage implements Backend {
             .append('.')
             .append(set.name())
             .append('.')
-            .append(Names.lowerCamel(set.bits().get(0).name()))
+            .append(
+                Names.lowerCamel(
+                    set.bits().isEmpty() ? set.ranges().get(0).name() : set.bits().get(0).name()))
             .append('(')
             .append(f.name())
             .append("()) */\n");
@@ -511,7 +513,7 @@ public final class NativeImage implements Backend {
           .append(f.name().substring(1))
           .append("();\n");
       FlagSet bits = bitfields(m, f);
-      if (bits != null) bitfieldAccessors(f, bits, out);
+      if (bits != null) bitfieldAccessors(f, bits, carrier, out);
     }
     out.append("    }\n");
   }
@@ -530,21 +532,27 @@ public final class NativeImage implements Backend {
    * struct that {@code seam.h} unions with the field. They read and write the same bits as the
    * masks in {@code <Class>Constants}, at one shift more per read than a mask test (spec 7a.9).
    */
-  private static void bitfieldAccessors(Field f, FlagSet set, StringBuilder out) {
-    for (FlagBit b : set.bits()) {
-      String camel = Names.lowerCamel(b.name());
-      String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
-      String annotation =
-          "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + b.name()) + ") ";
-      out.append(annotation)
-          .append("boolean ")
-          .append(accessor)
-          .append("();\n")
-          .append(annotation)
-          .append("void ")
-          .append(accessor)
-          .append("(boolean value);\n");
-    }
+  private static void bitfieldAccessors(Field f, FlagSet set, String carrier, StringBuilder out) {
+    for (FlagBit b : set.bits()) bitfieldAccessor(f, b.name(), "boolean", out);
+    // A range reads zero-extended (the bit-field is unsigned) and writes its low bits.
+    for (FlagRange r : set.ranges()) bitfieldAccessor(f, r.name(), carrier, out);
+  }
+
+  private static void bitfieldAccessor(Field f, String member, String type, StringBuilder out) {
+    String camel = Names.lowerCamel(member);
+    String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
+    String annotation = "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + member) + ") ";
+    out.append(annotation)
+        .append(type)
+        .append(' ')
+        .append(accessor)
+        .append("();\n")
+        .append(annotation)
+        .append("void ")
+        .append(accessor)
+        .append('(')
+        .append(type)
+        .append(" value);\n");
   }
 
   private static EnumGroup enumGroup(Module m, GroupRef ref) {

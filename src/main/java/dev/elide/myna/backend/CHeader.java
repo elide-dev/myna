@@ -218,29 +218,104 @@ public final class CHeader implements Backend {
           .append(' ')
           .append(Names.cTypedef(m, f.name()))
           .append(";\n");
-      BigInteger all = BigInteger.ZERO;
-      for (FlagBit b : f.bits()) {
-        BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
-        all = all.or(mask);
-        define(out, Names.cMacro(m, f.name(), b.name()), literal(f.type(), mask, true));
+      for (FlagBit b : f.bits())
+        define(
+            out,
+            Names.cMacro(m, f.name(), b.name()),
+            literal(f.type(), BigInteger.ONE.shiftLeft(b.bit()), true));
+      for (FlagRange r : f.ranges()) {
+        define(
+            out,
+            Names.cMacro(m, f.name(), r.name() + "_shift"),
+            literal(f.type(), BigInteger.valueOf(r.low()), false));
+        define(
+            out, Names.cMacro(m, f.name(), r.name() + "_mask"), literal(f.type(), r.mask(), true));
       }
-      define(out, Names.cMacro(m, f.name(), "ALL"), literal(f.type(), all, true));
+      define(out, Names.cMacro(m, f.name(), "ALL"), literal(f.type(), f.all(), true));
+      for (FlagRange r : f.ranges()) rangeFunctions(m, f, r, out);
       if (f.cBitfields()) bitsStruct(m, f, carrier, out);
     }
     if (!m.constants().isEmpty() || !m.enums().isEmpty() || !m.flagSets().isEmpty())
       out.append('\n');
   }
 
-  /** LSB-first bit-fields; unnamed gaps keep each bit at its index. */
+  /**
+   * A range's getter and setter: pure functions of the word, computed on the unsigned carrier so a
+   * signed word's sign bit is an ordinary bit. The setter masks the value to the range's width.
+   */
+  private static void rangeFunctions(Module m, FlagSet f, FlagRange r, StringBuilder out) {
+    String word = Names.cTypedef(m, f.name());
+    String value = r.enumName() == null ? word : Names.cTypedef(m, r.enumName());
+    String unsigned = "uint" + (f.type().bytes * 8) + "_t";
+    String shift = Names.cMacro(m, f.name(), r.name() + "_shift");
+    String mask = Names.cMacro(m, f.name(), r.name() + "_mask");
+    out.append("static inline ")
+        .append(value)
+        .append(' ')
+        .append(Names.cFlagFunction(m, f.name(), r.name()))
+        .append('(')
+        .append(word)
+        .append(" flags) {\n  return (")
+        .append(value)
+        .append(")(((")
+        .append(unsigned)
+        .append(")flags & (")
+        .append(unsigned)
+        .append(")")
+        .append(mask)
+        .append(") >> ")
+        .append(shift)
+        .append(");\n}\n");
+    out.append("static inline ")
+        .append(word)
+        .append(' ')
+        .append(Names.cFlagFunction(m, f.name(), "with_" + r.name()))
+        .append('(')
+        .append(word)
+        .append(" flags, ")
+        .append(value)
+        .append(" value) {\n  return (")
+        .append(word)
+        .append(")(((")
+        .append(unsigned)
+        .append(")flags & (")
+        .append(unsigned)
+        .append(")~(")
+        .append(unsigned)
+        .append(")")
+        .append(mask)
+        .append(") | (((")
+        .append(unsigned)
+        .append(")value << ")
+        .append(shift)
+        .append(") & (")
+        .append(unsigned)
+        .append(")")
+        .append(mask)
+        .append("));\n}\n");
+  }
+
+  /** LSB-first bit-fields; unnamed gaps keep each bit and range at its index. */
   private static void bitsStruct(Module m, FlagSet f, String carrier, StringBuilder out) {
     String name = Names.cBitsStruct(m, f.name());
     out.append("struct ").append(name).append(" {\n");
+    var members = new TreeMap<Integer, String[]>();
+    for (FlagBit b : f.bits()) members.put(b.bit(), new String[] {b.name(), "1"});
+    for (FlagRange r : f.ranges())
+      members.put(r.low(), new String[] {r.name(), Integer.toString(r.width())});
     int next = 0;
-    for (FlagBit b : f.bits()) {
-      if (b.bit() > next)
-        out.append("  ").append(carrier).append(" : ").append(b.bit() - next).append(";\n");
-      out.append("  ").append(carrier).append(' ').append(b.name()).append(" : 1;\n");
-      next = b.bit() + 1;
+    for (var member : members.entrySet()) {
+      int low = member.getKey(), width = Integer.parseInt(member.getValue()[1]);
+      if (low > next)
+        out.append("  ").append(carrier).append(" : ").append(low - next).append(";\n");
+      out.append("  ")
+          .append(carrier)
+          .append(' ')
+          .append(member.getValue()[0])
+          .append(" : ")
+          .append(width)
+          .append(";\n");
+      next = low + width;
     }
     out.append("};\nSEAM_ASSERT(sizeof(struct ")
         .append(name)

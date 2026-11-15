@@ -6,10 +6,18 @@ import java.lang.invoke.MethodHandle;
 
 public final class ConstsFFM {
     private ConstsFFM() {}
-    public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
+    public static final String ABI_FINGERPRINT = "53f8d46c40ac85033aeef172d4fa026f8aef36499d378b065b87c44b90b4300f";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
+    public static final StructLayout Node_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_INT.withName("tag"),
+        ValueLayout.JAVA_INT.withName("packed"),
+        ValueLayout.JAVA_LONG.withName("operand"));
+    public static final long Node_tag_OFFSET = 0L;
+    // flags Packed: values in ConstsConstants.Packed
+    public static final long Node_packed_OFFSET = 4L;
+    public static final long Node_operand_OFFSET = 8L;
     public static final StructLayout Record_LAYOUT = MemoryLayout.structLayout(
         ValueLayout.JAVA_INT.withName("status"),
         ValueLayout.JAVA_INT.withName("perms"),
