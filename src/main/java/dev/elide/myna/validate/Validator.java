@@ -248,7 +248,8 @@ public final class Validator {
           !signatures.contains(function.symbol()),
           "symbol collides with callback: " + function.symbol());
       record(module, function.returns());
-      if (!(function.returns() instanceof Named)) type(function.returns(), pointable, signatures, true);
+      if (!(function.returns() instanceof Named))
+        type(function.returns(), pointable, signatures, true);
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
@@ -358,7 +359,8 @@ public final class Validator {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
         record(module, parameter.type());
-        if (!(parameter.type() instanceof Named)) type(parameter.type(), pointable, signatures, false);
+        if (!(parameter.type() instanceof Named))
+          type(parameter.type(), pointable, signatures, false);
         functionScalar(parameter.type());
         facts(parameter.facts(), PARAM_FACTS, strict);
         boolean pointer = parameter.type() instanceof Pointer;
