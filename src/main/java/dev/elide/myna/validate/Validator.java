@@ -524,27 +524,6 @@ public final class Validator {
     require(
         !enabled(function.facts(), "noreturn"),
         "Truffle cells require a returning import" + advice);
-    // A cell lends a present empty buffer a page-aligned dummy, so a byte pointer it lends can
-    // require no more than a page, as a call borrow can. Facts that are not approved are not
-    // requirements, and cells ignore them.
-    for (Parameter parameter : function.parameters()) {
-      Fact align = parameter.facts().get("align");
-      if (align == null || !align.enabled() || !align.approved()) continue;
-      if (!Seam.lendsBytes(parameter)
-          && module.borrows().stream()
-              .noneMatch(b ->
-                  b.function().equals(function.name()) && b.parameter().equals(parameter.name())))
-        continue;
-      require(
-          Long.parseLong(align.value()) <= 4096,
-          "Truffle cells lend byte pointers at most 4096-byte alignment: "
-              + function.name()
-              + "."
-              + parameter.name()
-              + " declares align="
-              + align.value()
-              + advice);
-    }
     String cell = function.name() + "_Cell";
     require(
         !types.contains(cell) && !signatures.contains(cell),

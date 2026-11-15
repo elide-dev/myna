@@ -643,49 +643,35 @@ class TruffleCellsTest {
   }
 
   /**
-   * A cell lends an empty buffer a page-aligned dummy, so a byte parameter it lends takes an
-   * approved {@code align} of at most 4096, as a borrow does; opting the import out of cells, or a
-   * fact cells ignore, keeps the general 2^29 limit.
+   * A byte pointer that is not a borrow takes any power-of-two align up to 2^29, page sizes above
+   * 4096 included: its cell lends an empty buffer a copy at that alignment. Every malformed value
+   * fails with the align message, whichever check would see it first.
    */
   @Test
-  void alignOnCellByteParametersStaysWithinAPage() {
+  void alignOnCellByteParametersAbovePagesAndMalformed() {
     String decode =
         "import decode return=i32 error=no_failure\n"
             + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read_write"
             + " align=4096@explicit_contract truffle_buffer=true@explicit_contract\n"
             + "  param count type=u64\n"
             + "end\n";
-    assertTrue(
-        generate(MODULE + decode)
-            .get("MynaTruffle.java")
-            .contains(
-                "new OverAlignedBytesCoercion(\"decode\", \"data\", false, true, false, false,"
-                    + " 4096);"));
-    for (String text :
-        new String[] {
-          decode,
-          decode
-              .replace("ptr<u8>", "ptr<char>")
-              .replace(" truffle_buffer=true@explicit_contract", "")
-        }) {
+    for (String align : new String[] {"4096", "16384", "65536", "2097152"}) {
+      String truffle =
+          generate(MODULE + decode.replace("align=4096", "align=" + align)).get("MynaTruffle.java");
+      assertTrue(
+          truffle.contains(
+              "new OverAlignedBytesCoercion(\"decode\", \"data\", false, true, false, false, "
+                  + align
+                  + ");"),
+          truffle);
+    }
+    for (String bad : new String[] {"99999999999999999999", "abc", "0"}) {
       var refused =
           assertThrows(
               IllegalArgumentException.class,
-              () -> generate(MODULE + text.replace("align=4096", "align=8192")));
-      assertEquals(
-          "Truffle cells lend byte pointers at most 4096-byte alignment: decode.data declares"
-              + " align=8192; opt out with truffle_cell=false@explicit_contract on decode",
-          refused.getMessage());
+              () -> generate(MODULE + decode.replace("align=4096", "align=" + bad)));
+      assertEquals("align requires a positive integer: " + bad, refused.getMessage());
     }
-    generate(
-        MODULE
-            + decode
-                .replace("align=4096", "align=8192")
-                .replace(
-                    "import decode return=i32 error=no_failure",
-                    "import decode return=i32 error=no_failure"
-                        + " truffle_cell=false@explicit_contract")
-                .replace(" truffle_buffer=true@explicit_contract", ""));
   }
 
   /**

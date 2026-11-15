@@ -2666,6 +2666,44 @@ class TruffleRuntimeTest {
   }
 
   /**
+   * The shared empty dummy is page aligned. Under a fact above a page (16 KiB, 64 KiB, 2 MiB) an
+   * empty buffer is lent the dangling address of the fact itself: aligned, non-null, nothing
+   * allocated or copied. A non-empty buffer at that alignment is still lent in place.
+   */
+  @Test
+  void emptyBufferUnderAFactAboveAPageIsLentADanglingAlignedAddress() throws Exception {
+    onFreshThread(() -> {
+      try (Arena arena = Arena.ofConfined()) {
+        NativeBytes empty = NativeBytes.of(arena.allocate(0, 1), true);
+        for (long align : new long[] {8192, 16384, 65536, 1L << 21}) {
+          for (boolean writable : new boolean[] {false, true}) {
+            var c = new OverAlignedBytesCoercion("f", "data", false, writable, true, false, align);
+            Borrow lent = c.execute(empty);
+            assertEquals(align, lent.address(), "the dangling address of align " + align);
+            assertEquals(0, lent.length());
+            assertNull(c.segment(empty), "no guest segment for an empty buffer");
+            lent.release();
+          }
+        }
+        // Up to a page the shared dummy serves.
+        Borrow page =
+            new OverAlignedBytesCoercion("f", "data", false, true, true, false, 4096)
+                .execute(empty);
+        assertEquals(Borrow.emptyAddress(), page.address());
+        page.release();
+        // A non-empty buffer at the fact's alignment is lent in place, its address unchanged.
+        MemorySegment aligned = arena.allocate(32, 16384);
+        NativeBytes bytes = NativeBytes.of(aligned, true);
+        var c = new OverAlignedBytesCoercion("f", "data", false, true, true, false, 16384);
+        Borrow inPlace = c.execute(bytes);
+        assertEquals(aligned.address(), inPlace.address());
+        assertEquals(32, inPlace.length());
+        inPlace.release();
+      }
+    });
+  }
+
+  /**
    * An {@code align} fact is a requirement on the address native code receives: copies honor it
    * beyond the default 16, and memory that is lent in place at a lesser alignment is copied.
    */

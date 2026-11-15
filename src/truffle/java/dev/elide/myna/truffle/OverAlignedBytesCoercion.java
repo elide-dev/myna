@@ -76,7 +76,11 @@ public final class OverAlignedBytesCoercion extends Coercion {
     if (value instanceof NativeBytes bytes) {
       if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
       long size = bytes.size();
-      if (size == 0) borrow.lend(Borrow.emptyAddress(), 0);
+      // An empty buffer is never dereferenced: up to a page it is lent the shared page-aligned
+      // dummy, above that the dangling address align itself, non-null and aligned by construction
+      // (Rust's NonNull::dangling). No allocation either way, and the fact is final, so the choice
+      // folds.
+      if (size == 0) borrow.lend(align > EmptyBytes.ALIGNMENT ? align : Borrow.emptyAddress(), 0);
       else if (misaligned(bytes.address())) slow(value, borrow);
       else borrow.lend(bytes.address(), size);
     } else if (value instanceof HeapBytes bytes) {
