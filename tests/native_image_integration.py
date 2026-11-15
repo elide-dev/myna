@@ -210,10 +210,14 @@ class NativeImageIntegrationTests(unittest.TestCase):
                 if access == "read" and kind in ("I16", "U16", "Char", "I8", "U8"):
                     # Known SVM gap: a narrow C-interface read is a CInterfaceReadNode, which the
                     # backend's sign-extending-load match rule does not fold, so one register
-                    # extension follows the (already extending) load. Fold it and this fails.
+                    # extension follows the (already extending) load on x86-64. Fold it there and
+                    # this fails. AArch64 (macOS CI) folds at least ldrsh with no extension.
                     extra = [i for i in field if narrow.match(i)]
-                    self.assertEqual(len(extra), 1, field)
-                    field = [i for i in field if i is not extra[0]]
+                    if any("%" in i for i in field):
+                        self.assertEqual(len(extra), 1, field)
+                    else:
+                        self.assertLessEqual(len(extra), 1, field)
+                    field = [i for i in field if not extra or i is not extra[0]]
                 if name == "writeBool":
                     # Better than before: a Java boolean is already 0 or 1, so the store needs no
                     # `value ? 1 : 0` normalization; the code is the raw form without it.
