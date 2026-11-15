@@ -187,7 +187,7 @@ final class ConstantsValidator {
       require(!RESERVED_BITS.contains(b.name()), where + "bit name is reserved: " + b.name());
       require(names.add(b.name()), where + "duplicate bit name: " + b.name());
       require(
-          b.bit() < width,
+          b.bit() >= 0 && b.bit() < width,
           where
               + "bit "
               + b.name()
@@ -326,6 +326,13 @@ final class ConstantsValidator {
     var claimed = new HashMap<String, String>();
     for (String symbol : new TreeSet<>(functionSymbols))
       claimed.put(symbol, "function symbol " + symbol);
+    // Callback names are C typedefs in the same ordinary-identifier namespace as the generated
+    // macros, typedefs and name functions.
+    for (Signature c : m.callbacks()) claim(claimed, c.name(), "callback " + c.name());
+    // Opaque and record names are struct tags, the namespace of the generated bits structs.
+    var tags = new HashMap<String, String>();
+    for (String name : m.opaqueTypes()) claim(tags, name, "opaque " + name);
+    for (Struct s : m.structs()) claim(tags, s.name(), "struct " + s.name());
     for (Constant c : m.constants()) {
       String name = Names.cMacro(m, null, c.name());
       String where = "const " + c.name();
@@ -357,8 +364,11 @@ final class ConstantsValidator {
       }
       claim(claimed, Names.cMacro(m, f.name(), "ALL"), "flags " + f.name() + " _ALL");
       claim(claimed, Names.cTypedef(m, f.name()), "flags " + f.name() + " typedef");
-      if (f.cBitfields())
-        claim(claimed, Names.cBitsStruct(m, f.name()), "flags " + f.name() + " bits struct");
+      if (f.cBitfields()) {
+        String bits = Names.cBitsStruct(m, f.name());
+        claim(claimed, bits, "flags " + f.name() + " bits struct");
+        claim(tags, bits, "flags " + f.name() + " bits struct");
+      }
     }
   }
 
