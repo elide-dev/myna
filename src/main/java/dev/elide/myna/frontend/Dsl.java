@@ -5,6 +5,7 @@ package dev.elide.myna.frontend;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import java.math.BigInteger;
 import java.util.*;
 
 /** Strict line-oriented frontend. Unknown options are errors, including misspelled contracts. */
@@ -22,6 +23,11 @@ public final class Dsl {
     var callbacks = new ArrayList<Signature>();
     var resources = new ArrayList<Resource>();
     var borrows = new ArrayList<BufferBorrow>();
+    var constants = new ArrayList<Constant>();
+    var enums = new ArrayList<EnumGroup>();
+    var flagSets = new ArrayList<FlagSet>();
+    var enumValues = new ArrayList<EnumValue>();
+    var flagBits = new ArrayList<FlagBit>();
     String[] header = null;
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
@@ -128,7 +134,16 @@ public final class Dsl {
                 "expected opaque NAME outside a block");
             opaque.add(words[1]);
           }
-          case "struct", "import", "export", "callback" -> {
+          case "const" -> {
+            require(
+                name != null && header == null && words.length >= 2,
+                "expected const NAME type=INT value=INTEGER outside a block");
+            var opts = options(words, 2);
+            var type = integerScalar(takeRequired(opts, "type"));
+            constants.add(new Constant(words[1], type, integer(takeRequired(opts, "value"))));
+            empty(opts);
+          }
+          case "struct", "import", "export", "callback", "enum", "flags" -> {
             require(
                 name != null && header == null && words.length >= 2,
                 "expected a named top-level block");
@@ -136,10 +151,27 @@ public final class Dsl {
             options = options(words, 2);
             parameters.clear();
             fields.clear();
+            enumValues.clear();
+            flagBits.clear();
+          }
+          case "value" -> {
+            require(header != null && header[0].equals("enum"), "value requires an enum block");
+            require(words.length == 4 && words[2].equals("="), "expected: value NAME = INTEGER");
+            enumValues.add(new EnumValue(words[1], integer(words[3])));
+          }
+          case "bit" -> {
+            require(header != null && header[0].equals("flags"), "bit requires a flags block");
+            require(words.length == 4 && words[2].equals("="), "expected: bit NAME = INDEX");
+            require(words[3].matches("[0-9]{1,9}"), "invalid bit index: " + words[3]);
+            flagBits.add(new FlagBit(words[1], Integer.parseInt(words[3])));
           }
           case "param" -> {
             require(
-                header != null && !header[0].equals("struct") && words.length >= 3,
+                header != null
+                    && (header[0].equals("import")
+                        || header[0].equals("export")
+                        || header[0].equals("callback"))
+                    && words.length >= 3,
                 "param requires a function block and a type");
             var opts = options(words, 2);
             var type = Seam.type(takeRequired(opts, "type"));
@@ -148,18 +180,18 @@ public final class Dsl {
                 Ownership.valueOf(take(opts, "ownership", "unspecified").toUpperCase(Locale.ROOT));
             var access =
                 Access.valueOf(take(opts, "access", "unspecified").toUpperCase(Locale.ROOT));
-            parameters.add(new Parameter(words[1], type, nullable, ownership, access, facts(opts)));
+            var group = group(opts);
+            parameters.add(
+                new Parameter(words[1], type, nullable, ownership, access, facts(opts), group));
           }
           case "field" -> {
             require(
                 header != null && header[0].equals("struct") && words.length >= 3,
                 "field requires a struct block");
             var opts = options(words, 2);
-            fields.add(
-                new Field(
-                    words[1],
-                    Seam.type(takeRequired(opts, "type")),
-                    Long.parseLong(takeRequired(opts, "offset"))));
+            var type = Seam.type(takeRequired(opts, "type"));
+            long offset = Long.parseLong(takeRequired(opts, "offset"));
+            fields.add(new Field(words[1], type, offset, group(opts)));
             empty(opts);
           }
           case "end" -> {
@@ -172,7 +204,18 @@ public final class Dsl {
                       parameters,
                       take(options, "java_type", null),
                       take(options, "ffm_java", null),
-                      take(options, "ffm_sentinel", null)));
+                      take(options, "ffm_sentinel", null),
+                      group(options)));
+              empty(options);
+            } else if (header[0].equals("enum")) {
+              enums.add(
+                  new EnumGroup(
+                      header[1], integerScalar(takeRequired(options, "type")), enumValues));
+              empty(options);
+            } else if (header[0].equals("flags")) {
+              var type = integerScalar(takeRequired(options, "type"));
+              boolean bitfields = bool(take(options, "c_bitfields", "false"));
+              flagSets.add(new FlagSet(header[1], type, flagBits, bitfields));
               empty(options);
             } else if (header[0].equals("struct")) {
               structs.add(
@@ -199,6 +242,7 @@ public final class Dsl {
                   "isolate must be none or thread");
               String cc = take(options, "cc", "c");
               require(cc.equals("c"), "only cc=c is supported");
+              var returnsGroup = group(options);
               functions.add(
                   new Function(
                       header[1],
@@ -212,7 +256,8 @@ public final class Dsl {
                       include,
                       callback,
                       isolate.equals("thread"),
-                      facts(options)));
+                      facts(options),
+                      returnsGroup));
             }
             header = null;
             options = null;
@@ -238,7 +283,31 @@ public final class Dsl {
         resources,
         borrows,
         nativeConfig,
-        truffleConfig);
+        truffleConfig,
+        constants,
+        enums,
+        flagSets);
+  }
+
+  /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */
+  public static BigInteger integer(String text) {
+    if (text.matches("-?[0-9]+")) return new BigInteger(text);
+    if (text.matches("0[xX][0-9a-fA-F]+")) return new BigInteger(text.substring(2), 16);
+    throw new IllegalArgumentException("invalid integer: " + text);
+  }
+
+  private static Scalar integerScalar(String text) {
+    // Any scalar parses; the validator rejects carriers that are not integers.
+    if (Seam.type(text) instanceof Scalar s) return s;
+    throw new IllegalArgumentException("carrier must be an integer scalar, found " + text);
+  }
+
+  /** Takes {@code enum=} or {@code flags=}, before the remaining options become facts. */
+  private static GroupRef group(Map<String, String> opts) {
+    String enumName = take(opts, "enum", null), flagsName = take(opts, "flags", null);
+    require(enumName == null || flagsName == null, "enum= and flags= are mutually exclusive");
+    if (enumName != null) return new GroupRef(GroupKind.ENUM, enumName);
+    return flagsName == null ? null : new GroupRef(GroupKind.FLAGS, flagsName);
   }
 
   private static Map<String, String> options(String[] words, int start) {

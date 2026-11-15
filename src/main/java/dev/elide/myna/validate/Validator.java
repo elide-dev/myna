@@ -112,8 +112,10 @@ public final class Validator {
             signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
             "static FFM callbacks require an i32/i64 status return");
         try {
-          if (signature.returns() == Scalar.I32) Integer.parseInt(signature.ffmSentinel());
-          else Long.parseLong(signature.ffmSentinel());
+          if (!Ranges.fits(
+              (Scalar) signature.returns(),
+              new BigInteger(signature.ffmSentinel()),
+              Seam.targetAbi(module.targetTriple()))) throw new NumberFormatException();
         } catch (NumberFormatException invalid) {
           throw new IllegalArgumentException("FFM callback sentinel is outside its carrier range");
         }
@@ -327,11 +329,8 @@ public final class Validator {
             function.sentinel() != null && function.sentinel().matches("-?[0-9]+"),
             "missing or invalid sentinel");
         BigInteger value = new BigInteger(function.sentinel());
-        int bits = ((Scalar) function.returns()).bytes * 8;
         require(
-            value.compareTo(BigInteger.ONE.shiftLeft(bits - 1).negate()) >= 0
-                && value.compareTo(BigInteger.ONE.shiftLeft(bits - 1).subtract(BigInteger.ONE))
-                    <= 0,
+            Ranges.fits((Scalar) function.returns(), value, Seam.targetAbi(module.targetTriple())),
             "sentinel out of range");
       } else require(function.sentinel() == null, "sentinel only applies to integer_sentinel");
       require(

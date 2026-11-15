@@ -1,0 +1,45 @@
+# Named constants, enums and flag sets: declarations, references and the open-set rule.
+module constants target=x86_64-unknown-linux-gnu java_package=fixture.constants java_class=Consts truffle_cells=true
+opaque Session
+const MAGIC type=u32 value=0x3141514b
+const LIMIT type=u64 value=0xffffffffffffffff
+const FLOOR type=i64 value=-9223372036854775808
+enum Status type=i32
+  value null_result = -1
+  value ok = 0
+  value syntax_error = 0x10
+  value internal_error = 3
+end
+enum Level type=u8
+  value low = 0
+  value high = 255
+end
+flags Perms type=u32
+  bit read = 0
+  bit write = 1
+  bit sticky = 31
+end
+flags Wide type=u64 c_bitfields=true
+  bit first = 0
+  bit last = 63
+end
+struct Record size=24 align=8
+  field status type=i32 offset=0 enum=Status
+  field perms type=u32 offset=4 flags=Perms
+  field wide type=u64 offset=8 flags=Wide
+  field raw type=u64 offset=16
+end
+callback Listener return=i32 enum=Status
+  param isolate type=isolate_thread
+end
+# Leaf by default: enum= never changes the transition.
+import status symbol=consts_status return=i32 error=no_failure enum=Status
+  param view type=ptr<Record> nullable=false ownership=borrowed access=read
+end
+import setLevel symbol=consts_set_level return=void error=no_failure
+  param level type=u8 enum=Level
+  param session type=ptr<Session> nullable=false ownership=borrowed access=read
+end
+import blockingStatus symbol=consts_blocking_status return=i32 error=no_failure native_leaf=false@explicit_contract enum=Status
+  param session type=ptr<Session> nullable=false ownership=borrowed access=read
+end

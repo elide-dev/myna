@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.model;
 
+import java.math.BigInteger;
 import java.util.*;
 
 /** Language-neutral, immutable ABI model. Source diagnostics are excluded from identity. */
@@ -186,7 +187,18 @@ public final class Seam {
       boolean nullable,
       Ownership ownership,
       Access access,
-      SortedMap<String, Fact> facts) {
+      SortedMap<String, Fact> facts,
+      GroupRef group) {
+    public Parameter(
+        String name,
+        Type type,
+        boolean nullable,
+        Ownership ownership,
+        Access access,
+        SortedMap<String, Fact> facts) {
+      this(name, type, nullable, ownership, access, facts, null);
+    }
+
     public Parameter {
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
     }
@@ -204,7 +216,37 @@ public final class Seam {
       String include,
       String callback,
       boolean isolateThread,
-      SortedMap<String, Fact> facts) {
+      SortedMap<String, Fact> facts,
+      GroupRef returnsGroup) {
+    public Function(
+        String name,
+        String symbol,
+        Direction direction,
+        Type returns,
+        List<Parameter> parameters,
+        ErrorConvention error,
+        String sentinel,
+        String javaTarget,
+        String include,
+        String callback,
+        boolean isolateThread,
+        SortedMap<String, Fact> facts) {
+      this(
+          name,
+          symbol,
+          direction,
+          returns,
+          parameters,
+          error,
+          sentinel,
+          javaTarget,
+          include,
+          callback,
+          isolateThread,
+          facts,
+          null);
+    }
+
     public Function {
       parameters = List.copyOf(parameters);
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
@@ -234,13 +276,24 @@ public final class Seam {
       List<Parameter> parameters,
       String javaType,
       String ffmTarget,
-      String ffmSentinel) {
+      String ffmSentinel,
+      GroupRef returnsGroup) {
     public Signature(String name, Type returns, List<Parameter> parameters) {
-      this(name, returns, parameters, null, null, null);
+      this(name, returns, parameters, null, null, null, null);
     }
 
     public Signature(String name, Type returns, List<Parameter> parameters, String javaType) {
-      this(name, returns, parameters, javaType, null, null);
+      this(name, returns, parameters, javaType, null, null, null);
+    }
+
+    public Signature(
+        String name,
+        Type returns,
+        List<Parameter> parameters,
+        String javaType,
+        String ffmTarget,
+        String ffmSentinel) {
+      this(name, returns, parameters, javaType, ffmTarget, ffmSentinel, null);
     }
 
     public Signature {
@@ -248,7 +301,48 @@ public final class Seam {
     }
   }
 
-  public record Field(String name, Type type, long offset) {}
+  /** A struct field; {@code group} names the enum or flag set annotating it, or is null. */
+  public record Field(String name, Type type, long offset, GroupRef group) {
+    public Field(String name, Type type, long offset) {
+      this(name, type, offset, null);
+    }
+  }
+
+  /** A named integer constant: {@code const NAME type=u32 value=0x10}. */
+  public record Constant(String name, Scalar type, BigInteger value) {}
+
+  public record EnumValue(String name, BigInteger value) {}
+
+  /** A closed list of named values over an integer carrier; values are sorted by number. */
+  public record EnumGroup(String name, Scalar type, List<EnumValue> values) {
+    public EnumGroup {
+      values = values.stream().sorted(Comparator.comparing(EnumValue::value)).toList();
+    }
+  }
+
+  public record FlagBit(String name, int bit) {}
+
+  /**
+   * A set of named bit indices over an integer carrier; bits are sorted by index. {@code
+   * cBitfields} opts the set into a generated {@code @CBitfield} accessor struct.
+   */
+  public record FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+    public FlagSet {
+      bits = bits.stream().sorted(Comparator.comparingInt(FlagBit::bit)).toList();
+    }
+
+    public FlagSet(String name, Scalar type, List<FlagBit> bits) {
+      this(name, type, bits, false);
+    }
+  }
+
+  public enum GroupKind {
+    ENUM,
+    FLAGS
+  }
+
+  /** A reference from a field, parameter or return to a declared enum or flag set. */
+  public record GroupRef(GroupKind kind, String name) {}
 
   public record Struct(String name, long size, int alignment, List<Field> fields) {
     public Struct {
@@ -374,7 +468,43 @@ public final class Seam {
       List<Resource> resources,
       List<BufferBorrow> borrows,
       NativeConfig nativeConfig,
-      TruffleConfig truffleConfig) {
+      TruffleConfig truffleConfig,
+      List<Constant> constants,
+      List<EnumGroup> enums,
+      List<FlagSet> flagSets) {
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          List.of(),
+          List.of(),
+          List.of());
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -491,6 +621,9 @@ public final class Seam {
       callbacks = callbacks.stream().sorted(Comparator.comparing(Signature::name)).toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();
       functions = functions.stream().sorted(Comparator.comparing(Function::symbol)).toList();
+      constants = constants.stream().sorted(Comparator.comparing(Constant::name)).toList();
+      enums = enums.stream().sorted(Comparator.comparing(EnumGroup::name)).toList();
+      flagSets = flagSets.stream().sorted(Comparator.comparing(FlagSet::name)).toList();
     }
 
     public Module withTarget(String target) {
@@ -507,7 +640,10 @@ public final class Seam {
           resources,
           borrows,
           nativeConfig,
-          truffleConfig);
+          truffleConfig,
+          constants,
+          enums,
+          flagSets);
     }
 
     public String javaPackageName() {
@@ -548,6 +684,16 @@ public final class Seam {
 
     public String foreignFeatureClass() {
       return javaClass == null ? "MynaForeignFeature" : javaClass + "ForeignFeature";
+    }
+
+    /** The dependency-free class of literal constants, flag predicates and name functions. */
+    public String constantsClass() {
+      return nativeClass() + "Constants";
+    }
+
+    /** The {@code @CContext} directives class of the Native Image output. */
+    public String directivesClass() {
+      return nativeClass() + "Directives";
     }
 
     public String truffleClass() {
