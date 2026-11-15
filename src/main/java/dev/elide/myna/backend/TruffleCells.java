@@ -194,7 +194,7 @@ public final class TruffleCells implements Backend {
           group(
               f.bits().stream().map(FlagBit::name).toList(),
               f.bits().stream()
-                  .map(b -> guestLiteral(f.type(), BigInteger.ONE.shiftLeft(b.bit())))
+                  .map(b -> guestLiteral(f.type(), flagMask(f.type(), b.bit())))
                   .toList(),
               "                    "));
     }
@@ -313,6 +313,23 @@ public final class TruffleCells implements Backend {
       case "int" -> Integer.toString((int) bits);
       default -> Long.toString(bits) + "L";
     };
+  }
+
+  /**
+   * The mask of {@code bit} as a value of {@code type}: on a signed carrier the sign bit is the
+   * carrier's most negative value, which is what a cell returning that mask gives a guest (i8 and
+   * i16 results are sign-extended, i32 and i64 stay signed). Unsigned carriers keep the power of
+   * two.
+   */
+  private static BigInteger flagMask(Scalar type, int bit) {
+    BigInteger mask = BigInteger.ONE.shiftLeft(bit);
+    int width = type.bytes * 8;
+    boolean signed =
+        switch (type) {
+          case I8, I16, I32, I64, ISIZE -> true;
+          default -> false;
+        };
+    return signed && bit == width - 1 ? mask.subtract(BigInteger.ONE.shiftLeft(width)) : mask;
   }
 
   /**

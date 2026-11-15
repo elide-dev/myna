@@ -1802,9 +1802,14 @@ class TruffleCellsTest {
 
   /** Compiles the generated Truffle class of {@link #NAMED} against the test class path. */
   private static Class<?> compileNamed() throws Exception {
-    var java = generate(NAMED).get("NamedTruffle.java");
+    return compileTruffle(NAMED, "fixture.named", "Named");
+  }
+
+  /** Compiles the generated Truffle class {@code pkg.<cls>Truffle} of {@code seam}. */
+  private static Class<?> compileTruffle(String seam, String pkg, String cls) throws Exception {
+    var java = generate(seam).get(cls + "Truffle.java");
     Path dir = Files.createTempDirectory("myna-names");
-    Path source = dir.resolve("fixture/named/NamedTruffle.java");
+    Path source = dir.resolve(pkg.replace('.', '/') + "/" + cls + "Truffle.java");
     Files.createDirectories(source.getParent());
     Files.writeString(source, java);
     var compiler = ToolProvider.getSystemJavaCompiler();
@@ -1824,7 +1829,7 @@ class TruffleCellsTest {
     var loader =
         new URLClassLoader(
             new java.net.URL[] {dir.toUri().toURL()}, TruffleCellsTest.class.getClassLoader());
-    return Class.forName("fixture.named.NamedTruffle", true, loader);
+    return Class.forName(pkg + "." + cls + "Truffle", true, loader);
   }
 
   @Test
@@ -1886,6 +1891,39 @@ class TruffleCellsTest {
         interop.readArrayElement(members, 0),
         "consts in name order, then enums, then flags");
     assertEquals("Perms", interop.readArrayElement(members, 5));
+  }
+
+  /**
+   * A flag at the sign bit of a signed carrier is the value a cell returning that mask gives a
+   * guest: narrow signed results are sign-extended and i32/i64 stay signed, so the mask is
+   * negative.
+   */
+  @Test
+  void signedFlagMasksAreWhatCellsReturn() throws Exception {
+    String seam =
+        "module signs target=x86_64-unknown-linux-gnu java_package=fixture.signs java_class=Signs"
+            + " truffle_cells=true\n"
+            + "flags F8 type=i8\n  bit low = 0\n  bit top = 7\nend\n"
+            + "flags F16 type=i16\n  bit top = 15\nend\n"
+            + "flags F32 type=i32\n  bit top = 31\nend\n"
+            + "flags F64 type=i64\n  bit top = 63\nend\n"
+            + "flags FSize type=isize\n  bit top = 63\nend\n"
+            + "flags U8 type=u8\n  bit top = 7\nend\n"
+            + "flags U32 type=u32\n  bit top = 31\nend\n";
+    Object constants =
+        compileTruffle(seam, "fixture.signs", "Signs").getMethod("constants").invoke(null);
+    var interop = InteropLibrary.getUncached();
+    assertEquals(1, interop.readMember(interop.readMember(constants, "F8"), "low"));
+    assertEquals((int) (byte) 0x80, interop.readMember(interop.readMember(constants, "F8"), "top"));
+    assertEquals(
+        (int) (short) 0x8000, interop.readMember(interop.readMember(constants, "F16"), "top"));
+    assertEquals(
+        Integer.MIN_VALUE, interop.readMember(interop.readMember(constants, "F32"), "top"));
+    assertEquals(Long.MIN_VALUE, interop.readMember(interop.readMember(constants, "F64"), "top"));
+    assertEquals(Long.MIN_VALUE, interop.readMember(interop.readMember(constants, "FSize"), "top"));
+    // Unsigned carriers keep their number, as cells widen them.
+    assertEquals(0x80, interop.readMember(interop.readMember(constants, "U8"), "top"));
+    assertEquals(0x80000000L, interop.readMember(interop.readMember(constants, "U32"), "top"));
   }
 
   @Test
