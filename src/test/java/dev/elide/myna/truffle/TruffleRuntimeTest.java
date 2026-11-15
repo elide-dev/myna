@@ -4076,4 +4076,67 @@ class TruffleRuntimeTest {
           assertThrows(NativeCellException.class, () -> function.call(resource)).getMessage());
     }
   }
+
+  /** The shape a generated constants() returns for Status, FunctionFlags and ANALYSIS_MAGIC. */
+  private static NativeConstants komodoConstants() {
+    return new NativeConstants(
+        new String[] {"ANALYSIS_MAGIC", "Status", "FunctionFlags"},
+        new Object[] {
+          0x3141514b,
+          new NativeConstants(
+              new String[] {"null_result", "ok", "syntax_error", "internal_error"},
+              new Object[] {-1, 0, 1, 3}),
+          new NativeConstants(
+              new String[] {"exported", "suspending", "external"}, new Object[] {1, 2, 4})
+        });
+  }
+
+  @Test
+  void nativeConstantsReadMembers() throws Exception {
+    NativeConstants constants = komodoConstants();
+    assertTrue(INTEROP.hasMembers(constants));
+    assertEquals(0x3141514b, INTEROP.readMember(constants, "ANALYSIS_MAGIC"));
+    Object status = INTEROP.readMember(constants, "Status");
+    assertInstanceOf(NativeConstants.class, status);
+    assertEquals(0, INTEROP.readMember(status, "ok"));
+    assertEquals(-1, INTEROP.readMember(status, "null_result"));
+    assertEquals(4, INTEROP.readMember(INTEROP.readMember(constants, "FunctionFlags"), "external"));
+    assertTrue(INTEROP.isMemberReadable(status, "ok"));
+    assertFalse(INTEROP.isMemberReadable(status, "missing"));
+    assertEquals(
+        "missing",
+        assertThrows(UnknownIdentifierException.class, () -> INTEROP.readMember(status, "missing"))
+            .getUnknownIdentifier());
+    Object members = INTEROP.getMembers(status);
+    assertEquals(4, INTEROP.getArraySize(members));
+    assertEquals("internal_error", INTEROP.readArrayElement(members, 3));
+    assertThrows(InvalidArrayIndexException.class, () -> INTEROP.readArrayElement(members, 4));
+
+    // The cached library: the same member string hits its specialization; equal strings of other
+    // identities and unknown names past the limit take the uncached lookup with the same answers.
+    InteropLibrary cached = InteropLibrary.getFactory().create(status);
+    String ok = "ok";
+    for (int i = 0; i < 3; i++) assertEquals(0, cached.readMember(status, ok));
+    assertThrows(UnknownIdentifierException.class, () -> cached.readMember(status, "missing"));
+    for (int i = 0; i < 8; i++) {
+      String fresh = new String("syntax_error".toCharArray());
+      assertEquals(1, cached.readMember(status, fresh));
+      assertTrue(cached.isMemberReadable(status, fresh));
+    }
+    assertEquals(0, cached.readMember(status, ok));
+    assertThrows(UnknownIdentifierException.class, () -> cached.readMember(status, "absent"));
+  }
+
+  @Test
+  void nativeConstantsRejectNonConstants() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeConstants(new String[] {"a"}, new Object[] {"text"}));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeConstants(new String[] {"a", "a"}, new Object[] {1, 2}));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new NativeConstants(new String[] {"a"}, new Object[] {}));
+  }
 }

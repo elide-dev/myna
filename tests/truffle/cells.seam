@@ -5,7 +5,21 @@ opaque Counter
 resource Counter representation=native threading=confined create=counterCreate destroy=counterDestroy
 opaque Stepper
 resource Stepper representation=native threading=confined create=stepperCreate destroy=stepperDestroy
-import add symbol=cells_add return=i32 error=no_failure
+# Named constants: a guest reads them through CellApiTruffle.constants() and compares cell results
+# with them; enum= on a result leaves the cell and its leaf status unchanged.
+const LIMIT type=u64 value=0xfffffffffffffffe
+enum Status type=i32
+  value ok = 0
+  value five = 5
+end
+enum Octet type=u8
+  value top = 255
+end
+flags Mode type=u8
+  bit fast = 0
+  bit high = 7
+end
+import add symbol=cells_add return=i32 error=no_failure enum=Status
   param left type=i32
   param right type=i32
 end
@@ -19,7 +33,7 @@ import scale symbol=cells_scale return=f64 error=no_failure
   param value type=f32
   param factor type=f64
 end
-import lowByte symbol=cells_low_byte return=u8 error=no_failure
+import lowByte symbol=cells_low_byte return=u8 error=no_failure enum=Octet
   param value type=i64
 end
 import peek symbol=cells_peek return=i64 error=no_failure

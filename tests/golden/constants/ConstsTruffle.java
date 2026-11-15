@@ -2,10 +2,12 @@
 package fixture.constants;
 
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.truffle.Carriers;
 import dev.elide.myna.truffle.CoercionPolicy;
 import dev.elide.myna.truffle.IntegerCoercion;
 import dev.elide.myna.truffle.NativeCell;
+import dev.elide.myna.truffle.NativeConstants;
 import dev.elide.myna.truffle.NativeFunction;
 import dev.elide.myna.truffle.PointerCoercion;
 import org.graalvm.word.WordFactory;
@@ -32,6 +34,102 @@ public final class ConstsTruffle {
     }
     public static NativeFunction status() {
         return new status_Cell().function();
+    }
+    private static final NativeConstants CONSTANTS =
+            new NativeConstants(
+                new String[] {"FLOOR", "LIMIT", "MAGIC", "Level", "Status", "Perms", "Wide"},
+                new Object[] {
+                    -9223372036854775808L,
+                    -1L,
+                    826364235L,
+                    new NativeConstants(
+                            new String[] {"low", "high"},
+                            new Object[] {
+                                0,
+                                255
+                            }),
+                    new NativeConstants(
+                            new String[] {"null_result", "ok", "internal_error", "syntax_error"},
+                            new Object[] {
+                                -1,
+                                0,
+                                3,
+                                16
+                            }),
+                    new NativeConstants(
+                            new String[] {"read", "write", "sticky"},
+                            new Object[] {
+                                1L,
+                                2L,
+                                2147483648L
+                            }),
+                    new NativeConstants(
+                            new String[] {"first", "last"},
+                            new Object[] {
+                                1L,
+                                -9223372036854775808L
+                            })
+                });
+    /**
+     * The seam's consts, enums and flag sets as one guest-visible object, built when this
+     * class initializes: {@code constants.Status.ok} reads a number that a compiled guest
+     * folds. Flag members are the masks of their bits. Each value is what a cell returning
+     * its carrier gives a guest: unsigned values below 64 bits are their number.
+     */
+    public static NativeConstants constants() {
+        return CONSTANTS;
+    }
+    /** Names of enum Level: u8. */
+    public static final class LevelNames {
+        private LevelNames() {}
+        private static final TruffleString LOW =
+                TruffleString.fromConstant("low", TruffleString.Encoding.UTF_8);
+        private static final TruffleString HIGH =
+                TruffleString.fromConstant("high", TruffleString.Encoding.UTF_8);
+        /**
+         * The declared name of a value, or null when the enum does not list it. Folds to a
+         * constant for a constant value; no boundary.
+         */
+        public static TruffleString name(byte value) {
+            switch (value) {
+                case 0: return LOW;
+                case -1: return HIGH;
+                default: return null;
+            }
+        }
+        /** The same, for the value as a cell returns it: no narrowing needed. */
+        public static TruffleString name(int value) {
+            switch (value) {
+                case 0: return LOW;
+                case 255: return HIGH;
+                default: return null;
+            }
+        }
+    }
+    /** Names of enum Status: i32. */
+    public static final class StatusNames {
+        private StatusNames() {}
+        private static final TruffleString NULL_RESULT =
+                TruffleString.fromConstant("null_result", TruffleString.Encoding.UTF_8);
+        private static final TruffleString OK =
+                TruffleString.fromConstant("ok", TruffleString.Encoding.UTF_8);
+        private static final TruffleString INTERNAL_ERROR =
+                TruffleString.fromConstant("internal_error", TruffleString.Encoding.UTF_8);
+        private static final TruffleString SYNTAX_ERROR =
+                TruffleString.fromConstant("syntax_error", TruffleString.Encoding.UTF_8);
+        /**
+         * The declared name of a value, or null when the enum does not list it. Folds to a
+         * constant for a constant value; no boundary.
+         */
+        public static TruffleString name(int value) {
+            switch (value) {
+                case -1: return NULL_RESULT;
+                case 0: return OK;
+                case 3: return INTERNAL_ERROR;
+                case 16: return SYNTAX_ERROR;
+                default: return null;
+            }
+        }
     }
     /** Transitioning import consts_blocking_status through the Native Image binding. */
     public static final class blockingStatus_Cell extends NativeCell {

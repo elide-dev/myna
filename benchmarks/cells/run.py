@@ -32,7 +32,7 @@ from truffle_integration import truffle_jars
 WORKLOAD = 'truffle-cells-v1'
 SIZES = (16, 256, 1024, 4096, 65536)
 SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ffm-step', 'glue-leaf', 'glue-step',
-          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
+          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-leaf-literal', 'typed-leaf-constant', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
           'hand-step', 'glue-boundary-step']
 # String arguments: Java strings and guest (Truffle) strings, by what their UTF-8 encoding needs.
 TEXTS = {'-utf8': 'h\u00e9llo w\u00f6rld', '-wide': '\u3053\u3093\u306b\u3061\u306f\u4e16\u754c'}

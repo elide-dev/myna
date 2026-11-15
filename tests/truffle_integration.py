@@ -80,6 +80,7 @@ class TruffleIntegrationTests(unittest.TestCase):
         # host nulls the checks pass): a non-cell wrapper asserts the caller's align contract.
         result = run(java, "-ea:fixture.cells...", "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
         self.assertIn("wrapper assertions enabled: fired", result.stdout)
+        self.assertIn("guest constants read and named", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
 
     def test_ffm_cells_in_native_image(self):
@@ -90,13 +91,14 @@ class TruffleIntegrationTests(unittest.TestCase):
         # entry into a cell's boundary method, so even invoke allocates the address's segment.
         build = native_image("-O3", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The probe is the consumer's own node class.
-                             "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat",
+                             "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat,fixture.cells.CellChecks$GuestConstants",
                              "--module-path", self.module_path(), "-cp", os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR])),
                              "-H:+PrintAnalysisCallTree", f"-H:Path={self.work}",
                              "--features=fixture.cells.CellApiForeignFeature", "fixture.cells.FfmCellsMain", "-o", app)
         self.assertIn("ffm-cells-app", build.stdout)
         self.assert_wrapper_assertions_compiled_out(self.work / "reports")
         result = run(app, self.library)
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("wrapper assertions disabled: silent", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
 
@@ -133,13 +135,17 @@ class TruffleIntegrationTests(unittest.TestCase):
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The generated properties cover the cells; the probes are the consumer's own node classes.
-                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates",
+                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates,fixture.cells.CellChecks$GuestConstants",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
                              f"-Dmyna.cells.libraryPath={self.work}",
                              "fixture.cells.CellsMain", "-o", app)
         self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)
+        # Reads of constants.Status.ok compared with a cell result: compiled, folded to a compilation
+        # constant, no deoptimization and no allocation; lowByte's u8 255 equals constants.Octet.top
+        # (CellChecks.guestConstants throws otherwise).
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("Truffle cells compiled and passed", result.stdout)
 
     def assert_cells_are_runtime_compilable(self, log):
@@ -165,7 +171,10 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
             "BytesCoercion.emptyAddress", "AlignedBytesCoercion.execute", "AlignedBytesCoercion.slow",
             "OverAlignedBytesCoercion.execute", "OverAlignedBytesCoercion.slow",
-            "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText")]
+            "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText",
+            # Guest-visible constants: the cached read folds; names are a switch over constants.
+            "NativeConstants$ReadMember.cached")]
+        expected.append("fixture.cells.CellApiTruffle$StatusNames.name")
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
 

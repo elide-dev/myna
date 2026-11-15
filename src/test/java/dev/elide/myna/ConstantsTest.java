@@ -585,7 +585,19 @@ class ConstantsTest {
             "type collides with generated Truffle class CellsTruffle"),
         Arguments.of(
             "enum status_Cell type=i32\n value ok = 0\nend\n" + IMP + "\nend\n",
-            "type collides with generated Truffle cell for status"));
+            "type collides with generated Truffle cell for status"),
+        Arguments.of(
+            "const Status type=i32 value=1\n" + ST,
+            "enum Status: name collides with const Status in Truffle constants()"),
+        Arguments.of(
+            "const FunctionFlags type=u32 value=1\n" + FL,
+            "flags FunctionFlags: name collides with const FunctionFlags in Truffle constants()"));
+  }
+
+  @Test
+  void constAndGroupNamesShareANamespaceOnlyWithCells() {
+    // Without Truffle cells nothing puts consts and groups in one namespace.
+    Validator.validate(Dsl.parse(HEAD + "const Status type=i32 value=1\n" + ST), true);
   }
 
   @ParameterizedTest
