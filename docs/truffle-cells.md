@@ -233,7 +233,21 @@ in a `finally` of its own, in reverse acquisition order:
   costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
   arena of their own. Because cells release in reverse order, nested borrows and calls back into
   guest code are last-in, first-out; releasing out of order or on another thread throws
-  `IllegalStateException` and leaves the stack unchanged.
+  `IllegalStateException` and leaves the stack unchanged;
+- every copy a borrow lends starts on a 16-byte boundary (`Borrow.Scratch.ALIGNMENT`): scratch,
+  arena, text and held copies alike, whatever was pushed before. A guest's UTF-16 or wider
+  elements therefore never meet an odd address through a copy, which heap arrays on HotSpot
+  (object-header dependent base offsets) could not promise in place;
+- a parameter with `align=N@explicit_contract` is never lent at an address not divisible by `N`.
+  Copies start on a boundary of at least `N` (an arena or a rounded `malloc` for `N` above 16); a
+  pin that is not divisible by `N` is undone and the array copied; native memory lent in place
+  at a lesser alignment (a misaligned `asSlice`) is copied, written back for writable parameters,
+  and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
+  bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
+  buffer lends a page-aligned dummy address.
+  The fact is accepted on a byte-pointer import parameter (C string or `truffle_buffer`); a `borrow`
+  declaration's buffer still rejects `align`, which `seam.ll` and the direct wrappers would promise to
+  every caller while only cells check it.
 
 A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch

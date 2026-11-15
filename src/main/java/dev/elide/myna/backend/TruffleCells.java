@@ -208,7 +208,12 @@ public final class TruffleCells implements Backend {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
             boolean writable = p.access() != Access.READ;
-            String coercion = cell.isHeld(p) ? "HeldBytesCoercion" : "BytesCoercion";
+            // A parameter with an align fact takes the coercion that honors it; the others keep the
+            // smaller one, which a compiled call inlines to keep its borrow out of the heap.
+            String coercion =
+                cell.isHeld(p)
+                    ? "HeldBytesCoercion"
+                    : align(p) > 1 ? "AlignedBytesCoercion" : "BytesCoercion";
             imports.add(RUNTIME + coercion);
             imports.add(RUNTIME + "Borrow");
             fields
@@ -235,12 +240,15 @@ public final class TruffleCells implements Backend {
                   .append(declared)
                   .append(", ")
                   .append(p.nullable())
+                  .append(align(p) > 1 ? ", " + align(p) : "")
                   .append(");\n");
               continue;
             }
             init.append("            this.")
                 .append(field)
-                .append(" = new BytesCoercion(")
+                .append(" = new ")
+                .append(coercion)
+                .append("(")
                 .append(quotedName)
                 .append(", ")
                 .append(declared)
@@ -251,8 +259,15 @@ public final class TruffleCells implements Backend {
                 .append(writable)
                 .append(", ")
                 .append(cell.isBuffer(p))
-                // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either.
-                .append(rawBytes(p) ? ", false" : "")
+                // A truffle_buffer parameter is raw bytes: no borrow, and no terminator either. An
+                // align fact follows the terminated flag, which then has to be spelled out.
+                .append(
+                    align(p) > 1
+                        ? ", "
+                            + (rawBytes(p) ? "false" : String.valueOf(!cell.isBuffer(p)))
+                            + ", "
+                            + align(p)
+                        : rawBytes(p) ? ", false" : "")
                 .append(");\n");
           } else {
             imports.add(RUNTIME + "PointerCoercion");
@@ -1160,6 +1175,15 @@ public final class TruffleCells implements Backend {
       case I64, U64, USIZE, ISIZE, U32 -> new String[] {"long", "executeLong"};
       case F32, F64 -> new String[] {"double", "executeDouble"};
     };
+  }
+
+  /**
+   * The {@code align} fact a byte parameter's coercion honors, or zero: only an approved
+   * ({@code explicit_contract} or compiler-proven) fact is a requirement.
+   */
+  private static long align(Parameter p) {
+    Fact fact = p.facts().get("align");
+    return fact != null && fact.enabled() && fact.approved() ? Long.parseLong(fact.value()) : 0;
   }
 
   private static boolean enabled(Function f, String key) {

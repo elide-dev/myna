@@ -958,6 +958,7 @@ class TruffleRuntimeTest {
     assertEquals(failed.getMessage(), interop.getExceptionMessage(failed));
     assertTrue(interop.hasMembers(failed));
     Object members = interop.getMembers(failed);
+    assertTrue(interop.hasArrayElements(members));
     assertEquals(1, interop.getArraySize(members));
     assertTrue(interop.isArrayElementReadable(members, 0));
     assertFalse(interop.isArrayElementReadable(members, 1));
@@ -2363,6 +2364,233 @@ class TruffleRuntimeTest {
   /** Reads a C string up to its terminator, as native code would. */
   private static String cString(long address) {
     return MemorySegment.ofAddress(address).reinterpret(Long.MAX_VALUE).getString(0);
+  }
+
+  /**
+   * Every copy a borrow lends starts on a 16-byte boundary: scratch, arena and held copies, text
+   * and units pushes, whatever was pushed before (#120).
+   */
+  @Test
+  void lentCopiesAreSixteenByteAligned() throws Exception {
+    onFreshThread(() -> {
+      int[] lengths = {0, 1, 3, 255, 256, 4097, 20_000};
+      for (boolean odd : new boolean[] {false, true}) {
+        Borrow first = odd ? Borrow.ofString("odd", true) : null;
+        for (int length : lengths) {
+          byte[] bytes = new byte[length];
+          for (boolean terminated : new boolean[] {false, true}) {
+            Borrow call = Borrow.ofArray(bytes, true, terminated);
+            assertEquals(0, call.address() % 16, "call copy of " + length);
+            call.release();
+          }
+          Borrow text = Borrow.ofString("x".repeat(length), true);
+          assertEquals(0, text.address() % 16, "text of " + length);
+          text.release();
+          Borrow wide = Borrow.ofString("\u00e9".repeat(length), true);
+          assertEquals(0, wide.address() % 16, "non-ASCII text of " + length);
+          wide.release();
+          var held = new HeldBytesCoercion("f", "data", false);
+          Borrow kept = held.execute(new HeapBytes(bytes, false));
+          assertEquals(0, kept.address() % 16, "held copy of " + length);
+          kept.release();
+          Borrow heldText = held.execute("y".repeat(length + 1));
+          assertEquals(0, heldText.address() % 16, "held text of " + length);
+          heldText.release();
+        }
+        if (first != null) first.release();
+      }
+    });
+  }
+
+  /**
+   * An {@code align} fact is a requirement on the address native code receives: copies honor it
+   * beyond the default 16, and memory that is lent in place at a lesser alignment is copied.
+   */
+  /**
+   * The coercion for a parameter with an align fact takes every kind of value as {@link
+   * BytesCoercion} does, and hands back the segments of native memory it lent in place.
+   */
+  @Test
+  void alignedCoercionsLendEveryKindOfValueAndGiveBackSegments() throws Exception {
+    try (Arena confined = Arena.ofConfined()) {
+      MemorySegment mine = confined.allocate(32, 16);
+      var cString = new AlignedBytesCoercion("f", "p", true, false, false, true, 4);
+      var sized = new AlignedBytesCoercion("f", "p", false, true, true, false, 4);
+      // Native memory: its segment is the scope to check, once; global memory has none.
+      NativeBytes inPlace = NativeBytes.of(mine.asSlice(4, 8), true);
+      assertNull(sized.segment(inPlace));
+      sized.execute(inPlace).release();
+      assertSame(inPlace.segment(), sized.segment(inPlace));
+      assertSame(inPlace, sized.scoped(inPlace));
+      assertNull(sized.segment("text"));
+      NativeBytes global = NativeBytes.of(Arena.global().allocate(8, 8), false);
+      var reader = new AlignedBytesCoercion("f", "p", false, false, true, false, 4);
+      reader.execute(global).release();
+      assertNull(reader.segment(global));
+      reader.execute(inPlace).release();
+      assertSame(inPlace.segment(), reader.segment(inPlace));
+      assertNull(reader.segment(global));
+      assertThrows(
+          NativeCellException.class,
+          () -> sized.execute(NativeBytes.of(mine.asSlice(4, 8).asReadOnly(), true)));
+      assertThrows(
+          NativeCellException.class,
+          () -> sized.scoped(NativeBytes.of(mine.asSlice(4, 8).asReadOnly(), false)));
+      assertEquals(NativeBytes.of(0, 0, false).size(), 0);
+      Borrow empty = reader.execute(NativeBytes.of(0, 0, false));
+      assertNotEquals(0, empty.address());
+      assertEquals(0, empty.address() % 4);
+      // Pointers: null where allowed, the address when aligned, a mismatch for a sized buffer.
+      assertEquals(0, cString.execute(null).address());
+      assertEquals(0, cString.execute(new ForeignNull()).address());
+      assertEquals(0, cString.execute(NativePointer.NULL).address());
+      assertEquals(mine.address(), cString.execute(new ForeignPointer(mine.address())).address());
+      assertThrows(NativeCellException.class, () -> reader.execute(null));
+      assertThrows(NativeCellException.class, () -> reader.execute(NativePointer.of(mine.address())));
+      assertThrows(
+          NativeCellException.class, () -> cString.execute(new ForeignPointer(mine.address() + 2)));
+      assertThrows(NativeCellException.class, () -> cString.execute(new ForeignBoolean()));
+      var lyingPointer = new AlignedBytesCoercion("f", "p", false, false, false, true, 4);
+      var liar = new LyingPointer();
+      inject(
+          lyingPointer,
+          new InteropLibrary() {
+            @Override
+            public boolean accepts(Object receiver) {
+              return receiver == liar;
+            }
+
+            @Override
+            public boolean isPointer(Object receiver) {
+              return true;
+            }
+
+            @Override
+            public long asPointer(Object receiver) throws UnsupportedMessageException {
+              throw UnsupportedMessageException.create();
+            }
+          });
+      assertThrows(Error.class, () -> lyingPointer.execute(liar));
+      var owner = new NativeResource("Ticket", 0x6000L, address -> {}, null);
+      assertThrows(NativeCellException.class, () -> cString.execute(owner));
+      owner.close();
+      // A writable heap array at an alignment above a copy's own is written back.
+      var wideWriter = new AlignedBytesCoercion("f", "p", false, true, true, false, 64);
+      byte[] array = {1, 2, 3};
+      Borrow wide = wideWriter.execute(new HeapBytes(array, true));
+      assertEquals(0, wide.address() % 64);
+      MemorySegment.ofAddress(wide.address()).reinterpret(3).set(ValueLayout.JAVA_BYTE, 1, (byte) 7);
+      wide.release();
+      assertArrayEquals(new byte[] {1, 7, 3}, array);
+      // A guest buffer that lies about its size is a guest error, as for BytesCoercion.
+      var lie = new ShrinkingBuffer(-1);
+      var lying = new AlignedBytesCoercion("f", "p", false, false, true, false, 4);
+      inject(lying, direct(lie));
+      assertThrows(NativeCellException.class, () -> lying.execute(lie));
+      // A terminated C string through every path that copies it.
+      Borrow terminated = cString.execute("abc");
+      assertEquals("abc", cString(terminated.address()));
+      terminated.release();
+    }
+  }
+
+  /** A pin at an address that satisfies the fact is taken; the image tests cover undoing one. */
+  @Test
+  void pinsAtAlignedAddressesAreTaken() {
+    Borrow pinned = new Borrow();
+    assertTrue(pinned.pinned("pin", 4096, 3, 64));
+    assertEquals(4096, pinned.address());
+    assertEquals(3, pinned.length());
+    assertEquals(16, Borrow.Scratch.roundUp(9, 16));
+    assertEquals(16, Borrow.Scratch.roundUp(16, 16));
+  }
+
+  @Test
+  void alignFactForcesCopyOfMisalignedSegment() throws Exception {
+    onFreshThread(() -> {
+      try (Arena arena = Arena.ofConfined()) {
+        MemorySegment base = arena.allocate(64, 64);
+        for (int i = 0; i < 64; i++) base.set(ValueLayout.JAVA_BYTE, i, (byte) i);
+        var aligned = new AlignedBytesCoercion("f", "data", false, false, true, false, 8);
+        // Aligned memory is still lent in place.
+        Borrow inPlace = aligned.execute(NativeBytes.of(base.asSlice(8, 16), false));
+        assertEquals(base.address() + 8, inPlace.address());
+        inPlace.release();
+        // A misaligned slice is copied: aligned, equal, and no segment is passed in its place.
+        NativeBytes slice = NativeBytes.of(base.asSlice(1, 16), false);
+        Borrow copy = aligned.execute(slice);
+        assertEquals(0, copy.address() % 8);
+        assertNotEquals(slice.address(), copy.address());
+        assertEquals(16, copy.length());
+        assertEquals(bytesAt(slice.address(), 16), bytesAt(copy.address(), 16));
+        assertNull(aligned.segment(slice));
+        assertNull(aligned.scoped(slice));
+        copy.release();
+        // A writable misaligned slice is written back.
+        var writable = new AlignedBytesCoercion("f", "data", false, true, true, false, 8);
+        NativeBytes target = NativeBytes.of(base.asSlice(3, 8), true);
+        Borrow out = writable.execute(target);
+        assertEquals(0, out.address() % 8);
+        MemorySegment.ofAddress(out.address()).reinterpret(8).set(ValueLayout.JAVA_BYTE, 0, (byte) 99);
+        out.release();
+        assertEquals(99, base.get(ValueLayout.JAVA_BYTE, 3));
+        // A bare pointer carries no size to copy: a misaligned one is refused.
+        var pointer = new AlignedBytesCoercion("f", "data", false, false, false, false, 8);
+        assertThrows(
+            NativeCellException.class,
+            () -> pointer.execute(NativePointer.of(base.address() + 1)));
+        assertEquals(base.address(), pointer.execute(NativePointer.of(base.address())).address());
+        // Alignment beyond a copy's default is honored for every kind of value.
+        var wide = new AlignedBytesCoercion("f", "data", false, false, false, true, 64);
+        for (Object value : new Object[] {new HeapBytes(new byte[5], false), "text", "\u00e9t\u00e9"}) {
+          Borrow lent = wide.execute(value);
+          assertEquals(0, lent.address() % 64, String.valueOf(value));
+          lent.release();
+        }
+        for (AbstractTruffleString guest : guestStrings()) {
+          Borrow lent = wide.execute(guest);
+          assertEquals(0, lent.address() % 64);
+          lent.release();
+        }
+        Borrow interopText = wide.execute(new ForeignString());
+        assertEquals(0, interopText.address() % 64);
+        interopText.release();
+        var narrow = new AlignedBytesCoercion("f", "data", false, false, false, true, 8);
+        Borrow interopNarrow = narrow.execute(new ForeignString());
+        assertEquals(0, interopNarrow.address() % 8);
+        interopNarrow.release();
+        Borrow foreign = wide.execute(new ForeignBuffer(new byte[] {1, 2, 3}, false));
+        assertEquals(0, foreign.address() % 64);
+        foreign.release();
+        var wideWritable = new AlignedBytesCoercion("f", "data", false, true, true, false, 64);
+        assertThrows(
+            NativeCellException.class, () -> wideWritable.execute(new HeapBytes(new byte[1], false)));
+        assertThrows(
+            IllegalArgumentException.class, () -> new AlignedBytesCoercion("f", "d", false, false, false, true, 3));
+        assertThrows(IllegalArgumentException.class, () -> new HeldBytesCoercion("f", "d", false, -2));
+        var held = new HeldBytesCoercion("f", "data", false, 64);
+        Borrow heldText = held.execute("text");
+        assertEquals(0, heldText.address() % 64);
+        heldText.release();
+        Borrow heldGuest = held.execute(guestStrings().get(0));
+        assertEquals(0, heldGuest.address() % 64);
+        heldGuest.release();
+        Borrow heldInterop = held.execute(new ForeignString());
+        assertEquals(0, heldInterop.address() % 64);
+        heldInterop.release();
+        Borrow heldForeign = held.execute(new ForeignBuffer(new byte[] {1, 2, 3}, false));
+        assertEquals(0, heldForeign.address() % 64);
+        heldForeign.release();
+        Borrow kept = held.execute(new HeapBytes(new byte[5], false));
+        assertEquals(0, kept.address() % 64);
+        kept.release();
+        Borrow heldSlice = held.execute(slice);
+        assertEquals(0, heldSlice.address() % 64);
+        assertEquals(bytesAt(slice.address(), 16), bytesAt(heldSlice.address(), 16));
+        assertNull(held.segment(slice));
+        heldSlice.release();
+      }
+    });
   }
 
   @Test

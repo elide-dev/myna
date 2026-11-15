@@ -33,12 +33,26 @@ import java.lang.foreign.MemorySegment;
 public final class HeldBytesCoercion extends Coercion {
   private final boolean nullable;
 
+  /** The parameter's {@code align} fact, or zero for none; see {@link BytesCoercion}. */
+  private final long align;
+
   /**
    * @param nullable whether {@code null} lends the null address with length zero
    */
   public HeldBytesCoercion(String function, String parameter, boolean nullable) {
+    this(function, parameter, nullable, 0);
+  }
+
+  /**
+   * @param align the parameter's {@code align=N@explicit_contract} fact, or zero for none: native
+   *     memory that is not divisible by it is copied instead of lent in place
+   */
+  public HeldBytesCoercion(String function, String parameter, boolean nullable, long align) {
     super(function, parameter);
+    if (align < 0 || (align & (align - 1)) != 0)
+      throw new IllegalArgumentException("align must be a power of two: " + align);
     this.nullable = nullable;
+    this.align = align <= 1 ? 0 : align;
   }
 
   /** Lends {@code value} until the borrow is released or, once kept, its resource ends it. */
@@ -46,14 +60,17 @@ public final class HeldBytesCoercion extends Coercion {
     Borrow borrow = new Borrow();
     if (value instanceof NativeBytes bytes) {
       long size = bytes.size();
-      borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
-      borrow.retain(bytes);
+      if (align > 1 && size != 0 && (bytes.address() & (align - 1)) != 0) slow(value, borrow);
+      else {
+        borrow.lend(size == 0 ? Borrow.emptyAddress() : bytes.address(), size);
+        borrow.retain(bytes);
+      }
     } else if (value instanceof HeapBytes bytes) {
-      borrow.lendHeld(bytes.array());
+      borrow.lendHeld(bytes.array(), align);
     } else if (value instanceof String text) {
-      borrow.lendHeldText(text);
+      borrow.lendHeldText(text, align);
     } else if (value instanceof AbstractTruffleString text) {
-      borrow.lendHeldText(javaString(text));
+      borrow.lendHeldText(javaString(text), align);
     } else {
       slow(value, borrow);
     }
@@ -74,7 +91,10 @@ public final class HeldBytesCoercion extends Coercion {
    * segments it has made.
    */
   public MemorySegment segment(Object value) {
-    return value instanceof NativeBytes bytes ? bytes.scoped : null;
+    if (!(value instanceof NativeBytes bytes)) return null;
+    // Memory that violates the align fact was copied: nothing of the guest's is passed in place.
+    if (align > 1 && bytes.size() != 0 && (bytes.address() & (align - 1)) != 0) return null;
+    return bytes.scoped;
   }
 
   @TruffleBoundary
@@ -92,11 +112,11 @@ public final class HeldBytesCoercion extends Coercion {
     InteropLibrary interop = interop();
     try {
       if (interop.isString(value)) {
-        borrow.lendHeldText(interop.asString(value));
+        borrow.lendHeldText(interop.asString(value), align);
         return;
       }
       if (interop.hasBufferElements(value)) {
-        borrow.lendHeldBuffer(interop, value);
+        borrow.lendHeldBuffer(interop, value, align);
         return;
       }
       if ((interop.isPointer(value) && interop.asPointer(value) == 0) || interop.isNull(value)) {

@@ -608,6 +608,45 @@ class TruffleCellsTest {
   }
 
   /**
+   * An approved {@code align} fact reaches the coercion of a byte parameter, whichever shape it has
+   * (C string or raw bytes); a heuristic one is refused (#120).
+   */
+  @Test
+  void alignFactsReachByteCoercions() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " align=8@explicit_contract truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "  param text type=ptr<char> nullable=false ownership=borrowed access=read"
+            + " align=2@explicit_contract\n"
+            + "end\n";
+    String truffle = generate(MODULE + decode).get("MynaTruffle.java");
+    assertTrue(
+        truffle.contains("new AlignedBytesCoercion(\"decode\", \"data\", false, false, false, false, 8);"),
+        truffle);
+    assertTrue(
+        truffle.contains("new AlignedBytesCoercion(\"decode\", \"text\", false, false, false, true, 2);"),
+        truffle);
+    // Only an approved fact is a requirement; validation refuses the rest.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + decode.replace("align=8@explicit_contract", "align=8@heuristic")));
+    // A borrow's buffer keeps rejecting align: the wrappers and seam.ll would promise it to every
+    // caller, and only cells check it.
+    String borrow =
+        "borrow sum bytes length=count lifetime=call\n"
+            + "import sum return=i64 error=no_failure nounwind=true@explicit_contract\n"
+            + "  param bytes type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract"
+            + " align=16@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "end\n";
+    var refused = assertThrows(IllegalArgumentException.class, () -> generate(MODULE + borrow));
+    assertTrue(refused.getMessage().contains("cannot impose alignment"));
+  }
+
+  /**
    * A byte pointer without a borrow declaration is by default a C string parameter. {@code
    * truffle_buffer} declares it raw bytes whose count stays a guest argument: no terminator, pinned
    * when large.

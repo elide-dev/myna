@@ -64,6 +64,31 @@ public final class CellChecks {
     check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
   }
+  /** The address a call received: every lent copy is 16-byte aligned and align facts are honored. */
+  static void alignment(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    byte[][] arrays = {new byte[1], new byte[3], new byte[255], new byte[4097], large, new byte[40_000]};
+    for (byte[] array : arrays) {
+      for (String name : new String[] {"addressOf", "addressOfWide"}) {
+        long want = name.equals("addressOf") ? 16 : 64;
+        long at = (Long) call(cells, name, new HeapBytes(array, false), (long) array.length);
+        check(at % want == 0, name + " of " + array.length + " heap bytes at " + Long.toHexString(at));
+      }
+      long text = (Long) call(cells, "addressOf", "x".repeat(Math.min(array.length, 1000)), 1L);
+      check(text % 16 == 0, "addressOf a string at " + Long.toHexString(text));
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 64);
+      for (int offset : new int[] {0, 1, 8, 16, 33}) {
+        NativeBytes slice = NativeBytes.of(base.asSlice(offset, 32), false);
+        for (String name : new String[] {"addressOf", "addressOfWide"}) {
+          long want = name.equals("addressOf") ? 16 : 64;
+          long at = (Long) call(cells, name, slice, 32L);
+          check(at % want == 0, name + " of native memory at offset " + offset + ": " + Long.toHexString(at));
+          check(((base.address() + offset) % want == 0) == (at == slice.address()), name + " lends aligned memory in place and copies the rest, offset " + offset);
+        }
+      }
+    }
+  }
   /**
    * What only FFM cells do: a buffer lent from a caller's segment reaches the downcall as that
    * segment, so the linker refuses a closed one and one confined to another thread, and keeps a
@@ -499,6 +524,7 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
+    alignment(cells, large);
     transfers(cells, large);
     decodes(cells);
     guestStrings(cells);

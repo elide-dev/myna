@@ -48,6 +48,9 @@ uint64_t cells_sum_bytes(const uint8_t *bytes, uint64_t count, const int64_t *bi
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];
   return sum;
 }
+// The address of a buffer, to observe the alignment of what a cell lends.
+uint64_t cells_address_of(const uint8_t *bytes, uint64_t count) { (void)count; return (uint64_t)(uintptr_t)bytes; }
+uint64_t cells_address_of_wide(const uint8_t *bytes, uint64_t count) { (void)count; return (uint64_t)(uintptr_t)bytes; }
 // Sums a buffer for as long as the caller wants the call to last: gate[0] is set once the call
 // is in native code, and the sum starts when the caller sets gate[1].
 uint64_t cells_hold(const uint8_t *bytes, uint64_t count, int32_t *gate) {

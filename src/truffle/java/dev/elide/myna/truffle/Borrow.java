@@ -129,6 +129,17 @@ public final class Borrow {
     return borrow;
   }
 
+  /**
+   * Takes the {@code pin} of an array at {@code address} for the call, or undoes it when the
+   * address is not divisible by {@code align} (at least one); whether it was taken.
+   */
+  boolean pinned(Object pin, long address, long length, long align) {
+    boolean fits = (address & (align - 1)) == 0;
+    if (fits) own(PINNED, pin, address, length);
+    else Pins.unpin(pin);
+    return fits;
+  }
+
   /** Lends a heap array: pinned when large and in a Native Image, otherwise copied. */
   public static Borrow ofArray(byte[] array, boolean writable, boolean nulTerminated) {
     Borrow borrow = new Borrow();
@@ -190,23 +201,24 @@ public final class Borrow {
    * #end()}: native memory of its own, never the scratch stack or a pin, which end with the call.
    * An empty buffer lends the dummy address and copies nothing.
    */
-  void lendHeld(byte[] bytes) {
+  void lendHeld(byte[] bytes, long align) {
     if (bytes.length == 0) {
       lend(emptyAddress(), 0);
       return;
     }
-    Copy copy = Copy.held(bytes);
+    Copy copy = Copy.held(bytes, align);
     own(COPIED, copy, copy.address, bytes.length);
   }
 
   /** Lends a held copy of {@code text} as UTF-8, without a terminator. */
-  void lendHeldText(String text) {
-    lendHeld(utf8(text));
+  void lendHeldText(String text, long align) {
+    lendHeld(utf8(text), align);
   }
 
-  /** Lends a held copy of any interop buffer, read through {@code interop}. */
-  void lendHeldBuffer(InteropLibrary interop, Object buffer) throws UnsupportedMessageException {
-    lendHeld(read(interop, buffer, false));
+  /** Lends a held copy of any interop buffer, read through {@code interop}, at {@code align}. */
+  void lendHeldBuffer(InteropLibrary interop, Object buffer, long align)
+      throws UnsupportedMessageException {
+    lendHeld(read(interop, buffer, false), align);
   }
 
   /**
@@ -215,8 +227,19 @@ public final class Borrow {
    */
   void lendArray(byte[] array, boolean writable, boolean nulTerminated, int threshold) {
     if (!nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode())
-      Pins.pin(this, array);
+      Pins.pin(this, array, 1);
     else lendCopy(array, null, writable, nulTerminated);
+  }
+
+  /**
+   * {@link #lendArray} for a parameter with an {@code align} fact: a pin whose address is not
+   * divisible by {@code align} is undone and the array copied instead.
+   */
+  void lendAlignedArray(
+      byte[] array, boolean writable, boolean nulTerminated, int threshold, long align) {
+    boolean pin = !nulTerminated && array.length >= threshold && ImageInfo.inImageRuntimeCode();
+    if (pin && Pins.pin(this, array, align)) return;
+    lendAlignedCopy(array, null, writable, nulTerminated, align);
   }
 
   /**
@@ -228,6 +251,11 @@ public final class Borrow {
     Scratch scratch = Scratch.pushText(text);
     if (scratch != null) lendPushed(scratch);
     else lendCopy(utf8(text), null, false, nulTerminated);
+  }
+
+  /** Lends UTF-8 text at an address divisible by {@code align}, which may exceed 16. */
+  void lendAlignedString(String text, boolean nulTerminated, long align) {
+    lendAlignedCopy(utf8(text), null, false, nulTerminated, align);
   }
 
   /**
@@ -247,6 +275,13 @@ public final class Borrow {
   void lendBuffer(InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
       throws UnsupportedMessageException {
     lendCopy(read(interop, buffer, writable), buffer, writable, nulTerminated);
+  }
+
+  /** {@link #lendBuffer} for a parameter whose {@code align} fact is {@code align}. */
+  void lendBuffer(
+      InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated, long align)
+      throws UnsupportedMessageException {
+    lendAlignedCopy(read(interop, buffer, writable), buffer, writable, nulTerminated, align);
   }
 
   @TruffleBoundary
@@ -286,9 +321,27 @@ public final class Borrow {
       this.offset = start;
       this.terminated = nulTerminated;
     } else {
-      Copy copy = Copy.of(bytes, nulTerminated);
+      Copy copy = Copy.of(bytes, nulTerminated, 0);
       own(COPIED, copy, copy.address, bytes.length);
     }
+    if (writable) {
+      this.array = bytes;
+      this.interopSource = source;
+    }
+  }
+
+  /**
+   * {@link #lendCopy} at an address divisible by {@code align}: scratch copies are 16-byte aligned,
+   * so only a stricter fact takes an arena of its own.
+   */
+  private void lendAlignedCopy(
+      byte[] bytes, Object source, boolean writable, boolean nulTerminated, long align) {
+    if (align <= Scratch.ALIGNMENT) {
+      lendCopy(bytes, source, writable, nulTerminated);
+      return;
+    }
+    Copy copy = Copy.of(bytes, nulTerminated, align);
+    own(COPIED, copy, copy.address, bytes.length);
     if (writable) {
       this.array = bytes;
       this.interopSource = source;
@@ -387,16 +440,31 @@ public final class Borrow {
     final MemorySegment segment;
     final long address;
 
+    /** What {@code free} takes when {@link #arena} is {@code null}; it precedes {@link #address}. */
+    private final long raw;
+
     private Copy(Arena arena, MemorySegment segment) {
+      this(arena, segment, segment.address());
+    }
+
+    private Copy(Arena arena, MemorySegment segment, long raw) {
       this.arena = arena;
       this.segment = segment;
       this.address = segment.address();
+      this.raw = raw;
+    }
+
+    /** The alignment of a copy: {@link Scratch#ALIGNMENT}, or a stricter {@code align} fact. */
+    private static long alignment(long align) {
+      return Math.max(align, Scratch.ALIGNMENT);
     }
 
     @TruffleBoundary
-    static Copy of(byte[] bytes, boolean nulTerminated) {
+    static Copy of(byte[] bytes, boolean nulTerminated, long align) {
       Arena arena = Arena.ofConfined();
-      MemorySegment segment = arena.allocate(Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1));
+      MemorySegment segment =
+          arena.allocate(
+              Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1), alignment(align));
       MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
       if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
       return new Copy(arena, segment);
@@ -411,14 +479,18 @@ public final class Borrow {
      * guest's later writes to the array would reach the native side.
      */
     @TruffleBoundary
-    static Copy held(byte[] bytes) {
+    static Copy held(byte[] bytes, long align) {
       long size = bytes.length;
+      long alignment = alignment(align);
       Copy copy;
       if (ImageInfo.inImageRuntimeCode()) {
-        copy = new Copy(null, MemorySegment.ofAddress(Malloc.allocate(size)).reinterpret(size));
+        // Over-allocate and round up, so the guarantee does not rest on malloc's own alignment.
+        long raw = Malloc.allocate(size + alignment);
+        MemorySegment at = MemorySegment.ofAddress(Scratch.roundUp(raw, alignment));
+        copy = new Copy(null, at.reinterpret(size), raw);
       } else {
         Arena arena = Arena.ofShared();
-        copy = new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+        copy = new Copy(arena, arena.allocate(size, alignment));
       }
       MemorySegment.copy(bytes, 0, copy.segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
       return copy;
@@ -430,7 +502,7 @@ public final class Borrow {
         if (array != null) writeBack(copy.segment, 0, array, source);
       } finally {
         if (copy.arena != null) copy.arena.close();
-        else Malloc.free(copy.address);
+        else Malloc.free(copy.raw);
       }
     }
   }
@@ -455,9 +527,10 @@ public final class Borrow {
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
   private static final class Pins {
-    static void pin(Borrow borrow, byte[] array) {
+    /** Pins {@code array} unless its address violates {@code align}; whether it did. */
+    static boolean pin(Borrow borrow, byte[] array, long align) {
       PinnedObject pin = PinnedObject.create(array);
-      borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
+      return borrow.pinned(pin, pin.addressOfArrayElement(0).rawValue(), array.length, align);
     }
 
     static void unpin(Object pin) {
@@ -525,11 +598,16 @@ public final class Borrow {
     /** The end of the innermost copy: zero when the stack is empty. */
     long top;
 
+    /** {@code value} rounded up to a multiple of {@code align}, a power of two. */
+    static long roundUp(long value, long align) {
+      return (value + align - 1) & -align;
+    }
+
     /**
      * The bytes a copy of {@code size} bytes occupies; an empty copy still gets its own address.
      */
     static long reservation(long size) {
-      return (Math.max(size, 1) + ALIGNMENT - 1) & -ALIGNMENT;
+      return roundUp(Math.max(size, 1), ALIGNMENT);
     }
 
     /** The block to copy {@code size} bytes into at {@link #top}, or {@code null} if it is full. */
