@@ -48,16 +48,9 @@ public final class RustFfi implements Backend {
           .append("(&self) -> &[")
           .append(element)
           .append("] {\n");
-      if (v.signedCount())
-        out.append("        debug_assert!(")
-            .append(count)
-            .append(" >= 0, \"")
-            .append(v.label())
-            .append(": negative count\");\n");
       out.append("        let count = ")
           .append(count)
-          .append(v.countType() == Scalar.USIZE ? "" : " as usize")
-          .append(";\n        if ")
+          .append(" as usize;\n        if ")
           .append(pointer)
           .append(".is_null() {\n            debug_assert!(count == 0, \"")
           .append(v.label())

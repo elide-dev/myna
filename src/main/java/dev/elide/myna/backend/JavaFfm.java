@@ -260,7 +260,7 @@ public final class JavaFfm implements Backend {
           .append(");\n    }\n");
   }
 
-  /** The count field as a {@code long}: unsigned narrow carriers zero-extend, signed ones widen. */
+  /** The count field as a {@code long}: narrow carriers zero-extend, a u64 is its raw bits. */
   private static String countRead(Views v) {
     String read = "record.get(" + Types.layout(v.countType()) + ", " + v.count().offset() + "L)";
     return switch (v.countType()) {

@@ -42,11 +42,11 @@ final class ViewsValidator {
         require(count != null, where + ": count=" + f.count() + " names no field of " + s.name());
         String countWhere = s.name() + "." + count.name();
         require(
-            count.type() instanceof Scalar c && integer(c),
+            count.type() instanceof Scalar c && unsigned(c),
             where
                 + ": count field "
                 + countWhere
-                + " must be an integer, found "
+                + " must be u8, u16, u32 or u64, found "
                 + count.type().text());
         require(
             count.group() == null,
@@ -84,9 +84,10 @@ final class ViewsValidator {
                 + " needs");
   }
 
-  private static boolean integer(Scalar s) {
+  /** A count is never negative: only the fixed-width unsigned carriers count elements. */
+  private static boolean unsigned(Scalar s) {
     return switch (s) {
-      case I8, U8, I16, U16, I32, U32, I64, U64, ISIZE, USIZE -> true;
+      case U8, U16, U32, U64 -> true;
       default -> false;
     };
   }

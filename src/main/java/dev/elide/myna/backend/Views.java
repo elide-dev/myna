@@ -46,13 +46,6 @@ record Views(Struct struct, Field pointer, Field count, Type element, long eleme
     return (Scalar) count.type();
   }
 
-  boolean signedCount() {
-    return switch (countType()) {
-      case I8, I16, I32, I64, ISIZE -> true;
-      default -> false;
-    };
-  }
-
   /** {@code Struct.field}, for messages. */
   String label() {
     return struct.name() + "." + pointer.name();

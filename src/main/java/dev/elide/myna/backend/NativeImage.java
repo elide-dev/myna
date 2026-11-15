@@ -537,11 +537,10 @@ public final class NativeImage implements Backend {
     String count = "record." + v.count().name() + "()";
     String bound =
         switch (v.countType()) {
-          case U64, USIZE -> "Long.compareUnsigned(i, " + count + ") < 0";
           case U32 -> "i < Integer.toUnsignedLong(" + count + ")";
           case U16 -> "i < Short.toUnsignedLong(" + count + ")";
           case U8 -> "i < Byte.toUnsignedLong(" + count + ")";
-          default -> "i < " + count;
+          default -> "Long.compareUnsigned(i, " + count + ") < 0"; // u64
         };
     String element;
     String access;

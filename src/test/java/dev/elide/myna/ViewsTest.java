@@ -98,7 +98,7 @@ class ViewsTest {
                 + ELEMENT
                 + "struct R size=32 align=8\n"
                 + ok
-                + "  field m type=i16 offset=24\nend\n"),
+                + "  field m type=u16 offset=24\nend\n"),
         true);
     assertEquals(
         "field R.n: count= requires a ptr<T> field, found u64",
@@ -107,14 +107,23 @@ class ViewsTest {
         "field R.p: count=n names no field of R",
         reject(record("  field p type=ptr<E> offset=0 count=n\n")));
     assertEquals(
-        "field R.p: count field R.q must be an integer, found ptr<E>",
+        "field R.p: count field R.q must be u8, u16, u32 or u64, found ptr<E>",
         reject(record("  field p type=ptr<E> offset=0 count=q\n  field q type=ptr<E> offset=8\n")));
     assertEquals(
-        "field R.p: count field R.p must be an integer, found ptr<E>",
+        "field R.p: count field R.p must be u8, u16, u32 or u64, found ptr<E>",
         reject(record("  field p type=ptr<E> offset=0 count=p\n")));
     assertEquals(
-        "field R.p: count field R.n must be an integer, found f64",
+        "field R.p: count field R.n must be u8, u16, u32 or u64, found f64",
         reject(record("  field p type=ptr<E> offset=0 count=n\n  field n type=f64 offset=8\n")));
+    // A count is never negative: signed carriers, and the pointer-sized ones, are rejected.
+    for (String carrier : List.of("i8", "i16", "i32", "i64", "isize", "usize"))
+      assertEquals(
+          "field R.p: count field R.n must be u8, u16, u32 or u64, found " + carrier,
+          reject(
+              record(
+                  "  field p type=ptr<E> offset=0 count=n\n  field n type="
+                      + carrier
+                      + " offset=8\n")));
     assertEquals(
         "field R.p: count field R.n carries an enum= or flags= reference",
         reject(
@@ -168,15 +177,15 @@ class ViewsTest {
                     + "  field d type=ptr<i32> offset=24 count=dn\n"
                     + "  field an type=u8 offset=32\n"
                     + "  field bn type=u16 offset=34\n"
-                    + "  field cn type=i64 offset=40\n"
-                    + "  field dn type=usize offset=48\n"
+                    + "  field cn type=u32 offset=36\n"
+                    + "  field dn type=u64 offset=40\n"
                     + "end\n"),
             true);
     String rust = out.get("seam.rs");
     assertTrue(rust.contains("pub fn a(&self) -> &[usize] {"), rust);
     assertTrue(rust.contains("pub fn b(&self) -> &[core::ffi::c_char] {"), rust);
-    assertTrue(rust.contains("debug_assert!(self.cn >= 0, \"R.c: negative count\");"), rust);
-    assertTrue(rust.contains("let count = self.dn;\n"), rust);
+    assertFalse(rust.contains(">= 0"), rust);
+    assertTrue(rust.contains("let count = self.dn as usize;\n"), rust);
     String ffm = out.get("CFFM.java");
     assertTrue(
         ffm.contains("long count = Byte.toUnsignedLong(record.get(ValueLayout.JAVA_BYTE, 32L));"));
@@ -187,7 +196,7 @@ class ViewsTest {
     String ni = out.get("C.java");
     assertTrue(ni.contains("i < Byte.toUnsignedLong(record.an())"), ni);
     assertTrue(ni.contains("i < Short.toUnsignedLong(record.bn())"), ni);
-    assertTrue(ni.contains("i >= 0L && i < record.cn() :"), ni);
+    assertTrue(ni.contains("i < Integer.toUnsignedLong(record.cn())"), ni);
     assertTrue(ni.contains("Long.compareUnsigned(i, record.dn()) < 0"), ni);
     assertTrue(ni.contains("return record.a().read(WordFactory.signed(i)).rawValue();"), ni);
     assertTrue(ni.contains("public static byte R_bAt(R record, long i) {"), ni);
