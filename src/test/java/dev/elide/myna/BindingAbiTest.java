@@ -42,17 +42,13 @@ class BindingAbiTest {
     assertFalse(normal.get("MynaNative.java").contains("NO_TRANSITION"));
     assertTrue(normal.get("seam.json").contains("\"nativeCallPolicy\":\"TRANSITION\""));
     assertNotEquals(fast.get("seam.abi"), normal.get("seam.abi"));
-    // Without leaves nothing is initialized specially; only the generated context's check runs.
-    String properties =
+    assertFalse(
         normal.entrySet().stream()
             .filter(e -> e.getKey().endsWith(".properties"))
             .findFirst()
             .orElseThrow()
-            .getValue();
-    assertTrue(
-        properties.endsWith("\nArgs = --features=dev.elide.myna.generated.MynaNativeDirectives\n"),
-        properties);
-    assertFalse(properties.contains("--initialize"), properties);
+            .getValue()
+            .contains("Args ="));
   }
 
   @Test

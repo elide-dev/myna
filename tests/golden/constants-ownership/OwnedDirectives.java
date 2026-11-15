@@ -3,8 +3,8 @@ package fixture.constants.owned;
 
 /**
  * The C context of {@link Owned}: the seam.h these bindings were generated with,
- * and, as the hosted Feature that native-image.properties registers, the check that
- * fails the image build when that header's fingerprint is not the bindings' own.
+ * and, as a hosted Feature that native-image runs with {@code --features=fixture.constants.owned.OwnedDirectives},
+ * the check that fails the image build when that header's fingerprint is not the bindings' own.
  */
 public final class OwnedDirectives
     implements org.graalvm.nativeimage.c.CContext.Directives, org.graalvm.nativeimage.hosted.Feature {

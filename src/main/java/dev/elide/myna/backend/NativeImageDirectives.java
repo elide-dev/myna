@@ -11,8 +11,8 @@ import java.util.List;
  * The C context of the Native Image class, {@code <Class>Directives}. It embeds this generation's
  * {@code seam.h}, writes it to a temporary directory when the image builder first asks for headers
  * and delegates everything else to the consumer's {@code c_context}, if one is named. As a hosted
- * {@code Feature}, which the generated {@code native-image.properties} registers, it fails the
- * image build when the header's fingerprint is not the Native Image class's own.
+ * {@code Feature}, which consumers enable with {@code --features=<package>.<Class>Directives}, it
+ * fails the image build when the header's fingerprint is not the Native Image class's own.
  *
  * <p>Only the image builder uses the class: run-time code never reaches it, so no header text
  * reaches an image. The class names everything qualified, so neither a declared type nor a consumer
@@ -48,10 +48,13 @@ public final class NativeImageDirectives implements Backend {
                 + "}: the seam.h these bindings were generated with,"
                 + (delegate == null ? "" : " after the headers of {@code " + delegate + "},")
                 + "\n"
-                + " * and, as the hosted Feature that native-image.properties registers, the check"
-                + " that\n"
-                + " * fails the image build when that header's fingerprint is not the bindings'"
-                + " own.\n"
+                + " * and, as a hosted Feature that native-image runs with {@code --features="
+                + m.javaPackageName()
+                + "."
+                + self
+                + "},\n"
+                + " * the check that fails the image build when that header's fingerprint is not"
+                + " the bindings' own.\n"
                 + " */\n"
                 + "public final class "
                 + self

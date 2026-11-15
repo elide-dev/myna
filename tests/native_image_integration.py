@@ -81,10 +81,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         (work / "libownership_demo_jni.a.symbols").write_text(
             (generated / "libownership_demo_jni.a.symbols").read_text() + "Java_JniMain_nativeErrors\n")
         classes = work / "classes"
-        # The generated properties register the context's header check: a JNI-only image compiles its
-        # class too, and with no Native Image class in the image it has nothing to check.
-        compile_native(classes, generated, generated / "NativeApiJNI.java", generated / "NativeApiDirectives.java",
-                       ROOT / "tests/ownership/JniMain.java")
+        compile_native(classes, generated, generated / "NativeApiJNI.java", ROOT / "tests/ownership/JniMain.java")
         native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}",
                      "-H:-UnlockExperimentalVMOptions", "JniMain", "-o", work / "jni-app")
         self.assertIn("Static JNI scalar, ownership and direct buffer calls passed", run(work / "jni-app").stdout)
@@ -242,6 +239,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         # No native-linker flags: @CContext supplies the path and @CLibrary selects the archive.
         native_image( "-O1", "-cp", classes,
             "--initialize-at-build-time=fixture.bemo.BemoMain$Literals",
+            "--features=fixture.bemo.BemoImportsDirectives",  # the opt-in seam.h check
             f"-Dmyna.bemo.libraryPath={work}", f"-Dmyna.bemo.contextHeader={fixture / 'context.h'}",
             "fixture.bemo.BemoMain", "-o", app)
         self.assertIn("Bemo static linkage and handwritten callbacks passed", run(app).stdout)
@@ -314,11 +312,8 @@ class NativeImageIntegrationTests(unittest.TestCase):
         if classes.exists():
             shutil.rmtree(classes)
         classes.mkdir()
-        # The generated properties register the context's header check; without the Native Image
-        # class in the image it has nothing to check, so FFM-only images compile just its class.
         compile_native(classes, generated, generated / "MynaFFM.java", generated / "MynaNativeJNI.java",
-                       generated / "MynaForeignFeature.java", generated / "MynaNativeDirectives.java",
-                       ROOT / "tests/abi/FfmMain.java")
+                       generated / "MynaForeignFeature.java", ROOT / "tests/abi/FfmMain.java")
         library = work / ("libinspect.dylib" if sys.platform == "darwin" else "libinspect.so")
         os.environ["SEAM_GENERATED"] = str(generated)
         run("rustc", "--edition=2024", "--crate-type=cdylib", "-C", "opt-level=2", "--cfg", 'feature="std"', ROOT / "tests/abi/inspect.rs", "-o", library)
@@ -375,7 +370,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
 
 class GeneratedContextTests(unittest.TestCase):
     """The generated C context: seam.h reaches the image build and nothing else, its fingerprint is
-    checked there, and the @CConstant accessors fold to the descriptor's literals."""
+    checked there when the consumer enables the context as a Feature, and the @CConstant accessors
+    fold to the descriptor's literals."""
+    CHECK = "--features=fixture.header.HeaderApiDirectives"
 
     @classmethod
     def setUpClass(cls):
@@ -391,7 +388,7 @@ class GeneratedContextTests(unittest.TestCase):
                        cls.generated / "HeaderApiDirectives.java", HEADER / "HeaderMain.java",
                        HEADER / "DirectivesProbe.java")
         cls.app = cls.work / "header-app"
-        native_image("-O2", "-cp", cls.classes, *cls.builder_tmp(cls),
+        native_image("-O2", "-cp", cls.classes, *cls.builder_tmp(cls), cls.CHECK,
                      "-H:+UnlockExperimentalVMOptions", "-H:+PrintAnalysisCallTree", "-H:-DeleteLocalSymbols",
                      "-H:-UnlockExperimentalVMOptions", "fixture.header.HeaderMain", "-o", cls.app)
 
@@ -449,11 +446,14 @@ class GeneratedContextTests(unittest.TestCase):
         classes = self.work / "stale-classes"
         compile_native(classes, self.generated, self.generated / "HeaderApi.java", stale / "HeaderApiDirectives.java",
                        HEADER / "HeaderMain.java")
-        result = native_image("-O1", "-cp", classes, *self.builder_tmp(), "fixture.header.HeaderMain",
+        result = native_image("-O1", "-cp", classes, *self.builder_tmp(), self.CHECK, "fixture.header.HeaderMain",
                               "-o", self.work / "stale-app", ok=False)
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
         self.assertIn(f"seam.h fingerprint {header} differs from generated bindings {bindings}", output)
+        # The check is opt-in: without the Feature the same mixed classes build.
+        native_image("-O1", "-cp", classes, *self.builder_tmp(), "fixture.header.HeaderMain",
+                     "-o", self.work / "unchecked-app")
 
     def test_large_header(self):
         """A seam.h over 64 KiB, beyond one class-file string constant, is embedded in pieces."""

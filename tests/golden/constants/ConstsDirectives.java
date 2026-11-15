@@ -3,8 +3,8 @@ package fixture.constants;
 
 /**
  * The C context of {@link Consts}: the seam.h these bindings were generated with,
- * and, as the hosted Feature that native-image.properties registers, the check that
- * fails the image build when that header's fingerprint is not the bindings' own.
+ * and, as a hosted Feature that native-image runs with {@code --features=fixture.constants.ConstsDirectives},
+ * the check that fails the image build when that header's fingerprint is not the bindings' own.
  */
 public final class ConstsDirectives
     implements org.graalvm.nativeimage.c.CContext.Directives, org.graalvm.nativeimage.hosted.Feature {

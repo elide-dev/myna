@@ -1602,12 +1602,8 @@ class GeneratorTest {
     // Without a consumer context nothing is delegated.
     assertFalse(directives.contains("Directives context ="), directives);
     assertFalse(directives.contains("return context."), directives);
-    // The generated properties register the check, so every image build with the bindings runs it.
-    assertTrue(
-        output
-            .get(PROPERTIES)
-            .contains("Args = --features=dev.elide.myna.generated.MynaNativeDirectives"),
-        output.get(PROPERTIES));
+    // Consumers opt into the check with --features; the generated properties do not register it.
+    assertFalse(output.get(PROPERTIES).contains("--features"), output.get(PROPERTIES));
   }
 
   @Test
@@ -1635,12 +1631,6 @@ class GeneratorTest {
                 + "        return headers;\n"),
         directives);
     assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
-    assertTrue(
-        output
-            .get(
-                "META-INF/native-image/dev.elide.myna/fixture.bemo.BemoImports/"
-                    + "native-image.properties")
-            .contains("--features=fixture.bemo.BemoImportsDirectives"));
   }
 
   @Test

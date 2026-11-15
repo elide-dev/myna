@@ -3,8 +3,8 @@ package fixture.cells;
 
 /**
  * The C context of {@link CellApi}: the seam.h these bindings were generated with,
- * and, as the hosted Feature that native-image.properties registers, the check that
- * fails the image build when that header's fingerprint is not the bindings' own.
+ * and, as a hosted Feature that native-image runs with {@code --features=fixture.cells.CellApiDirectives},
+ * the check that fails the image build when that header's fingerprint is not the bindings' own.
  */
 public final class CellApiDirectives
     implements org.graalvm.nativeimage.c.CContext.Directives, org.graalvm.nativeimage.hosted.Feature {

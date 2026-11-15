@@ -22,25 +22,19 @@ public final class NativeImageProperties implements Backend {
     boolean hasLiterals = module.functions().stream().anyMatch(f -> f.callback() != null);
     String result =
         "# Myna binding ABI 2: preserve symbolic metadata / runtime-address separation.\n";
-    // The generated C context is also the hosted Feature that checks seam.h at every image build.
-    String features = "--features=" + module.javaPackageName() + "." + module.directivesClass();
     if (leaves.isEmpty()) {
-      if (!hasLiterals) return result + "Args = " + features + truffle(module) + "\n";
+      if (!hasLiterals) return result + truffle(module, "Args = ");
       return result
-          + "Args = "
-          + features
-          + " --initialize-at-build-time="
+          + "Args = --initialize-at-build-time="
           + type
           + "$Literals"
-          + truffle(module)
+          + truffle(module, " ")
           + "\n";
     }
     return result
         + "JavaArgs ="
         + " --add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.c=ALL-UNNAMED\n"
-        + "Args = "
-        + features
-        + " --initialize-at-build-time="
+        + "Args = --initialize-at-build-time="
         + type
         + ","
         + type
@@ -50,7 +44,7 @@ public final class NativeImageProperties implements Backend {
         + leaves.stream()
             .map(f -> type + "$" + f.name() + "_Binding")
             .collect(Collectors.joining(","))
-        + truffle(module)
+        + truffle(module, " ")
         + "\n";
   }
 
@@ -59,14 +53,16 @@ public final class NativeImageProperties implements Backend {
    * hold no addresses: the bindings they call keep theirs in run-time classes) initialize at build
    * time, like every Truffle node class.
    */
-  private static String truffle(Module module) {
+  private static String truffle(Module module, String prefix) {
     if (module.truffleConfig() == null) return "";
     String type = module.javaPackageName() + "." + module.truffleClass();
     var cells = module.functions().stream().filter(f -> Seam.truffleCell(module, f)).toList();
-    return " --initialize-at-build-time="
+    return prefix
+        + "--initialize-at-build-time="
         + type
         + cells.stream()
             .map(f -> "," + type + "$" + f.name() + "_Cell")
-            .collect(Collectors.joining());
+            .collect(Collectors.joining())
+        + (prefix.equals(" ") ? "" : "\n");
   }
 }

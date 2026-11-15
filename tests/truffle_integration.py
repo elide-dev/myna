@@ -62,11 +62,8 @@ def build_truffle_fixture():
                    generated / "CellApiDirectives.java", FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"
-    # The generated properties register the context's header check (with nothing to check in an
-    # image without the Native Image class), so the FFM build compiles the context and its delegate.
     compile_native(classes_ffm, generated_ffm, generated_ffm / "CellApiFFM.java", generated_ffm / "CellApiTruffle.java",
-                   generated_ffm / "CellApiForeignFeature.java", generated_ffm / "CellApiDirectives.java",
-                   FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
+                   generated_ffm / "CellApiForeignFeature.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
                    classpath=classpath)
     return work, classes, classes_ffm, library, jars
 
