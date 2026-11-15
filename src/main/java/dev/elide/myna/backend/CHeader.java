@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
+import java.math.BigInteger;
 import java.util.*;
 
 public final class CHeader implements Backend {
@@ -48,11 +50,12 @@ public final class CHeader implements Backend {
         .append(Seam.BINDING_ABI_VERSION)
         .append('\n');
     out.append("SEAM_ASSERT(sizeof(void *) == 8, \"seam target requires 64-bit pointers\");\n\n");
+    constants(m, out);
     for (String name : m.opaqueTypes()) out.append("struct ").append(name).append(";\n");
     for (Struct s : m.structs()) out.append("struct ").append(s.name()).append(";\n");
     for (Signature c : m.callbacks())
       out.append("typedef ")
-          .append(Types.c(c.returns()))
+          .append(Types.c(m, c.returns(), c.returnsGroup()))
           .append(" (*")
           .append(c.name())
           .append(")(")
@@ -60,7 +63,8 @@ public final class CHeader implements Backend {
               c.parameters().isEmpty()
                   ? "void"
                   : String.join(
-                      ", ", c.parameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
+                      ", ",
+                      c.parameters().stream().map(p -> Types.c(m, p) + " " + p.name()).toList()))
           .append(");\n");
     for (Struct s : m.structs()) {
       out.append("struct ").append(s.name()).append(" {\n");
@@ -73,7 +77,23 @@ public final class CHeader implements Backend {
               .append('[')
               .append(f.offset() - offset)
               .append("];\n");
-        out.append("  ").append(Types.c(f.type())).append(' ').append(f.name()).append(";\n");
+        if (f.group() != null && f.group().kind() == GroupKind.FLAGS && bitfields(m, f.group())) {
+          String carrier = Types.c(m, f.type(), f.group());
+          out.append("  union {\n    ")
+              .append(carrier)
+              .append(' ')
+              .append(f.name())
+              .append(";\n    struct ")
+              .append(Names.cBitsStruct(m, f.group().name()))
+              .append(' ')
+              .append(f.name())
+              .append("Bits;\n  };\n");
+        } else
+          out.append("  ")
+              .append(Types.c(m, f.type(), f.group()))
+              .append(' ')
+              .append(f.name())
+              .append(";\n");
         offset = f.offset() + Validator.size(f.type());
       }
       if (s.size() > offset)
@@ -117,6 +137,13 @@ public final class CHeader implements Backend {
           .append(header.direction())
           .append("; error=")
           .append(header.error())
+          .append(
+              header.returnsGroup() == null
+                  ? ""
+                  : "; returns "
+                      + header.returnsGroup().kind().name().toLowerCase(Locale.ROOT)
+                      + " "
+                      + header.returnsGroup().name())
           .append(" */\n");
       for (Parameter p : header.abiParameters())
         out.append("/* ")
@@ -128,20 +155,119 @@ public final class CHeader implements Backend {
             .append(" access=")
             .append(p.access())
             .append(" */\n");
-      out.append(Types.c(header.returns())).append(' ').append(header.symbol()).append('(');
+      out.append(Types.c(m, header.returns(), header.returnsGroup()))
+          .append(' ')
+          .append(header.symbol())
+          .append('(');
       out.append(
           header.abiParameters().isEmpty()
               ? "void"
               : String.join(
                   ", ",
-                  header.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
+                  header.abiParameters().stream()
+                      .map(p -> Types.c(m, p) + " " + p.name())
+                      .toList()));
       out.append(");\n");
-      if (wrapped) wrapper(declared, lowered, out);
-      if (importRef) importReference(lowered, out);
+      if (wrapped) wrapper(m, declared, lowered, out);
+      if (importRef) importReference(m, lowered, out);
     }
     return out.append(
             "\n#ifdef __cplusplus\n}\n#endif\n#undef SEAM_ASSERT\n#undef SEAM_ALIGNOF\n#endif\n")
         .toString();
+  }
+
+  private static boolean bitfields(Module m, GroupRef ref) {
+    return m.flagSets().stream().anyMatch(f -> f.name().equals(ref.name()) && f.cBitfields());
+  }
+
+  private static void constants(Module m, StringBuilder out) {
+    for (Constant c : m.constants()) {
+      out.append("/* const ").append(c.name()).append(": ").append(c.type().text()).append(" */\n");
+      define(
+          out,
+          Names.cMacro(m, null, c.name()),
+          literal(c.type(), c.value(), c.type().text().startsWith("u")));
+    }
+    for (EnumGroup e : m.enums()) {
+      String typedef = Names.cTypedef(m, e.name());
+      String carrier = Types.c(e.type());
+      out.append("/* enum ").append(e.name()).append(": ").append(e.type().text()).append(" */\n");
+      out.append("typedef ").append(carrier).append(' ').append(typedef).append(";\n");
+      for (EnumValue v : e.values())
+        define(out, Names.cMacro(m, e.name(), v.name()), literal(e.type(), v.value(), false));
+      out.append("static inline const char *")
+          .append(Names.cNameFunction(m, e.name()))
+          .append('(')
+          .append(carrier)
+          .append(" value) {\n  switch (value) {\n");
+      for (EnumValue v : e.values()) // the validator rejects duplicate numbers
+      out.append("    case ")
+            .append(Names.cMacro(m, e.name(), v.name()))
+            .append(": return ")
+            .append(SeamJson.quote(v.name()))
+            .append(";\n");
+      out.append("    default: return NULL;\n  }\n}\n");
+    }
+    for (FlagSet f : m.flagSets()) {
+      String carrier = Types.c(f.type());
+      out.append("/* flags ").append(f.name()).append(": ").append(f.type().text()).append(" */\n");
+      out.append("typedef ")
+          .append(carrier)
+          .append(' ')
+          .append(Names.cTypedef(m, f.name()))
+          .append(";\n");
+      BigInteger all = BigInteger.ZERO;
+      for (FlagBit b : f.bits()) {
+        BigInteger mask = BigInteger.ONE.shiftLeft(b.bit());
+        all = all.or(mask);
+        define(out, Names.cMacro(m, f.name(), b.name()), literal(f.type(), mask, true));
+      }
+      define(out, Names.cMacro(m, f.name(), "ALL"), literal(f.type(), all, true));
+      if (f.cBitfields()) bitsStruct(m, f, carrier, out);
+    }
+    if (!m.constants().isEmpty() || !m.enums().isEmpty() || !m.flagSets().isEmpty())
+      out.append('\n');
+  }
+
+  /** LSB-first bit-fields; unnamed gaps keep each bit at its index. */
+  private static void bitsStruct(Module m, FlagSet f, String carrier, StringBuilder out) {
+    String name = Names.cBitsStruct(m, f.name());
+    out.append("struct ").append(name).append(" {\n");
+    int next = 0;
+    for (FlagBit b : f.bits()) {
+      if (b.bit() > next)
+        out.append("  ").append(carrier).append(" : ").append(b.bit() - next).append(";\n");
+      out.append("  ").append(carrier).append(' ').append(b.name()).append(" : 1;\n");
+      next = b.bit() + 1;
+    }
+    out.append("};\nSEAM_ASSERT(sizeof(struct ")
+        .append(name)
+        .append(") == sizeof(")
+        .append(carrier)
+        .append("), \"bit-field struct size\");\n");
+  }
+
+  private static void define(StringBuilder out, String macro, String value) {
+    out.append("#define ").append(macro).append(' ').append(value).append('\n');
+  }
+
+  /**
+   * A typed integer literal in hex when {@code hex} (unsigned constants, flag masks), else decimal.
+   */
+  static String literal(Scalar type, BigInteger value, boolean hex) {
+    int bits = type == Scalar.USIZE || type == Scalar.ISIZE ? 64 : type.bytes * 8;
+    boolean unsigned = type.text().startsWith("u");
+    if (unsigned)
+      return "UINT" + bits + "_C(" + (hex ? "0x" + value.toString(16) : value.toString()) + ")";
+    // A signed mask with the sign bit set is that bit pattern's negative value, not a hex literal
+    // (which would not fit the type).
+    if (hex && value.bitLength() >= bits) value = value.subtract(BigInteger.ONE.shiftLeft(bits));
+    else if (hex) return "INT" + bits + "_C(0x" + value.toString(16) + ")";
+    String macro = "INT" + bits + "_C";
+    BigInteger min = BigInteger.ONE.shiftLeft(bits - 1).negate();
+    if (value.equals(min))
+      return "(-" + macro + "(" + min.negate().subtract(BigInteger.ONE) + ") - 1)";
+    return value.signum() < 0 ? "(" + macro + "(" + value + "))" : macro + "(" + value + ")";
   }
 
   /**
@@ -153,31 +279,36 @@ public final class CHeader implements Backend {
    * seam.rs} ({@code native_image_shims!}), {@code seam.ll} (which declares only the reference
    * form), and the Native Image backend's symbol expectations.
    */
-  private static void importReference(Function lowered, StringBuilder out) {
+  private static void importReference(Module m, Function lowered, StringBuilder out) {
     out.append("/* Native Image binds ")
         .append(lowered.symbol())
         .append(
             "; the C provider must also define it (the C counterpart of"
                 + " `native_image_shims!`). */\n");
-    out.append(Types.c(lowered.returns())).append(' ').append(lowered.symbol()).append('(');
+    out.append(Types.c(m, lowered.returns(), lowered.returnsGroup()))
+        .append(' ')
+        .append(lowered.symbol())
+        .append('(');
     out.append(
         String.join(
-            ", ", lowered.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()));
+            ", ",
+            lowered.abiParameters().stream().map(p -> Types.c(m, p) + " " + p.name()).toList()));
     out.append(");\n");
   }
 
-  private static void wrapper(Function f, Function ref, StringBuilder out) {
+  private static void wrapper(Module m, Function f, Function ref, StringBuilder out) {
     boolean record = f.returns() instanceof Named;
     out.append("static inline ")
-        .append(Types.c(f.returns()))
+        .append(Types.c(m, f.returns(), f.returnsGroup()))
         .append(' ')
         .append(f.symbol())
         .append('(')
         .append(
             String.join(
-                ", ", f.abiParameters().stream().map(p -> Types.c(p) + " " + p.name()).toList()))
+                ", ", f.abiParameters().stream().map(p -> Types.c(m, p) + " " + p.name()).toList()))
         .append(") {\n");
-    if (record) out.append("  ").append(Types.c(f.returns())).append(" result;\n");
+    if (record)
+      out.append("  ").append(Types.c(m, f.returns(), f.returnsGroup())).append(" result;\n");
     var args = new java.util.ArrayList<String>();
     for (Parameter p : f.abiParameters())
       args.add(p.type() instanceof Named ? "&" + p.name() : p.name());

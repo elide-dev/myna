@@ -18,13 +18,66 @@ extern "C" {
 #define CONSTANTS_BINDING_ABI_VERSION 2
 SEAM_ASSERT(sizeof(void *) == 8, "seam target requires 64-bit pointers");
 
+/* const FLOOR: i64 */
+#define CONSTANTS_FLOOR (-INT64_C(9223372036854775807) - 1)
+/* const LIMIT: u64 */
+#define CONSTANTS_LIMIT UINT64_C(0xffffffffffffffff)
+/* const MAGIC: u32 */
+#define CONSTANTS_MAGIC UINT32_C(0x3141514b)
+/* enum Level: u8 */
+typedef uint8_t constants_level_t;
+#define CONSTANTS_LEVEL_LOW UINT8_C(0)
+#define CONSTANTS_LEVEL_HIGH UINT8_C(255)
+static inline const char *constants_level_name(uint8_t value) {
+  switch (value) {
+    case CONSTANTS_LEVEL_LOW: return "low";
+    case CONSTANTS_LEVEL_HIGH: return "high";
+    default: return NULL;
+  }
+}
+/* enum Status: i32 */
+typedef int32_t constants_status_t;
+#define CONSTANTS_STATUS_NULL_RESULT (INT32_C(-1))
+#define CONSTANTS_STATUS_OK INT32_C(0)
+#define CONSTANTS_STATUS_INTERNAL_ERROR INT32_C(3)
+#define CONSTANTS_STATUS_SYNTAX_ERROR INT32_C(16)
+static inline const char *constants_status_name(int32_t value) {
+  switch (value) {
+    case CONSTANTS_STATUS_NULL_RESULT: return "null_result";
+    case CONSTANTS_STATUS_OK: return "ok";
+    case CONSTANTS_STATUS_INTERNAL_ERROR: return "internal_error";
+    case CONSTANTS_STATUS_SYNTAX_ERROR: return "syntax_error";
+    default: return NULL;
+  }
+}
+/* flags Perms: u32 */
+typedef uint32_t constants_perms_t;
+#define CONSTANTS_PERMS_READ UINT32_C(0x1)
+#define CONSTANTS_PERMS_WRITE UINT32_C(0x2)
+#define CONSTANTS_PERMS_STICKY UINT32_C(0x80000000)
+#define CONSTANTS_PERMS_ALL UINT32_C(0x80000003)
+/* flags Wide: u64 */
+typedef uint64_t constants_wide_t;
+#define CONSTANTS_WIDE_FIRST UINT64_C(0x1)
+#define CONSTANTS_WIDE_LAST UINT64_C(0x8000000000000000)
+#define CONSTANTS_WIDE_ALL UINT64_C(0x8000000000000001)
+struct constants_wide_bits {
+  uint64_t first : 1;
+  uint64_t : 62;
+  uint64_t last : 1;
+};
+SEAM_ASSERT(sizeof(struct constants_wide_bits) == sizeof(uint64_t), "bit-field struct size");
+
 struct Session;
 struct Record;
-typedef int32_t (*Listener)(void * isolate);
+typedef constants_status_t (*Listener)(void * isolate);
 struct Record {
-  int32_t status;
-  uint32_t perms;
-  uint64_t wide;
+  constants_status_t status;
+  constants_perms_t perms;
+  union {
+    constants_wide_t wide;
+    struct constants_wide_bits wideBits;
+  };
   uint64_t raw;
 };
 SEAM_ASSERT(sizeof(struct Record) == 24, "struct size");
@@ -34,18 +87,18 @@ SEAM_ASSERT(offsetof(struct Record, perms) == 4, "field offset");
 SEAM_ASSERT(offsetof(struct Record, wide) == 8, "field offset");
 SEAM_ASSERT(offsetof(struct Record, raw) == 16, "field offset");
 
-/* IMPORT; error=NO_FAILURE */
+/* IMPORT; error=NO_FAILURE; returns enum Status */
 /* session: nullable=false ownership=BORROWED access=READ */
-int32_t consts_blocking_status(struct Session const * session);
+constants_status_t consts_blocking_status(struct Session const * session);
 
 /* IMPORT; error=NO_FAILURE */
 /* level: nullable=true ownership=UNSPECIFIED access=UNSPECIFIED */
 /* session: nullable=false ownership=BORROWED access=READ */
-void consts_set_level(uint8_t level, struct Session const * session);
+void consts_set_level(constants_level_t level, struct Session const * session);
 
-/* IMPORT; error=NO_FAILURE */
+/* IMPORT; error=NO_FAILURE; returns enum Status */
 /* view: nullable=false ownership=BORROWED access=READ */
-int32_t consts_status(struct Record const * view);
+constants_status_t consts_status(struct Record const * view);
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam.*;
+import dev.elide.myna.model.Seam.Module;
 
 final class Types {
   private Types() {}
@@ -23,6 +25,15 @@ final class Types {
       case F64 -> "double";
       default -> (s.text().startsWith("u") ? "uint" : "int") + s.bytes * 8 + "_t";
     };
+  }
+
+  /** The C type, spelled with the group's typedef when the value belongs to an enum or flags. */
+  static String c(Module m, Type type, GroupRef group) {
+    return group == null ? c(type) : Names.cTypedef(m, group.name());
+  }
+
+  static String c(Module m, Parameter p) {
+    return p.group() == null ? c(p) : Names.cTypedef(m, p.group().name());
   }
 
   static String c(Parameter p) {

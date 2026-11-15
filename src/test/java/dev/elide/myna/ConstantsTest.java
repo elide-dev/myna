@@ -685,4 +685,66 @@ class ConstantsTest {
     assertFalse(json.contains("enums"));
     assertFalse(json.contains("flagSets"));
   }
+
+  private static String header(String source) {
+    return dev.elide.myna.Generator.generate(Dsl.parse(source), true).get("seam.h");
+  }
+
+  @Test
+  void cHeaderRendersExtremes() throws Exception {
+    String h = header(Files.readString(Path.of("examples/constants.seam")));
+    for (String line :
+        new String[] {
+          "#define CONSTANTS_MAGIC UINT32_C(0x3141514b)",
+          "#define CONSTANTS_LIMIT UINT64_C(0xffffffffffffffff)",
+          "#define CONSTANTS_FLOOR (-INT64_C(9223372036854775807) - 1)",
+          "#define CONSTANTS_STATUS_NULL_RESULT (INT32_C(-1))",
+          "#define CONSTANTS_STATUS_SYNTAX_ERROR INT32_C(16)",
+          "#define CONSTANTS_LEVEL_HIGH UINT8_C(255)",
+          "#define CONSTANTS_PERMS_STICKY UINT32_C(0x80000000)",
+          "#define CONSTANTS_PERMS_ALL UINT32_C(0x80000003)",
+          "#define CONSTANTS_WIDE_LAST UINT64_C(0x8000000000000000)",
+          "typedef int32_t constants_status_t;",
+          "typedef uint8_t constants_level_t;",
+          "static inline const char *constants_status_name(int32_t value) {",
+          "    case CONSTANTS_STATUS_NULL_RESULT: return \"null_result\";",
+          "    default: return NULL;",
+          "constants_status_t consts_status(struct Record const * view);",
+          "void consts_set_level(constants_level_t level, struct Session const * session);",
+          "typedef constants_status_t (*Listener)(void * isolate);",
+          "  constants_status_t status;",
+          "  constants_perms_t perms;",
+          "struct constants_wide_bits {\n"
+              + "  uint64_t first : 1;\n"
+              + "  uint64_t : 62;\n"
+              + "  uint64_t last : 1;\n"
+              + "};",
+          "  union {\n"
+              + "    constants_wide_t wide;\n"
+              + "    struct constants_wide_bits wideBits;\n"
+              + "  };",
+          "SEAM_ASSERT(offsetof(struct Record, wide) == 8, \"field offset\");",
+        }) assertTrue(h.contains(line), line);
+    assertFalse(h.contains("constants_perms_bits"));
+    assertFalse(h.contains("typedef enum"));
+    assertFalse(h.contains("enum {"));
+  }
+
+  @Test
+  void cHeaderSignedMasksAndMinimums() {
+    String h =
+        header(
+            "module m target=x86_64-unknown-linux-gnu\n"
+                + "flags F type=i32\n bit top = 31\n bit low = 0\nend\n"
+                + "enum E type=i8\n value lo = -128\n value a = 1\nend\n");
+    assertTrue(h.contains("#define M_F_TOP (-INT32_C(2147483647) - 1)"), h);
+    assertTrue(h.contains("#define M_F_LOW INT32_C(0x1)"), h);
+    assertTrue(h.contains("#define M_F_ALL (INT32_C(-2147483647))"), h);
+    assertTrue(h.contains("#define M_E_LO (-INT8_C(127) - 1)"), h);
+  }
+
+  @Test
+  void cHeaderWithoutDeclarationsHasNoConstantsSection() {
+    assertFalse(header("module m target=x86_64-unknown-linux-gnu\n").contains("typedef"));
+  }
 }
