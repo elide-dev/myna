@@ -210,17 +210,23 @@ public final class JavaFfm implements Backend {
     String name = v.struct().name() + "_" + v.pointer().name();
     String count = countRead(v);
     String size = v.elementSize() + "L";
+    String imported =
+        " A record an import returns is a zero-length segment: reinterpret it to "
+            + v.struct().name()
+            + "_LAYOUT first. */\n";
+    String base = "record.get(ValueLayout.ADDRESS, " + v.pointer().offset() + "L)";
     out.append("    /** The ")
         .append(v.count().name())
         .append(" elements at ")
         .append(v.pointer().name())
-        .append(", empty when it is null; valid for as long as the record is. */\n")
+        .append(", empty when it is null; valid for as long as the record is.")
+        .append(imported)
         .append("    public static MemorySegment ")
         .append(name)
         .append("(MemorySegment record) {\n")
-        .append("        MemorySegment base = record.get(ValueLayout.ADDRESS, ")
-        .append(v.pointer().offset())
-        .append("L);\n        long count = ")
+        .append("        MemorySegment base = ")
+        .append(base)
+        .append(";\n        long count = ")
         .append(count)
         .append(";\n        if (base.address() == 0L) {\n            assert count == 0L : \"")
         .append(v.label())
@@ -229,35 +235,33 @@ public final class JavaFfm implements Backend {
         .append("        return base.reinterpret(Math.multiplyExact(count, ")
         .append(size)
         .append("));\n    }\n");
-    String index = "java.util.Objects.checkIndex(i, " + count + ")";
+    // The count is read once and checked before anything is built; the element is addressed
+    // directly, so the count is never multiplied here.
     out.append("    /** Element i of ")
         .append(v.label())
         .append("; IndexOutOfBoundsException unless 0 <= i < ")
         .append(v.count().name())
-        .append(". */\n    public static ");
+        .append('.')
+        .append(imported)
+        .append("    public static ")
+        .append(v.element() instanceof Scalar e ? Types.java(e) : "MemorySegment")
+        .append(' ')
+        .append(name)
+        .append("(MemorySegment record, long i) {\n        java.util.Objects.checkIndex(i, ")
+        .append(count)
+        .append(");\n        MemorySegment base = ")
+        .append(base)
+        .append(";\n        assert base.address() != 0L : \"")
+        .append(v.label())
+        .append(" is null with a nonzero count\";\n")
+        .append("        return MemorySegment.ofAddress(base.address() + i * ")
+        .append(size)
+        .append(").reinterpret(")
+        .append(size)
+        .append(')');
     if (v.element() instanceof Scalar e)
-      out.append(Types.java(e))
-          .append(' ')
-          .append(name)
-          .append("(MemorySegment record, long i) {\n        return ")
-          .append(name)
-          .append("(record).getAtIndex(")
-          .append(Types.layout(e))
-          .append(", ")
-          .append(index)
-          .append(");\n    }\n");
-    else
-      out.append("MemorySegment ")
-          .append(name)
-          .append("(MemorySegment record, long i) {\n        return ")
-          .append(name)
-          .append("(record).asSlice(")
-          .append(index)
-          .append(" * ")
-          .append(size)
-          .append(", ")
-          .append(size)
-          .append(");\n    }\n");
+      out.append(".get(").append(Types.layout(e)).append(", 0L)");
+    out.append(";\n    }\n");
   }
 
   /** The count field as a {@code long}: narrow carriers zero-extend, a u64 is its raw bits. */

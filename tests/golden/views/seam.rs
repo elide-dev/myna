@@ -38,11 +38,12 @@ const _: () = {
 impl Program {
     /// The `functionCount` elements at `functions`, empty when it is null.
     ///
-    /// The record's contract: a non-null `functions` addresses `functionCount` initialized,
-    /// aligned elements that stay valid and unmodified for as long as the record is borrowed,
-    /// and a null one has a zero count. Debug builds assert both rules.
+    /// # Safety
+    /// The record came from the producer, or obeys its contract: a non-null `functions`
+    /// addresses `functionCount` initialized, aligned elements that stay valid and unmodified while the
+    /// record is borrowed, and a null one has a zero count. Debug builds assert both rules.
     #[inline]
-    pub fn functions(&self) -> &[Function] {
+    pub unsafe fn functions(&self) -> &[Function] {
         let count = self.functionCount as usize;
         if self.functions.is_null() {
             debug_assert!(count == 0, "Program.functions: null with a nonzero count");
@@ -50,16 +51,17 @@ impl Program {
         }
         debug_assert!(count <= isize::MAX as usize / core::mem::size_of::<Function>(), "Program.functions: count overflows isize");
         debug_assert!(self.functions.is_aligned(), "Program.functions: misaligned");
-        // SAFETY: the record's contract above; null was handled.
+        // SAFETY: the caller's contract above; null was handled.
         unsafe { core::slice::from_raw_parts(self.functions, count) }
     }
     /// The `textLength` elements at `text`, empty when it is null.
     ///
-    /// The record's contract: a non-null `text` addresses `textLength` initialized,
-    /// aligned elements that stay valid and unmodified for as long as the record is borrowed,
-    /// and a null one has a zero count. Debug builds assert both rules.
+    /// # Safety
+    /// The record came from the producer, or obeys its contract: a non-null `text`
+    /// addresses `textLength` initialized, aligned elements that stay valid and unmodified while the
+    /// record is borrowed, and a null one has a zero count. Debug builds assert both rules.
     #[inline]
-    pub fn text(&self) -> &[u16] {
+    pub unsafe fn text(&self) -> &[u16] {
         let count = self.textLength as usize;
         if self.text.is_null() {
             debug_assert!(count == 0, "Program.text: null with a nonzero count");
@@ -67,7 +69,7 @@ impl Program {
         }
         debug_assert!(count <= isize::MAX as usize / core::mem::size_of::<u16>(), "Program.text: count overflows isize");
         debug_assert!(self.text.is_aligned(), "Program.text: misaligned");
-        // SAFETY: the record's contract above; null was handled.
+        // SAFETY: the caller's contract above; null was handled.
         unsafe { core::slice::from_raw_parts(self.text, count) }
     }
 }

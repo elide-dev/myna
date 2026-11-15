@@ -16,9 +16,10 @@ public final class RustFfi implements Backend {
   }
 
   /**
-   * A safe slice accessor per counted view: a {@code &Record} is already trusted, and its contract
-   * is that a non-null pointer addresses {@code count} elements living as long as the record. The
-   * null and size rules are checked once here, with {@code debug_assert!} for the contract parts.
+   * A slice accessor per counted view. It is {@code unsafe}: records are {@code Copy} with public
+   * raw fields, so safe code could build one whose pointer and count disagree. The caller asserts
+   * the record contract once, at the call; the null and size rules are then handled here, with
+   * {@code debug_assert!} for the contract parts.
    */
   private static void views(Module m, Struct s, StringBuilder out) {
     var views = Views.of(m, s);
@@ -33,24 +34,24 @@ public final class RustFfi implements Backend {
           .append("` elements at `")
           .append(v.pointer().name())
           .append("`, empty when it is null.\n")
-          .append("    ///\n")
-          .append("    /// The record's contract: a non-null `")
+          .append("    ///\n    /// # Safety\n")
+          .append("    /// The record came from the producer, or obeys its contract: a non-null `")
           .append(v.pointer().name())
-          .append("` addresses `")
+          .append("`\n    /// addresses `")
           .append(v.count().name())
-          .append("` initialized,\n")
+          .append("` initialized, aligned elements that stay valid and unmodified while the\n")
           .append(
-              "    /// aligned elements that stay valid and unmodified for as long as the record")
-          .append(" is borrowed,\n")
-          .append("    /// and a null one has a zero count. Debug builds assert both rules.\n")
-          .append("    #[inline]\n    pub fn ")
+              "    /// record is borrowed, and a null one has a zero count. Debug builds assert")
+          .append(" both rules.\n")
+          .append("    #[inline]\n    pub unsafe fn ")
           .append(v.pointer().name())
           .append("(&self) -> &[")
           .append(element)
           .append("] {\n");
       out.append("        let count = ")
           .append(count)
-          .append(" as usize;\n        if ")
+          .append(v.countType() == Scalar.USIZE ? "" : " as usize")
+          .append(";\n        if ")
           .append(pointer)
           .append(".is_null() {\n            debug_assert!(count == 0, \"")
           .append(v.label())
@@ -66,7 +67,7 @@ public final class RustFfi implements Backend {
           .append(".is_aligned(), \"")
           .append(v.label())
           .append(": misaligned\");\n")
-          .append("        // SAFETY: the record's contract above; null was handled.\n")
+          .append("        // SAFETY: the caller's contract above; null was handled.\n")
           .append("        unsafe { core::slice::from_raw_parts(")
           .append(pointer)
           .append(", count) }\n    }\n");

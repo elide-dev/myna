@@ -46,7 +46,7 @@ final class ViewsValidator {
             where
                 + ": count field "
                 + countWhere
-                + " must be u8, u16, u32 or u64, found "
+                + " must be u8, u16, u32, u64 or usize, found "
                 + count.type().text());
         require(
             count.group() == null,
@@ -84,10 +84,10 @@ final class ViewsValidator {
                 + " needs");
   }
 
-  /** A count is never negative: only the fixed-width unsigned carriers count elements. */
+  /** A count is never negative: only unsigned carriers count elements. */
   private static boolean unsigned(Scalar s) {
     return switch (s) {
-      case U8, U16, U32, U64 -> true;
+      case U8, U16, U32, U64, USIZE -> true;
       default -> false;
     };
   }

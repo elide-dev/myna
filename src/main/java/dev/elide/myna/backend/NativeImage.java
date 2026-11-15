@@ -126,9 +126,12 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.struct.CField");
       imports.add("org.graalvm.nativeimage.c.struct.CFieldAddress");
     }
-    for (Struct st : m.structs())
-      if (Views.of(m, st).stream().anyMatch(v -> v.element() instanceof Scalar))
+    for (Struct st : m.structs()) {
+      var views = Views.of(m, st);
+      if (!views.isEmpty()) imports.add("com.oracle.svm.shared.AlwaysInline");
+      if (views.stream().anyMatch(v -> v.element() instanceof Scalar))
         imports.add("org.graalvm.word.WordFactory");
+    }
     for (Struct st : m.structs())
       for (Field f : st.fields()) {
         carrierImport(imports, f.type());
@@ -530,7 +533,8 @@ public final class NativeImage implements Backend {
    * through its {@code addressOf(long)} or the scalar through its C pointer's {@code read}. SVM
    * rejects methods without C-interface annotations in a {@code @CStruct} interface, default and
    * static ones included, so the helper is a static method of the class. The bound is an {@code
-   * assert}, which compiles out unless the image is built with assertions enabled.
+   * assert}, which compiles out unless the image is built with assertions enabled; the helper is
+   * always inlined, so it costs the pointer load and the scaled access.
    */
   private static void viewAccessor(Module m, Views v, StringBuilder out) {
     String record = "record." + v.pointer().name() + "()";
@@ -540,7 +544,7 @@ public final class NativeImage implements Backend {
           case U32 -> "i < Integer.toUnsignedLong(" + count + ")";
           case U16 -> "i < Short.toUnsignedLong(" + count + ")";
           case U8 -> "i < Byte.toUnsignedLong(" + count + ")";
-          default -> "Long.compareUnsigned(i, " + count + ") < 0"; // u64
+          default -> "Long.compareUnsigned(i, " + count + ") < 0"; // u64, usize
         };
     String element;
     String access;
@@ -556,7 +560,10 @@ public final class NativeImage implements Backend {
         .append(v.label())
         .append("; asserts 0 <= i < ")
         .append(v.count().name())
-        .append(". */\n    public static ")
+        .append(". Not for {@code @Uninterruptible} code; use {@code ")
+        .append(access)
+        .append("} there. */\n")
+        .append("    @AlwaysInline(\"Myna counted view element\")\n    public static ")
         .append(element)
         .append(' ')
         .append(v.struct().name())

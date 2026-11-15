@@ -29,7 +29,7 @@ public final class ViewsFFM {
     public static final long Program_text_OFFSET = 16L;
     public static final long Program_textLength_OFFSET = 24L;
     public static final long Program_version_OFFSET = 28L;
-    /** The functionCount elements at functions, empty when it is null; valid for as long as the record is. */
+    /** The functionCount elements at functions, empty when it is null; valid for as long as the record is. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
         long count = record.get(ValueLayout.JAVA_LONG, 8L);
@@ -39,11 +39,14 @@ public final class ViewsFFM {
         }
         return base.reinterpret(Math.multiplyExact(count, 16L));
     }
-    /** Element i of Program.functions; IndexOutOfBoundsException unless 0 <= i < functionCount. */
+    /** Element i of Program.functions; IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, long i) {
-        return Program_functions(record).asSlice(java.util.Objects.checkIndex(i, record.get(ValueLayout.JAVA_LONG, 8L)) * 16L, 16L);
+        java.util.Objects.checkIndex(i, record.get(ValueLayout.JAVA_LONG, 8L));
+        MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
+        assert base.address() != 0L : "Program.functions is null with a nonzero count";
+        return MemorySegment.ofAddress(base.address() + i * 16L).reinterpret(16L);
     }
-    /** The textLength elements at text, empty when it is null; valid for as long as the record is. */
+    /** The textLength elements at text, empty when it is null; valid for as long as the record is. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_text(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
         long count = Integer.toUnsignedLong(record.get(ValueLayout.JAVA_INT, 24L));
@@ -53,9 +56,12 @@ public final class ViewsFFM {
         }
         return base.reinterpret(Math.multiplyExact(count, 2L));
     }
-    /** Element i of Program.text; IndexOutOfBoundsException unless 0 <= i < textLength. */
+    /** Element i of Program.text; IndexOutOfBoundsException unless 0 <= i < textLength. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static short Program_text(MemorySegment record, long i) {
-        return Program_text(record).getAtIndex(ValueLayout.JAVA_SHORT, java.util.Objects.checkIndex(i, Integer.toUnsignedLong(record.get(ValueLayout.JAVA_INT, 24L))));
+        java.util.Objects.checkIndex(i, Integer.toUnsignedLong(record.get(ValueLayout.JAVA_INT, 24L)));
+        MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
+        assert base.address() != 0L : "Program.text is null with a nonzero count";
+        return MemorySegment.ofAddress(base.address() + i * 2L).reinterpret(2L).get(ValueLayout.JAVA_SHORT, 0L);
     }
     public static final FunctionDescriptor empty_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.ADDRESS);
     public static MethodHandle empty(SymbolLookup lookup) {

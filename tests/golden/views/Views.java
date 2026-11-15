@@ -91,12 +91,14 @@ public final class Views {
         @CField("version") void version(int value);
         @CFieldAddress("version") CIntPointer addressOfVersion();
     }
-    /** Element i of Program.functions; asserts 0 <= i < functionCount. */
+    /** Element i of Program.functions; asserts 0 <= i < functionCount. Not for {@code @Uninterruptible} code; use {@code record.functions().addressOf(i)} there. */
+    @AlwaysInline("Myna counted view element")
     public static Function Program_functionsAt(Program record, long i) {
         assert i >= 0L && Long.compareUnsigned(i, record.functionCount()) < 0 : "Program.functions: index out of bounds";
         return record.functions().addressOf(i);
     }
-    /** Element i of Program.text; asserts 0 <= i < textLength. */
+    /** Element i of Program.text; asserts 0 <= i < textLength. Not for {@code @Uninterruptible} code; use {@code record.text().read(WordFactory.signed(i))} there. */
+    @AlwaysInline("Myna counted view element")
     public static short Program_textAt(Program record, long i) {
         assert i >= 0L && i < Integer.toUnsignedLong(record.textLength()) : "Program.text: index out of bounds";
         return record.text().read(WordFactory.signed(i));

@@ -26,9 +26,9 @@ parameters, returns and callback types reference them (see
 ## Counted element views
 
 A `ptr<T>` record field may name the integer field counting its elements with `count=FIELD` (#133; see
-[the descriptor format](../dsl.md#counted-element-views)). Rust records gain a safe `&[T]` accessor, FFM
+[the descriptor format](../dsl.md#counted-element-views)). Rust records gain an `unsafe fn` `&[T]` accessor, FFM
 gains `<Struct>_<field>(record)` and the `Objects.checkIndex`ed `<Struct>_<field>(record, i)`, and Native
-Image gains `addressOf(long)` on element structs and an asserted `<Struct>_<field>At(record, i)`. The C ABI is
+Image gains `addressOf(long)` on element structs and an asserted, always-inlined `<Struct>_<field>At(record, i)`. Counts are `u8`, `u16`, `u32`, `u64` or `usize`. The C ABI is
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
 

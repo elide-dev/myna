@@ -223,9 +223,10 @@ class NativeImageIntegrationTests(unittest.TestCase):
                 self.assertEqual(field, raw, f"@CField {name} must compile to the raw offset access's code")
 
     def test_counted_views(self):
-        """examples/views.seam over C's static records: the element helpers read records through
-        the indexed addressOf(long) and scalars through the C pointer, and with -ea the asserted
-        bound rejects index count, a negative index and index 0 of an empty view."""
+        """examples/views.seam over C's static records, built as consumers build images (no -ea):
+        the element helpers read records through the indexed addressOf(long) and scalars through
+        the C pointer, and each compiles to the raw access it wraps, with no call: one load of the
+        pointer field and one scaled access. The bound is a caller contract and compiles out."""
         work = ROOT / "build/views-test"
         fixture = ROOT / "tests/views"
         generated = work / "generated"
@@ -238,10 +239,33 @@ class NativeImageIntegrationTests(unittest.TestCase):
         compile_native(classes, generated, generated / "Views.java", generated / "ViewsDirectives.java",
                        fixture / "ViewsMain.java")
         app = work / "views-app"
-        native_image("-O2", "-ea", "-cp", classes,
-                     "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={work / 'native.o'}",
+        native_image("-O2", "-cp", classes,
+                     "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols", f"-H:NativeLinkerOption={work / 'native.o'}",
                      "-H:-UnlockExperimentalVMOptions", "fixture.views.ViewsMain", "-o", app)
         self.assertIn("Native Image counted views passed", run(app).stdout)
+        # Evidence: the measured methods' machine code, retained under build/reports.
+        evidence = ROOT / "build/reports/native-image/views"
+        def body(method):
+            return disassembly(app, "ViewsMain", method, evidence)
+        call = re.compile(r"^(call|bl|blr|jmp\s+\*|br)\b")
+        # Program.functions is at offset 0 and Program.text at 0x10 (x86-64 and AArch64 spellings).
+        loads = {"functionAt": (r"^\S+ \(%rdi\), %r", r"^ldr x\d+, \[x0\]$"),
+                 "textAt": (r"^\S+ 0x10\(%rdi\), %r", r"^ldr x\d+, \[x0, #(0x10|16)\]$")}
+        # The scaled access: Function is 16 bytes, so its address is pointer + (i << 4); a u16 is
+        # one 2-scaled halfword load.
+        scaled = {"functionAt": r"(shl\w* \$0x4, %r|lsl #4\b|lsl #0x4\b)",
+                  "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #1\]|lsl #0x1\])"}
+        for name in ("functionAt", "textAt"):
+            helper = body(name)
+            raw = body("raw" + name[0].upper() + name[1:])
+            # Equal code, including the known extra register extension after a narrow read
+            # (elide-dev/graal#239) that the raw CShortPointer.read also carries.
+            self.assertEqual(helper, raw, f"{name} must compile to the raw access it wraps")
+            self.assertFalse([i for i in helper if call.match(i)], helper)
+            self.assertNotIn("assertionsDisabled", "\n".join(helper))
+            pointer = [i for i in helper if any(re.match(p, i) for p in loads[name])]
+            self.assertEqual(len(pointer), 1, helper)
+            self.assertEqual(len([i for i in helper if re.search(scaled[name], i)]), 1, helper)
 
     def test_bemo_context_delegates(self):
         """Bemo names its own c_context: the generated context delegates its library path (static

@@ -58,10 +58,12 @@ seam::assert_implementations!(seam);
 #[test]
 fn views_have_the_counted_elements() {
     let p = program();
-    assert_eq!(p.functions().len(), 2);
-    assert_eq!(p.functions()[1].id, 11);
-    assert_eq!(p.functions()[1].entry, 0x2000);
-    assert_eq!(p.text(), &[b'h' as u16, b'i' as u16, 0xffff]);
+    // SAFETY: the record's pointers address static arrays of the counted lengths.
+    let (functions, text) = unsafe { (p.functions(), p.text()) };
+    assert_eq!(functions.len(), 2);
+    assert_eq!(functions[1].id, 11);
+    assert_eq!(functions[1].entry, 0x2000);
+    assert_eq!(text, &[b'h' as u16, b'i' as u16, 0xffff]);
 }
 
 #[test]
@@ -69,7 +71,8 @@ fn views_have_the_counted_elements() {
 fn index_count_panics() {
     let p = program();
     let index = p.functionCount as usize;
-    let _ = p.functions()[index].id;
+    // SAFETY: as above; the index is what is out of bounds.
+    let _ = unsafe { p.functions() }[index].id;
 }
 
 #[test]
@@ -77,14 +80,16 @@ fn index_count_panics() {
 fn scalar_index_count_panics() {
     let p = program();
     let index = p.textLength as usize;
-    let _ = p.text()[index];
+    // SAFETY: as above; the index is what is out of bounds.
+    let _ = unsafe { p.text() }[index];
 }
 
 #[test]
 fn null_with_zero_count_is_empty() {
     let p = empty();
-    assert!(p.functions().is_empty());
-    assert!(p.text().is_empty());
+    // SAFETY: null pointers with zero counts obey the contract.
+    assert!(unsafe { p.functions() }.is_empty());
+    assert!(unsafe { p.text() }.is_empty());
 }
 
 #[test]
@@ -92,5 +97,6 @@ fn null_with_zero_count_is_empty() {
 fn null_with_a_count_panics_in_debug() {
     let mut p = empty();
     p.textLength = 1;
-    let _ = p.text();
+    // SAFETY: deliberately breaks the contract; the debug assertion stops it before any read.
+    let _ = unsafe { p.text() };
 }
