@@ -69,7 +69,7 @@ The integration suite compiles and runs this path as a Native Image executable c
 
 ## Constants, enums and flag sets
 
-Constants cost nothing at run time, and the generator keeps it that way. The measurements are in the design (`docs/superpowers/specs/2026-11-15-constants-enums-flags-design.md`, sections 7, 7a and 8); the checks that keep them true are in `tests/llvm_integration.py` and `tests/native_image_integration.py`.
+Constants cost nothing at run time, and the generator keeps it that way. The measurements come from design-time experiments recorded in the design (`docs/superpowers/specs/2026-11-15-constants-enums-flags-design.md`, sections 7, 7a and 8); the integration tests (`tests/llvm_integration.py`, `tests/native_image_integration.py`) assert the key ones.
 
 | Question | Result |
 | --- | --- |

@@ -15,7 +15,8 @@ parameters, returns and callback types reference them (see
 - **Rust**: `pub const`s and a `#[repr(transparent)]` newtype per group with associated consts,
   `name()` and flag operators. A newtype compiles to the same code as the raw integer.
 - **Java**: `<Class>Constants` with `static final` literals, `<Enum>.name(v)` and `<Flags>.<bit>(flags)`. The
-  Native Image class gains nested `@CEnum` enums, `<name>Enum` methods and typed overloads.
+  Native Image class gains nested `@CEnum` enums, `<name>Enum` methods, typed overloads and `@CConstant`
+  accessors that fold to the literal.
 - **Truffle**: `constants()` and `<Enum>Names` (see below).
 - Enums are open sets: undeclared values are legal and names return `NULL`/`None`/`null`. References add no
   optimizer facts. Constants are compile-time literals in every backend, with no globals and no Java enums
@@ -65,10 +66,10 @@ Rust, for a field or import that references `flags=FunctionFlags`:
 
 ```rust
 // before
-extern "C" { fn ir_function_flags(f: *const IrFunction) -> u32; }
+unsafe extern "C" { fn ir_function_flags(f: *const IrFunction) -> u32; }
 if (flags & 4) != 0 { /* external */ }
 // after
-extern "C" { fn ir_function_flags(f: *const IrFunction) -> FunctionFlags; }
+unsafe extern "C" { fn ir_function_flags(f: *const IrFunction) -> FunctionFlags; }
 if flags.contains(FunctionFlags::EXTERNAL) { /* external */ }
 let raw: u32 = flags.0;
 ```
