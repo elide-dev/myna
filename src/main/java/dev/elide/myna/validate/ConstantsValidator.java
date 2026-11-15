@@ -69,50 +69,33 @@ final class ConstantsValidator {
   }
 
   private static void groupNames(Module m, Set<String> functionSymbols) {
-    var types = new HashSet<String>(m.opaqueTypes());
-    m.structs().forEach(s -> types.add(s.name()));
-    m.callbacks().forEach(s -> types.add(s.name()));
+    var declared = new HashSet<String>(m.opaqueTypes());
+    m.structs().forEach(s -> declared.add(s.name()));
+    m.callbacks().forEach(s -> declared.add(s.name()));
     var groups = new ArrayList<String[]>();
     m.enums().forEach(e -> groups.add(new String[] {"enum " + e.name(), e.name()}));
     m.flagSets().forEach(f -> groups.add(new String[] {"flags " + f.name(), f.name()}));
-    // Names are checked against every declared type, then against each other.
-    var declared = new HashSet<>(types);
+    // Duplicate, scalar, reserved and generated-name checks of the group names themselves run in
+    // Validator, where the groups join the declared types.
     for (String[] group : groups) {
       String name = group[1];
-      Validator.identifier(name);
-      require(declared.add(name), "duplicate type: " + name);
-      require(!Validator.isScalarName(name), "type shadows scalar: " + name);
-      require(
-          !Validator.RESERVED_TYPE_NAMES.contains(name), "type shadows generated name: " + name);
+      declared.add(name);
       require(
           !functionSymbols.contains(name),
           group[0] + ": name collides with function symbol " + name);
-      if (m.truffleConfig() != null) {
-        require(
-            !name.equals(m.truffleClass()),
-            "type collides with generated Truffle class " + m.truffleClass());
-        for (Function f : m.functions())
-          require(
-              !(Seam.truffleCell(m, f) && name.equals(f.name() + "_Cell")),
-              "type collides with generated Truffle cell for " + f.name());
-      }
+      require(!name.equals(m.ffmClass()), "type collides with generated FFM class " + m.ffmClass());
     }
     for (String[] group : groups)
       require(
           !declared.contains(group[1] + "Names"),
           group[0] + ": generated name " + group[1] + "Names collides with a declared type");
-    if (!groups.isEmpty() || !m.constants().isEmpty()) {
-      for (var generated :
-          List.of(
-              Map.entry("constants", m.constantsClass()),
-              Map.entry("directives", m.directivesClass())))
-        require(
-            !declared.contains(generated.getValue()),
-            "type collides with generated "
-                + generated.getKey()
-                + " class "
-                + generated.getValue());
-    }
+    require(
+        !declared.contains(m.directivesClass()),
+        "type collides with generated directives class " + m.directivesClass());
+    if (!groups.isEmpty() || !m.constants().isEmpty())
+      require(
+          !declared.contains(m.constantsClass()),
+          "type collides with generated constants class " + m.constantsClass());
     for (EnumGroup e : m.enums())
       require(!e.values().isEmpty(), "enum " + e.name() + ": declares no values");
     for (FlagSet f : m.flagSets())

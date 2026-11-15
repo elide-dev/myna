@@ -448,6 +448,47 @@ class ConstantsTest {
         Arguments.of(
             ST + "enum StatusNames type=i32\n value ok = 0\nend\n",
             "enum Status: generated name StatusNames collides with a declared type"),
+        Arguments.of(
+            "opaque MynaNativeDirectives\n",
+            "type collides with generated directives class MynaNativeDirectives"),
+        // Groups are types of the generated code.
+        Arguments.of(
+            "enum FooFn type=i32\n value ok = 0\nend\n" + "import foo symbol=f" + NOFAIL + "\n",
+            "Rust alias FooFn collides with a declared type"),
+        Arguments.of(
+            "enum bar_Downcall type=i32\n value ok = 0\nend\n"
+                + "import bar symbol=b"
+                + NOFAIL
+                + "\n",
+            "type collides with generated FFM adapter for bar"),
+        Arguments.of(
+            "enum bar_CriticalDowncall type=i32\n value ok = 0\nend\n"
+                + "import bar symbol=b"
+                + NOFAIL
+                + "\n",
+            "type collides with generated FFM adapter for bar"),
+        Arguments.of(
+            "enum foo_Leaf type=i32\n value ok = 0\nend\n" + "import foo symbol=f" + NOFAIL + "\n",
+            "type collides with generated native leaf binding for foo"),
+        Arguments.of(
+            "enum foo_Binding type=i32\n value ok = 0\nend\n"
+                + "import foo symbol=f"
+                + NOFAIL
+                + "\n",
+            "type collides with generated native leaf binding for foo"),
+        Arguments.of(
+            "enum XCallback type=i32\n value ok = 0\nend\n" + "callback X return=void\nend\n",
+            "type collides with generated FFM callback helper: XCallback"),
+        Arguments.of(
+            "enum XUpcalls type=i32\n value ok = 0\nend\n" + "callback X return=void\nend\n",
+            "type collides with generated FFM callback helper: XUpcalls"),
+        Arguments.of(
+            "flags XCallback type=u8\n bit a = 0\nend\ncallback X return=void\nend\n",
+            "type collides with generated FFM callback helper: XCallback"),
+        Arguments.of("callback Status return=void\nend\n" + ST, "duplicate type: Status"),
+        Arguments.of(
+            ST + "struct S size=8 align=8\n field p type=ptr<Status> offset=0\nend\n",
+            "unknown pointee: Status"),
         // Bitfield accessors.
         Arguments.of(
             "flags FunctionFlags type=u32 c_bitfields=true\n bit exported = 0\nend\n"
@@ -467,6 +508,13 @@ class ConstantsTest {
   @MethodSource("rejects")
   void rejects(String body, String message) {
     assertEquals(message, invalid(HEAD, body));
+  }
+
+  @Test
+  void groupsCollideWithTheFfmClass() {
+    assertEquals(
+        "type collides with generated FFM class CellsFFM",
+        invalid(CELLS, "enum CellsFFM type=i32\n value ok = 0\nend\n"));
   }
 
   static Stream<Arguments> rejectsWithCells() {

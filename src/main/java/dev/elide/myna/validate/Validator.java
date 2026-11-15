@@ -99,6 +99,20 @@ public final class Validator {
           !RESERVED_TYPE_NAMES.contains(struct.name()),
           "type shadows generated name: " + struct.name());
     }
+    // Enum and flag-set names are types of the generated code, so every generated-name check
+    // below sees them; they are not pointees, so references use `pointable`.
+    Set<String> groups = new HashSet<>();
+    for (String group :
+        java.util.stream.Stream.concat(
+                module.enums().stream().map(EnumGroup::name),
+                module.flagSets().stream().map(FlagSet::name))
+            .toList()) {
+      identifier(group);
+      require(types.add(group), "duplicate type: " + group);
+      require(!isScalarName(group), "type shadows scalar: " + group);
+      require(!RESERVED_TYPE_NAMES.contains(group), "type shadows generated name: " + group);
+      groups.add(group);
+    }
     Set<String> signatures = new HashSet<>();
     for (Signature signature : module.callbacks()) {
       identifier(signature.name());
@@ -127,6 +141,8 @@ public final class Validator {
           "type shadows generated name: " + signature.name());
       signatures.add(signature.name());
     }
+    Set<String> pointable = new HashSet<>(types);
+    pointable.removeAll(groups);
     for (Signature signature : module.callbacks()) {
       for (String generated : List.of(signature.name() + "Callback", signature.name() + "Upcalls"))
         require(
@@ -158,7 +174,7 @@ public final class Validator {
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
-        type(field.type(), types, signatures, false);
+        type(field.type(), pointable, signatures, false);
         require(field.type() != Isolate.THREAD, "isolate_thread is a parameter type");
         int size = size(field.type());
         int align = size;
@@ -183,13 +199,13 @@ public final class Validator {
               + struct.name());
     }
     for (Signature signature : module.callbacks()) {
-      type(signature.returns(), types, signatures, true);
+      type(signature.returns(), pointable, signatures, true);
       require(signature.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       Set<String> params = new HashSet<>();
       for (Parameter parameter : signature.parameters()) {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
-        type(parameter.type(), types, signatures, false);
+        type(parameter.type(), pointable, signatures, false);
         require(parameter.facts().isEmpty(), "contracts on callback parameters are not supported");
         // Native Image invokes with signed Java carriers; see NativeImage#widened.
         require(
@@ -232,7 +248,7 @@ public final class Validator {
           !signatures.contains(function.symbol()),
           "symbol collides with callback: " + function.symbol());
       record(module, function.returns());
-      if (!(function.returns() instanceof Named)) type(function.returns(), types, signatures, true);
+      if (!(function.returns() instanceof Named)) type(function.returns(), pointable, signatures, true);
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
@@ -342,7 +358,7 @@ public final class Validator {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
         record(module, parameter.type());
-        if (!(parameter.type() instanceof Named)) type(parameter.type(), types, signatures, false);
+        if (!(parameter.type() instanceof Named)) type(parameter.type(), pointable, signatures, false);
         functionScalar(parameter.type());
         facts(parameter.facts(), PARAM_FACTS, strict);
         boolean pointer = parameter.type() instanceof Pointer;
