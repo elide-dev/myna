@@ -300,7 +300,7 @@ public final class NativeImage implements Backend {
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
     for (Struct st : m.structs()) {
       struct(m, st, out);
-      caseAccessors(st, out);
+      caseAccessors(m, st, out);
     }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
@@ -615,7 +615,7 @@ public final class NativeImage implements Backend {
    * {@code @CEnum}, null for an unlisted value, like an import's {@code <name>Enum}. The tag is not
    * checked. Flag cases keep the raw {@code @CField}, tested with {@code <Class>Constants}.
    */
-  private static void caseAccessors(Struct st, StringBuilder out) {
+  private static void caseAccessors(Module m, Struct st, StringBuilder out) {
     var done = new HashSet<String>();
     for (Field f : st.fields())
       for (FieldCase c : f.cases()) {
@@ -643,12 +643,40 @@ public final class NativeImage implements Backend {
             .append(accessor)
             .append('(')
             .append(st.name())
-            .append(" record) {\n        return ")
-            .append(c.group().name())
-            .append(".of(record.")
-            .append(f.name())
-            .append("());\n    }\n");
+            .append(" record) {\n");
+        EnumGroup narrow = m.narrowed(c.group(), f.type());
+        if (narrow == null)
+          out.append("        return ")
+              .append(c.group().name())
+              .append(".of(record.")
+              .append(f.name())
+              .append("());\n    }\n");
+        else
+          // A raw value the enum's narrower carrier cannot hold is null, as an unlisted one is.
+          out.append("        ")
+              .append(javaType(m, f.type()))
+              .append(" raw = record.")
+              .append(f.name())
+              .append("();\n        return ")
+              .append(fitsCarrier(narrow.type()))
+              .append(" ? ")
+              .append(c.group().name())
+              .append(".of((")
+              .append(Types.java(narrow.type()))
+              .append(") raw) : null;\n    }\n");
       }
+  }
+
+  /** True when the carrier holds {@code raw}, a wider field's value as its Java type. */
+  private static String fitsCarrier(Scalar carrier) {
+    return switch (carrier) {
+      case U8 -> "(raw >>> 8) == 0";
+      case U16 -> "(raw >>> 16) == 0";
+      case U32 -> "(raw >>> 32) == 0";
+      case I8 -> "raw == (byte) raw";
+      case I16 -> "raw == (short) raw";
+      default -> "raw == (int) raw";
+    };
   }
 
   /** The {@code c_bitfields=true} flag set annotating a field, or null. */

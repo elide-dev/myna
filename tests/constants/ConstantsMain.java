@@ -148,6 +148,18 @@ public final class ConstantsMain {
       default -> check(false, "key switch on SUB");
     }
     check(ConstsConstants.ABI_VERSION == 3, "module abi version");
+    // UnaryOp is u32: an operand with an upper bit set is no UnaryOp, and one switch serves the
+    // u64 operand and the u32 Unary.op field.
+    node.operand((1L << 32) | ConstsConstants.UnaryOp.INVERT);
+    check(Consts.operandAsUnaryOp(node) == null, "upper bits set: no UnaryOp");
+    check(ConstsConstants.UnaryOp.key(node.operand()) == Integer.MIN_VALUE, "upper bits set: no key");
+    Consts.Unary unary = StackValue.get(Consts.Unary.class);
+    unary.op(ConstsConstants.UnaryOp.INVERT);
+    switch (ConstsConstants.UnaryOp.key(unary.op())) {
+      case ConstsConstants.UnaryOp.INVERT_KEY -> check(true, "u32 key switch");
+      default -> check(false, "u32 key switch on INVERT");
+    }
+    node.operand(ConstsConstants.BinaryOp.SUB);
     check(Consts.operandAsUnaryOp(node) == Consts.UnaryOp.INVERT, "operand as UnaryOp");
     node.operand(7);
     check(Consts.operandAsBinaryOp(node) == null, "an unlisted operand is null");

@@ -92,7 +92,7 @@ public final class CHeader implements Backend {
               .append("Bits;\n  };\n");
         } else
           out.append("  ")
-              .append(Types.c(m, f.type(), f.group()))
+              .append(Types.c(m, f.type(), m.fieldTypeGroup(f)))
               .append(' ')
               .append(f.name())
               .append(";\n");

@@ -115,7 +115,7 @@ public final class RustFfi implements Backend {
         out.append("    pub ")
             .append(f.name())
             .append(": ")
-            .append(Types.rust(f.type(), f.group()))
+            .append(Types.rust(f.type(), m.fieldTypeGroup(f)))
             .append(",\n");
         offset = f.offset() + Validator.size(f.type());
       }
@@ -145,7 +145,7 @@ public final class RustFfi implements Backend {
             .append(");\n");
       out.append("};\n");
       views(m, s, out);
-      caseAccessors(s, out);
+      caseAccessors(m, s, out);
     }
     out.append("\nunsafe extern \"C\" {\n");
     for (Function declared : m.functions()) {
@@ -298,8 +298,27 @@ public final class RustFfi implements Backend {
    * One accessor per tagged field and group its {@code when} lines name: the field read as that
    * group's newtype. Nothing checks the tag; the caller reads the case the tag selects.
    */
-  private static void caseAccessors(Struct s, StringBuilder out) {
+  private static void caseAccessors(Module m, Struct s, StringBuilder out) {
     var accessors = new LinkedHashMap<String, String>();
+    for (Field f : s.fields()) {
+      EnumGroup plain = m.narrowed(f.group(), f.type());
+      if (plain != null)
+        accessors.put(
+            Names.rustCaseAccessor(f.name(), plain.name()),
+            "    /// `"
+                + f.name()
+                + "` as enum "
+                + plain.name()
+                + ", or `None` when the raw value is outside "
+                + Types.rust(plain.type())
+                + ".\n    #[inline(always)] pub const fn "
+                + Names.rustCaseAccessor(f.name(), plain.name())
+                + "(&self) -> Option<"
+                + plain.name()
+                + "> { "
+                + narrowRead((Scalar) f.type(), plain, "self." + f.name())
+                + " }\n");
+    }
     for (Field f : s.fields())
       for (FieldCase c : f.cases()) {
         String name = Names.rustCaseAccessor(f.name(), c.group().name());
@@ -309,6 +328,7 @@ public final class RustFfi implements Backend {
                 .filter(o -> o.group().equals(c.group()))
                 .map(o -> "`" + o.tagField() + " == " + o.value() + "`")
                 .toList();
+        EnumGroup narrow = m.narrowed(c.group(), f.type());
         accessors.put(
             name,
             "    /// `"
@@ -318,20 +338,41 @@ public final class RustFfi implements Backend {
                 + c.group().name()
                 + ", its meaning when "
                 + String.join(" or ", tags)
+                + (narrow == null
+                    ? ""
+                    : "; `None` when the raw value is outside " + Types.rust(narrow.type()))
                 + ".\n    #[inline(always)] pub const fn "
                 + name
                 + "(&self) -> "
-                + c.group().name()
-                + " { "
-                + c.group().name()
-                + "(self."
-                + f.name()
-                + ") }\n");
+                + (narrow == null
+                    ? c.group().name() + " { " + c.group().name() + "(self." + f.name() + ") }\n"
+                    : "Option<"
+                        + c.group().name()
+                        + "> { "
+                        + narrowRead((Scalar) f.type(), narrow, "self." + f.name())
+                        + " }\n"));
       }
     if (accessors.isEmpty()) return;
     out.append("impl ").append(s.name()).append(" {\n");
     accessors.values().forEach(out::append);
     out.append("}\n");
+  }
+
+  /**
+   * {@code raw}, a field of type {@code field}, as {@code Some(enum)} when the enum's narrower
+   * carrier holds its value, else {@code None}: no wide value aliases a declared code. Casts and a
+   * compare, no panic. Same signedness round-trips through the carrier; otherwise the value is
+   * compared with the carrier's maximum (and, from a signed field, with zero).
+   */
+  private static String narrowRead(Scalar field, EnumGroup e, String raw) {
+    String f = Types.rust(field), c = Types.rust(e.type());
+    boolean fieldUnsigned = field.text().startsWith("u"),
+        enumUnsigned = e.type().text().startsWith("u");
+    String fits;
+    if (fieldUnsigned == enumUnsigned) fits = raw + " as " + c + " as " + f + " == " + raw;
+    else if (fieldUnsigned) fits = raw + " <= " + c + "::MAX as " + f;
+    else fits = raw + " >= 0 && " + raw + " <= " + c + "::MAX as " + f;
+    return "if " + fits + " { Some(" + e.name() + "(" + raw + " as " + c + ")) } else { None }";
   }
 
   /**

@@ -29,6 +29,12 @@ parameters, returns and callback types reference them (see
 - A 64-bit enum whose values all fit an `int` gets `<VALUE>_KEY` labels and `key(long)` in
   `<Class>Constants`, so Java can `switch` on it (Java has no `switch` on `long`); see
   [tagged fields](../dsl.md#fields-whose-meaning-depends-on-a-tag).
+- A struct field's `enum=` and a `when ... enum=` case may name an enum with a narrower carrier than the
+  field when the field's type holds every value, so one code table serves a `u32` field and a `u64`
+  operand. The field stays its raw integer; Rust gets `<field>_as_<enum>() -> Option<Enum>`, the Native Image
+  case accessor returns `null` for a value the carrier cannot hold, and the enum gets the same `int` switch
+  keys (see [narrowed field references](../dsl.md#constants-enums-and-flag-sets)). Descriptors that use it were
+  rejected before, so existing output is unchanged.
 - A module that declares `abi=N` emits it as `<MODULE>_ABI_VERSION` (C), `ABI_VERSION` (Rust) and
   `<Class>Constants.ABI_VERSION`, typed `i32`; `<Class>Constants` is generated for it alone if needed.
 - A struct field can name the group that applies per value of a tag field with `when tag=binary
@@ -96,7 +102,7 @@ single buffers.
 | 9 | `@CBitfield` accessors and the C bitfield union exist only with `c_bitfields=true` on the flag set. | descriptors using flag sets | add the option to ask for them |
 | 10 | `align=N@explicit_contract` is accepted on borrow buffers (a power of two, at most 4096). | descriptors that declare it | none; see the fixes below |
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
-| 12 | In an enum with a 64-bit carrier whose values all fit an `int` (now given `int` switch keys), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
+| 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
 
 Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every

@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class ConstsFFM {
     private ConstsFFM() {}
-    public static final String ABI_FINGERPRINT = "16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09";
+    public static final String ABI_FINGERPRINT = "6d7151fad6c4bde0b28437f9cc6f7c7491c3812da85623bdd84a1a09c2e09f40";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
@@ -33,7 +33,12 @@ public final class ConstsFFM {
     public static final long Record_perms_OFFSET = 4L;
     // flags Wide: values in ConstsConstants.Wide
     public static final long Record_wide_OFFSET = 8L;
+    // enum Level: values in ConstsConstants.Level
     public static final long Record_raw_OFFSET = 16L;
+    public static final StructLayout Unary_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_INT.withName("op"));
+    // enum UnaryOp: values in ConstsConstants.UnaryOp
+    public static final long Unary_op_OFFSET = 0L;
     // returns enum Status: values in ConstsConstants.Status
     public static final FunctionDescriptor blockingStatus_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle blockingStatus(SymbolLookup lookup) {
