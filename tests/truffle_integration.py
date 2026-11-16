@@ -183,7 +183,9 @@ class TruffleIntegrationTests(unittest.TestCase):
             # Guest-visible constants: the exported cached read (the specialization body is trivially
             # inlined into it at analysis); names are a switch over constants.
             "NativeConstantsGen$InteropLibraryExports$Cached.readMember")]
-        expected.append("fixture.cells.CellApiTruffle$StatusNames.name")
+        # Enum names are a switch over image-heap constants, trivially inlined into the probe that
+        # reads them; the probe compiling at run time proves no class-initialization check.
+        expected.append("fixture.cells.CellChecks$GuestConstants.execute")
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
 

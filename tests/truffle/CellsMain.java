@@ -256,7 +256,8 @@ public final class CellsMain {
         if (pinsPerCall < 16) throw new AssertionError("sumBytes did not pin its large heap array: " + pinsPerCall + " bytes per call");
         allocates("sumBytes of a copied heap array", new CellApiTruffle.sumBytes_Cell(), 0, 64 * 2, new HeapBytes(small, false), 64L, NativePointer.NULL);
         // Two declared borrows beside a pointer: lending native memory both ways and copying both
-        // heap arrays allocate nothing, and two pinned arrays allocate their two pins.
+        // heap arrays allocate nothing. With large heap arrays only the output is pinned: the input
+        // declares align=16, and a pinned array's data starts on an 8-byte boundary, so it is copied.
         java.lang.foreign.MemorySegment written = java.lang.foreign.Arena.global().allocate(64);
         java.lang.foreign.MemorySegment copied = java.lang.foreign.Arena.global().allocate(8);
         allocates("transfer between native buffers", new CellApiTruffle.transfer_Cell(), 0, 64 * 3,
@@ -267,7 +268,7 @@ public final class CellsMain {
             new HeapBytes(small, false), new HeapBytes(new byte[64], true), NativePointer.NULL);
         allocates("transfer between pinned heap arrays", new CellApiTruffle.transfer_Cell(), 64, large.length,
             pinned, new HeapBytes(new byte[large.length], true), NativePointer.NULL);
-        if (pinsPerCall < 32) throw new AssertionError("transfer did not pin both large heap arrays: " + pinsPerCall + " bytes per call");
+        if (pinsPerCall < 16 || pinsPerCall >= 32) throw new AssertionError("transfer did not pin exactly its large output array: " + pinsPerCall + " bytes per call");
         // A nullable borrow from compiled code. One call site sees an absent and a present output
         // in turn and stays compiled; absent, in any spelling, lends the null address and derives
         // length zero without allocating, exactly as lending native memory does.
