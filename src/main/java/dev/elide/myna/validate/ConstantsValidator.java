@@ -31,6 +31,20 @@ final class ConstantsValidator {
     for (Function f : m.functions()) functionSymbols.add(f.symbol());
     groupNames(m, functionSymbols);
 
+    // abi= is emitted as ABI_VERSION beside the consts: a crate-root Rust const, a field of
+    // <Class>Constants and <MODULE>_ABI_VERSION in C (claimed with the other C names).
+    if (m.abiDeclared()) {
+      for (Constant c : m.constants())
+        require(
+            !c.name().equals("ABI_VERSION"),
+            "const ABI_VERSION: collides with the ABI_VERSION generated from the module's abi=;"
+                + " remove the const and use the generated one");
+      for (Function f : m.functions())
+        require(
+            !f.name().equals("ABI_VERSION"),
+            "function ABI_VERSION: collides with the Rust const ABI_VERSION generated from the"
+                + " module's abi=; rename the function");
+    }
     var constants = new HashSet<String>();
     for (Constant c : m.constants()) {
       Validator.identifier(c.name());
@@ -62,6 +76,7 @@ final class ConstantsValidator {
                 + f.name()
                 + " in Truffle constants()");
     }
+    rustValues(m);
     accessors(m);
     for (EnumGroup e : m.enums()) enumValues(e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
@@ -70,6 +85,30 @@ final class ConstantsValidator {
     references(m);
     bitfieldAccessors(m);
     cNames(m, functionSymbols);
+  }
+
+  /**
+   * The crate root of {@code seam.rs} has one value namespace for the {@code pub const} of each
+   * const (upper-cased) and of {@code abi=}, the {@code pub fn} of each function, and the
+   * tuple-struct newtype of each enum and flag set (a tuple struct's constructor is a value): any
+   * two of the same name are rustc error E0428.
+   */
+  private static void rustValues(Module m) {
+    var values = new HashMap<String, String>();
+    if (m.abiDeclared()) values.put("ABI_VERSION", "the const ABI_VERSION generated from abi=");
+    for (Constant c : m.constants())
+      rustValue(values, c.name().toUpperCase(Locale.ROOT), "const " + c.name());
+    for (Function f : m.functions())
+      rustValue(values, f.name(), f.direction().name().toLowerCase(Locale.ROOT) + " " + f.name());
+    for (EnumGroup e : m.enums()) rustValue(values, e.name(), "enum " + e.name());
+    for (FlagSet f : m.flagSets()) rustValue(values, f.name(), "flags " + f.name());
+  }
+
+  private static void rustValue(Map<String, String> values, String name, String owner) {
+    String other = values.putIfAbsent(name, owner);
+    require(
+        other == null,
+        owner + ": Rust name " + name + " collides with " + other + " in seam.rs; rename one");
   }
 
   private static boolean integer(Scalar s) {
@@ -114,7 +153,7 @@ final class ConstantsValidator {
     require(
         !declared.contains(m.directivesClass()),
         "type collides with generated directives class " + m.directivesClass());
-    if (!groups.isEmpty() || !m.constants().isEmpty())
+    if (m.declaresConstants())
       require(
           !declared.contains(m.constantsClass()),
           "type collides with generated constants class " + m.constantsClass());
@@ -203,6 +242,25 @@ final class ConstantsValidator {
       require(
           other == null, where + "values " + other + " and " + v.name() + " are both " + v.value());
     }
+    // A 64-bit enum whose values fit an int also gets <VALUE>_KEY fields and key(long) in Java.
+    if (e.intKeys())
+      for (EnumValue v : e.values()) {
+        require(
+            !v.name().equals("key"),
+            where
+                + "value key: reserved beside the generated key(long) switch helper; rename the"
+                + " value");
+        require(
+            !names.contains(v.name() + "_key"),
+            where
+                + "values "
+                + v.name()
+                + " and "
+                + v.name()
+                + "_key both generate the Java constant "
+                + v.name().toUpperCase(Locale.ROOT)
+                + "_KEY; rename one");
+      }
   }
 
   private static void flagBits(FlagSet f) {
@@ -587,6 +645,7 @@ final class ConstantsValidator {
     // Callback names are C typedefs in the same ordinary-identifier namespace as the generated
     // macros, typedefs and name functions.
     for (Signature c : m.callbacks()) claim(claimed, c.name(), "callback " + c.name());
+    if (m.abiDeclared()) claim(claimed, Names.abiVersionMacro(m), "module abi= version");
     // Opaque and record names are struct tags, the namespace of the generated bits structs.
     var tags = new HashMap<String, String>();
     for (String name : m.opaqueTypes()) claim(tags, name, "opaque " + name);

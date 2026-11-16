@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class ConstsFFM {
     private ConstsFFM() {}
-    public static final String ABI_FINGERPRINT = "952c39f25cc60a83dd16fe23049a9780cf6eedf4b57457a0dab1af8672276083";
+    public static final String ABI_FINGERPRINT = "16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }

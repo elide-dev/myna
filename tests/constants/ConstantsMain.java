@@ -142,6 +142,12 @@ public final class ConstantsMain {
     node.operand(ConstsConstants.BinaryOp.SUB);
     check(Consts.operandAsBinaryOp(node) == Consts.BinaryOp.SUB, "operand as BinaryOp");
     check(caseIsSub(node), "measured enum case compare");
+    // The hot-path form: a switch on the raw u64 field through its int key.
+    switch (ConstsConstants.BinaryOp.key(node.operand())) {
+      case ConstsConstants.BinaryOp.SUB_KEY -> check(true, "key switch");
+      default -> check(false, "key switch on SUB");
+    }
+    check(ConstsConstants.ABI_VERSION == 3, "module abi version");
     check(Consts.operandAsUnaryOp(node) == Consts.UnaryOp.INVERT, "operand as UnaryOp");
     node.operand(7);
     check(Consts.operandAsBinaryOp(node) == null, "an unlisted operand is null");

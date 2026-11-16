@@ -14,7 +14,7 @@ import org.graalvm.word.WordFactory;
 
 public final class ConstsTruffle {
     private ConstsTruffle() {}
-    public static final String ABI_FINGERPRINT = "952c39f25cc60a83dd16fe23049a9780cf6eedf4b57457a0dab1af8672276083";
+    public static final String ABI_FINGERPRINT = "16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09";
     /** Logical names of every generated cell, in symbol order. */
     public static final String[] CELLS = {"blockingStatus", "setLevel", "status"};
     /** A fresh executable per call: a cell holds call-site profiles and is adopted once. */
