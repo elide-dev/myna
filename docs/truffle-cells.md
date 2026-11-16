@@ -33,8 +33,7 @@ generated outputs. Three further module options require it:
 Two per-import facts refine the module choice:
 
 - `truffle_cell=false@explicit_contract` opts one import out. Imports with by-value records or
-  callback parameters must opt out: those shapes need language glue. So must an import with a
-  [batch of buffers](ownership.md#batches-of-buffers), which cells do not lend yet.
+  callback parameters must opt out: those shapes need language glue.
 - `truffle_raw_pointers=true@explicit_contract` lets guest numbers stand in for pointer arguments
   of that import (`bun:ffi` compatibility). By default a pointer argument must be an interop pointer
   or, where the parameter is nullable, interop `null`.
@@ -368,6 +367,49 @@ The scratch stack's lifetimes have three caveats:
 A pinned array does not move, so its address stays valid across any safepoint between the pin and
 the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
 [Measurement](#measurement).
+
+### Batches of buffers
+
+A [batch](ownership.md#batches-of-buffers) (`borrow F SOURCES lengths=LENGTHS count=COUNT`) drops
+its lengths and count from the guest signature: the guest passes an interop array
+(`hasArrayElements`) of byte buffers or strings, or `null` (interop `null`, host `null`, or an
+empty array) for the empty batch, which reaches native code as null arrays with count zero. Host
+code can pass a `BufferArray.of(..)`.
+
+- Each element is lent by the single-buffer coercion, under exactly its rules: native memory in
+  place, heap arrays pinned or copied by the pin threshold, strings and other interop buffers
+  copied, a present empty buffer at a non-null address. An element may be interop `null` (the null
+  pointer with length zero) only under `elements_nullable=true`.
+- The array's size is read once and checked (a negative size, or more than 134217727 elements,
+  is a guest error before anything is lent), and each element is read once, as it is lent; what
+  the call lends and its release undoes is what was read, never re-read, whatever the guest stores
+  into the array meanwhile.
+- The pointer and length arrays take `16 * count` bytes of the thread's scratch stack, and the
+  elements' copies stack above them, so the whole batch pops in one step. Arrays too large for the
+  stack (above 1024 elements, or not fitting beside outstanding copies) take a confined arena of
+  their own, as a large copy does, and so does each element copy past the end of the scratch block.
+- A failure to lend element `k` releases the elements before it, in reverse, and the call never
+  reaches native code.
+- An FFM cell passes a single buffer's own segment to its downcall, which holds its scope for the
+  call; a batch's addresses are in memory, where the linker holds nothing. So an FFM cell lends an
+  element of scoped native memory in place only when nothing can close it during the call, as the
+  host wrapper does: a segment confined to the calling thread (accessible from it but not from a
+  sentinel thread that never starts, kept in a run-time-initialized holder) under a native leaf.
+  Any other (shared, automatic, or confined under an import that can call back) is copied through
+  its segment, a scope-checked read that refuses a closed or foreign-thread arena, straight onto
+  the scratch stack. Coercing a later element can run guest code (an array's element reads, a
+  string's or buffer's messages), which could close an element already lent in place, so once
+  every argument is coerced, right before the downcall, the cell checks again that each element it
+  lent in place is open and confined to this thread, and otherwise fails the call as a closed
+  single buffer's does, releasing the batch. From there nothing can close it: no other thread can
+  close a confined arena, and a leaf cannot call back. A batch with nothing lent in place pays one
+  branch. Native Image cells lend native memory in place, as for a single buffer.
+- A batch is a `Batch`, not a `Borrow`, so single borrows keep their layout. A compiled batch call
+  allocates only what lending its elements needs: nothing for native memory, scratch copies and
+  scoped copies, a `PinnedObject` per pinned element, an arena per element copied past the scratch
+  block, and one array of those owners per call that has any. `tests/truffle/CellsMain.java` and
+  `FfmCellsMain.java` measure three small heap arrays, native and scoped segments, and a string
+  batch beside a nullable batch at zero bytes per compiled call in both backends.
 
 ## Ownership
 

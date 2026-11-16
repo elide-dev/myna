@@ -64,7 +64,8 @@ public final class TruffleCells implements Backend {
    */
   private record Cell(Function function, CallBorrows borrows, Resource creates, Resource destroys) {
     boolean isLength(Parameter p) {
-      return borrows.length(p) != null;
+      // A batch's lengths array and count drop out too: the cell derives both from its elements.
+      return borrows.derived(p);
     }
 
     boolean isBuffer(Parameter p) {
@@ -376,6 +377,8 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The borrows that are batches, whose locals are a Batch rather than a Borrow.
+    var batchLocals = new HashSet<String>();
     // The call borrows whose release writes a copy back, which can fail after the call returned.
     var writableBorrows = new HashSet<String>();
     // The NUL check of each C string's borrow, by borrow local.
@@ -413,6 +416,39 @@ public final class TruffleCells implements Backend {
         }
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
+        BufferBorrow batch = cell.borrows().buffer(p);
+        if (batch != null && batch.batch()) {
+          // A guest array of buffers or strings, each lent by the single-buffer coercion; the
+          // borrow's address is the pointer array, the lengths follow it, and its length is the
+          // count.
+          imports.add(RUNTIME + "BatchCoercion");
+          imports.add(RUNTIME + "Batch");
+          fields.append("        @Node.Child private BatchCoercion ").append(field).append(";\n");
+          Scalar element = cell.borrows().lengthElement(batch);
+          boolean wide = element.bytes == 8;
+          init.append("            this.")
+              .append(field)
+              .append(" = new BatchCoercion(")
+              .append(quotedName)
+              .append(", ")
+              .append(declared)
+              .append(", ")
+              .append(batch.elementsNullable())
+              .append(", ")
+              .append(wide)
+              .append(", ")
+              .append(wide ? "Long.MAX_VALUE" : CallBorrows.max32(element))
+              .append(", ")
+              .append(ffm)
+              .append(", ")
+              .append(Seam.nativeLeaf(f))
+              .append(");\n");
+          String local = "borrow_" + p.name();
+          batchLocals.add(local);
+          borrows.add(local + " = " + field + ".execute(" + argument + ")");
+          arguments.add(address(ffm, imports, local + ".address()"));
+          continue;
+        }
         if (t instanceof Pointer || t instanceof FunctionPointer) {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
@@ -631,8 +667,21 @@ public final class TruffleCells implements Backend {
       // buffer once every borrow is held.
       for (int n = 0; n < f.parameters().size(); n++) {
         Parameter p = f.parameters().get(n);
+        BufferBorrow count = cell.borrows().count(p);
+        if (count != null) {
+          // A batch's count is its borrow's length, at most BatchCoercion.MAX_COUNT.
+          String elements = "borrow_" + count.parameter() + ".length()";
+          arguments.set(
+              n, cell.borrows().countType(count).bytes == 8 ? elements : "(int) " + elements);
+          continue;
+        }
         BufferBorrow borrow = cell.borrows().length(p);
         if (borrow == null) continue;
+        if (borrow.batch()) {
+          String local = "borrow_" + borrow.parameter();
+          arguments.set(n, address(ffm, imports, local + ".lengths()"));
+          continue;
+        }
         String length = "borrow_" + borrow.parameter() + ".length()";
         String unborrowed = "lent_" + borrow.parameter() + ".size()";
         if (cell.borrows().narrow(borrow)) {
@@ -786,7 +835,9 @@ public final class TruffleCells implements Backend {
         // go without one: skip the fast path whenever the create has any. Its segment still
         // reaches the downcall through scoped.
         // A C string is checked on the borrowed path only: no fast path skips it.
+        // A batch is always borrowed: its elements' addresses are in memory, not segments.
         if (held.isEmpty()
+            && !cell.borrows().batched()
             && f.parameters().stream().noneMatch(x -> x.access() == Access.CSTRING)
             && segments.size() > 1
             && segments.size() <= MAX_PATTERN_BUFFERS)
@@ -1039,12 +1090,25 @@ public final class TruffleCells implements Backend {
                   "NativeResource resource = owner$ = new NativeResource(");
     }
     for (String borrow : borrows) {
-      callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
+      String declared = borrow.substring(0, borrow.indexOf(' '));
+      callBlock
+          .append(indent)
+          .append(batchLocals.contains(declared) ? "Batch " : "Borrow ")
+          .append(borrow)
+          .append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
       String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));
       if (check != null) callBlock.append(indent).append(check).append('\n');
     }
+    // Once every argument is coerced, and so no guest code can run before the call, each batch
+    // validates the scopes of the elements it lent in place (FFM cells under a native leaf).
+    if (ffm && Seam.nativeLeaf(f))
+      for (String borrow : borrows) {
+        String declared = borrow.substring(0, borrow.indexOf(' '));
+        if (batchLocals.contains(declared))
+          callBlock.append(indent).append(declared).append(".recheck(this);\n");
+      }
     for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');
     for (int i = borrows.size() - 1; i >= 0; i--) {

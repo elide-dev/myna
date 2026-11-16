@@ -184,6 +184,9 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BytesCoercion.emptyAddress", "AlignedBytesCoercion.execute", "AlignedBytesCoercion.slow",
             "OverAlignedBytesCoercion.execute", "OverAlignedBytesCoercion.slow",
             "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText",
+            # Batch.absorbScratch and Borrow.handOver are trivially inlined at analysis.
+            "BatchCoercion.execute", "BatchCoercion.lendScoped", "Batch.reserve", "Batch.absorb",
+            "Batch.absorbCopy", "Batch.release",
             # Guest-visible constants: the exported cached read (the specialization body is trivially
             # inlined into it at analysis); names are a switch over constants.
             "NativeConstantsGen$InteropLibraryExports$Cached.readMember")]

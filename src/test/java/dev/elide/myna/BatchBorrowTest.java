@@ -353,12 +353,40 @@ class BatchBorrowTest {
   }
 
   @Test
-  void cellsAreRejectedForBatchesUntilSupported() {
-    String cells = BATCH.replace("java_class=Api", "java_class=Api truffle_cells=true");
-    String message =
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
-            .getMessage();
-    assertTrue(message.contains("truffle_cell=false@explicit_contract"), message);
+  void batchImportsGetCellsThatLendEachElement() {
+    for (String backend : new String[] {"", " truffle_backend=ffm"}) {
+      String cells = BATCH.replace("java_class=Api", "java_class=Api truffle_cells=true" + backend);
+      String java = Generator.generate(Dsl.parse(cells), true).get("ApiTruffle.java");
+      boolean ffm = !backend.isEmpty();
+      assertTrue(
+          java.contains(
+              "this.coerce_sources = new BatchCoercion(\"digest\", \"sources\", false, true,"
+                  + " Long.MAX_VALUE, "
+                  + ffm
+                  + ", false);"),
+          java);
+      assertTrue(
+          java.contains(
+              "this.coerce_deps = new BatchCoercion(\"merge\", \"deps\", true, false, 4294967295L, "
+                  + ffm
+                  + ", false);"),
+          java);
+      // The lengths and count drop out of the guest signature; the cell derives them.
+      assertTrue(java.contains("super(\"digest\", 1);"), java);
+      assertTrue(java.contains("super(\"merge\", 3);"), java);
+      assertTrue(java.contains("borrow_deps.lengths(), (int) borrow_deps.length()"), java);
+      // A batch is always borrowed: no call skips its borrow for segments passed in place.
+      assertFalse(java.contains("lent_"), java);
+      // Non-leaf imports never lend a scoped element in place, so nothing is checked again.
+      assertFalse(java.contains(".recheck(this);"), java);
+    }
+    // An FFM leaf cell checks the elements it lent in place again, right before the call.
+    String leaf =
+        BATCH
+            .replace("java_class=Api", "java_class=Api truffle_cells=true truffle_backend=ffm")
+            .replaceFirst(" native_leaf=false@explicit_contract", "");
+    String java = Generator.generate(Dsl.parse(leaf), true).get("ApiTruffle.java");
+    assertTrue(java.contains("borrow_sources.recheck(this);"), java);
+    assertTrue(java.contains("Long.MAX_VALUE, true, true);"), java);
   }
 }

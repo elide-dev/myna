@@ -339,6 +339,21 @@ public final class CellsMain {
         // copies a small one without a terminator.
         allocates("sumBytes of a pinned heap array", new CellApiTruffle.sumBytes_Cell(), 32, large.length, pinned, (long) large.length, NativePointer.NULL);
         if (pinsPerCall < 16) throw new AssertionError("sumBytes did not pin its large heap array: " + pinsPerCall + " bytes per call");
+        // A batch costs what its elements do as single borrows: three small heap arrays are three
+        // scratch copies above the batch's arrays, and three native buffers are lent in place, so
+        // neither allocates, as three single-buffer calls do not.
+        byte[] first = {1, 2, 3}, second = {4}, third = new byte[64];
+        allocates("digest of three small heap arrays", new CellApiTruffle.digest_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, first, second, third),
+            BufferArray.of(new HeapBytes(first, false), new HeapBytes(second, false), new HeapBytes(third, false)));
+        byte[] lentBytes = new byte[64];
+        java.util.Arrays.fill(lentBytes, (byte) 3);
+        allocates("digest of three native buffers", new CellApiTruffle.digest_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, lentBytes, lentBytes, lentBytes),
+            BufferArray.of(NativeBytes.of(lent, false), NativeBytes.of(lent, false), NativeBytes.of(lent, false)));
+        allocates("merge of a string batch and a nullable batch", new CellApiTruffle.merge_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.foldBatch(CellChecks.FNV_OFFSET, "abc".getBytes(), first), null, second),
+            BufferArray.of("abc", new HeapBytes(first, false)), BufferArray.of(null, new HeapBytes(second, false)));
         allocates("sumBytes of a copied heap array", new CellApiTruffle.sumBytes_Cell(), 0, 64 * 2, new HeapBytes(small, false), 64L, NativePointer.NULL);
         // Two declared borrows beside a pointer: lending native memory both ways and copying both
         // heap arrays allocate nothing. With large heap arrays only the output is pinned: the input
