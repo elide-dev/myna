@@ -168,7 +168,7 @@ public final class NativeOwnership implements Backend {
     private static void lendBatch(NativeBuffer[] buffers, org.graalvm.word.Pointer arrays, int count, boolean wide, long maxLength, boolean elementsNullable) {
         int held = 0;
         try {
-            org.graalvm.word.Pointer lengths = arrays.add(8 * count);
+            org.graalvm.word.Pointer lengths = arrays.add(org.graalvm.word.WordFactory.unsigned(8L * count));
             for (int i = 0; i < count; i++) {
                 NativeBuffer buffer = buffers[i];
                 long length = 0;
@@ -185,9 +185,9 @@ public final class NativeOwnership implements Backend {
                     if (address == 0) address = arrays.rawValue();
                 }
                 held = i + 1;
-                arrays.writeLong(8 * i, address);
-                if (wide) lengths.writeLong(8 * i, length);
-                else lengths.writeInt(4 * i, (int) length);
+                arrays.writeLong(org.graalvm.word.WordFactory.signed(8L * i), address);
+                if (wide) lengths.writeLong(org.graalvm.word.WordFactory.signed(8L * i), length);
+                else lengths.writeInt(org.graalvm.word.WordFactory.signed(4L * i), (int) length);
             }
         } catch (RuntimeException | Error failure) {
             releaseBatch(buffers, held);
@@ -201,7 +201,7 @@ public final class NativeOwnership implements Backend {
 
     private static void pinBatch(byte[][] buffers, org.graalvm.nativeimage.PinnedObject[] pins, org.graalvm.word.Pointer arrays, int count, boolean wide, boolean elementsNullable) {
         try {
-            org.graalvm.word.Pointer lengths = arrays.add(8 * count);
+            org.graalvm.word.Pointer lengths = arrays.add(org.graalvm.word.WordFactory.unsigned(8L * count));
             for (int i = 0; i < count; i++) {
                 byte[] buffer = buffers[i];
                 long address = 0;
@@ -215,9 +215,9 @@ public final class NativeOwnership implements Backend {
                     address = pins[i].addressOfArrayElement(0).rawValue();
                     length = buffer.length;
                 }
-                arrays.writeLong(8 * i, address);
-                if (wide) lengths.writeLong(8 * i, length);
-                else lengths.writeInt(4 * i, length);
+                arrays.writeLong(org.graalvm.word.WordFactory.signed(8L * i), address);
+                if (wide) lengths.writeLong(org.graalvm.word.WordFactory.signed(8L * i), length);
+                else lengths.writeInt(org.graalvm.word.WordFactory.signed(4L * i), length);
             }
         } catch (RuntimeException | Error failure) {
             unpinBatch(pins, count);
@@ -663,6 +663,7 @@ public final class NativeOwnership implements Backend {
         .append(" = ")
         .append(b.name())
         .append(".length;\n")
+        .append(countCheck(call, b.borrow(), "count" + s, pad))
         .append(pad)
         .append("org.graalvm.word.Pointer arrays")
         .append(s)
@@ -717,6 +718,28 @@ public final class NativeOwnership implements Backend {
           .append(b.borrow().elementsNullable())
           .append(");\n");
     out.append(pad).append("    try {\n");
+  }
+
+  /**
+   * Rejects a batch whose count its declared type cannot carry, before anything is allocated or
+   * acquired: an {@code IllegalArgumentException}, as for a buffer length outside the ABI range. A
+   * Java array always fits a 32- or 64-bit count, so the comparison folds away; it states the rule
+   * where the count is read. Every offset and size derived from the count is computed in {@code
+   * long}.
+   */
+  static String countCheck(CallBorrows call, BufferBorrow b, String count, String pad) {
+    Scalar type = call.countType(b);
+    String max = type.bytes == 8 ? "Long.MAX_VALUE" : CallBorrows.max32(type);
+    return pad
+        + "if ((long) "
+        + count
+        + " > "
+        + max
+        + ") throw new IllegalArgumentException(\""
+        + call.function().name()
+        + "."
+        + b.parameter()
+        + ": batch count exceeds ABI range\");\n";
   }
 
   private static void batchClose(Buffer b, boolean arrays, String pad, StringBuilder out) {

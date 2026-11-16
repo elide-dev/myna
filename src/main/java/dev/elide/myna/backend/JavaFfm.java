@@ -599,6 +599,7 @@ public final class JavaFfm implements Backend {
             .append(" = ")
             .append(arg)
             .append(".length;\n")
+            .append(NativeOwnership.countCheck(call, buffer, "count" + s, "                "))
             .append("                MemorySegment arrays")
             .append(s)
             .append(" = count")
@@ -823,7 +824,7 @@ public final class JavaFfm implements Backend {
                     address = length == 0 ? arrays.address() : buffer.address();
                 }
                 arrays.setAtIndex(ValueLayout.JAVA_LONG, i, address);
-                if (wide) arrays.setAtIndex(ValueLayout.JAVA_LONG, count + i, length);
+                if (wide) arrays.setAtIndex(ValueLayout.JAVA_LONG, (long) count + i, length);
                 else arrays.setAtIndex(ValueLayout.JAVA_INT, 2L * count + i, (int) length);
             }
             return arrays;

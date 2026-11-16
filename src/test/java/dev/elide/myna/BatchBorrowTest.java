@@ -133,6 +133,15 @@ class BatchBorrowTest {
     assertTrue(java.contains("lendBatch(arg5, arrays5, count5, false, 4294967295L, true);"), java);
     assertTrue(java.contains("pinBatch(arg2, pins2, arrays2, count2, true, false);"), java);
     assertTrue(java.contains("private static void releaseBatch("), java);
+    // Offsets and sizes are long arithmetic; a count its type cannot carry is rejected first.
+    assertFalse(java.contains("8 * "), java);
+    assertTrue(
+        java.contains("writeLong(org.graalvm.word.WordFactory.signed(8L * i), address);"), java);
+    assertTrue(
+        java.contains(
+            "if ((long) count5 > 2147483647L) throw new IllegalArgumentException(\"merge.deps:"
+                + " batch count exceeds ABI range\");"),
+        java);
     assertTrue(java.contains(": org.graalvm.nativeimage.StackValue.get(128);"), java);
     // FFM: an array of native segments, lent through the arena.
     String ffm = output.get("ApiFFM.java");
@@ -144,6 +153,13 @@ class BatchBorrowTest {
         ffm);
     assertTrue(ffm.contains("java.lang.ref.Reference.reachabilityFence(arg2);"), ffm);
     assertTrue(ffm.contains("private static MemorySegment lendBatch("), ffm);
+    assertTrue(
+        ffm.contains("arrays.setAtIndex(ValueLayout.JAVA_LONG, (long) count + i, length);"), ffm);
+    assertTrue(
+        ffm.contains(
+            "if ((long) count > Long.MAX_VALUE) throw new"
+                + " IllegalArgumentException(\"digest.sources: batch count exceeds ABI range\");"),
+        ffm);
   }
 
   @Test
