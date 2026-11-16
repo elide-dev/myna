@@ -66,6 +66,20 @@ public final class FfmCellsMain {
         allocates("transfer, input scoped", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), NativeBytes.of(globalOut, true), NativePointer.NULL);
         allocates("transfer, both scoped", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), NativeBytes.of(mineOut, true), NativePointer.NULL);
         allocates("transfer, scoped and copied", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), new HeapBytes(new byte[4], true), NativePointer.NULL);
+        // A batch costs what its elements' lending does: heap arrays and strings copied onto the
+        // scratch stack, a confined segment lent in place under the leaf digest, and a shared one
+        // copied straight onto the stack through its segment, none of which allocates.
+        byte[] one = {1, 2, 3}, two = {4};
+        allocates("digest of three small heap arrays", new CellApiTruffle.digest_Cell(),
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, one, two, new byte[64]),
+            BufferArray.of(new HeapBytes(one, false), new HeapBytes(two, false), new HeapBytes(new byte[64], false)));
+        byte[] ones = {1, 1, 1, 1};
+        allocates("digest of global, confined and shared segments", new CellApiTruffle.digest_Cell(),
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, ones, ones, ones),
+            BufferArray.of(NativeBytes.of(global, false), NativeBytes.of(mine, false), NativeBytes.of(common, false)));
+        allocates("merge of a string batch and a nullable batch with a confined segment", new CellApiTruffle.merge_Cell(),
+            CellChecks.foldBatch(CellChecks.foldBatch(CellChecks.FNV_OFFSET, "abc".getBytes(), one), null, ones),
+            BufferArray.of("abc", new HeapBytes(one, false)), BufferArray.of(null, NativeBytes.of(mine, false)));
         // A mapped file's segment is checked like any other.
         java.nio.file.Path file = java.nio.file.Files.createTempFile("myna-cells", ".bin");
         try (var channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ, java.nio.file.StandardOpenOption.WRITE);

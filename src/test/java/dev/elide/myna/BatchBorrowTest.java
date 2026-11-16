@@ -359,21 +359,18 @@ class BatchBorrowTest {
               "this.coerce_sources = new BatchCoercion(\"digest\", \"sources\", false, true,"
                   + " Long.MAX_VALUE, "
                   + ffm
-                  + ");"),
+                  + ", false);"),
           java);
       assertTrue(
           java.contains(
               "this.coerce_deps = new BatchCoercion(\"merge\", \"deps\", true, false, 4294967295L, "
                   + ffm
-                  + ");"),
+                  + ", false);"),
           java);
       // The lengths and count drop out of the guest signature; the cell derives them.
       assertTrue(java.contains("super(\"digest\", 1);"), java);
       assertTrue(java.contains("super(\"merge\", 3);"), java);
-      assertTrue(
-          java.contains(
-              "borrow_deps.address() + 8L * borrow_deps.length(), (int) borrow_deps.length()"),
-          java);
+      assertTrue(java.contains("borrow_deps.lengths(), (int) borrow_deps.length()"), java);
       // A batch is always borrowed: no call skips its borrow for segments passed in place.
       assertFalse(java.contains("lent_"), java);
     }

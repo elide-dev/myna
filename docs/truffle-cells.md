@@ -368,22 +368,31 @@ code can pass a `BufferArray.of(..)`.
   place, heap arrays pinned or copied by the pin threshold, strings and other interop buffers
   copied, a present empty buffer at a non-null address. An element may be interop `null` (the null
   pointer with length zero) only under `elements_nullable=true`.
-- Each element is read from the guest array once, as it is lent; what the call lends and its
-  release undoes is that snapshot, whatever the guest stores into the array meanwhile.
+- The array's size is read once and checked (a negative size, or more than 134217727 elements,
+  is a guest error before anything is lent), and each element is read once, as it is lent; what
+  the call lends and its release undoes is what was read, never re-read, whatever the guest stores
+  into the array meanwhile. Native memory lent in place must stay open for the whole call,
+  including the coercion of later elements, which may run guest code.
 - The pointer and length arrays take `16 * count` bytes of the thread's scratch stack, and the
   elements' copies stack above them, so the whole batch pops in one step. Arrays too large for the
   stack (above 1024 elements, or not fitting beside outstanding copies) take a confined arena of
-  their own, as a large copy does. A batch takes at most 134217727 elements.
+  their own, as a large copy does, and so does each element copy past the end of the scratch block.
 - A failure to lend element `k` releases the elements before it, in reverse, and the call never
   reaches native code.
 - An FFM cell passes a single buffer's own segment to its downcall, which holds its scope for the
-  call; a batch's addresses are in memory, where the linker holds nothing. So an FFM cell copies
-  an element of guest native memory whose scope has anything to check (any but the global scope)
-  through its segment, a scope-checked read that refuses a closed or foreign-thread arena, and
-  lends the copy. Native Image cells lend native memory in place, as for a single buffer.
-- A compiled batch call allocates what its elements' lending does and nothing more: no array of
-  borrows and no boxed lengths. `tests/truffle/CellsMain.java` measures three small heap arrays,
-  three native buffers, and a string batch beside a nullable batch at zero bytes per call.
+  call; a batch's addresses are in memory, where the linker holds nothing. So an FFM cell lends an
+  element of scoped native memory in place only when nothing can close it during the call, as the
+  host wrapper does: a segment confined to the calling thread (accessible from it but not from a
+  sentinel thread that never starts, kept in a run-time-initialized holder) under a native leaf.
+  Any other (shared, automatic, or confined under an import that can call back) is copied through
+  its segment, a scope-checked read that refuses a closed or foreign-thread arena, straight onto
+  the scratch stack. Native Image cells lend native memory in place, as for a single buffer.
+- A batch is a `Batch`, not a `Borrow`, so single borrows keep their layout. A compiled batch call
+  allocates only what lending its elements needs: nothing for native memory, scratch copies and
+  scoped copies, a `PinnedObject` per pinned element, an arena per element copied past the scratch
+  block, and one array of those owners per call that has any. `tests/truffle/CellsMain.java` and
+  `FfmCellsMain.java` measure three small heap arrays, native and scoped segments, and a string
+  batch beside a nullable batch at zero bytes per compiled call in both backends.
 
 ## Ownership
 

@@ -377,6 +377,8 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The borrows that are batches, whose locals are a Batch rather than a Borrow.
+    var batchLocals = new HashSet<String>();
     // The call borrows whose release writes a copy back, which can fail after the call returned.
     var writableBorrows = new HashSet<String>();
     // The NUL check of each C string's borrow, by borrow local.
@@ -420,7 +422,7 @@ public final class TruffleCells implements Backend {
           // borrow's address is the pointer array, the lengths follow it, and its length is the
           // count.
           imports.add(RUNTIME + "BatchCoercion");
-          imports.add(RUNTIME + "Borrow");
+          imports.add(RUNTIME + "Batch");
           fields.append("        @Node.Child private BatchCoercion ").append(field).append(";\n");
           Scalar element = cell.borrows().lengthElement(batch);
           boolean wide = element.bytes == 8;
@@ -438,8 +440,11 @@ public final class TruffleCells implements Backend {
               .append(wide ? "Long.MAX_VALUE" : CallBorrows.max32(element))
               .append(", ")
               .append(ffm)
+              .append(", ")
+              .append(Seam.nativeLeaf(f))
               .append(");\n");
           String local = "borrow_" + p.name();
+          batchLocals.add(local);
           borrows.add(local + " = " + field + ".execute(" + argument + ")");
           arguments.add(address(ffm, imports, local + ".address()"));
           continue;
@@ -674,8 +679,7 @@ public final class TruffleCells implements Backend {
         if (borrow == null) continue;
         if (borrow.batch()) {
           String local = "borrow_" + borrow.parameter();
-          arguments.set(
-              n, address(ffm, imports, local + ".address() + 8L * " + local + ".length()"));
+          arguments.set(n, address(ffm, imports, local + ".lengths()"));
           continue;
         }
         String length = "borrow_" + borrow.parameter() + ".length()";
@@ -1086,7 +1090,12 @@ public final class TruffleCells implements Backend {
                   "NativeResource resource = owner$ = new NativeResource(");
     }
     for (String borrow : borrows) {
-      callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
+      String declared = borrow.substring(0, borrow.indexOf(' '));
+      callBlock
+          .append(indent)
+          .append(batchLocals.contains(declared) ? "Batch " : "Borrow ")
+          .append(borrow)
+          .append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
       String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));

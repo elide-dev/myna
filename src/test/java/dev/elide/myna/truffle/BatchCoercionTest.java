@@ -25,7 +25,7 @@ class BatchCoercionTest {
     return at;
   }
 
-  private static byte[] element(Borrow batch, int index, boolean wide) {
+  private static byte[] element(Batch batch, int index, boolean wide) {
     long count = batch.length();
     MemorySegment arrays = MemorySegment.ofAddress(batch.address()).reinterpret(16 * count);
     long address = arrays.getAtIndex(ValueLayout.JAVA_LONG, index);
@@ -42,9 +42,9 @@ class BatchCoercionTest {
 
   @Test
   void theEmptyBatchIsNullArraysWithCountZero() {
-    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false);
+    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false, false);
     for (Object empty : new Object[] {null, NativeVoid.INSTANCE, BufferArray.of()}) {
-      Borrow batch = coercion.execute(empty);
+      Batch batch = coercion.execute(empty);
       assertEquals(0, batch.address());
       assertEquals(0, batch.length());
       batch.release();
@@ -65,8 +65,8 @@ class BatchCoercionTest {
       for (boolean wide : new boolean[] {true, false}) {
         var coercion =
             new BatchCoercion(
-                "f", "sources", true, wide, wide ? Long.MAX_VALUE : 4294967295L, false);
-        Borrow batch =
+                "f", "sources", true, wide, wide ? Long.MAX_VALUE : 4294967295L, false, false);
+        Batch batch =
             coercion.execute(
                 BufferArray.of(
                     new HeapBytes(a, false),
@@ -93,10 +93,10 @@ class BatchCoercionTest {
   @Test
   void largeBatchesAndElementsTakeArenas() {
     long top = top();
-    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false);
+    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false, false);
     Object[] many = new Object[1100];
     for (int i = 0; i < many.length; i++) many[i] = new HeapBytes(new byte[] {(byte) i}, false);
-    Borrow batch = coercion.execute(BufferArray.of(many));
+    Batch batch = coercion.execute(BufferArray.of(many));
     assertEquals(1100, batch.length());
     assertArrayEquals(new byte[] {(byte) 1099}, element(batch, 1099, true));
     batch.release();
@@ -121,7 +121,7 @@ class BatchCoercionTest {
   @Test
   void aFailedElementReleasesThoseBeforeIt() {
     long top = top();
-    var coercion = new BatchCoercion("f", "sources", false, false, 2, false);
+    var coercion = new BatchCoercion("f", "sources", false, false, 2, false, false);
     byte[] large = new byte[20_000];
     for (Object[] elements :
         new Object[][] {
@@ -137,18 +137,92 @@ class BatchCoercionTest {
     assertTrue(tooLong.getMessage().contains("element 0 has 3 bytes"), tooLong.getMessage());
     NativeCellException shrank =
         assertThrows(NativeCellException.class, () -> coercion.execute(new Shrinking()));
-    assertTrue(
-        shrank.getMessage().contains("the array changed while it was lent"), shrank.getMessage());
+    assertTrue(shrank.getMessage().contains("element 1 cannot be read"), shrank.getMessage());
     assertEquals(top, top());
-    NativeCellException tooMany =
-        assertThrows(NativeCellException.class, () -> coercion.execute(new Huge()));
-    assertTrue(tooMany.getMessage().contains("at most"), tooMany.getMessage());
+    // An untrusted size outside 0 to MAX_COUNT is refused before anything is lent.
+    for (long size : new long[] {Integer.MAX_VALUE, -1, Long.MIN_VALUE}) {
+      NativeCellException bad =
+          assertThrows(NativeCellException.class, () -> coercion.execute(new Sized(size)));
+      assertTrue(bad.getMessage().contains("got an array of size " + size), bad.getMessage());
+      assertEquals(top, top());
+    }
+    // In the arena fallback too, a failed element releases the arena and every element before it.
+    var wide = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false, false);
+    Object[] many = new Object[1100];
+    java.util.Arrays.fill(many, "x");
+    many[1099] = 42;
+    assertThrows(NativeCellException.class, () -> wide.execute(BufferArray.of(many)));
+    long previous = -1;
+    top = top();
+    for (int round = 0; round < 8 && top != previous; round++) {
+      assertThrows(NativeCellException.class, () -> wide.execute(BufferArray.of(many)));
+      previous = top;
+      top = top();
+    }
+    assertEquals(previous, top);
+  }
+
+  /**
+   * A host {@code ProxyArray} whose size is negative, through a polyglot context: the cell refuses
+   * it as a guest error instead of passing a negative count to native code.
+   */
+  @Test
+  void aNegativeHostArraySizeIsAGuestError() {
+    var cell = new CountCell();
+    try (org.graalvm.polyglot.Context context =
+        org.graalvm.polyglot.Context.newBuilder()
+            .option("engine.WarnInterpreterOnly", "false")
+            .build()) {
+      var function = context.asValue(cell.function());
+      var negative =
+          new org.graalvm.polyglot.proxy.ProxyArray() {
+            public Object get(long index) {
+              throw new ArrayIndexOutOfBoundsException();
+            }
+
+            public void set(long index, org.graalvm.polyglot.Value value) {
+              throw new UnsupportedOperationException();
+            }
+
+            public long getSize() {
+              return -1;
+            }
+          };
+      var failure =
+          assertThrows(
+              org.graalvm.polyglot.PolyglotException.class, () -> function.execute(negative));
+      assertTrue(failure.getMessage().contains("got an array of size -1"), failure.getMessage());
+      assertEquals(
+          2L, function.execute(org.graalvm.polyglot.proxy.ProxyArray.fromArray("a", "b")).asLong());
+    }
+  }
+
+  /** A cell that lends a batch and returns its count. */
+  static final class CountCell extends NativeCell {
+    @com.oracle.truffle.api.nodes.Node.Child
+    private BatchCoercion batch =
+        new BatchCoercion("count", "sources", false, true, Long.MAX_VALUE, false, false);
+
+    CountCell() {
+      super("count", 1);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      Batch lent = batch.execute(arguments[0]);
+      try {
+        return lent.length();
+      } finally {
+        lent.release();
+      }
+    }
   }
 
   @Test
   void aBatchReleasedOutOfOrderFailsAndLeavesTheStack() {
-    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false);
-    Borrow batch = coercion.execute(BufferArray.of("abc"));
+    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false, false);
+    Batch batch = coercion.execute(BufferArray.of("abc"));
     Borrow later = Borrow.ofString("later", true);
     assertThrows(IllegalStateException.class, batch::release);
     later.release();
@@ -156,15 +230,50 @@ class BatchCoercionTest {
   }
 
   @Test
+  void ffmLeafCellsLendConfinedElementsInPlace() {
+    long top = top();
+    var leaf = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, true);
+    try (Arena confined = Arena.ofConfined();
+        Arena shared = Arena.ofShared()) {
+      MemorySegment mine = confined.allocate(3);
+      MemorySegment everyone = shared.allocate(2);
+      everyone.fill((byte) 6);
+      Batch batch =
+          leaf.execute(
+              BufferArray.of(NativeBytes.of(mine, false), NativeBytes.of(everyone, false)));
+      MemorySegment arrays = MemorySegment.ofAddress(batch.address()).reinterpret(32);
+      assertEquals(mine.address(), arrays.getAtIndex(ValueLayout.JAVA_LONG, 0));
+      assertNotEquals(everyone.address(), arrays.getAtIndex(ValueLayout.JAVA_LONG, 1));
+      assertArrayEquals(new byte[] {6, 6}, element(batch, 1, true));
+      batch.release();
+    }
+    Arena closing = Arena.ofConfined();
+    MemorySegment closed = closing.allocate(3);
+    closing.close();
+    assertThrows(
+        NativeCellException.class,
+        () -> leaf.execute(BufferArray.of(NativeBytes.of(closed, false))));
+    // A segment too large for the scratch stack is copied into an arena of its own.
+    try (Arena shared = Arena.ofShared()) {
+      MemorySegment big = shared.allocate(20_000);
+      big.set(ValueLayout.JAVA_BYTE, 19_999, (byte) 9);
+      Batch batch = leaf.execute(BufferArray.of(NativeBytes.of(big, false)));
+      assertEquals(9, element(batch, 0, true)[19_999]);
+      batch.release();
+    }
+    assertEquals(top, top());
+  }
+
+  @Test
   void ffmCellsCopyScopedElements() {
     long top = top();
-    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true);
+    var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, false);
     MemorySegment global = Arena.global().allocate(2);
     global.fill((byte) 4);
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment confined = arena.allocate(3);
       confined.fill((byte) 5);
-      Borrow batch =
+      Batch batch =
           coercion.execute(
               BufferArray.of(NativeBytes.of(global, false), NativeBytes.of(confined, false)));
       MemorySegment arrays = MemorySegment.ofAddress(batch.address()).reinterpret(32);
@@ -221,9 +330,15 @@ class BatchCoercionTest {
     }
   }
 
-  /** An array larger than any batch. */
+  /** An array whose size is whatever it is told, larger than any batch or negative. */
   @ExportLibrary(InteropLibrary.class)
-  static final class Huge implements TruffleObject {
+  static final class Sized implements TruffleObject {
+    final long size;
+
+    Sized(long size) {
+      this.size = size;
+    }
+
     @ExportMessage
     boolean hasArrayElements() {
       return true;
@@ -231,7 +346,7 @@ class BatchCoercionTest {
 
     @ExportMessage
     long getArraySize() {
-      return Integer.MAX_VALUE;
+      return size;
     }
 
     @ExportMessage

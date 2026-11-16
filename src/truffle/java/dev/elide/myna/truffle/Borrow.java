@@ -4,7 +4,6 @@ package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
@@ -77,7 +76,6 @@ public final class Borrow {
   private static final int PINNED = 1;
   private static final int SCRATCH = 2;
   private static final int COPIED = 3;
-  private static final int BATCH = 4;
 
   /** Guest text of one byte per UTF-16 code unit: Latin-1, of which ASCII is copied as it is. */
   static final int LATIN_1 = 1;
@@ -115,17 +113,6 @@ public final class Borrow {
   private boolean terminated;
 
   private boolean released;
-
-  // A batch ({@link BatchCoercion}): its pointer and length arrays, in one region of the scratch
-  // stack or, too large for it, of an arena of its own; where the stack stood before the batch and
-  // where it ends after the elements' scratch copies; and the pins and arena copies of elements,
-  // made only when an element needs one. The arrays and every scratch copy pop in one step.
-  private MemorySegment batchBlock;
-  private long batchBase;
-  private long batchOffset;
-  private long batchTop;
-  private Copy batchArrays;
-  private Object[] batchOwners;
 
   /** The null borrow until a lend method fills it. */
   Borrow() {}
@@ -345,80 +332,15 @@ public final class Borrow {
   }
 
   /**
-   * Starts a batch of {@code count} elements: reserves its pointer and length arrays, {@code 16 *
-   * count} bytes, on the current thread's scratch stack, or in an arena of their own when they do
-   * not fit there, as a large copy does. {@link #address()} is then the pointer array and {@link
-   * #length()} the count; the lengths follow the pointers.
+   * Hands what this borrow must undo to the {@link Batch} that takes it over: the pin or the arena
+   * {@link Copy} of a pinned or arena-copied element, or {@code null} when there is nothing to undo
+   * apart from the scratch stack, which pops with the batch. The borrow is released as far as
+   * {@link #release()} is concerned. A batch lends read-only elements, which have no copy-back.
    */
-  void lendBatch(int count) {
-    long size = 16L * count;
-    Scratch scratch = Scratch.region(size);
-    if (scratch != null) {
-      long start = scratch.top - Scratch.reservation(size);
-      own(BATCH, scratch, scratch.base + start, count);
-      batchBlock = scratch.block;
-      batchBase = scratch.base;
-      batchOffset = start;
-      this.offset = (int) start;
-    } else {
-      scratch = Scratch.current();
-      Copy arrays = Copy.region(size);
-      own(BATCH, scratch, arrays.address, count);
-      batchArrays = arrays;
-      batchBlock = arrays.segment;
-      batchBase = arrays.address;
-      batchOffset = 0;
-      this.offset = (int) scratch.top;
-    }
-    batchTop = scratch.top;
-  }
-
-  /**
-   * Takes over element {@code index} of a batch, which {@code element} has just lent: its address
-   * and length go into the arrays, and whatever must be undone after the call becomes this batch's
-   * to undo. A scratch copy pops with the batch; a pin or an arena copy is kept until release.
-   */
-  void absorb(int index, Borrow element, boolean wide) {
-    long count = length;
-    Memory.putLong(batchBase, batchBlock, batchOffset + 8L * index, element.address);
-    if (wide)
-      Memory.putLong(batchBase, batchBlock, batchOffset + 8L * count + 8L * index, element.length);
-    else
-      Memory.putInt(
-          batchBase, batchBlock, batchOffset + 8L * count + 4L * index, (int) element.length);
-    int kind = element.kind;
-    if (kind == PINNED || kind == COPIED) {
-      Object[] owners = batchOwners;
-      if (owners == null) batchOwners = owners = new Object[(int) count];
-      owners[index] = element.owner;
-    }
-    element.released = true;
-    batchTop = ((Scratch) owner).top;
-  }
-
-  /**
-   * Ends a batch: unpins and frees its elements in reverse, then pops its scratch region. Out of
-   * line in code compiled ahead of time, where {@link #release()} must stay small enough to inline
-   * into every cell, or a single buffer's borrow would be allocated; partial evaluation still
-   * inlines it.
-   */
-  @HostCompilerDirectives.InliningCutoff
-  private void releaseBatch() {
-    Scratch scratch = (Scratch) owner;
-    scratch.check(offset, batchTop);
+  Object handOver() {
+    assert array == null : "a batch element has no copy-back";
     released = true;
-    try {
-      Object[] owners = batchOwners;
-      if (owners != null)
-        for (int i = owners.length - 1; i >= 0; i--) {
-          Object element = owners[i];
-          if (element instanceof Copy copy) Copy.release(copy, null, null);
-          else if (element != null) Pins.unpin(element);
-        }
-    } finally {
-      scratch.top = offset;
-      if (batchArrays != null) Copy.release(batchArrays, null, null);
-    }
+    return kind == PINNED || kind == COPIED ? owner : null;
   }
 
   public long address() {
@@ -464,10 +386,6 @@ public final class Borrow {
   public void release() {
     if (released) return;
     int kind = this.kind;
-    if (kind == BATCH) {
-      releaseBatch();
-      return;
-    }
     if (kind == SCRATCH) {
       Scratch scratch = (Scratch) owner;
       scratch.check(offset, offset + Scratch.reservation(length + (terminated ? 1 : 0)));
@@ -546,7 +464,7 @@ public final class Borrow {
    * A copy too large for the scratch stack, or one that did not fit: an arena of its own. A held
    * borrow's copy is one too, made by {@link #held}.
    */
-  private static final class Copy {
+  static final class Copy {
     /** The arena, or {@code null} for a held copy {@code malloc}ed in a Native Image. */
     final Arena arena;
 
@@ -579,6 +497,24 @@ public final class Borrow {
     static Copy region(long size) {
       Arena arena = Arena.ofConfined();
       return new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+    }
+
+    /**
+     * A copy of guest native memory too large for the scratch stack, read through its segment: a
+     * scope-checked access. Returns {@code null}, allocating nothing, when the segment is closed or
+     * confined to another thread.
+     */
+    @TruffleBoundary
+    static Copy ofSegment(MemorySegment segment) {
+      Arena arena = Arena.ofConfined();
+      MemorySegment copy = arena.allocate(segment.byteSize(), Scratch.ALIGNMENT);
+      try {
+        MemorySegment.copy(segment, 0, copy, 0, segment.byteSize());
+      } catch (IllegalStateException | WrongThreadException e) {
+        arena.close();
+        return null;
+      }
+      return new Copy(arena, copy);
     }
 
     @TruffleBoundary
@@ -647,7 +583,7 @@ public final class Borrow {
   }
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
-  private static final class Pins {
+  static final class Pins {
     static void pin(Borrow borrow, byte[] array) {
       PinnedObject pin = PinnedObject.create(array);
       borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
@@ -699,7 +635,7 @@ public final class Borrow {
     static final long ALIGNMENT = 16;
 
     private final Thread thread = Thread.currentThread();
-    private MemorySegment block;
+    MemorySegment block;
     private long wanted = INITIAL;
 
     /** The address of {@link #block}, read by compiled code after a push. */
@@ -752,15 +688,34 @@ public final class Borrow {
     }
 
     /**
-     * Reserves {@code size} bytes on the current thread's stack and returns that stack, whose
-     * {@link #top} is then the end of the region, or returns {@code null} when the region is larger
-     * than {@link #LARGEST} or does not fit. The region's bytes are left as they were.
+     * Reserves {@code size} bytes on the current thread's stack for a batch's arrays and returns
+     * that stack, whose {@link #top} is then the end of the region, or returns {@code null} when
+     * the region is larger than {@link #LARGEST} or does not fit. The region's bytes are left as
+     * they were.
      */
     @TruffleBoundary
     static Scratch region(long size) {
       if (size > LARGEST) return null;
       Scratch scratch = Scratches.CURRENT.get();
       if (scratch.reserve(size) == null) return null;
+      scratch.top += reservation(size);
+      return scratch;
+    }
+
+    /**
+     * Copies guest native memory onto the current thread's stack through its segment, a
+     * scope-checked access, and returns that stack, whose {@link #top} is then the end of the copy.
+     * Returns {@code null}, pushing nothing, when the copy is too large or does not fit, and
+     * throws, pushing nothing, when the segment is closed or confined to another thread.
+     */
+    @TruffleBoundary
+    static Scratch pushSegment(MemorySegment segment) {
+      long size = segment.byteSize();
+      if (size > LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      MemorySegment block = scratch.reserve(size);
+      if (block == null) return null;
+      MemorySegment.copy(segment, 0, block, scratch.top, size);
       scratch.top += reservation(size);
       return scratch;
     }
