@@ -67,7 +67,7 @@ buffer, a Native Image constructor whose buffers may all be absent must name the
 `null` means: `Parsed.parse(factory, (byte[]) null)`. A wrapper adds nothing to the create but the call borrow's own work: no allocation beyond
 it and no change to leaf status or transitions. A call borrow on any other function that returns a
 pointer stays rejected. A create that keeps its buffer past the call declares a
-[held borrow](#borrows-held-by-a-resource-truffle-cells-only) instead.
+[held borrow](#borrows-held-by-a-resource) instead.
 
 `threading=confined` requires access and destruction on the creating/adopting thread. `threading=shared` explicitly permits access and destruction from other threads, with the native implementation providing any necessary synchronization. It does not request reference counting or shared ownership. These are strong contracts, not properties inferred from the function signatures.
 
@@ -82,6 +82,44 @@ pointer stays rejected. A create that keeps its buffer past the call declares a
 - `unsafe from_raw(...)` accepts that obligation back. It requires the correct allocator/resource type, sole ownership, valid thread context, and no outstanding borrows.
 
 Confined owners are neither `Send` nor `Sync`; shared owners explicitly implement both under the descriptor's contract. Borrowed views do not create Rust references into opaque native objects or imply `noalias`. Their raw-pointer escape hatch remains subject to unsafe FFI obligations. They are not lifetime-checked after conversion to a raw pointer.
+
+### Implementing imports in Rust
+
+`ownership` above is for a Rust *caller*. Where Rust *implements* the imports, `rust_implementation=trait` on the module line generates, in `seam.rs`, a safe trait named after the module (`ownership_demo` gives `OwnershipDemoImplementation`) and a macro that defines every import's `extern "C"` entry point from a type implementing it:
+
+```rust
+mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }
+struct Demo;
+impl seam::OwnershipDemoImplementation for Demo {
+    type Parsed = Parsed; // the implementation's own type behind each `Parsed` handle
+    type Ticket = Ticket;
+    fn parse(source: Option<&[u8]>) -> Option<Box<Parsed>> { /* ... */ }
+    fn release(parsed: Option<Box<Parsed>>) { drop(parsed) }
+    fn parsedValue(parsed: &Parsed) -> u64 { parsed.value }
+    fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64 { /* ... */ }
+    // ... one method per import
+}
+seam::define_implementations!(Demo, seam);
+```
+
+The trait has one method per import, so one `impl` covers the module:
+
+- A [call-scoped buffer](#call-scoped-buffers-including-off-heap-storage) is a slice, and its length parameter drops out: `&[u8]` for read access, `&mut [u8]` for write or read/write, wrapped in `Option` when it is nullable. A `write` buffer is a `&mut [u8]` too, which Rust requires to hold initialized bytes: every generated wrapper lends initialized bytes, and a raw caller must do the same (a C caller lending an uninitialized `uint8_t out[64]` breaks the contract). There is no `&str` form: no borrow declares validated UTF-8 text yet.
+- Each resource whose constructor returns its pointer is an associated type, bound `Send + Sync` for a `threading=shared` resource, which any thread may use and destroy; a confined resource's type has no bound. Its constructors return `Option<Box<Self::R>>` (`None` is a null result), its destroy takes `Box<Self::R>` (`Option<Box<Self::R>>` when the destroy is `nullable=true`), and any other borrowed `ptr<R>` parameter is `&Self::R` (`Option<&Self::R>` when nullable). Shared access stays shared: a `read_write` borrow of a resource is still `&Self::R`, so mutation goes through interior mutability, which the `Sync` bound makes thread-safe for a shared resource.
+- Every other parameter and result, of every other import, is exactly as the raw binding declares it, raw pointers included.
+
+`define_implementations!(Type)` expects the module's items in scope; `define_implementations!(Type, path)` takes the path of the module that includes `seam.rs`. Each entry point converts its arguments once and calls the implementation statically. It allocates nothing; `Box::into_raw` and `Box::from_raw` move the implementation's own allocation across the ABI. The slice conversions are `#[inline(always)]`. Rust ignores `#[inline]` on an exported function, so the entry point itself carries none. The entry points are `extern "C"`: as with any such function, a panic in the implementation aborts instead of unwinding across the ABI, so a `nounwind` import keeps its contract.
+
+The caller's contract is checked where it can be. With debug assertions on, the entry points assert (and so abort) on each violation:
+
+- a null pointer for a buffer declared `nullable=false`, whatever its length;
+- an absent buffer with a nonzero length;
+- a 64-bit length that is negative or past `isize::MAX` (a raw Java caller's `-1`, for one);
+- a null pointer passed to a non-nullable destroy.
+
+A release build never builds a slice, a reference or a `Box` from such arguments. It reads an empty slice for a bad buffer or length, and returns from a destroy given null. A null pointer for a non-nullable resource argument of any other import aborts in every build, because no result would be safe to make up: the `::core::panic!` cannot leave the `extern "C"` function.
+
+`Box` is named unqualified in the trait and the macro: in a `no_std` crate with `alloc`, bring `alloc::boxed::Box` into scope where `seam.rs` is included and where the macro is invoked. Held borrows and resources with a `handle=` keep their raw form. A follow-up will map [batch borrows](https://github.com/elide-dev/myna/issues/132) once they exist. The generated items are named after the module and `myna_implementation`, and the generated code names `Box`, so no declaration may take any of these names. The option is serialized as `"rustImplementation": "trait"` and fingerprinted; modules without it generate exactly what they did. The [implementation fixture](../tests/ownership/implementation.rs) implements the ownership fixture's imports this way and runs under a [C caller](../tests/ownership/implemented.c).
 
 ### Native Image: consumer-implemented lifecycle
 
@@ -115,9 +153,9 @@ import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true
 end
 ```
 
-`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid. A create that keeps its input until the resource it makes is released declares a [borrow held by that resource](#borrows-held-by-a-resource-truffle-cells-only) instead.
+`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid. A create that keeps its input until the resource it makes is released declares a [borrow held by that resource](#borrows-held-by-a-resource) instead.
 
-Each buffer is a borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length; the function returns a scalar or void. A buffer declared `nullable=false` is always present; any other buffer is a [nullable buffer](#nullable-buffers) that may be absent. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. An `align=N@explicit_contract` fact on a buffer, call or held, is a caller contract: `seam.ll` emits the attribute as it does for any parameter, so the caller must pass an address divisible by `N`, at most 4096. LLVM's `align` does not depend on the extent, so every wrapper lends a present empty buffer a dummy aligned to `N` (an aligned arena allocation in FFM, an `_Alignas` local in the JNI shim, a rounded stack value in Native Image, an aligned static in Rust), and the assertion checks only what the caller lends. Debug builds check it at no release cost: the FFM, Native Image and JNI `ByteBuffer` wrappers use a Java `assert` (off on HotSpot without `-ea`, folded away in a Native Image built without assertions), and the Rust wrappers use `debug_assert!`, each a single AND of the address. Truffle cells do not trust the guest: native memory at a misaligned address is copied to an aligned copy (and written back when writable) instead of lent in place, heap copies start on 16 bytes or on `N` if larger, and a held borrow's copy likewise. The Native Image `byte[]` overloads pin an array, whose data is only 8-aligned, so with `N` above 8 they copy into aligned unmanaged memory (written back, then freed) instead. Additional `dereferenceable` or `noalias` requirements on a buffer are rejected.
+Each buffer is a borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length (`usize`, which is `size_t`, counts as 64-bit unsigned); the function returns a scalar or void. A buffer declared `nullable=false` is always present; any other buffer is a [nullable buffer](#nullable-buffers) that may be absent. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. An `align=N@explicit_contract` fact on a buffer, call or held, is a caller contract: `seam.ll` emits the attribute as it does for any parameter, so the caller must pass an address divisible by `N`, at most 4096. LLVM's `align` does not depend on the extent, so every wrapper lends a present empty buffer a dummy aligned to `N` (an aligned arena allocation in FFM, an `_Alignas` local in the JNI shim, a rounded stack value in Native Image, an aligned static in Rust), and the assertion checks only what the caller lends. Debug builds check it at no release cost: the FFM, Native Image and JNI `ByteBuffer` wrappers use a Java `assert` (off on HotSpot without `-ea`, folded away in a Native Image built without assertions), and the Rust wrappers use `debug_assert!`, each a single AND of the address. Truffle cells do not trust the guest: native memory at a misaligned address is copied to an aligned copy (and written back when writable) instead of lent in place, heap copies start on 16 bytes or on `N` if larger, and a held borrow's copy likewise. The Native Image `byte[]` overloads pin an array, whose data is only 8-aligned, so with `N` above 8 they copy into aligned unmanaged memory (written back, then freed) instead. Additional `dereferenceable` or `noalias` requirements on a buffer are rejected.
 
 A `write` buffer is a writable buffer, handled exactly like a `read_write` one by every wrapper: a mutable slice in Rust, a writable acquisition or segment in Java, a copy that is filled from the caller's bytes and written back in a Truffle cell. No wrapper relies on the callee not reading it, so the callee always sees the caller's initialized bytes, and the declaration needs no `writeonly` fact (an approved one remains an LLVM contract of its own).
 
@@ -139,6 +177,39 @@ end
 - Any other parameter is a scalar or a pointer. A pointer that is not a declared buffer **passes through every wrapper unchanged**, in the carrier the raw binding already uses for its type. The borrow declarations say nothing about it: it keeps its own declared nullability, access and ownership, and meeting them stays the caller's responsibility, exactly as on the raw binding. Callback, by-value record and isolate-thread parameters are rejected beside a borrow.
 - A pointer result beside a borrow stays rejected, except for a resource's [constructor](#constructors-with-call-scoped-buffers), which returns a fresh resource: nothing yet ties any other returned pointer to the buffer it may point into.
 - No wrapper checks that two buffers of one call are disjoint. Rust's borrow rules exclude a `&mut` slice that overlaps another; everywhere else, passing overlapping memory as a read buffer and a writable buffer breaks the read contract above and is the caller's error.
+
+### C strings
+
+```text
+import titleLength symbol=title_length return=u64 error=no_failure nounwind=true@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
+```
+
+`access=cstring` declares a read-only NUL-terminated string with no length: a borrowed `ptr<u8>`
+of an import, read during the call up to its terminator and not retained. It needs approved
+`nocapture` and `readonly`, the facts `seam.ll` then carries as for any read-only borrow, and it can
+be no borrow's buffer or length. The raw bindings keep their pointer carriers (`uint8_t const *` in
+`seam.h`, `*const u8` in Rust). The wrappers:
+
+- **Rust**: `&::core::ffi::CStr` (`Option<&CStr>` when nullable), in the `ownership` wrapper of the
+  import, and in the [implementer trait](#implementing-imports-in-rust), where a null one aborts.
+- **FFM**: a `String` overload on `LibraryBinding`, which writes NUL-terminated UTF-8 into the
+  call's confined arena (null is the null pointer when the parameter is nullable, and a
+  `NullPointerException` otherwise).
+- **Truffle cells**: strings only: a Java `String`, a `TruffleString`, or any interop string
+  (converted with `asTruffleString`), lent NUL-terminated and read-only. Bytes, pointers and anything
+  else are a guest error naming the function and parameter.
+- **Native Image**: a `String` overload in the ownership class, converted with
+  `CTypeConversion.toCString` for the call and freed after it. That conversion uses the image's
+  default charset, UTF-8 unless the image was built with another `file.encoding`; FFM and Truffle
+  always encode UTF-8.
+
+A Java or guest string with an embedded NUL would end early on the C side, so every Java and
+Truffle wrapper refuses one before copying it: FFM and Native Image throw
+`IllegalArgumentException` naming the function and parameter, and a Truffle cell throws its guest
+error after scanning the bytes it lent, with no Java string made (a nullable argument that is null is not checked). A Rust `&CStr` cannot contain one. An
+`access=cstring` parameter takes no `align`, `dereferenceable` or `truffle_buffer` fact, and its import passes only scalars and pointers beside it. In the implementer trait, `Err` with a success status from an out-pointer constructor aborts in every build: the caller would own whatever its slot held.
 
 ### Nullable buffers
 
@@ -200,7 +271,113 @@ Negative lengths, lengths outside the ABI integer range, and null addresses with
 
 An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. A `null` array for a nullable buffer is not pinned and passes the null pointer. There is no overload that mixes arrays with `NativeBuffer`s.
 
-## Creates that report a status (Truffle cells only)
+### Batches of buffers
+
+An import that takes a batch of buffers passes them as two parallel arrays and a count:
+
+```text
+borrow digest sources lengths=lengths count=count lifetime=call
+import digest symbol=buffer_batch_digest return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+```
+
+The contract is the single-buffer one applied per element: the callee reads only
+`sources[i][0 .. lengths[i]]` for `i < count`, reads the two arrays only up to `count`, and keeps
+none of it past the call.
+
+- `sources` is a borrowed `ptr<ptr<u8>>` and `lengths` a borrowed pointer to `u32`, `u64`, `i32` or
+  `i64`, each `access=read`, `nullable=true` and with approved `nocapture` and `readonly`; `count` is
+  a 32- or 64-bit integer. Neither array may declare `align`, `dereferenceable`, `noalias` or
+  `nonnull`: `seam.ll` gives them the facts a single read buffer gets, and no extent.
+- **The empty batch is a null `sources` and a null `lengths` with count zero**, which every wrapper
+  passes for an empty array of buffers.
+- Elements are read-only and present: each is non-null, and a present empty element gets a non-null
+  address with length zero. With `elements_nullable=true` an element may be absent instead, and then
+  is the null pointer with length zero.
+- An import may declare several batches beside single buffers. The three parameters of a batch
+  belong to it alone. A batch ends with the call: `lifetime=resource:` is rejected.
+
+| Wrapper | Batch | Absent element |
+| --- | --- | --- |
+| Rust | `&[&[u8]]`, or `&[Option<&[u8]>]` | `None` |
+| Native Image, off-heap | `NativeBuffer[]` | `null` |
+| Native Image, arrays | `byte[][]` | `null` |
+| FFM | `MemorySegment[]` | `null`, or a native segment of length zero at address zero |
+
+- **Rust** builds both arrays on the stack for up to eight buffers and allocates nothing, so
+  `seam.rs` builds in a `no_std` crate without an allocator. Above eight, the plain wrapper panics
+  with a message naming the `_with_scratch` form, which takes a `BatchScratch` after each batch:
+  caller-provided `MaybeUninit` slices for the pointers and the lengths, at least as long as the
+  batch (it panics otherwise).
+
+  ```rust
+  let mut pointers = vec![MaybeUninit::uninit(); parts.len()];
+  let mut lengths = vec![MaybeUninit::uninit(); parts.len()];
+  digest_with_scratch(&parts, seam::BatchScratch::new(&mut pointers, &mut lengths));
+  ```
+
+  A resource constructor whose import takes a batch has the same two forms:
+  `Bundle::create(&parts)` keeps up to eight elements on the stack and panics above that, and
+  `Bundle::create_with_scratch(&parts, scratch)` (`NAME_with_scratch` for a constructor named after
+  its import) takes a `BatchScratch` after each batch. A length or count that does not fit its type
+  panics before the foreign call. The lending
+  helpers live in a hidden `ownership::batch` module; the names `BufferBatch`, `BufferBatchIter`,
+  `OptionalBufferBatch`, `OptionalBufferBatchIter`, `BatchLength`, `BatchScratch` and `batch`, an
+  import named `F_with_scratch` beside a batch import `F`, and a parameter named `P_scratch` beside
+  a batch `P` are rejected.
+- **Native Image** takes one snapshot of a `NativeBuffer[]` (one array copy), then acquires each
+  element in order, after the function's single buffers, and releases them in reverse after the
+  call; a store into the caller's array during the call cannot change what is released. A
+  `byte[][]` pins each non-empty element and keeps the pins in its own array. Each element is
+  validated as a single buffer is; a failure releases exactly the elements already held, and the
+  call never reaches native code. Both arrays share one region: 128 bytes of stack for up to eight
+  elements, unmanaged memory (freed after the call) otherwise. A count its type cannot carry is
+  rejected first. A `null` batch array is rejected; pass an empty one.
+- **FFM** snapshots the `MemorySegment[]` and validates each segment as a single buffer is (native,
+  alive, accessible from the calling thread, within the length type). The linker holds the scope
+  of a segment argument for the call, but not of an address the callee finds in memory, so an
+  element is lent in place only when nothing can close it during the call:
+  - the global scope (`scope().equals(Arena.global().scope())`, which holds for
+    `MemorySegment.ofAddress(..).reinterpret(..)`), or
+  - a segment confined to the calling thread, when the import is a native leaf: a leaf cannot call
+    back into Java, which is the only way the owner thread could close it. Confinement is detected
+    with public API: the segment is accessible from the calling thread but not from a thread that
+    never starts (`isAccessibleBy`).
+
+  Every other element (a shared or automatic arena, or a confined one under a non-leaf import) is
+  copied into the call's confined arena, as a single buffer's temporary storage is, and the copy
+  is lent. The arrays live in the same arena.
+- **Static JNI** generates no buffer adapter for an import with a batch; its raw binding remains.
+- **Truffle cells** take a guest array of byte buffers or strings (or null for the empty batch)
+  and lend each element as a single buffer, from the scratch stack; see
+  [Truffle cells](truffle-cells.md#batches-of-buffers).
+
+An implementation in Rust can read a batch through the safe views `seam.rs` defines when a module
+declares one:
+
+```rust
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn buffer_batch_digest(sources: *const *mut u8, lengths: *const u64, count: u64) -> u64 {
+    let batch = unsafe { seam::BufferBatch::from_raw(sources, lengths, count) };
+    batch.iter().map(|bytes| bytes.len() as u64).sum()
+}
+```
+
+`BufferBatch<'a, L>` yields `&'a [u8]` and `OptionalBufferBatch<'a, L>` yields `Option<&'a [u8]>`,
+where `L` is the length type (`u64` by default). `BatchLength` is sealed: only `u32`, `u64`, `i32`
+and `i64` implement it, so a view that crosses threads never runs a length conversion of the
+caller's own. Each is a `Copy`, `Send` and `Sync` view with
+`len()`, `is_empty()`, `get(i)` (counted from the start) and `iter()`, and is `IntoIterator`; the
+iterators are `ExactSizeIterator` and `FusedIterator`. `from_raw` requires that, unless the count
+is zero, both arrays are non-null, valid for `count` reads, and stay valid and unmodified for
+`'a`; that every length is non-negative and at most `isize::MAX`; and that each element is valid
+for reads of its length (null only with length zero, which `OptionalBufferBatch` yields as `None`)
+and unmutated for `'a`.
+
+## Creates that report a status
 
 Many C creates do not return the resource. They return a status and write the resource through a
 parameter: into a field of a struct the caller allocates, or by initializing the caller's struct
@@ -234,13 +411,60 @@ The parameter must be a non-null pointer with `write` or `read_write` access. Th
 create's: on a listed status it has written a live resource and transferred sole ownership of it;
 on any other it has left nothing to release.
 
-Only Truffle cells generate an owner for these forms, so the module must set `truffle_cells=true`
+Only Truffle cells generate an owner for the two struct forms, so the module must set `truffle_cells=true`
 and the create must have a cell. A cell does not let the create write into guest memory: it
 passes a struct the runtime owns and copies the result to the buffer the guest supplied. The Native Image, FFM and Rust ownership APIs do not wrap them;
 their raw bindings, and any call-buffer wrappers the create declares, are generated as for any
 other import. See [Truffle native cells](truffle-cells.md#ownership) for what the cell does.
 
-## Borrows held by a resource (Truffle cells only)
+### Status plus out-pointer
+
+The usual C shape for "status plus handle" writes the handle through a `ptr<ptr<R>>` parameter,
+and every ownership API wraps it:
+
+```text
+opaque Surface
+resource Surface representation=native threading=confined create=surfaceOpen,surfaceFrom destroy=surfaceClose handle=out success=0
+borrow surfaceOpen error length=capacity lifetime=call
+import surfaceOpen symbol=surface_open return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i32
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+```
+
+`handle=PARAMETER` names a `ptr<ptr<R>>` parameter with `access=write`, for an opaque or struct
+resource `R`. The create returns an integer status, `success=` is required, and every constructor of
+the resource takes this shape with one status type. The parameter may be declared nullable: every
+wrapper passes a slot of its own. On a listed status the slot holds a live resource, adopted as any
+create's is. On any other status nothing is adopted and the slot's contents are ignored, whatever
+the create left there. A listed status with a null handle created nothing either, and every wrapper
+treats it as a failure with that status. Statuses compare unsigned for unsigned results: a `u8`
+status of 200 matches `success=200` even though Java carries it in a `byte`. The caller decides what that
+status means:
+
+- **FFM**: `ApiFFM.Surface.surfaceOpen(binding, factory, onFailure, width, error)` allocates the slot in
+  a confined arena for the call (the FFM wrappers keep no per-thread scratch to take it from), and on any other status returns `onFailure.failed(status)`, from a
+  generated `Surface.Failure<T>` whose `failed` takes the status in its Java carrier (`int` for an
+  `i32`, the declared carrier for an `enum=` result): null, a value, or a throw. The caller can read
+  the message buffer it lent there.
+- **Native Image**: `ApiOwnership.Surface.surfaceOpen(factory, onFailure, width, error)`, the same
+  with the slot on the stack, and a `NativeBuffer` and a `byte[]` overload when the create has call
+  buffers.
+- **Rust**: `Surface::surfaceOpen(width, error) -> Result<Surface, SurfaceStatus>`: `Err` carries the
+  status, as the `enum=` newtype when the result has one and the raw integer otherwise.
+- **Truffle cells**: as for a handle field, the guest lends an 8-byte buffer for the slot and
+  receives a copy; any other status is a guest error that names it.
+
+With one constructor the wrapper is `create`, as for any resource. In the [implementer
+trait](#implementing-imports-in-rust) such a constructor returns `Result<Box<Self::R>, Status>` and
+drops the out-parameter: on `Ok` the entry point writes the box into the slot and returns the first
+`success=` value (a null slot, which only a nullable parameter allows, drops the box instead); on
+`Err(status)` it returns that status, aborting in every build if it is a success value. The destroy
+takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a [held borrow](#borrows-held-by-a-resource) is wrapped as described there.
+
+## Borrows held by a resource
 
 Some creates keep their input. A decoder that adopts its input region records pointers into it in
 the result it initializes, and reads them until that result is released:
@@ -267,24 +491,53 @@ end
 until that resource is destroyed. The contract is the create's: on a listed status it may read the
 buffer's `length` bytes at any time until its `destroy` returns, and it never writes them, frees
 them, or uses them after that; on any other status it has kept nothing. The other rules of a
-`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, no alignment or
-extent preconditions), with three differences:
+`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, an `align` fact as
+a caller contract and no extent preconditions), with three differences:
 
-- the function must be the create of `NAME`, a create that reports a status and writes its resource
-  through a parameter (`handle=…`), and it must have a Truffle cell, since only a cell's owner can
-  end a borrow after its call;
+- the function must be a constructor of `NAME`. For a resource the Rust, FFM and Native Image owners
+  wrap (one whose create returns its pointer, or writes it through a `ptr<ptr<R>>` out-parameter),
+  any constructor may hold. For a struct handle (`handle=PARAMETER.FIELD` or a struct initialized in
+  place) the create must have a Truffle cell, since only a cell's owner wraps it. A Truffle cell
+  holds a buffer only beside the struct or slot of a `handle=` create, so a create that returns its
+  pointer and holds a buffer opts out of cells with `truffle_cell=false@explicit_contract`;
 - the buffer is read-only (`access=read`): nothing could be written back once the call has returned;
 - the buffer is captured, so it must not be declared `nocapture`.
 
 A held borrow may sit beside call borrows on the same create, as `key` does above: those still end
 with the call. The validator rejects a held borrow anywhere else with the rule it breaks.
 
-Only Truffle cells project the held lifetime. A Native Image, FFM, static JNI or Rust wrapper ends
-every borrow when its call returns, which would free or unpin a buffer the native side still reads,
-so those backends generate no call-buffer wrapper for a function with a held buffer, including its
-call borrows; its raw binding is generated as for any other import, and the caller of that binding
-keeps the buffer alive until the release. A function whose borrows all end with the call keeps its
-wrappers. See [Truffle native cells](truffle-cells.md#borrows-held-by-a-resource) for what the cell
+Each owner keeps a held buffer alive in its own way:
+
+- **Rust**: the owner carries the buffer's lifetime, `Doc<'held>`, and takes `data: &'held [u8]`,
+  so the borrow checker keeps the bytes alive and unmodified while the owner exists. Rust does not
+  guarantee that a destructor runs (`mem::forget`, `into_raw`), and the native side may read the
+  buffer until its destroy returns, so:
+  - the safe form is closure-scoped: `Doc::with_create(&bytes, |doc: &Doc| ...)` makes the resource,
+    lends it to the closure by reference, which can neither forget nor move it, and destroys it
+    afterwards, on unwind too. It returns `Option<T>`, or `Result<T, Status>` for an out-pointer
+    create;
+  - `Doc::create(&bytes)` returns the owner as an `unsafe fn`, whose `# Safety` requires dropping
+    it, never leaking it, before `'held` ends; `from_raw` adds the same for held buffers.
+
+  Call borrows beside a held buffer are lent for the call only, and a C string as `&CStr`. Every
+  buffer follows the align policy of other borrows: an empty slice under an `align` fact is lent an
+  aligned static, and a non-empty one's alignment is `debug_assert!`ed. A constructor that also
+  takes a batch gets no Rust wrapper. Owners of resources without held borrows keep their plain
+  type.
+- **FFM and Native Image**: the constructor copies the bytes, once, into native memory the owner
+  holds: an arena in FFM (shared or confined as the resource is), unmanaged memory in Native Image.
+  The owner's destructor frees it after the native destroy returns, through the same destructor the
+  factory receives, never a cleaner; a create that makes nothing frees it at once. A destroy that
+  throws (a missing symbol, a closed library arena) leaves the copy to leak with the resource, since
+  the native side may still read it. Native Image rounds the copy up to an `align` fact above
+  malloc's alignment, as FFM's arena allocates it. The caller's
+  segment, `NativeBuffer` or array may then change or close immediately. These wrappers exist for a
+  constructor with exactly one held buffer and no other buffer, batch or C string; any other keeps
+  only its raw binding.
+- A writable held buffer is not declarable (above): the native side would write into memory no Java
+  caller could observe safely after the call.
+- Static JNI generates no wrapper for a function with a held buffer; its raw binding remains, and
+  its caller keeps the buffer alive until the release. See [Truffle native cells](truffle-cells.md#borrows-held-by-a-resource) for what the cell
 does with each kind of guest value.
 
 ## Truffle cells
@@ -293,7 +546,7 @@ With `truffle_cells=true`, the same declarations project into guest-callable cel
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows a create keeps until its resource is destroyed (Rust, FFM, Native Image and, for `handle=` creates, Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

@@ -422,6 +422,91 @@ public final class MynaFFM {
             this.visit_address = lookup.find("seam_visit").orElse(null);
             this.widen_address = lookup.find("seam_widen").orElse(null);
         }
+        /** The resolved address of seam_classify, valid while the library arena is open. */
+        public MemorySegment classify_address() {
+            if (this.classify_address == null) throw new UnsatisfiedLinkError("seam_classify");
+            return this.classify_address;
+        }
+        /** The resolved address of seam_echo, valid while the library arena is open. */
+        public MemorySegment echo_address() {
+            if (this.echo_address == null) throw new UnsatisfiedLinkError("seam_echo");
+            return this.echo_address;
+        }
+        /** The resolved address of seam_exercise, valid while the library arena is open. */
+        public MemorySegment exercise_address() {
+            if (this.exercise_address == null) throw new UnsatisfiedLinkError("seam_exercise");
+            return this.exercise_address;
+        }
+        /** The resolved address of seam_for_each, valid while the library arena is open. */
+        public MemorySegment forEach_address() {
+            if (this.forEach_address == null) throw new UnsatisfiedLinkError("seam_for_each");
+            return this.forEach_address;
+        }
+        /** The resolved address of seam_inspect, valid while the library arena is open. */
+        public MemorySegment inspect_address() {
+            if (this.inspect_address == null) throw new UnsatisfiedLinkError("seam_inspect");
+            return this.inspect_address;
+        }
+        /** The resolved address of seam_is_high, valid while the library arena is open. */
+        public MemorySegment isHigh_address() {
+            if (this.isHigh_address == null) throw new UnsatisfiedLinkError("seam_is_high");
+            return this.isHigh_address;
+        }
+        /** The resolved address of seam_low_signed, valid while the library arena is open. */
+        public MemorySegment lowSigned_address() {
+            if (this.lowSigned_address == null) throw new UnsatisfiedLinkError("seam_low_signed");
+            return this.lowSigned_address;
+        }
+        /** The resolved address of seam_low_unsigned, valid while the library arena is open. */
+        public MemorySegment lowUnsigned_address() {
+            if (this.lowUnsigned_address == null) throw new UnsatisfiedLinkError("seam_low_unsigned");
+            return this.lowUnsigned_address;
+        }
+        /** The resolved address of seam_reducer, valid while the library arena is open. */
+        public MemorySegment reducer_address() {
+            if (this.reducer_address == null) throw new UnsatisfiedLinkError("seam_reducer");
+            return this.reducer_address;
+        }
+        /** The resolved address of seam_rotate, valid while the library arena is open. */
+        public MemorySegment rotate_address() {
+            if (this.rotate_address == null) throw new UnsatisfiedLinkError("seam_rotate");
+            return this.rotate_address;
+        }
+        /** The resolved address of seam_scale_myna_ref, valid while the library arena is open. */
+        public MemorySegment scale_address() {
+            if (this.scale_address == null) throw new UnsatisfiedLinkError("seam_scale_myna_ref");
+            return this.scale_address;
+        }
+        /** The resolved address of seam_spread_myna_ref, valid while the library arena is open. */
+        public MemorySegment spread_address() {
+            if (this.spread_address == null) throw new UnsatisfiedLinkError("seam_spread_myna_ref");
+            return this.spread_address;
+        }
+        /** The resolved address of seam_struct_probe, valid while the library arena is open. */
+        public MemorySegment structProbe_address() {
+            if (this.structProbe_address == null) throw new UnsatisfiedLinkError("seam_struct_probe");
+            return this.structProbe_address;
+        }
+        /** The resolved address of seam_sum, valid while the library arena is open. */
+        public MemorySegment sum_address() {
+            if (this.sum_address == null) throw new UnsatisfiedLinkError("seam_sum");
+            return this.sum_address;
+        }
+        /** The resolved address of seam_swap_pair, valid while the library arena is open. */
+        public MemorySegment swapPair_address() {
+            if (this.swapPair_address == null) throw new UnsatisfiedLinkError("seam_swap_pair");
+            return this.swapPair_address;
+        }
+        /** The resolved address of seam_visit, valid while the library arena is open. */
+        public MemorySegment visit_address() {
+            if (this.visit_address == null) throw new UnsatisfiedLinkError("seam_visit");
+            return this.visit_address;
+        }
+        /** The resolved address of seam_widen, valid while the library arena is open. */
+        public MemorySegment widen_address() {
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("seam_widen");
+            return this.widen_address;
+        }
         public byte classify(MemorySegment isolate_thread, short value, boolean strict) throws Throwable {
             if (this.classify_address == null) throw new UnsatisfiedLinkError("seam_classify");
             return (byte) MynaFFM.classify_Downcall.HANDLE.invokeExact(this.classify_address, isolate_thread, value, strict);
@@ -518,6 +603,41 @@ public final class MynaFFM {
             this.rotate_address = lookup.find("seam_rotate").orElse(null);
             this.swapPair_address = lookup.find("seam_swap_pair").orElse(null);
             this.widen_address = lookup.find("seam_widen").orElse(null);
+        }
+        /** The resolved address of seam_inspect, valid while the library arena is open. */
+        public MemorySegment inspect_address() {
+            if (this.inspect_address == null) throw new UnsatisfiedLinkError("seam_inspect");
+            return this.inspect_address;
+        }
+        /** The resolved address of seam_low_signed, valid while the library arena is open. */
+        public MemorySegment lowSigned_address() {
+            if (this.lowSigned_address == null) throw new UnsatisfiedLinkError("seam_low_signed");
+            return this.lowSigned_address;
+        }
+        /** The resolved address of seam_low_unsigned, valid while the library arena is open. */
+        public MemorySegment lowUnsigned_address() {
+            if (this.lowUnsigned_address == null) throw new UnsatisfiedLinkError("seam_low_unsigned");
+            return this.lowUnsigned_address;
+        }
+        /** The resolved address of seam_reducer, valid while the library arena is open. */
+        public MemorySegment reducer_address() {
+            if (this.reducer_address == null) throw new UnsatisfiedLinkError("seam_reducer");
+            return this.reducer_address;
+        }
+        /** The resolved address of seam_rotate, valid while the library arena is open. */
+        public MemorySegment rotate_address() {
+            if (this.rotate_address == null) throw new UnsatisfiedLinkError("seam_rotate");
+            return this.rotate_address;
+        }
+        /** The resolved address of seam_swap_pair, valid while the library arena is open. */
+        public MemorySegment swapPair_address() {
+            if (this.swapPair_address == null) throw new UnsatisfiedLinkError("seam_swap_pair");
+            return this.swapPair_address;
+        }
+        /** The resolved address of seam_widen, valid while the library arena is open. */
+        public MemorySegment widen_address() {
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("seam_widen");
+            return this.widen_address;
         }
         public long inspect(MemorySegment value) throws Throwable {
             if (this.inspect_address == null) throw new UnsatisfiedLinkError("seam_inspect");

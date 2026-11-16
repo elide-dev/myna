@@ -78,3 +78,117 @@ end
 import parsedValue symbol=parsed_value return=u64 error=no_failure nounwind=true@explicit_contract
   param parsed type=ptr<Parsed> nullable=false ownership=borrowed access=read
 end
+# A batch borrow: sources[i] is a buffer of lengths[i] bytes for i < count, each read during the
+# call only. The wrappers take an array of buffers and build both arrays for the call; an empty
+# batch passes null arrays with count zero, which the declaration accepts.
+borrow digest sources lengths=lengths count=count lifetime=call
+import digest symbol=buffer_batch_digest return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+# Two batches beside a single buffer, each with its own lengths and count. The elements of deps may
+# be absent: a null element with length zero.
+borrow merge key length=keyLength lifetime=call
+borrow merge inputs lengths=inputLengths count=inputCount lifetime=call
+borrow merge deps lengths=depLengths count=depCount lifetime=call elements_nullable=true
+import merge symbol=buffer_batch_merge return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param key type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param keyLength type=u32
+  param inputs type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputLengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputCount type=u64
+  param deps type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depLengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depCount type=u32
+end
+# The address each lends for element 0, so the FFM tests can tell a segment lent in place from a
+# copy: firstLeaf is a native leaf (the default), firstCall is not.
+borrow firstLeaf sources lengths=lengths count=count lifetime=call
+import firstLeaf symbol=buffer_batch_first_leaf return=u64 error=no_failure nounwind=true@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u32
+end
+borrow firstCall sources lengths=lengths count=count lifetime=call
+import firstCall symbol=buffer_batch_first_call return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u32
+end
+# A constructor that takes a batch: the resource keeps the digest of what it read during the call.
+opaque Bundle
+resource Bundle representation=native threading=shared create=bundleCreate destroy=bundleRelease
+borrow bundleCreate parts lengths=lengths count=count lifetime=call
+import bundleCreate symbol=bundle_create return=ptr<Bundle> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param parts type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<i32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=i32
+end
+import bundleRelease symbol=bundle_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bundle type=ptr<Bundle> nullable=false ownership=transferred_to_callee access=read_write
+end
+import bundleValue symbol=bundle_value return=u64 error=no_failure nounwind=true@explicit_contract
+  param bundle type=ptr<Bundle> nullable=false ownership=borrowed access=read
+end
+# Constructors that report a status and write the handle through an out-pointer, the usual C shape
+# for "status plus handle": the wrappers pass a slot of their own, adopt the handle on a success
+# status and hand any other status to the caller, who can read the message it lent. The error
+# buffer's length is a size_t.
+enum SurfaceStatus type=i32
+  value ok = 0
+  value negative = 3
+  value failed = 4
+end
+opaque Surface
+resource Surface representation=native threading=shared create=surfaceOpen,surfaceFrom,surfaceTitled destroy=surfaceClose handle=out success=0
+borrow surfaceOpen error length=capacity lifetime=call
+borrow surfaceFrom source length=length lifetime=call
+borrow surfaceFrom error length=capacity lifetime=call
+import surfaceOpen symbol=surface_open return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i32
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+import surfaceFrom symbol=surface_from return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param source type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+# A constructor with a C string beside its call buffer: the title's length is the width.
+borrow surfaceTitled error length=capacity lifetime=call
+import surfaceTitled symbol=surface_titled return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+import surfaceClose symbol=surface_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param surface type=ptr<Surface> nullable=false ownership=transferred_to_callee access=read_write
+end
+import surfaceWidth symbol=surface_width return=i64 error=no_failure nounwind=true@explicit_contract
+  param surface type=ptr<Surface> nullable=false ownership=borrowed access=read
+end
+# A NUL-terminated string read during the call, with no length: a String in Java, a &CStr in Rust.
+import titleLength symbol=title_length return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
+# A create that keeps its read-only input until its resource is destroyed (lifetime=resource:):
+# Rust ties the slice's lifetime to the owner; FFM and Native Image copy the bytes into memory the
+# owner frees after the destroy.
+opaque Doc
+resource Doc representation=native threading=shared create=docOpen destroy=docClose
+borrow docOpen data length=length lifetime=resource:Doc
+import docOpen symbol=doc_open return=ptr<Doc> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+end
+import docClose symbol=doc_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param doc type=ptr<Doc> nullable=false ownership=transferred_to_callee access=read_write
+end
+import docSum symbol=doc_sum return=u64 error=no_failure nounwind=true@explicit_contract
+  param doc type=ptr<Doc> nullable=false ownership=borrowed access=read
+end

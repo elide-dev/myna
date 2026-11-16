@@ -50,7 +50,8 @@ enum BinaryOp type=u64
   value add = 0
   value sub = 1
 end
-enum UnaryOp type=u64
+# A u32 code table, also read narrowed from the u64 operand below.
+enum UnaryOp type=u32
   value negate = 0
   value invert = 1
 end
@@ -66,11 +67,15 @@ struct Node size=16 align=8
     when tag=unary enum=UnaryOp
     when tag=write flags=WriteFlags
 end
+# The same UnaryOp on a field of its own carrier.
+struct Unary size=4 align=4
+  field op type=u32 offset=0 enum=UnaryOp
+end
 struct Record size=24 align=8
   field status type=i32 offset=0 enum=Status
   field perms type=u32 offset=4 flags=Perms
   field wide type=u64 offset=8 flags=Wide
-  field raw type=u64 offset=16
+  field raw type=u64 offset=16 enum=Level
 end
 callback Listener return=i32 enum=Status
   param isolate type=isolate_thread

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "elide-docs": { "type": "http", "url": "https://elide.help/mcp" }
+  }
+}

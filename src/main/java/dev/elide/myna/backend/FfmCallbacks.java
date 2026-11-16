@@ -10,7 +10,7 @@ import java.util.*;
 final class FfmCallbacks {
   private FfmCallbacks() {}
 
-  static void generate(Module m, StringBuilder out) {
+  static void generate(Module m, JavaFfm.StructLayouts structs, StringBuilder out) {
     for (Signature s : m.callbacks()) {
       String name = s.name(), carrier = Types.ffmCarrier(s.returns());
       boolean unsignedReturn = s.returns() == Scalar.U8 || s.returns() == Scalar.U16;
@@ -28,8 +28,10 @@ final class FfmCallbacks {
       var layouts = new ArrayList<String>();
       // C callers trust narrow unsigned return values to be zero-extended. FFM's signed
       // byte/short carriers sign-extend, so project the same register through an int adapter.
-      if (returns) layouts.add(unsignedReturn ? "ValueLayout.JAVA_INT" : Types.layout(s.returns()));
-      s.parameters().forEach(p -> layouts.add(Types.layout(p.type())));
+      if (returns)
+        layouts.add(unsignedReturn ? "ValueLayout.JAVA_INT" : structs.value(s.returns()));
+      // A ptr<S> argument arrives sized to S, as an import's result does.
+      s.parameters().forEach(p -> layouts.add(structs.value(p.type())));
       out.append("    public static final FunctionDescriptor ")
           .append(name)
           .append("_CALLBACK_DESCRIPTOR = FunctionDescriptor.")

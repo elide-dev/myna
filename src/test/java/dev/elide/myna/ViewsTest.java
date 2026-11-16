@@ -454,6 +454,137 @@ class ViewsTest {
         result);
   }
 
+  /**
+   * Issue #135: a {@code ptr<S>} to a declared struct is {@code S_POINTER} in descriptors and
+   * fields, so a read through it is a segment sized to S. Layouts are declared pointees first; the
+   * fields that close a cycle target a padding layout of the pointee's size, and opaque, scalar and
+   * counted pointers stay unsized. The fixture is the one the HotSpot and Native Image tests run.
+   */
+  @Test
+  void ffmStructPointersAreSized() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("tests/pointers/pointers.seam")));
+    String ffm = Generator.generate(module, true).get("PointersFFM.java");
+    // Pointees first over full edges only: Anchor -> Node; the Node/Leaf cycle keeps name order.
+    assertTrue(ffm.indexOf("Node_LAYOUT =") < ffm.indexOf("Anchor_LAYOUT ="), ffm);
+    assertTrue(ffm.indexOf("Anchor_LAYOUT =") < ffm.indexOf("Leaf_LAYOUT ="), ffm);
+    for (String shell :
+        List.of(
+            "paddingLayout(40).withByteAlignment(8)).withName(\"next\")",
+            "paddingLayout(16).withByteAlignment(8)).withName(\"leaf\")",
+            "paddingLayout(40).withByteAlignment(8)).withName(\"owner\")"))
+      assertTrue(ffm.contains("ValueLayout.ADDRESS.withTargetLayout(MemoryLayout." + shell), ffm);
+    assertTrue(ffm.contains("Node_POINTER.withName(\"first\")"), ffm);
+    // Only targeted structs get a pointer layout, and with it the restricted call.
+    assertFalse(ffm.contains("Pair_POINTER"), ffm);
+    assertTrue(
+        ffm.contains("sum_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, Pair_LAYOUT);"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "Visit_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG,"
+                + " Node_POINTER);"),
+        ffm);
+    // The shells depend on the graph, not on names: renaming Leaf to sort last changes nothing.
+    String renamed =
+        Generator.generate(
+                Dsl.parse(
+                    Files.readString(Path.of("tests/pointers/pointers.seam"))
+                        .replace("Leaf", "Zleaf")),
+                true)
+            .get("PointersFFM.java");
+    assertTrue(
+        renamed.contains(
+            "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout(40)"
+                + ".withByteAlignment(8)).withName(\"owner\")"),
+        renamed);
+    assertTrue(
+        renamed.contains(
+            "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout(16)"
+                + ".withByteAlignment(8)).withName(\"leaf\")"),
+        renamed);
+    assertTrue(ffm.contains("ValueLayout.ADDRESS.withName(\"handle\")"), ffm);
+    assertTrue(ffm.contains("ValueLayout.ADDRESS.withName(\"name\")"), ffm);
+    assertTrue(ffm.contains("head_DESCRIPTOR = FunctionDescriptor.of(Node_POINTER);"), ffm);
+    assertTrue(
+        ffm.contains(
+            "weigh_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE, Leaf_POINTER);"),
+        ffm);
+    // A counted view's pointer to a struct stays unsized; its accessors size it by the count.
+    String views = Generator.generate(Dsl.parse(example()), true).get("ViewsFFM.java");
+    assertTrue(views.contains("ValueLayout.ADDRESS.withName(\"functions\")"), views);
+    assertTrue(
+        views.contains("program_DESCRIPTOR = FunctionDescriptor.of(Program_POINTER);"), views);
+    String consumer =
+        """
+        package fixture.pointers;
+        import java.lang.foreign.*;
+        import java.lang.foreign.MemoryLayout.PathElement;
+        public final class Consumer {
+          static AddressLayout field(StructLayout layout, String name) {
+            return (AddressLayout) layout.select(PathElement.groupElement(name));
+          }
+          public static String run() {
+            try (Arena arena = Arena.ofConfined()) {
+              MemorySegment head = arena.allocate(PointersFFM.Node_LAYOUT);
+              MemorySegment second = arena.allocate(PointersFFM.Node_LAYOUT);
+              MemorySegment leaf = arena.allocate(PointersFFM.Leaf_LAYOUT);
+              head.set(ValueLayout.JAVA_LONG, PointersFFM.Node_value_OFFSET, 1L);
+              head.set(ValueLayout.ADDRESS, PointersFFM.Node_next_OFFSET, second);
+              head.set(ValueLayout.ADDRESS, PointersFFM.Node_leaf_OFFSET, leaf);
+              head.set(ValueLayout.ADDRESS, PointersFFM.Node_handle_OFFSET, leaf);
+              second.set(ValueLayout.JAVA_LONG, PointersFFM.Node_value_OFFSET, 2L);
+              leaf.set(ValueLayout.ADDRESS, PointersFFM.Leaf_owner_OFFSET, head);
+              MemorySegment next = head.get(PointersFFM.Node_POINTER, PointersFFM.Node_next_OFFSET);
+              MemorySegment end = next.get(PointersFFM.Node_POINTER, PointersFFM.Node_next_OFFSET);
+              MemorySegment cycle = head.get(field(PointersFFM.Node_LAYOUT, "leaf"), PointersFFM.Node_leaf_OFFSET);
+              MemorySegment owner = cycle.get(field(PointersFFM.Leaf_LAYOUT, "owner"), PointersFFM.Leaf_owner_OFFSET);
+              MemorySegment opaque = head.get(field(PointersFFM.Node_LAYOUT, "handle"), PointersFFM.Node_handle_OFFSET);
+              return next.byteSize() + " " + next.get(ValueLayout.JAVA_LONG, 0) + " "
+                  + head.get(field(PointersFFM.Node_LAYOUT, "next"), PointersFFM.Node_next_OFFSET).byteSize() + " "
+                  + end.byteSize() + " " + end.equals(MemorySegment.NULL) + " "
+                  + cycle.byteSize() + " " + owner.byteSize() + " " + owner.get(ValueLayout.JAVA_LONG, 0) + " "
+                  + opaque.byteSize() + " " + PointersFFM.Node_POINTER.targetLayout().orElseThrow().equals(PointersFFM.Node_LAYOUT);
+            }
+          }
+        }
+        """;
+    assertEquals(
+        "40 2 40 40 true 16 40 1 0 true",
+        runOnHotSpot("fixture.pointers", "PointersFFM", ffm, consumer));
+  }
+
+  /**
+   * An out-pointer constructor reads a struct resource from its slot sized to the struct, and an
+   * opaque one as a plain address, as before.
+   */
+  @Test
+  void ffmOutPointerStructResourcesAreSized() {
+    String opaque =
+        Generator.generate(Dsl.parse(OwnershipTest.OUT_POINTER), true).get("ApiFFM.java");
+    assertTrue(opaque.contains("address = slot.get(ValueLayout.ADDRESS, 0);\n"), opaque);
+    assertFalse(opaque.contains("_POINTER"), opaque);
+    String struct =
+        Generator.generate(
+                Dsl.parse(
+                    OwnershipTest.OUT_POINTER.replace(
+                        "opaque Surface\n",
+                        "struct Surface size=8 align=8\n  field id type=i64 offset=0\nend\n")),
+                true)
+            .get("ApiFFM.java");
+    // Read only on success: junk a failed constructor leaves need not be aligned.
+    assertTrue(
+        struct.contains(
+            "address = (status == 0) ? slot.get(Surface_POINTER, 0) : MemorySegment.NULL;\n"),
+        struct);
+    assertTrue(
+        struct.contains(
+            "public static final AddressLayout Surface_POINTER ="
+                + " ValueLayout.ADDRESS.withTargetLayout(Surface_LAYOUT);"),
+        struct);
+    assertTrue(
+        struct.contains("close_DESCRIPTOR = FunctionDescriptor.ofVoid(Surface_POINTER);"), struct);
+  }
+
   /** Compiles a generated FFM class beside a consumer and returns the consumer's {@code run()}. */
   private static Object runOnHotSpot(String pkg, String ffmClass, String ffm, String consumer)
       throws Exception {

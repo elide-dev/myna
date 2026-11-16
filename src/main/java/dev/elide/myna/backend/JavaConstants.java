@@ -57,7 +57,7 @@ public final class JavaConstants implements Backend {
           c.type(),
           c.name().toUpperCase(Locale.ROOT),
           Types.javaLiteral(c.type(), c.value(), c.type().text().startsWith("u")));
-    for (EnumGroup e : m.enums()) enumGroup(e, out);
+    for (EnumGroup e : m.enums()) enumGroup(e, m.intKeys(e), out);
     for (FlagSet f : m.flagSets()) flagSet(m, f, out);
     return out.append("}\n").toString();
   }
@@ -89,7 +89,7 @@ public final class JavaConstants implements Backend {
         .append("() {}\n");
   }
 
-  private static void enumGroup(EnumGroup e, StringBuilder out) {
+  private static void enumGroup(EnumGroup e, boolean keys, StringBuilder out) {
     nested(out, "enum", e.name(), e.type());
     for (EnumValue v : e.values())
       field(
@@ -99,7 +99,7 @@ public final class JavaConstants implements Backend {
           e.type(),
           v.name().toUpperCase(Locale.ROOT),
           Types.javaLiteral(e.type(), v.value(), false));
-    if (e.intKeys())
+    if (keys)
       for (EnumValue v : e.values())
         field(
             out,
@@ -134,22 +134,52 @@ public final class JavaConstants implements Backend {
       out.append("                default -> null;\n            };\n");
     }
     out.append("        }\n");
-    if (e.intKeys()) {
-      boolean unsigned = e.unsignedKeys();
-      out.append(
-              "        /**\n"
-                  + "         * {@code value} as an {@code int} switch key: the value itself when"
-                  + " an {@code int} holds\n"
-                  + "         * it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label"
-                  + " equals. Java cannot\n"
-                  + "         * switch on a {@code long}: {@code switch (key(raw)) { case ")
-          .append(e.values().get(0).name().toUpperCase(Locale.ROOT))
-          .append("_KEY -> ... }}.\n         */\n")
-          .append("        public static int key(long value) { return ")
-          .append(unsigned ? "(value >>> 31) == 0" : "value == (int) value")
+    if (keys) {
+      String first = e.values().get(0).name().toUpperCase(Locale.ROOT);
+      if (e.wide())
+        out.append(
+                "        /**\n"
+                    + "         * {@code value} as an {@code int} switch key: the value itself when"
+                    + " an {@code int} holds\n"
+                    + "         * it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label"
+                    + " equals. Java cannot\n"
+                    + "         * switch on a {@code long}: {@code switch (key(raw)) { case ")
+            .append(first)
+            .append("_KEY -> ... }}.\n         */\n");
+      else
+        out.append(
+                "        /**\n"
+                    + "         * A wider field's raw value as an {@code int} switch key: the value"
+                    + " itself when the\n"
+                    + "         * carrier ")
+            .append(e.type().text())
+            .append(
+                " holds it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label\n"
+                    + "         * equals, so upper bits never alias a code: {@code switch"
+                    + " (key(raw)) { case ")
+            .append(first)
+            .append("_KEY -> ... }}.\n         */\n");
+      out.append("        public static int key(long value) { return ")
+          .append(keyTest(e.type()))
           .append(" ? (int) value : Integer.MIN_VALUE; }\n");
     }
     out.append("    }\n");
+  }
+
+  /**
+   * True when an {@code int} label can name {@code value}: inside the carrier's range and, for 32-
+   * and 64-bit carriers, inside {@code 0..Integer.MAX_VALUE} (unsigned) or the {@code int} range
+   * (signed, where {@code Integer.MIN_VALUE} is the no-label key anyway).
+   */
+  private static String keyTest(Scalar carrier) {
+    return switch (carrier) {
+      case U8 -> "(value >>> 8) == 0";
+      case U16 -> "(value >>> 16) == 0";
+      case U32, U64, USIZE -> "(value >>> 31) == 0";
+      case I8 -> "value == (byte) value";
+      case I16 -> "value == (short) value";
+      default -> "value == (int) value";
+    };
   }
 
   private static void flagSet(Module m, FlagSet f, StringBuilder out) {

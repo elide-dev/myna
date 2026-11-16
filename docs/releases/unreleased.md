@@ -29,6 +29,12 @@ parameters, returns and callback types reference them (see
 - A 64-bit enum whose values all fit an `int` gets `<VALUE>_KEY` labels and `key(long)` in
   `<Class>Constants`, so Java can `switch` on it (Java has no `switch` on `long`); see
   [tagged fields](../dsl.md#fields-whose-meaning-depends-on-a-tag).
+- A struct field's `enum=` and a `when ... enum=` case may name an enum with a narrower carrier than the
+  field when the field's type holds every value, so one code table serves a `u32` field and a `u64`
+  operand. The field stays its raw integer; Rust gets `<field>_as_<enum>() -> Option<Enum>`, the Native Image
+  case accessor returns `null` for a value the carrier cannot hold, and the enum gets the same `int` switch
+  keys (see [narrowed field references](../dsl.md#constants-enums-and-flag-sets)). Descriptors that use it were
+  rejected before, so existing output is unchanged.
 - A module that declares `abi=N` emits it as `<MODULE>_ABI_VERSION` (C), `ABI_VERSION` (Rust) and
   `<Class>Constants.ABI_VERSION`, typed `i32`; `<Class>Constants` is generated for it alone if needed.
 - A struct field can name the group that applies per value of a tag field with `when tag=binary
@@ -45,6 +51,21 @@ gains read-only views `<Struct>_<field>(record)` and `(record, Arena owner)`, `<
 Image gains `addressOf(long)` on element structs and an asserted, always-inlined `<Struct>_<field>At(record, i)`. Counts are `u8`, `u16`, `u32`, `u64` or `usize`; elements are structs, scalars, or pointers to a struct or opaque type (`ptr<ptr<T>>`). The C ABI is
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
+
+## Sized struct pointers in FFM (#135)
+
+Java FFM types `ptr<Struct>` parameters, returns and fields of imports, callbacks and structs, and the
+out slot of a struct resource's out-pointer constructor, with a
+new `<Struct>_POINTER` constant, `ValueLayout.ADDRESS.withTargetLayout(<Struct>_LAYOUT)`. The constant
+is emitted only for structs some pointer targets. An import's `ptr<Struct>` result, a callback's
+`ptr<Struct>` argument and `record.get(<Struct>_POINTER, offset)` are segments of the struct's size, so
+records and their counted views need no `reinterpret`. **A null one is sized too**, and reading through
+it is an unchecked native read that crashes. Test `address() == 0` first (see breaking change 15).
+Pointers to opaque types, scalars and pointers, a counted view's pointer, and pointer-array elements stay
+zero-length, and Truffle FFM cells are unchanged. Every pointer field inside a cycle of pointer fields
+(`next: ptr<Node>`, or a mutual cycle) targets a padding layout of the pointee's size and alignment.
+Layouts are declared pointees first (see [types and layouts](../dsl.md#types-and-layouts)). Layouts stay
+static final constants, with no work per call. The C ABI, `seam.json` and fingerprints are unchanged.
 
 ## Resources with several constructors (#139)
 
@@ -66,6 +87,62 @@ the same output as before.
   - a buffer that becomes a borrow drops its length argument from the cell (`syntax_Cell` goes from
     `(buffer, length)` to `(buffer)`). Cells take `Object[]`, so an old two-argument call fails at run
     time in the cell's arity check, not at compile time.
+- `rust_implementation=trait` on the module generates, for Rust code that *implements* the imports,
+  a safe `<Module>Implementation` trait and `define_implementations!`, which defines every
+  `extern "C"` entry point from an implementing type. Call borrows arrive as slices, returned
+  resources as associated types owned through `Box`, and everything else as declared. Modules
+  without the option generate the same output (see
+  [implementing imports in Rust](../ownership.md#implementing-imports-in-rust)).
+
+## Status-plus-out-pointer constructors, `usize` lengths, C strings (#141)
+
+- A resource's `handle=PARAMETER` may name a `ptr<ptr<R>>` out-parameter: the "status plus handle"
+  constructor. FFM and Native Image owners take an `onFailure` callback for any status outside
+  `success=`, Rust returns `Result<R, Status>`, and Truffle cells adopt it as other status creates
+  (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
+- A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
+- A constructor that keeps its read-only input (`lifetime=resource:`) is wrapped beyond Truffle cells:
+  Rust owners carry the buffer's lifetime (`Doc<'held>`) behind a closure-scoped safe form
+  (`Doc::with_create`) and an unsafe owner constructor, and FFM and Native Image copy the bytes
+  into memory the owner frees after the destroy. A Truffle cell holds a buffer only for a `handle=`
+  create (see [borrows held by a resource](../ownership.md#borrows-held-by-a-resource)).
+- `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
+  Rust wrappers and implementer trait, a `String` overload in FFM, a guest string in Truffle cells
+  (see [C strings](../ownership.md#c-strings)).
+- An import may no longer be named `NAME_address` with no parameters beside an import `NAME`: it
+  would collide with that binding's accessor.
+- The Native Image class gains `NAME_address()` per import too, from the linked `CGlobalData` symbol
+  read at run time; its `native-image.properties` now initializes `MynaSymbols` at build time
+  whenever the module has imports.
+- `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
+  from the same lookup, for symbols handed to native code rather than called.
+
+## Batches of borrowed buffers (#132)
+
+`borrow F SOURCES lengths=LENGTHS count=COUNT lifetime=call [elements_nullable=true]` declares an
+array of read buffers with a parallel array of lengths: `SOURCES[i]` holds `LENGTHS[i]` bytes for
+`i < COUNT`, each read during the call only (see
+[batches of buffers](../ownership.md#batches-of-buffers)). One import may declare several beside
+single buffers.
+
+- **Rust**: the wrapper takes `&[&[u8]]` (`&[Option<&[u8]>]` with nullable elements) and builds both
+  arrays on the stack for up to eight buffers and panics above that; a `_with_scratch` form, on the
+  wrapper and on a resource constructor over a batch import, takes caller scratch for more.
+  Nothing allocates, so `seam.rs` builds in `no_std` crates without an allocator. `seam.rs` gains
+  the `BufferBatch` and `OptionalBufferBatch` views an implementation builds from the raw arrays.
+- **Native Image**: `NativeBuffer[]` and `byte[][]` overloads that acquire or pin each element under the
+  single-buffer rules, from one snapshot of the array, with the arrays on the stack for up to eight
+  elements.
+- **FFM**: a `MemorySegment[]` overload, each segment validated as a single buffer is, lent in place
+  only when nothing can close it during the call and copied otherwise.
+- The empty batch passes null arrays with count zero. `seam.h` and `seam.ll` are unchanged: the arrays
+  carry the `nocapture` and `readonly` facts they declare. Static JNI keeps the raw binding.
+- **Truffle cells** take a guest array of buffers or strings, or null for the empty batch, and lend
+  each element under the single-buffer rules, with both arrays on the scratch stack. FFM cells lend
+  a confined segment in place under a native leaf, as the host wrapper does, checking it again right
+  before the call since coercing later elements may run guest code, and copy other scoped
+  native elements onto the scratch stack, since a downcall cannot hold their scope. A compiled call
+  allocates nothing beyond its elements' own lending. `BufferArray` passes a batch from host code.
 
 ## Breaking changes
 
@@ -82,10 +159,13 @@ the same output as before.
 | 9 | `@CBitfield` accessors and the C bitfield union exist only with `c_bitfields=true` on the flag set. | descriptors using flag sets | add the option to ask for them |
 | 10 | `align=N@explicit_contract` is accepted on borrow buffers (a power of two, at most 4096). | descriptors that declare it | none; see the fixes below |
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
-| 12 | In an enum with a 64-bit carrier whose values all fit an `int` (now given `int` switch keys), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
+| 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
+| 14 | An import named `NAME_address` with no parameters beside an import `NAME` is rejected: FFM bindings gain a `NAME_address()` accessor per import. | descriptors with such a pair of imports | rename one |
+| 15 | `NativeBytes` buffer messages over a closed arena, or a confined arena's memory on another thread, throw `NativeCellException` (a guest error a guest `try`/`catch` handles), with the `IllegalStateException` or `WrongThreadException` the segment accessors throw as its cause. HotSpot previously let those raw host exceptions escape (an internal error to guest languages), and a Native Image did not check at all (#128). | hosts that caught `IllegalStateException`/`WrongThreadException` from `NativeBytes` messages | catch `NativeCellException`, or inspect `getCause()` |
+| 16 | FFM `ptr<Struct>` results, callback arguments and field reads are segments of the struct's size, not zero-length. **A null one is a sized segment at address 0, so a read through it, or through a dangling pointer, is an unchecked native read that crashes the process where it used to throw `IndexOutOfBoundsException`.** A pointer misaligned for the struct, including a sentinel such as `(T *)-1`, is an `IllegalArgumentException` after the call completes. Structs that a pointer targets gain `<Struct>_POINTER`, and struct layouts can be declared in a different order. The FFM class of such a module calls the restricted `withTargetLayout` when it is initialized, so with `--illegal-native-access=deny` it needs native access even before its first downcall. | FFM consumers of struct pointers | test `address() == 0` or `equals(MemorySegment.NULL)` before reading, never `byteSize() == 0`; existing `reinterpret` calls still work; declare sentinel-carrying pointers `ptr<void>`; enable native access for the module, as downcalls already require |
 
-Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
+Not broken: FFM output apart from row 16 (otherwise additions and comments only), Truffle cell signatures and behaviour (except row 15), leaf status of every
 import, export entry-point signatures at the C level.
 
 ### The header check
@@ -152,6 +232,13 @@ today. It is tracked upstream as elide-dev/graal#239; `@CField` is kept and a te
 - **#121**: a failed create reports its `NativeStatusException` even when copying the guest buffer back fails.
 - **#122** (#124): a Truffle FFM cell over a create with one held borrow and two or more call borrows
   generated Java that did not compile. Such a create now skips the in-place fast path.
+- **#128**: in a Native Image, `NativeBytes`' scalar buffer messages (`read/writeBuffer{Byte,Short,Int,Long,Float,Double}`)
+  read and wrote the segment with word operations and no scope check, so a guest could touch freed memory
+  once a confined arena was closed. Every buffer message now checks the scope first, in both runtimes, and
+  fails with a `NativeCellException` whose cause is what the segment's accessors throw (breaking change
+  14). The check covers confined arenas fully. It does not protect a shared arena closed by another
+  thread: in compiled code one check may cover a whole loop of reads. Embedders keep shared arenas open
+  while guest code can reach the buffer.
 - **#123** (#125): `success=` values that the create's return scalar can never represent (so every create
   would fail at run time) are rejected at validation.
 

@@ -97,9 +97,10 @@ public final class JniAbi {
     for (Function f : m.functions()) {
       if (f.direction() != Direction.IMPORT) continue;
       result.add(lower(m, f, List.of()));
-      // One buffer adapter per function, taking a ByteBuffer for each of its borrows.
+      // One buffer adapter per function, taking a ByteBuffer for each of its borrows. A function
+      // with a batch keeps its raw binding only: a ByteBuffer has no array-of-buffers form.
       var borrows = m.callBorrows().stream().filter(b -> b.function().equals(f.name())).toList();
-      if (!borrows.isEmpty()) {
+      if (!borrows.isEmpty() && borrows.stream().noneMatch(BufferBorrow::batch)) {
         if (m.functions().stream().anyMatch(other -> other.name().equals(f.name() + "Buffer")))
           throw new IllegalArgumentException(
               "JNI buffer adapter name collision: " + f.name() + "Buffer");

@@ -8,11 +8,15 @@ Keep AOT FFM ABI adapters initialized at image build time and native symbol addr
 
 `myna-truffle` (src/truffle) uses only the public Truffle API plus the GraalVM SDK, built with the Truffle DSL processor; generated cells must stay DSL-free and must never change a binding's leaf status or embed addresses. Everything on a cell's compiled path must survive partial evaluation on Substrate: cell and runtime classes initialize at build time (generated `native-image.properties`), native memory access goes through `Memory` (word operations in an image, never `MemorySegment` accessors), and `BigInteger`, string building and other slow paths sit behind `@TruffleBoundary`. `tests/truffle_integration.py` proves cells run from runtime-compiled code; `benchmarks/cells` measures them against direct calls and NFI, with a checked-in advisory baseline. Cells over transitioning imports call the AOT stub directly (`truffle_transitions=direct`, the default), which needs the pinned fork's elide-dev/graal#196; `boundary` remains for consumers on older forks.
 
+Truffle code (src/truffle and generated cells) follows the `elide-dev:truffle-language` skill (enabled in the committed agent settings) and the trufflecheck rules; `mise run check:trufflecheck` reports findings against `trufflecheck.properties`, and `docs/trufflecheck-baseline.md` is the current baseline. The skill marketplace is pinned to a trufflecheck release tag (`ref`); bump it together with the version in `tools/trufflecheck.json`.
+
 Native value ABI v3 is producer-neutral. Preserve allocator ownership, borrowed-region lifetimes, validated UTF-8, exact number tokens and poisoned-builder recovery contracts. Do not add implicit JSON parsing or object materialization to direct traversal. C++ simdjson integration belongs in downstream adapters.
 
 Use `mise run test` and `mise run lint` for the full gates; use focused tasks while developing. Coverage denominators contain production code. Native-only Java readers need SVM integration tests. Sanitizer workloads must run their expected-failure canaries. Retain ThinLTO IR and disassembly evidence; Native Image machine code is not LLVM IR.
 
 CodSpeed tracks Myna's own simulation and wall-time workloads. Keep cross-library comparisons uninstrumented and rerunnable, with raw samples, source/binary hashes, compiler settings and hardware metadata. See `docs/benchmarking.md` for commands and limits.
+
+Agents use the Elide docs MCP server (`.mcp.json`) for Elide and Pkl build questions, and the CodSpeed plugin's MCP server for benchmark regressions.
 
 Extract matching symbol sidecars before stripping release executables. macOS Native Image currently supplies method symbols, not source-level DWARF; do not describe its dSYM as complete source debugging. Keep symbols tied to the executable UUID/build ID.
 

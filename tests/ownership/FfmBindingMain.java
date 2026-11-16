@@ -87,6 +87,7 @@ public final class FfmBindingMain {
         if (binding.tally(bytes.asSlice(3, 0)) != 0) throw new AssertionError("empty input is present");
         rejects(IllegalArgumentException.class, () -> binding.tally(MemorySegment.ofArray(new byte[0])));
         rejects(IllegalStateException.class, () -> binding.tally(closed));
+        batches(binding, memory, closed);
         var failure = new AtomicReference<Throwable>();
         var thread = new Thread(() -> {
           try {
@@ -115,6 +116,10 @@ public final class FfmBindingMain {
         if (binding.liveCount() != 0) throw new AssertionError("failed adoption leaked");
         // An unavailable destructor must preserve the adoption error and report cleanup failure.
         var lookup = SymbolLookup.libraryLookup(Path.of(args[0]), library);
+        // The address the binding resolved, for a symbol handed to native code rather than called.
+        if (binding.checksum_address().address() != lookup.find("buffer_checksum").orElseThrow().address())
+          throw new AssertionError("resolved address");
+        rejects(UnsatisfiedLinkError.class, () -> missing.liveCount_address());
         var noDestructor = new NativeApiFFM.LibraryBinding(symbol -> symbol.equals("ticket_destroy")
             ? java.util.Optional.empty() : lookup.find(symbol));
         var adoptedAddress = new AtomicReference<MemorySegment>();
@@ -167,6 +172,53 @@ public final class FfmBindingMain {
         binding.failNext();
         if (NativeApiFFM.Parsed.analyze(binding, adopt, source, (byte) 1) != null) throw new AssertionError("failed analyze");
         parsed.run(); empty.run(); analyzed.run();
+        // Status plus out-pointer: a success status adopts the handle; any other goes to onFailure,
+        // which reads the message the caller lent, and nothing is adopted.
+        var message = memory.allocate(32);
+        NativeApiFFM.Surface.Failure<Action> refuse = status -> { throw new AssertionError("status " + status); };
+        var widths = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> keep = (address, destructor, threadConstraint) -> {
+          widths.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var surface = NativeApiFFM.Surface.surfaceOpen(binding, keep, refuse, 7, message);
+        var from = NativeApiFFM.Surface.surfaceFrom(binding, keep, refuse, source.asSlice(1, 2), null);
+        if (binding.surfaceWidth(widths.get(0)) != 7 || binding.surfaceWidth(widths.get(1)) != 5)
+          throw new AssertionError("surface widths");
+        String why = NativeApiFFM.Surface.surfaceOpen(binding, (address, destructor, threadConstraint) -> {
+          throw new AssertionError("a failed create was adopted");
+        }, status -> status + ": " + message.getString(0), -1, message);
+        if (!why.equals("3: negative width")) throw new AssertionError(why);
+        // A C string beside a call buffer on one constructor.
+        var titled = NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "abcd", message);
+        if (binding.surfaceWidth(widths.get(2)) != 4) throw new AssertionError("titled width");
+        titled.run();
+        rejects(IllegalArgumentException.class, () -> NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "ab\0cd", message));
+        binding.failNext();
+        if (NativeApiFFM.Surface.surfaceFrom(binding, adopt, status -> null, source, null) != null)
+          throw new AssertionError("failed surfaceFrom");
+        if (binding.liveCount() != 2) throw new AssertionError("surfaces live");
+        surface.run(); from.run();
+        // A create that keeps its input: the binding copies it into memory the owner frees after
+        // the destroy, so the caller's segment may change or close at once.
+        var docs = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> keepDoc = (address, destructor, threadConstraint) -> {
+          docs.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var held = memory.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 4, (byte) 5, (byte) 6);
+        var doc = NativeApiFFM.Doc.create(binding, keepDoc, held);
+        held.fill((byte) 0);
+        if (binding.docSum(docs.get(0)) != 15) throw new AssertionError("held copy");
+        var fromHeap = NativeApiFFM.Doc.create(binding, keepDoc, MemorySegment.ofArray(new byte[] {1, 2}));
+        if (binding.docSum(docs.get(1)) != 3) throw new AssertionError("held heap copy");
+        doc.run(); fromHeap.run();
+        // A C string: NUL-terminated UTF-8 in the call's arena.
+        if (binding.titleLength("h\u00e9llo") != 6) throw new AssertionError("title length");
+        rejects(NullPointerException.class, () -> binding.titleLength((String) null));
+        // An embedded NUL would end the string early on the C side: refused before any copy.
+        rejects(IllegalArgumentException.class, () -> binding.titleLength("ab\0cd"));
+        if (binding.liveCount() != 0) throw new AssertionError("surfaces released");
         // The release accepts null as a no-op; no owner ever passes it one.
         binding.release(MemorySegment.NULL);
         if (binding.liveCount() != 0) throw new AssertionError("constructed resources leaked");
@@ -175,6 +227,94 @@ public final class FfmBindingMain {
     }
     verifyConfinedResources(Path.of(args[0]));
     System.out.println("Explicit FFM library lifetime and buffer borrowing passed");
+  }
+
+  // The fixture's batch digest (tests/ownership/native.rs): the count, then each element's length
+  // and bytes, or NULL_ELEMENT for an absent one; the empty batch folds in ABSENT.
+  static final long FNV_OFFSET = 0xcbf29ce484222325L;
+  static final long NULL_ELEMENT = -2L;
+  static long mix(long hash, long value) { return (hash ^ value) * 0x100000001b3L; }
+  static long fold(long hash, byte[] bytes) {
+    hash = mix(hash, bytes.length);
+    for (byte b : bytes) hash = mix(hash, b & 0xff);
+    return hash;
+  }
+  static long foldBatch(long hash, byte[]... buffers) {
+    if (buffers.length == 0) return mix(hash, 1L << 32);
+    hash = mix(hash, buffers.length);
+    for (byte[] buffer : buffers) hash = buffer == null ? mix(hash, NULL_ELEMENT) : fold(hash, buffer);
+    return hash;
+  }
+
+  /** Three buffers of different sizes, one empty; the empty batch; two batches in one call. */
+  private static void batches(NativeApiFFM.LibraryBinding binding, Arena memory, MemorySegment closed) throws Throwable {
+    byte[] a = {1, 2, 3}, b = {(byte) 255}, empty = {};
+    var sa = memory.allocateFrom(ValueLayout.JAVA_BYTE, a);
+    var sb = memory.allocateFrom(ValueLayout.JAVA_BYTE, b);
+    var three = new MemorySegment[] {sa, sb.asSlice(1, 0), sb.asReadOnly()};
+    if (binding.digest(three) != foldBatch(FNV_OFFSET, a, empty, b)) throw new AssertionError("batch digest");
+    if (binding.digest(new MemorySegment[] {MemorySegment.NULL}) != foldBatch(FNV_OFFSET, empty))
+      throw new AssertionError("an element at address zero is present and empty");
+    if (binding.digest(new MemorySegment[0]) != foldBatch(FNV_OFFSET)) throw new AssertionError("empty batch");
+    var many = new MemorySegment[20];
+    var bytes = new byte[20][];
+    for (int i = 0; i < many.length; i++) {
+      bytes[i] = new byte[i];
+      for (int j = 0; j < i; j++) bytes[i][j] = (byte) (i * 7 + j);
+      many[i] = memory.allocateFrom(ValueLayout.JAVA_BYTE, bytes[i]);
+    }
+    if (binding.digest(many) != foldBatch(FNV_OFFSET, bytes)) throw new AssertionError("large batch");
+    var key = memory.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 7, (byte) 8);
+    long expected = foldBatch(foldBatch(fold(FNV_OFFSET, new byte[] {7, 8}), a, b), b, null, empty);
+    if (binding.merge(key, new MemorySegment[] {sa, sb}, new MemorySegment[] {sb, null, sb.asSlice(0, 0)}) != expected)
+      throw new AssertionError("two batches");
+    expected = foldBatch(foldBatch(fold(FNV_OFFSET, new byte[] {7, 8}), a), null, null);
+    if (binding.merge(key, new MemorySegment[] {sa}, new MemorySegment[] {MemorySegment.NULL, null}) != expected)
+      throw new AssertionError("absent elements");
+    // An element is lent in place only when nothing can close it during the call: confined to
+    // this thread under a native leaf, or the global scope. Anything else is lent as a copy.
+    MemorySegment[] confined = {sa};
+    if (binding.firstLeaf(confined) != sa.address()) throw new AssertionError("confined element of a leaf lent in place");
+    if (binding.firstCall(confined) == sa.address()) throw new AssertionError("confined element of a non-leaf copied");
+    var global = MemorySegment.ofAddress(sa.address()).reinterpret(3);
+    if (binding.firstLeaf(new MemorySegment[] {global}) != sa.address()
+        || binding.firstCall(new MemorySegment[] {global}) != sa.address())
+      throw new AssertionError("global element lent in place");
+    try (var shared = Arena.ofShared()) {
+      var copy = shared.allocateFrom(ValueLayout.JAVA_BYTE, a);
+      if (binding.firstLeaf(new MemorySegment[] {copy}) == copy.address()) throw new AssertionError("shared element copied");
+      if (binding.digest(new MemorySegment[] {copy, sb}) != foldBatch(FNV_OFFSET, a, b)) throw new AssertionError("shared element bytes");
+    }
+    var automatic = Arena.ofAuto().allocateFrom(ValueLayout.JAVA_BYTE, b);
+    if (binding.firstLeaf(new MemorySegment[] {automatic}) == automatic.address()) throw new AssertionError("auto element copied");
+    if (binding.firstLeaf(new MemorySegment[0]) != 0) throw new AssertionError("empty first");
+    // A constructor that takes a batch keeps what it read, never the buffers.
+    var bundles = new java.util.ArrayList<MemorySegment>();
+    NativeApiFFM.ResourceFactory<Action> keep = (address, destructor, threadConstraint) -> {
+      bundles.add(address);
+      return () -> destructor.destroy(address);
+    };
+    var bundle = NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[] {sa, sb});
+    var none = NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[0]);
+    if (binding.bundleValue(bundles.get(0)) != foldBatch(FNV_OFFSET, a, b)
+        || binding.bundleValue(bundles.get(1)) != foldBatch(FNV_OFFSET))
+      throw new AssertionError("batch constructor");
+    rejects(IllegalStateException.class, () -> NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[] {closed}));
+    bundle.run(); none.run();
+    // Each element is validated exactly as a single buffer is, before the call.
+    rejects(NullPointerException.class, () -> binding.digest(new MemorySegment[] {sa, null}));
+    rejects(NullPointerException.class, () -> binding.digest(null));
+    rejects(IllegalArgumentException.class, () -> binding.digest(new MemorySegment[] {MemorySegment.ofArray(a)}));
+    rejects(IllegalStateException.class, () -> binding.digest(new MemorySegment[] {sa, closed}));
+    rejects(IllegalArgumentException.class, () -> binding.digest(new MemorySegment[] {MemorySegment.NULL.reinterpret(1)}));
+    var failure = new AtomicReference<Throwable>();
+    var thread = new Thread(() -> {
+      try {
+        rejects(WrongThreadException.class, () -> binding.digest(new MemorySegment[] {sa}));
+      } catch (Throwable error) { failure.set(error); }
+    });
+    thread.start(); thread.join();
+    if (failure.get() != null) throw failure.get();
   }
 
   private static void verifyConfinedResources(Path path) throws Throwable {

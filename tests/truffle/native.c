@@ -17,6 +17,9 @@ int64_t cells_peek(const int64_t *cell) { return *cell; }
 void cells_poke(int64_t *cell, int64_t value) { *cell = value; }
 size_t cells_raw_length(void *text) { return text ? strlen((const char *)text) : 0; }
 size_t cells_strlen(const char *text) { return strlen(text); }
+size_t cells_title_length(const uint8_t *text) { return strlen((const char *)text); }
+// A nullable C string: null has length zero.
+size_t cells_title_or_empty(const uint8_t *text) { return text ? strlen((const char *)text) : 0; }
 uint64_t cells_checksum(const uint8_t *bytes, uint64_t count) {
   uint64_t sum = 0;
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];
@@ -143,6 +146,27 @@ Parsed *cells_fill_text(uint8_t *report, uint64_t capacity, int32_t *gate) {
   for (uint64_t i = 0; i < capacity; i++) report[i] = 0x5a;
   return parsed_new(capacity);
 }
+typedef struct Window { int64_t width; } Window;
+// A negative width fails with status 3, junk in the out slot and a message in the error buffer.
+int32_t cells_window_open(int64_t width, Window **out, uint8_t *error, size_t capacity) {
+  if (width < 0) {
+    *out = (Window *)0xdead;
+    static const char message[] = "negative width";
+    for (size_t i = 0; i < capacity && i < sizeof message - 1; i++) error[i] = (uint8_t)message[i];
+    return 3;
+  }
+  Window *window = malloc(sizeof *window);
+  if (!window) return 4;
+  window->width = width;
+  live++;
+  *out = window;
+  return 0;
+}
+void cells_window_close(Window *window) {
+  free(window);
+  live--;
+}
+int64_t cells_window_width(const Window *window) { return window->width; }
 void cells_parsed_release(Parsed *parsed) {
   if (!parsed) return;
   free(parsed);
@@ -249,3 +273,42 @@ int32_t td_decode_adopted(const uint8_t *data, uint64_t length, uint64_t capacit
   return 0;
 }
 void td_release(void *output) { if (td_aligned(output)) memset(output, 0, sizeof(TdResult)); }
+// Batches: each digest folds the count, then every element's length and bytes (or NULL_ELEMENT for
+// an absent one), so the caller's expected value proves the native side saw exactly the bytes it
+// lent. Null arrays with count zero are the empty batch, folded as ABSENT; any other null is an
+// error, reported as UINT64_MAX.
+#define BATCH_OFFSET 0xcbf29ce484222325ULL
+#define BATCH_ABSENT (1ULL << 32)
+#define BATCH_NULL_ELEMENT (UINT64_MAX - 1)
+static uint64_t batch_mix(uint64_t hash, uint64_t value) { return (hash ^ value) * 0x100000001b3ULL; }
+static int batch_fold(uint64_t *hash, uint8_t *const *sources, const void *lengths, int width, uint64_t count, int nullable) {
+  if (!sources || !lengths) {
+    if (sources || lengths || count) return 0;
+    *hash = batch_mix(*hash, BATCH_ABSENT);
+    return 1;
+  }
+  *hash = batch_mix(*hash, count);
+  for (uint64_t i = 0; i < count; i++) {
+    uint64_t length = width == 8 ? ((const uint64_t *) lengths)[i] : ((const uint32_t *) lengths)[i];
+    if (!sources[i]) {
+      if (!nullable || length) return 0;
+      *hash = batch_mix(*hash, BATCH_NULL_ELEMENT);
+      continue;
+    }
+    *hash = batch_mix(*hash, length);
+    for (uint64_t k = 0; k < length; k++) *hash = batch_mix(*hash, sources[i][k]);
+  }
+  return 1;
+}
+uint64_t cells_batch_digest(uint8_t *const *sources, const uint64_t *lengths, uint64_t count) {
+  uint64_t hash = BATCH_OFFSET;
+  return batch_fold(&hash, sources, lengths, 8, count, 0) ? hash : UINT64_MAX;
+}
+uint64_t cells_batch_merge(uint8_t *const *inputs, const uint32_t *input_lengths, uint32_t input_count,
+                           uint8_t *const *deps, const int64_t *dep_lengths, int32_t dep_count) {
+  uint64_t hash = BATCH_OFFSET;
+  if (dep_count < 0) return UINT64_MAX;
+  if (!batch_fold(&hash, inputs, input_lengths, 4, input_count, 0)) return UINT64_MAX;
+  if (!batch_fold(&hash, deps, dep_lengths, 8, (uint64_t) dep_count, 1)) return UINT64_MAX;
+  return hash;
+}
