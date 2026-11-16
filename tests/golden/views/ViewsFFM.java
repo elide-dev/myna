@@ -33,23 +33,23 @@ public final class ViewsFFM {
     public static final long Program_version_OFFSET = 28L;
     public static final long Program_roots_OFFSET = 32L;
     public static final long Program_rootCount_OFFSET = 40L;
-    /** The count of Program.functions: functionCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The count of Program.functions: functionCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static long Program_functions_count(MemorySegment record) {
         return record.get(ValueLayout.JAVA_LONG, 8L);
     }
-    /** The functionCount elements at functions, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The functionCount elements at functions, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
-        long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, "Program.functions", "functionCount");
+        long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, 8L, "Program.functions", "functionCount");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The functionCount elements at functions, read-only and alive while owner is (the record's own lifetime is the caller's contract). IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The functionCount elements at functions, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
-        long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, "Program.functions", "functionCount");
+        long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, 8L, "Program.functions", "functionCount");
         return base.reinterpret(bytes, owner, null).asReadOnly();
     }
-    /** Element i of a view of Program.functions taken once; IndexOutOfBoundsException unless 0 <= i < functionCount. */
+    /** Element i of a view of Program.functions taken once; IndexOutOfBoundsException unless 0 <= i < view.byteSize() / 16L, which is functionCount for a view from Program_functions. */
     public static MemorySegment Program_functions_at(MemorySegment view, long i) {
         return view.asSlice(java.util.Objects.checkIndex(i, view.byteSize() / 16L) * 16L, 16L);
     }
@@ -57,7 +57,7 @@ public final class ViewsFFM {
     public static MemorySegment Program_functions(MemorySegment record, long i) {
         return Program_functions_at(Program_functions(record), i);
     }
-    /** Element i of Program.functions, read-only and alive while owner is; IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.functions, read-only and alive while owner is (a confined owner confines it to its thread); IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, long i, Arena owner) {
         return Program_functions_at(Program_functions(record, owner), i);
     }
@@ -65,19 +65,19 @@ public final class ViewsFFM {
     public static long Program_text_count(MemorySegment record) {
         return Integer.toUnsignedLong(record.get(ValueLayout.JAVA_INT, 24L));
     }
-    /** The textLength elements at text, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The textLength elements at text, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_text(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
-        long bytes = seam$viewBytes(base, Program_text_count(record), 2L, "Program.text", "textLength");
+        long bytes = seam$viewBytes(base, Program_text_count(record), 2L, 2L, "Program.text", "textLength");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The textLength elements at text, read-only and alive while owner is (the record's own lifetime is the caller's contract). IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The textLength elements at text, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_text(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
-        long bytes = seam$viewBytes(base, Program_text_count(record), 2L, "Program.text", "textLength");
+        long bytes = seam$viewBytes(base, Program_text_count(record), 2L, 2L, "Program.text", "textLength");
         return base.reinterpret(bytes, owner, null).asReadOnly();
     }
-    /** Element i of a view of Program.text taken once; IndexOutOfBoundsException unless 0 <= i < textLength. */
+    /** Element i of a view of Program.text taken once; IndexOutOfBoundsException unless 0 <= i < view.byteSize() / 2L, which is textLength for a view from Program_text. */
     public static short Program_text_at(MemorySegment view, long i) {
         return view.getAtIndex(ValueLayout.JAVA_SHORT, java.util.Objects.checkIndex(i, view.byteSize() / 2L));
     }
@@ -85,40 +85,47 @@ public final class ViewsFFM {
     public static short Program_text(MemorySegment record, long i) {
         return Program_text_at(Program_text(record), i);
     }
-    /** The count of Program.roots: rootCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The count of Program.roots: rootCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static long Program_roots_count(MemorySegment record) {
         return record.get(ValueLayout.JAVA_LONG, 40L);
     }
-    /** The rootCount elements at roots, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The rootCount elements at roots, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 32L);
-        long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, "Program.roots", "rootCount");
+        long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, 8L, "Program.roots", "rootCount");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The rootCount elements at roots, read-only and alive while owner is (the record's own lifetime is the caller's contract). IndexOutOfBoundsException for a count the pointer cannot hold. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The rootCount elements at roots, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 32L);
-        long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, "Program.roots", "rootCount");
+        long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, 8L, "Program.roots", "rootCount");
         return base.reinterpret(bytes, owner, null).asReadOnly();
     }
-    /** Element i of a view of Program.roots taken once; IndexOutOfBoundsException unless 0 <= i < rootCount. */
+    /** Element i of a view of Program.roots taken once; IndexOutOfBoundsException unless 0 <= i < view.byteSize() / 8L, which is rootCount for a view from Program_roots. The element pointer is a read-only, zero-length segment in the global scope; the owner overload scopes it. */
     public static MemorySegment Program_roots_at(MemorySegment view, long i) {
-        return view.getAtIndex(ValueLayout.ADDRESS, java.util.Objects.checkIndex(i, view.byteSize() / 8L));
+        return view.getAtIndex(ValueLayout.ADDRESS, java.util.Objects.checkIndex(i, view.byteSize() / 8L)).asReadOnly();
     }
-    /** Element i of Program.roots through one view; IndexOutOfBoundsException unless 0 <= i < rootCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of a view of Program.roots taken once; IndexOutOfBoundsException unless 0 <= i < view.byteSize() / 8L, which is rootCount for a view from Program_roots. The pointee as a read-only segment of 16 bytes bound to owner, which asserts the pointee lives as long as owner does (a confined owner confines it to its thread); a null element stays null. One restricted call per element, the price of scoping. */
+    public static MemorySegment Program_roots_at(MemorySegment view, long i, Arena owner) {
+        MemorySegment element = view.getAtIndex(ValueLayout.ADDRESS, java.util.Objects.checkIndex(i, view.byteSize() / 8L));
+        return (element.address() == 0L ? element : element.reinterpret(16L, owner, null)).asReadOnly();
+    }
+    /** Element i of Program.roots through one view; IndexOutOfBoundsException unless 0 <= i < rootCount; a read-only, zero-length, global-scope element pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, long i) {
         return Program_roots_at(Program_roots(record), i);
     }
-    /** Element i of Program.roots, read-only and alive while owner is; IndexOutOfBoundsException unless 0 <= i < rootCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.roots, the pointee read-only and bound to owner (see the owner form of _at); IndexOutOfBoundsException unless 0 <= i < rootCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, long i, Arena owner) {
-        return Program_roots_at(Program_roots(record, owner), i).reinterpret(owner, null).asReadOnly();
+        return Program_roots_at(Program_roots(record, owner), i, owner);
     }
-    /** The byte size of a counted view; IndexOutOfBoundsException for a count the pointer cannot hold. */
-    private static long seam$viewBytes(MemorySegment base, long count, long size, String view, String field) {
+    /** The byte size of a counted view; IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. */
+    private static long seam$viewBytes(MemorySegment base, long count, long size, long alignment, String view, String field) {
         if (count < 0L || count > Long.MAX_VALUE / size)
             throw new IndexOutOfBoundsException(view + ": " + field + " " + Long.toUnsignedString(count) + " overflows a byte size");
         if (count != 0L && base.address() == 0L)
             throw new IndexOutOfBoundsException(view + " is null with " + field + " " + count);
+        if (base.address() % alignment != 0L)
+            throw new IndexOutOfBoundsException(view + " is misaligned: 0x" + Long.toHexString(base.address()) + " is not a multiple of " + alignment);
         return count * size;
     }
     public static final FunctionDescriptor empty_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.ADDRESS);

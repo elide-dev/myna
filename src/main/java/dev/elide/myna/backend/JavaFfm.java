@@ -240,7 +240,11 @@ public final class JavaFfm implements Backend {
         .append(": ")
         .append(v.count().name())
         .append(", widened unsigned")
-        .append(wide ? " (above Long.MAX_VALUE it reads negative, which every view rejects)." : ".")
+        .append(
+            wide
+                ? " (above Long.MAX_VALUE it reads negative, which every view rejects: take the"
+                    + " view before looping on this count)."
+                : ".")
         .append(imported)
         .append(" */\n    public static long ")
         .append(name)
@@ -256,9 +260,11 @@ public final class JavaFfm implements Backend {
           .append(
               owned
                   ? " and alive while owner is (the record's own lifetime is the caller's"
-                      + " contract)."
+                      + " contract; a confined owner confines the view to its thread)."
                   : "; valid for as long as the record is, which the caller ensures.")
-          .append(" IndexOutOfBoundsException for a count the pointer cannot hold.")
+          .append(
+              " IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned"
+                  + " pointer.")
           .append(imported)
           .append(" */\n    public static MemorySegment ")
           .append(name)
@@ -269,7 +275,9 @@ public final class JavaFfm implements Backend {
           .append(name)
           .append("_count(record), ")
           .append(size)
-          .append(", \"")
+          .append(", ")
+          .append(v.elementAlignment())
+          .append("L, \"")
           .append(v.label())
           .append("\", \"")
           .append(v.count().name())
@@ -279,11 +287,25 @@ public final class JavaFfm implements Backend {
     }
     // The loop shape: element i of a view taken once, with no restricted call per element.
     String index = "java.util.Objects.checkIndex(i, view.byteSize() / " + size + ")";
+    boolean pointers = v.pointerElements();
+    String bound =
+        "; IndexOutOfBoundsException unless 0 <= i < view.byteSize() / "
+            + size
+            + ", which is "
+            + v.count().name()
+            + " for a view from "
+            + name
+            + ".";
     out.append("    /** Element i of a view of ")
         .append(v.label())
-        .append(" taken once; IndexOutOfBoundsException unless 0 <= i < ")
-        .append(v.count().name())
-        .append(". */\n    public static ")
+        .append(" taken once")
+        .append(bound)
+        .append(
+            pointers
+                ? " The element pointer is a read-only, zero-length segment in the global scope;"
+                    + " the owner overload scopes it."
+                : "")
+        .append(" */\n    public static ")
         .append(carrier)
         .append(' ')
         .append(name)
@@ -291,12 +313,31 @@ public final class JavaFfm implements Backend {
     if (v.element() instanceof Named)
       out.append("asSlice(").append(index).append(" * ").append(size).append(", ").append(size);
     else out.append("getAtIndex(").append(Types.layout(v.element())).append(", ").append(index);
-    out.append(");\n    }\n");
+    out.append(pointers ? ").asReadOnly();\n    }\n" : ");\n    }\n");
+    if (pointers)
+      out.append("    /** Element i of a view of ")
+          .append(v.label())
+          .append(" taken once")
+          .append(bound)
+          .append(" The pointee as a read-only segment of ")
+          .append(v.pointeeSize())
+          .append(
+              " bytes bound to owner, which asserts the pointee lives as long as owner does (a"
+                  + " confined owner confines it to its thread); a null element stays null. One"
+                  + " restricted call per element, the price of scoping. */\n")
+          .append("    public static MemorySegment ")
+          .append(name)
+          .append("_at(MemorySegment view, long i, Arena owner) {\n")
+          .append("        MemorySegment element = view.getAtIndex(ValueLayout.ADDRESS, ")
+          .append(index)
+          .append(");\n        return (element.address() == 0L ? element : element.reinterpret(")
+          .append(v.pointeeSize())
+          .append("L, owner, null)).asReadOnly();\n    }\n");
     out.append("    /** Element i of ")
         .append(v.label())
         .append(" through one view; IndexOutOfBoundsException unless 0 <= i < ")
         .append(v.count().name())
-        .append('.')
+        .append(pointers ? "; a read-only, zero-length, global-scope element pointer." : ".")
         .append(imported)
         .append(" */\n    public static ")
         .append(carrier)
@@ -310,7 +351,12 @@ public final class JavaFfm implements Backend {
     if (!segment) return;
     out.append("    /** Element i of ")
         .append(v.label())
-        .append(", read-only and alive while owner is; IndexOutOfBoundsException unless 0 <= i < ")
+        .append(
+            pointers
+                ? ", the pointee read-only and bound to owner (see the owner form of _at)"
+                : ", read-only and alive while owner is (a confined owner confines it to its"
+                    + " thread)")
+        .append("; IndexOutOfBoundsException unless 0 <= i < ")
         .append(v.count().name())
         .append('.')
         .append(imported)
@@ -320,27 +366,28 @@ public final class JavaFfm implements Backend {
         .append(name)
         .append("_at(")
         .append(name)
-        .append("(record, owner), i)")
-        // An element pointer reads as a new zero-length global segment; scope it too.
-        .append(v.element() instanceof Named ? "" : ".reinterpret(owner, null).asReadOnly()")
-        .append(";\n    }\n");
+        .append("(record, owner), i")
+        .append(pointers ? ", owner" : "")
+        .append(");\n    }\n");
   }
 
   /**
    * The one check behind every view: a count the pointer cannot hold, whether null with a nonzero
    * count, a u64 above {@code Long.MAX_VALUE} or a byte size that overflows, is an {@code
-   * IndexOutOfBoundsException} naming the view and its count field. The {@code $} keeps the name
-   * out of the descriptor's namespace.
+   * IndexOutOfBoundsException} naming the view and its count field, and so is a non-null pointer
+   * misaligned for the element. The {@code $} keeps the name out of the descriptor's namespace.
    */
   private static void viewBytes(StringBuilder out) {
     out.append(
         """
-            /** The byte size of a counted view; IndexOutOfBoundsException for a count the pointer cannot hold. */
-            private static long seam$viewBytes(MemorySegment base, long count, long size, String view, String field) {
+            /** The byte size of a counted view; IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. */
+            private static long seam$viewBytes(MemorySegment base, long count, long size, long alignment, String view, String field) {
                 if (count < 0L || count > Long.MAX_VALUE / size)
                     throw new IndexOutOfBoundsException(view + ": " + field + " " + Long.toUnsignedString(count) + " overflows a byte size");
                 if (count != 0L && base.address() == 0L)
                     throw new IndexOutOfBoundsException(view + " is null with " + field + " " + count);
+                if (base.address() % alignment != 0L)
+                    throw new IndexOutOfBoundsException(view + " is misaligned: 0x" + Long.toHexString(base.address()) + " is not a multiple of " + alignment);
                 return count * size;
             }
         """);
