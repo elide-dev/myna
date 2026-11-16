@@ -277,6 +277,127 @@ class BatchCoercionTest {
     }
   }
 
+  /** The sentinel thread inherits nothing: an inheritable thread-local's childValue never runs. */
+  @Test
+  void theSentinelInheritsNoThreadLocals() {
+    var calls = new java.util.concurrent.atomic.AtomicInteger();
+    var local =
+        new InheritableThreadLocal<String>() {
+          @Override
+          protected String childValue(String parent) {
+            calls.incrementAndGet();
+            return parent;
+          }
+        };
+    local.set("parent");
+    try {
+      Thread sentinel = BatchCoercion.Sentinel.create();
+      assertEquals(Thread.State.NEW, sentinel.getState());
+      assertNotNull(BatchCoercion.Sentinel.THREAD);
+      assertEquals(0, calls.get());
+    } finally {
+      local.remove();
+    }
+  }
+
+  /**
+   * Two elements lent in place are both checked again before the call, and the arrays and lengths
+   * the call receives are where the batch says.
+   */
+  @Test
+  void everyElementLentInPlaceIsRechecked() {
+    var leaf = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, true);
+    Batch empty = leaf.execute(null);
+    assertEquals(0, empty.lengths());
+    empty.recheck(null);
+    empty.release();
+    Arena first = Arena.ofConfined();
+    Arena second = Arena.ofConfined();
+    Batch batch =
+        leaf.execute(
+            BufferArray.of(
+                NativeBytes.of(first.allocate(2), false),
+                NativeBytes.of(second.allocate(3), false)));
+    assertEquals(batch.address() + 16, batch.lengths());
+    batch.recheck(null);
+    second.close();
+    NativeCellException closed = assertThrows(NativeCellException.class, () -> batch.recheck(null));
+    assertTrue(closed.getMessage().contains("was closed before the call"), closed.getMessage());
+    batch.release();
+    first.close();
+  }
+
+  /**
+   * A scoped element that is closed, too large for the scratch stack, or confined to another thread
+   * is refused before the call; an array without a size and a foreign null are handled.
+   */
+  @Test
+  void unavailableScopedElementsAndOddArraysAreRefused() throws Exception {
+    long top = top();
+    var copying = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, false);
+    var leaf = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, true);
+    Arena closing = Arena.ofConfined();
+    MemorySegment big = closing.allocate(20_000);
+    closing.close();
+    for (var coercion : new BatchCoercion[] {copying, leaf}) {
+      NativeCellException refused =
+          assertThrows(
+              NativeCellException.class,
+              () -> coercion.execute(BufferArray.of(NativeBytes.of(big, false))));
+      assertTrue(refused.getMessage().contains("closed or confined"), refused.getMessage());
+    }
+    var elsewhere = new java.util.concurrent.atomic.AtomicReference<MemorySegment>();
+    Thread owner = new Thread(() -> elsewhere.set(Arena.ofConfined().allocate(4)));
+    owner.start();
+    owner.join();
+    NativeCellException foreign =
+        assertThrows(
+            NativeCellException.class,
+            () -> leaf.execute(BufferArray.of(NativeBytes.of(elsewhere.get(), false))));
+    assertTrue(foreign.getMessage().contains("closed or confined"), foreign.getMessage());
+    assertEquals(top, top());
+    assertEquals(0, copying.execute(new TruffleRuntimeTest.ForeignNull()).length());
+    NativeCellException sizeless =
+        assertThrows(NativeCellException.class, () -> copying.execute(new Sizeless()));
+    assertTrue(
+        sizeless.getMessage().contains("array of buffers or strings"), sizeless.getMessage());
+  }
+
+  /**
+   * On a fresh thread, whose scratch block is small, a batch whose arrays or scoped copies do not
+   * fit beside an outstanding copy takes arenas instead, and still lends exactly its bytes.
+   */
+  @Test
+  void batchesThatDoNotFitBesideOutstandingCopiesTakeArenas() throws Exception {
+    var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+    Thread thread =
+        new Thread(() -> {
+          try {
+            Borrow outstanding = Borrow.ofString("x".repeat(3000), true);
+            var copying =
+                new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, true, false);
+            Object[] many = new Object[100];
+            java.util.Arrays.fill(many, "y");
+            Batch arrays = copying.execute(BufferArray.of(many));
+            assertArrayEquals(new byte[] {'y'}, element(arrays, 99, true));
+            arrays.release();
+            try (Arena shared = Arena.ofShared()) {
+              MemorySegment scoped = shared.allocate(2000);
+              scoped.fill((byte) 3);
+              Batch copied = copying.execute(BufferArray.of(NativeBytes.of(scoped, false)));
+              assertEquals(3, element(copied, 0, true)[1999]);
+              copied.release();
+            }
+            outstanding.release();
+          } catch (Throwable e) {
+            failure.set(e);
+          }
+        });
+    thread.start();
+    thread.join();
+    if (failure.get() != null) throw new AssertionError(failure.get());
+  }
+
   /** A cell that lends a batch and returns its count. */
   static final class CountCell extends NativeCell {
     @com.oracle.truffle.api.nodes.Node.Child
@@ -406,6 +527,30 @@ class BatchCoercionTest {
     @ExportMessage
     Object readArrayElement(long index) throws InvalidArrayIndexException {
       if (index == 0) return "a";
+      throw InvalidArrayIndexException.create(index);
+    }
+  }
+
+  /** An array that has elements but cannot say how many. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class Sizeless implements TruffleObject {
+    @ExportMessage
+    boolean hasArrayElements() {
+      return true;
+    }
+
+    @ExportMessage
+    long getArraySize() throws com.oracle.truffle.api.interop.UnsupportedMessageException {
+      throw com.oracle.truffle.api.interop.UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    boolean isArrayElementReadable(long index) {
+      return false;
+    }
+
+    @ExportMessage
+    Object readArrayElement(long index) throws InvalidArrayIndexException {
       throw InvalidArrayIndexException.create(index);
     }
   }

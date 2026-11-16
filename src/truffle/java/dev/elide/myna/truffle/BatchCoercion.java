@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -86,7 +85,8 @@ public final class BatchCoercion extends Coercion {
       if (size < 0 || size > MAX_COUNT) throw badSize(size);
       count = (int) size;
     } catch (UnsupportedMessageException e) {
-      throw CompilerDirectives.shouldNotReachHere(e);
+      // An array that has elements but no size is no array a batch can take.
+      throw mismatch("array of buffers or strings, or null", value);
     }
     if (count == 0) return batch;
     batch.reserve(count);
@@ -165,7 +165,15 @@ public final class BatchCoercion extends Coercion {
    * created at image build time.
    */
   static final class Sentinel {
-    static final Thread THREAD = Thread.ofPlatform().unstarted(() -> {});
+    static final Thread THREAD = create();
+
+    /**
+     * Never inherits the creating thread's inheritable thread-locals: nothing of whichever thread
+     * first lends a batch is copied into it, and no {@code childValue} runs.
+     */
+    static Thread create() {
+      return Thread.ofPlatform().inheritInheritableThreadLocals(false).unstarted(() -> {});
+    }
   }
 
   @TruffleBoundary

@@ -175,11 +175,6 @@ public final class Batch {
             + " place was closed while later elements were coerced");
   }
 
-  /** The scratch stack's current top, where the next copy goes. */
-  long stackTop() {
-    return scratch.top;
-  }
-
   private void own(int index, Object owner) {
     Object[] owners = this.owners;
     if (owners == null) this.owners = owners = new Object[count];

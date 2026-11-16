@@ -377,6 +377,16 @@ class BatchBorrowTest {
       assertTrue(java.contains("borrow_deps.lengths(), (int) borrow_deps.length()"), java);
       // A batch is always borrowed: no call skips its borrow for segments passed in place.
       assertFalse(java.contains("lent_"), java);
+      // Non-leaf imports never lend a scoped element in place, so nothing is checked again.
+      assertFalse(java.contains(".recheck(this);"), java);
     }
+    // An FFM leaf cell checks the elements it lent in place again, right before the call.
+    String leaf =
+        BATCH
+            .replace("java_class=Api", "java_class=Api truffle_cells=true truffle_backend=ffm")
+            .replaceFirst(" native_leaf=false@explicit_contract", "");
+    String java = Generator.generate(Dsl.parse(leaf), true).get("ApiTruffle.java");
+    assertTrue(java.contains("borrow_sources.recheck(this);"), java);
+    assertTrue(java.contains("Long.MAX_VALUE, true, true);"), java);
   }
 }
