@@ -22,9 +22,9 @@ the baseline requires a real optimization available under the same contract.
 
 ## Toolchain and execution modes
 
-Pin Elide 1.6.2, the native toolchain 2026.11.6, and GraalVM
-25.5.5-elide.28. The latter is an explicit external distribution: Elide 1.6.2's
-embedded Native Image compiler reports 25.5.5-elide.21. Retain archive checksums,
+Pin Elide 1.6.3, the native toolchain 2026.11.7, and GraalVM
+25.5.5-elide.28. The latter is an explicit external distribution: native builds
+use it directly even though Elide 1.6.3 bundles the same version. Retain archive checksums,
 compiler versions, edition, target, JVM flags and native link flags with results.
 Rust and LLVM must pass bitcode compatibility tests, beyond a version-major check.
 
@@ -109,7 +109,7 @@ coverage of native libraries instruments the Native Image managed heap.
 Run `mise install && mise run setup` first. Setup verifies the published GraalVM
 archive against `tools/graalvm.json`; the native bundle is locked in `mise.lock`.
 `mise run build:llvm` builds with the pinned compiler and external Native Image.
-The direct driver avoids Elide 1.6.2's embedded `.21` image compiler.
+The direct driver keeps native builds on the checksum-verified pin rather than whatever Elide bundles.
 
 ```sh
 mise run test:jvm             # production JVM: >=99% lines, >=93% branches
@@ -173,7 +173,7 @@ result schema. Hooks alone provide profiles, not wall-time result statistics. Cr
 ## Sanitizer and coverage boundaries
 
 The sanitizer wrappers and Linux amd64 instrumented-library add-ons come from
-`elide-dev/toolchain` 2026.11.6. ASan and TSan each must detect a deliberate bug in
+`elide-dev/toolchain` 2026.11.7. ASan and TSan each must detect a deliberate bug in
 a separate process before a clean workload can pass. The ASan lane also requires
 undefined-behavior and leak canaries and enforces fail-fast UBSan and LSan without
 leak suppressions. UBSan includes `-fsanitize=integer,implicit-conversion`, with

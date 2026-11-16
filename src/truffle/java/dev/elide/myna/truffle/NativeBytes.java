@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
@@ -18,6 +19,17 @@ import java.nio.ByteOrder;
  * A zero-copy guest buffer over native memory: an interop buffer and an interop pointer at once.
  * Cells lend its address directly. The caller keeps the memory alive for as long as the object is
  * reachable from guest code; this object does not own or free it.
+ *
+ * <p>Every buffer message checks the segment's scope before it touches the memory, in both
+ * runtimes, and fails with a guest error, a {@link NativeCellException} that guest code can catch:
+ * once the arena is closed, or on a thread other than a confined arena's owner. Its cause is the
+ * exception the segment's own accessors throw for the same access ({@link IllegalStateException},
+ * {@link WrongThreadException}). A Native Image reads and writes through word operations, which
+ * check nothing themselves, so this check is what keeps a guest from touching the memory of a
+ * closed confined arena there. It is a check, not a hold: it does not protect a shared arena closed
+ * by another thread (in compiled code one check may cover a whole loop of reads), so the caller
+ * keeps a shared arena open while guest code can reach the buffer. Memory viewed through {@link
+ * #of(long, long, boolean)} and the global arena have no scope to check.
  */
 @ExportLibrary(InteropLibrary.class)
 public final class NativeBytes implements TruffleObject {
@@ -40,12 +52,56 @@ public final class NativeBytes implements TruffleObject {
    */
   final MemorySegment scoped;
 
+  /**
+   * {@link #scoped}'s scope, which buffer messages check before every access, or {@code null}. Held
+   * here so compiled code reads its state without first loading it from the segment.
+   */
+  private final MemorySegment.Scope scope;
+
+  /** Whether {@link #scope} is confined to one thread, so a message checks the thread as well. */
+  private final boolean confined;
+
+  /**
+   * A confined arena's owner when it made this buffer (the usual case), so a message compares
+   * threads without loading the scope's owner; otherwise {@code null}, and a confined message asks
+   * the segment. The scope already holds its owner, so this retains nothing new.
+   */
+  private final Thread owner;
+
+  /** A thread that is never started, so no arena is confined to it; created on first use. */
+  private static Thread unowned;
+
   private NativeBytes(MemorySegment segment, boolean writable) {
     this.segment = segment;
     this.writable = writable;
     this.address = segment.address();
     this.size = segment.byteSize();
     this.scoped = size != 0 && !segment.scope().equals(Arena.global().scope()) ? segment : null;
+    this.scope = scoped == null ? null : segment.scope();
+    this.confined = scoped != null && !segment.isAccessibleBy(unowned());
+    Thread current = Thread.currentThread();
+    this.owner = confined && segment.isAccessibleBy(current) ? current : null;
+  }
+
+  /** Only a confined segment is inaccessible to some thread: no other scope has an owner. */
+  private static Thread unowned() {
+    Thread thread = unowned;
+    // A benign race: any thread that never starts will do.
+    if (thread == null) unowned = thread = newUnowned();
+    return thread;
+  }
+
+  /**
+   * A new thread that is never started. It does not inherit inheritable thread-locals, so it keeps
+   * no values of whichever thread first made a confined buffer. Created at run time, on first use,
+   * so it is not part of an image heap unless a buffer is made at build time, where a thread that
+   * has not started is allowed.
+   */
+  static Thread newUnowned() {
+    Thread thread = Thread.ofPlatform().inheritInheritableThreadLocals(false).unstarted(() -> {});
+    // Nor the creating thread's context class loader, which would otherwise stay reachable.
+    thread.setContextClassLoader(null);
+    return thread;
   }
 
   /**
@@ -108,6 +164,44 @@ public final class NativeBytes implements TruffleObject {
   private void check(long offset, int width) throws InvalidBufferOffsetException {
     if (offset < 0 || offset > size - width)
       throw InvalidBufferOffsetException.create(offset, width);
+    checkScope();
+  }
+
+  /**
+   * Fails unless the current thread may access the memory now: its arena is open, and a confined
+   * arena's owner is this thread. A global or address view has nothing to check ({@link #scope} is
+   * {@code null}); a shared or automatic one loads its scope's state and branches; a confined one
+   * also compares its owner with the current thread. Compiled code makes no call and allocates
+   * nothing unless the check fails, a branch it lays out as a slow path.
+   */
+  private void checkScope() {
+    MemorySegment.Scope s = scope;
+    if (s != null
+        && CompilerDirectives.injectBranchProbability(
+            CompilerDirectives.SLOWPATH_PROBABILITY, !(s.isAlive() && onOwner())))
+      throw inaccessible(segment);
+  }
+
+  /** Whether the current thread may access a live scope: any thread unless it is confined. */
+  private boolean onOwner() {
+    if (!confined) return true;
+    Thread known = owner;
+    Thread current = Thread.currentThread();
+    return known != null ? current == known : segment.isAccessibleBy(current);
+  }
+
+  /**
+   * The guest error for an access the segment refuses, with the segment accessors' own exception
+   * (the owner thread first, then liveness) as its cause.
+   */
+  @TruffleBoundary
+  private static NativeCellException inaccessible(MemorySegment s) {
+    if (!s.isAccessibleBy(Thread.currentThread()))
+      return NativeCellException.memory(
+          "native buffer is confined to another thread",
+          new WrongThreadException("Attempted access outside owning thread"));
+    return NativeCellException.memory(
+        "native buffer's arena is closed", new IllegalStateException("Already closed"));
   }
 
   private void checkWrite(long offset, int width)

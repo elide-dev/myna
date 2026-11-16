@@ -7,7 +7,7 @@ import dev.elide.myna.values.SimdNativeValueTape;
 import dev.elide.myna.values.ValueTape;
 import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.word.Pointer;
-import org.graalvm.word.PointerBase;
+import org.graalvm.nativeimage.c.struct.SizeOf;
 
 public final class ValuesMain {
   static java.util.function.Consumer<NativeValueTape> compiledCheck;
@@ -20,7 +20,7 @@ public final class ValuesMain {
     if (!condition) throw new IllegalStateException("Incorrect Rust/SVM value mapping");
   }
   private static SimdNativeValueTape javaBench, simdBench;
-  public static long consume(PointerBase descriptor, int mode) {
+  public static long consume(ValueApi.ValueView descriptor, int mode) {
     if (mode >= 10 && mode < 100) {
       SimdNativeValueTape reader;
       if (mode % 2 == 0) {
@@ -124,9 +124,10 @@ public final class ValuesMain {
     if (mode == 0) {
       tape.validate();
       check(ValueApi.ValueView.SIZE == 56 && ValueApi.ValueNode.SIZE == 24);
-      check(ValueApi.ValueNode.tag(ValueApi.ValueView.nodes(descriptor)) == ValueTape.OBJECT);
-      check(ValueApi.ValueView.nodeCount(descriptor) == tape.nodeCount());
-      check(ValueApi.ValueView.byteCount(descriptor) == tape.byteCount());
+      check(SizeOf.get(ValueApi.ValueView.class) == ValueApi.ValueView.SIZE);
+      check(descriptor.nodes().tag() == ValueTape.OBJECT);
+      check(descriptor.nodeCount() == tape.nodeCount());
+      check(descriptor.byteCount() == tape.byteCount());
       check(tape.tag(0) == ValueTape.OBJECT && tape.length(0) == 8);
       check(tape.unsignedBits(tape.find(0, ID)) == -1L);
       long name = tape.find(0, NAME);

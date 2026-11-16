@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #define TRUFFLE_DEMO_SEAM_ABI "b0542c4c6f8cef9b1c522e705eff5edfaf92e35ce3c12df27587421382a0602d"
+#define TRUFFLE_DEMO_SEAM_ABI_b0542c4c6f8cef9b1c522e705eff5edfaf92e35ce3c12df27587421382a0602d 1
 #define TRUFFLE_DEMO_BINDING_ABI_VERSION 2
 SEAM_ASSERT(sizeof(void *) == 8, "seam target requires 64-bit pointers");
 

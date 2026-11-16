@@ -20,6 +20,19 @@ public sealed class NativeCellException extends AbstractTruffleException
     super(message, location);
   }
 
+  private NativeCellException(String message, Throwable cause, Node location) {
+    super(message, cause, UNLIMITED_STACK_TRACE, location);
+  }
+
+  /**
+   * Guest memory a borrow copies could not be read or written: its arena was closed, or it is
+   * confined to another thread. Keeps the runtime's exception as the internal cause.
+   */
+  @TruffleBoundary
+  static NativeCellException memory(String message, RuntimeException cause) {
+    return new NativeCellException(message, cause, null);
+  }
+
   /**
    * A resource create returned a result that its seam does not list as success. Built behind a
    * boundary and without leaving compiled code: a failed create is an ordinary outcome.

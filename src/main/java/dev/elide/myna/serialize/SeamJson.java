@@ -34,6 +34,7 @@ public final class SeamJson {
         + java(m)
         + nativeConfig(m)
         + truffle(m)
+        + rustImplementation(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -56,6 +57,11 @@ public final class SeamJson {
                                         + quote(f.type().text())
                                         + ",\"offset\":"
                                         + f.offset()
+                                        + reference(f.group(), "")
+                                        + (f.count() == null
+                                            ? ""
+                                            : ",\"count\":" + quote(f.count()))
+                                        + cases(f)
                                         + "}")
                                 .toList())
                         + "}")
@@ -77,10 +83,12 @@ public final class SeamJson {
                         + quote(c.returns().text())
                         + ",\"parameters\":"
                         + array(c.parameters().stream().map(SeamJson::parameter).toList())
+                        + reference(c.returnsGroup(), "return")
                         + "}")
                 .toList())
         + ",\n  \"functions\": "
         + array(m.functions().stream().map(SeamJson::function).toList())
+        + groups(m)
         + ownership(m)
         + "\n}\n";
   }
@@ -110,6 +118,11 @@ public final class SeamJson {
         + "}";
   }
 
+  /** The opt-in Rust implementer trait; omitted unless requested, as cells are. */
+  private static String rustImplementation(Module m) {
+    return m.rustImplementation() ? ",\n  \"rustImplementation\": \"trait\"" : "";
+  }
+
   private static String ownership(Module m) {
     String result = "";
     if (!m.resources().isEmpty())
@@ -122,8 +135,14 @@ public final class SeamJson {
                               + quote(r.name())
                               + ",\"representation\":\"native\",\"threading\":"
                               + quote(r.shared() ? "shared" : "confined")
+                              // One constructor keeps its string form; several are a list.
                               + ",\"create\":"
-                              + quote(r.create())
+                              + (r.creates().size() == 1
+                                  ? quote(r.creates().getFirst())
+                                  : "["
+                                      + String.join(
+                                          ",", r.creates().stream().map(SeamJson::quote).toList())
+                                      + "]")
                               + ",\"destroy\":"
                               + quote(r.destroy())
                               + (r.handle() == null
@@ -146,8 +165,16 @@ public final class SeamJson {
                               + quote(b.function())
                               + ",\"parameter\":"
                               + quote(b.parameter())
-                              + ",\"length\":"
-                              + quote(b.length())
+                              // A batch names its arrays and count; single buffers keep their
+                              // form.
+                              + (b.batch()
+                                  ? ",\"lengths\":"
+                                      + quote(b.length())
+                                      + ",\"count\":"
+                                      + quote(b.count())
+                                      + ",\"elementsNullable\":"
+                                      + b.elementsNullable()
+                                  : ",\"length\":" + quote(b.length()))
                               // A held borrow names its resource; call borrows keep their form.
                               + (b.held()
                                   ? ",\"lifetime\":\"resource\",\"resource\":" + quote(b.resource())
@@ -195,7 +222,116 @@ public final class SeamJson {
         + array(f.abiParameters().stream().map(SeamJson::parameter).toList())
         + ",\"facts\":"
         + facts(f.facts())
+        + reference(f.returnsGroup(), "return")
         + "}";
+  }
+
+  /** Constants, enums and flag sets; each section is omitted when empty. Values are decimal. */
+  private static String groups(Module m) {
+    String result = "";
+    if (!m.constants().isEmpty())
+      result +=
+          ",\n  \"constants\": "
+              + array(
+                  m.constants().stream()
+                      .map(c ->
+                          "{\"name\":"
+                              + quote(c.name())
+                              + ",\"type\":"
+                              + quote(c.type().text())
+                              + ",\"value\":"
+                              + quote(c.value().toString())
+                              + "}")
+                      .toList());
+    if (!m.enums().isEmpty())
+      result +=
+          ",\n  \"enums\": "
+              + array(
+                  m.enums().stream()
+                      .map(e ->
+                          "{\"name\":"
+                              + quote(e.name())
+                              + ",\"type\":"
+                              + quote(e.type().text())
+                              + ",\"values\":"
+                              + array(
+                                  e.values().stream()
+                                      .map(v ->
+                                          "{\"name\":"
+                                              + quote(v.name())
+                                              + ",\"value\":"
+                                              + quote(v.value().toString())
+                                              + "}")
+                                      .toList())
+                              + "}")
+                      .toList());
+    if (!m.flagSets().isEmpty())
+      result +=
+          ",\n  \"flagSets\": "
+              + array(
+                  m.flagSets().stream()
+                      .map(f ->
+                          "{\"name\":"
+                              + quote(f.name())
+                              + ",\"type\":"
+                              + quote(f.type().text())
+                              + (f.cBitfields() ? ",\"cBitfields\":true" : "")
+                              + ",\"bits\":"
+                              + array(
+                                  f.bits().stream()
+                                      .map(b ->
+                                          "{\"name\":"
+                                              + quote(b.name())
+                                              + ",\"bit\":"
+                                              + b.bit()
+                                              + "}")
+                                      .toList())
+                              + ranges(f)
+                              + "}")
+                      .toList());
+    return result;
+  }
+
+  /** A field's tag cases, omitted when it has none so other fields keep their fingerprints. */
+  private static String cases(Field f) {
+    if (f.cases().isEmpty()) return "";
+    return ",\"cases\":"
+        + array(
+            f.cases().stream()
+                .map(c ->
+                    "{\"tag\":"
+                        + quote(c.tagField())
+                        + ",\"value\":"
+                        + quote(c.value())
+                        + reference(c.group(), "")
+                        + "}")
+                .toList());
+  }
+
+  /** A flag set's bit ranges, omitted when it has none so older sets keep their fingerprints. */
+  private static String ranges(FlagSet f) {
+    if (f.ranges().isEmpty()) return "";
+    return ",\"ranges\":"
+        + array(
+            f.ranges().stream()
+                .map(r ->
+                    "{\"name\":"
+                        + quote(r.name())
+                        + ",\"low\":"
+                        + r.low()
+                        + ",\"high\":"
+                        + r.high()
+                        + (r.enumName() == null ? "" : ",\"enum\":" + quote(r.enumName()))
+                        + "}")
+                .toList());
+  }
+
+  /** Appended only when present: {@code "enum"}/{@code "flags"}, or {@code "returnEnum"} etc. */
+  private static String reference(GroupRef group, String prefix) {
+    if (group == null) return "";
+    String key = group.kind() == GroupKind.ENUM ? "Enum" : "Flags";
+    key = prefix.isEmpty() ? key.toLowerCase(Locale.ROOT) : prefix + key;
+    return ",\"" + key + "\":" + quote(group.name());
   }
 
   private static String parameter(Parameter p) {
@@ -211,6 +347,7 @@ public final class SeamJson {
         + quote(p.access().name())
         + ",\"facts\":"
         + facts(p.facts())
+        + reference(p.group(), "")
         + "}";
   }
 
@@ -230,11 +367,16 @@ public final class SeamJson {
   }
 
   public static String fingerprint(Module module) {
+    return fingerprintOf(canonical(module));
+  }
+
+  /** The fingerprint of an already serialized {@link #canonical(Module) canonical} descriptor. */
+  static String fingerprintOf(String canonical) {
     try {
       return HexFormat.of()
           .formatHex(
               MessageDigest.getInstance("SHA-256")
-                  .digest(canonical(module).getBytes(StandardCharsets.UTF_8)));
+                  .digest(canonical.getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException e) {
       throw new AssertionError(e);
     }

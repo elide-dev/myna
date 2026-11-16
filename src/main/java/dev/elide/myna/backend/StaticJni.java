@@ -4,6 +4,7 @@ package dev.elide.myna.backend;
 
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import java.util.*;
 
@@ -12,6 +13,15 @@ public final class StaticJni {
   private StaticJni() {}
 
   public static Map<String, String> generate(Module m) {
+    return generate(m, new Fingerprint(m));
+  }
+
+  /**
+   * {@link #generate(Module)} given the fingerprint a generation already computed for exactly
+   * {@code m}; throws if it describes another module instance.
+   */
+  public static Map<String, String> generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     var methods = JniAbi.methods(m);
     if (methods.isEmpty()) throw new IllegalArgumentException("JNI generation requires imports");
     String cls = JniAbi.className(m);
@@ -26,7 +36,7 @@ public final class StaticJni {
             .append(cls)
             .append("() {}\n")
             .append("    public static final String ABI_FINGERPRINT = ")
-            .append(SeamJson.quote(SeamJson.fingerprint(m)))
+            .append(SeamJson.quote(fingerprint))
             .append(";\n")
             .append("    static { System.loadLibrary(")
             .append(SeamJson.quote(JniAbi.library(m)))
@@ -42,7 +52,7 @@ public final class StaticJni {
                     + "  (void)vm; (void)reserved; return JNI_VERSION_1_8;\n"
                     + "}\n");
     var llvm =
-        new StringBuilder(new Llvm().generate(m))
+        new StringBuilder(new Llvm().generate(m, abi))
             .append("\n; JNI signatures: no raw function effects propagate to wrappers.\n");
     var header =
         new StringBuilder(
@@ -214,6 +224,24 @@ public final class StaticJni {
           .append("if (!")
           .append(segment)
           .append(".isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();\n");
+      long align = CallBorrows.align(p);
+      // A debug-only check of the caller's contract: an AND of the address, off without -ea.
+      if (align > 1)
+        checks
+            .append(pad)
+            .append("assert ")
+            .append(segment)
+            .append(".byteSize() == 0 || (")
+            .append(segment)
+            .append(".address() & ")
+            .append(align - 1)
+            .append("L) == 0 : \"")
+            .append(method.implementation().name())
+            .append('.')
+            .append(p.name())
+            .append(" requires ")
+            .append(align)
+            .append("-byte alignment\";\n");
       if (nullable) checks.append("        }\n");
     }
     out.append(
@@ -339,7 +367,10 @@ public final class StaticJni {
             .append("    return")
             .append(f.returns() == Scalar.VOID ? "" : " 0")
             .append(";\n  }\n")
-            .append("  uint8_t ")
+            .append(
+                CallBorrows.align(p) > 1
+                    ? "  _Alignas(" + CallBorrows.align(p) + ") uint8_t "
+                    : "  uint8_t ")
             .append(empty)
             .append(" = 0;\n  if (")
             .append(nullable ? name + " != NULL && " : "")

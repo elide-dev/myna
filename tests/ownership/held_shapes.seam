@@ -1,0 +1,35 @@
+# Held buffers on both owned resource forms, nullable and narrow, beside call buffers and C
+# strings. OwnershipTest compiles its FFM and Native Image output; the Native Image integration test
+# compiles its Rust.
+module shapes target=aarch64-apple-darwin java_class=Api
+opaque Doc
+resource Doc representation=native threading=shared create=docOpen,docMixed destroy=docClose
+borrow docOpen data length=length lifetime=resource:Doc
+import docOpen return=ptr<Doc> error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=true ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u32
+  param hint type=ptr<u64> nullable=true ownership=borrowed access=read
+end
+borrow docMixed data length=length lifetime=resource:Doc
+borrow docMixed scratch length=capacity lifetime=call
+import docMixed return=ptr<Doc> error=no_failure nounwind=true@explicit_contract
+  param title type=ptr<u8> nullable=true ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read readonly=true@explicit_contract
+  param length type=u64
+  param scratch type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=u64
+end
+import docClose return=void error=no_failure nounwind=true@explicit_contract
+  param doc type=ptr<Doc> nullable=false ownership=transferred_to_callee access=read_write
+end
+opaque Win
+resource Win representation=native threading=confined create=winOpen destroy=winClose handle=out success=0
+borrow winOpen data length=length lifetime=resource:Win
+import winOpen return=u8 error=no_failure nounwind=true@explicit_contract
+  param data type=ptr<u8> nullable=false ownership=borrowed access=read readonly=true@explicit_contract align=32@explicit_contract
+  param length type=u64
+  param out type=ptr<ptr<Win>> nullable=true ownership=borrowed access=write
+end
+import winClose return=void error=no_failure nounwind=true@explicit_contract
+  param win type=ptr<Win> nullable=false ownership=transferred_to_callee access=read_write
+end

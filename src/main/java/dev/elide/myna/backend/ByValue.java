@@ -80,6 +80,7 @@ public final class ByValue {
         f.include(),
         f.callback(),
         f.isolateThread(),
-        f.facts());
+        f.facts(),
+        f.returnsGroup());
   }
 }

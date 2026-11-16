@@ -67,6 +67,24 @@ Generated typed methods use per-symbol static-final handles and `invokeExact`. L
 
 The integration suite compiles and runs this path as a Native Image executable calling Rust. Explicit scoped library bindings, consumer-owned resource factories and scoped dynamic/static callbacks are described in the [adapter guide](jvm-roadmap.md). Graal's [FFM documentation](https://www.graalvm.org/latest/reference-manual/native-image/native-code-interoperability/ffm-api/) explains AOT registration and specialization for known upcall targets.
 
+## Constants, enums and flag sets
+
+Constants cost nothing at run time, and the generator keeps it that way. The measurements come from design-time experiments recorded in the design (`docs/superpowers/specs/2026-11-15-constants-enums-flags-design.md`, sections 7, 7a and 8); the integration tests (`tests/llvm_integration.py`, `tests/native_image_integration.py`) assert the key ones.
+
+| Question | Result |
+| --- | --- |
+| Do constants occupy storage? | No. They are immediates (`cmpl $imm`, `ldc`/`bipush`); a bitcode global would stay as `.rodata` in a machine-code link and could disagree with the header. |
+| Rust enums | A `#[repr(transparent)]` newtype with associated consts compiles to the same code as raw integers. A `#[repr(int)]` enum is UB for undeclared values. |
+| Native Image image heap | The constants classes never load; their literals are in the consumer's bytecode. Name strings exist only when a name function is reachable and are interned once per image. |
+| Java `enum` instead | Costs a lookup, `ordinal()` and a switch map per read and keeps the class, `$VALUES` and name strings reachable. `<Class>Constants` has none. |
+| `@CStruct`/`@CField` vs offset reads | Identical machine code for wide fields. Narrow integer fields (`i8`, `u8`, `char`, `i16`, `u16`) carry one extra register sign-extension today; tracked as [elide-dev/graal#239](https://github.com/elide-dev/graal/issues/239). `@CField` stays, and a test pins the extra instruction so it fails when the fold lands. |
+| `@CConstant` | Byte-identical code to a `static final` literal; it only adds an image-build header query. |
+| `@CBitfield` | One extra shift and a narrower load against a mask test, so it is opt-in (`c_bitfields=true`). |
+| `@CEnum` | On this fork a `@CEnum` return does not build on a leaf call and costs two calls on a transition. The plain import stays raw and `<name>Enum` is a separate method; enum arguments through the literal value are free. |
+| Range facts | Not emitted for enum references: LLVM would delete a caller's check for a value the list omits (`-1` in the Komodo case). |
+
+A Truffle cell never sees these types: cell results stay primitive. `NativeConstants` values fold in compiled code when the guest passes a constant member name; see [Truffle native cells](truffle-cells.md#constants-and-names).
+
 ## Ownership and off-heap access
 
 The [ownership API](ownership.md) keeps Native Image cleanup policy in consumer code. Each resource type supplies one reusable native destructor callback. Off-heap buffer calls use consumer acquire/release hooks and a direct C API call without generated per-call allocation, copies, or monitors. Rust lifetime markers have no runtime bookkeeping. These are structural properties, not latency benchmark results; consumer GC registration and retention costs remain part of the integration.

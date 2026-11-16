@@ -4,13 +4,29 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.elide.myna.backend.Backend;
+import dev.elide.myna.backend.CHeader;
+import dev.elide.myna.backend.JavaFfm;
+import dev.elide.myna.backend.Llvm;
+import dev.elide.myna.backend.NativeImage;
+import dev.elide.myna.backend.NativeImageDirectives;
+import dev.elide.myna.backend.NativeImageForeign;
+import dev.elide.myna.backend.NativeImageProperties;
+import dev.elide.myna.backend.RustFfi;
 import dev.elide.myna.backend.StaticJni;
+import dev.elide.myna.backend.TruffleCells;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.nio.file.*;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.MessageDigestSpi;
+import java.security.Provider;
+import java.security.Security;
 import java.util.*;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -87,6 +103,7 @@ class GeneratorTest {
         Set.of(
             "META-INF/native-image/dev.elide.myna/dev.example.io.IoNatives/native-image.properties",
             "IoNatives.java",
+            "IoNativesDirectives.java",
             "IoNativesFFM.java",
             "IoNativesForeignFeature.java",
             "seam.abi",
@@ -98,6 +115,11 @@ class GeneratorTest {
     String nativeImage = output.get("IoNatives.java");
     assertTrue(nativeImage.contains("package dev.example.io;"));
     assertTrue(nativeImage.contains("public final class IoNatives {"));
+    assertTrue(nativeImage.contains("@CContext(IoNativesDirectives.class)"));
+    assertTrue(
+        output
+            .get("IoNativesDirectives.java")
+            .contains("package dev.example.io;\n\n/**\n * The C context of {@link IoNatives}:"));
     assertTrue(output.get("IoNativesFFM.java").contains("IoNativesFFM.inspect_Downcall.HANDLE"));
     assertTrue(
         output
@@ -151,7 +173,7 @@ class GeneratorTest {
     assertTrue(
         ni.contains(
             "open(IsolateThread isolate_thread, @CConst CCharPointer path, CCharPointerPointer"
-                + " argv, VoidPointer any, CIntPointer ints, PointerBase handle)"),
+                + " argv, VoidPointer any, CIntPointer ints, Handle handle)"),
         ni);
     assertTrue(ni.contains("return fixture.Ops.open(path, argv, any, ints, handle);"));
     assertFalse(ni.contains("WordFactory"));
@@ -380,12 +402,11 @@ class GeneratorTest {
     var output = generate(base);
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("CGlobalDataFactory.forSymbol(\"pt_flip_myna_ref\")"), ni);
-    assertTrue(
-        ni.contains("public static void flip(PointerBase p, int k, PointerBase result) {"), ni);
+    assertTrue(ni.contains("public static void flip(Pt p, int k, Pt result) {"), ni);
     assertTrue(ni.contains("@CEntryPoint(name = \"pt_norm_myna_ref\")"), ni);
     assertTrue(ni.contains("return fixture.Ops.norm(p);"), ni);
-    assertTrue(ni.contains("public static final int SIZE = 8;"), ni);
-    assertTrue(ni.contains("((Pointer) record).readInt(4)"), ni);
+    assertTrue(ni.contains("        int SIZE = 8;\n"), ni);
+    assertTrue(ni.contains("@CField(\"y\") int y();"), ni);
     String rust = output.get("seam.rs");
     assertTrue(rust.contains("pub fn flip(p: Pt, k: i32) -> Pt;"), rust);
     assertTrue(
@@ -780,6 +801,188 @@ class GeneratorTest {
           output.getKey());
   }
 
+  /**
+   * A generation fingerprints the module once and hands that fingerprint to every backend; each
+   * backend used on its own computes it and must produce the same text.
+   */
+  @Test
+  void standaloneBackendsMatchOneGeneration() throws Exception {
+    for (String example :
+        List.of("examples/truffle.seam", "examples/constants.seam", "tests/bemo/bemo.seam")) {
+      var module = Dsl.parse(Files.readString(Path.of(example)));
+      var generated = Generator.generate(module, true);
+      var fingerprint = new Fingerprint(module);
+      Validator.validate(module, true, fingerprint);
+      assertSame(module, fingerprint.module());
+      assertEquals(SeamJson.canonical(module), fingerprint.json());
+      assertEquals(SeamJson.fingerprint(module) + "\n", generated.get("seam.abi"));
+      assertEquals(generated, Generator.generate(module, true, fingerprint));
+      var backends =
+          new ArrayList<Backend>(
+              List.of(
+                  new CHeader(),
+                  new RustFfi(),
+                  new JavaFfm(),
+                  new NativeImage(),
+                  new NativeImageDirectives(),
+                  new NativeImageProperties(),
+                  new Llvm()));
+      if (module.truffleConfig() != null) backends.add(new TruffleCells());
+      for (Backend backend : backends) {
+        String expected = generated.get(backend.filename(module));
+        assertEquals(expected, backend.generate(module), example + " " + backend.filename(module));
+        assertEquals(
+            expected,
+            backend.generate(module, fingerprint),
+            example + " " + backend.filename(module));
+      }
+    }
+  }
+
+  /**
+   * A fingerprint or seam.h describes the exact module instance it was computed for; a retargeted
+   * module (whose fingerprint differs) or any other instance is rejected rather than mislabeled.
+   */
+  @Test
+  void precomputedFingerprintsAndHeadersRejectOtherModules() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("examples/truffle.seam")));
+    var retargeted = module.withTarget("aarch64-unknown-linux-gnu");
+    assertNotEquals(SeamJson.fingerprint(module), SeamJson.fingerprint(retargeted));
+    var stale = new Fingerprint(module);
+    String expected =
+        "fingerprint of module truffle_demo (aarch64-apple-darwin) used for another module"
+            + " instance; compute a Fingerprint for that module";
+    List<org.junit.jupiter.api.function.Executable> misuses =
+        new ArrayList<>(
+            List.of(
+                () -> Generator.generate(retargeted, true, stale),
+                () -> Validator.validate(retargeted, true, stale),
+                () -> StaticJni.generate(retargeted, stale),
+                () -> stale.valueFor(retargeted),
+                () -> new CHeader().header(retargeted, stale)));
+    for (Backend backend :
+        List.of(
+            new CHeader(),
+            new RustFfi(),
+            new JavaFfm(),
+            new NativeImage(),
+            new NativeImageDirectives(),
+            new NativeImageProperties(),
+            new NativeImageForeign(),
+            new Llvm(),
+            new TruffleCells())) misuses.add(() -> backend.generate(retargeted, stale));
+    // An equal but distinct instance is another module too.
+    var copy = Dsl.parse(Files.readString(Path.of("examples/truffle.seam")));
+    assertEquals(module, copy);
+    misuses.add(() -> new RustFfi().generate(copy, stale));
+    for (var misuse : misuses)
+      assertEquals(expected, assertThrows(IllegalArgumentException.class, misuse).getMessage());
+
+    var header = new CHeader().header(module, stale);
+    assertEquals(new CHeader().generate(module), header.text());
+    assertEquals(
+        "seam.h of module truffle_demo (aarch64-apple-darwin) used for another module instance",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new NativeImageDirectives().withHeader(retargeted, header))
+            .getMessage());
+  }
+
+  /** Counts SHA-256 digests created on the calling thread, delegating to the JDK's. */
+  public static final class CountingSha256 extends MessageDigestSpi {
+    static final ThreadLocal<int[]> COUNT = ThreadLocal.withInitial(() -> new int[1]);
+    private final MessageDigest delegate;
+
+    public CountingSha256() throws GeneralSecurityException {
+      delegate = MessageDigest.getInstance("SHA-256", "SUN");
+      COUNT.get()[0]++;
+    }
+
+    @Override
+    protected void engineUpdate(byte input) {
+      delegate.update(input);
+    }
+
+    @Override
+    protected void engineUpdate(byte[] input, int offset, int length) {
+      delegate.update(input, offset, length);
+    }
+
+    @Override
+    protected byte[] engineDigest() {
+      return delegate.digest();
+    }
+
+    @Override
+    protected void engineReset() {
+      delegate.reset();
+    }
+  }
+
+  /** Each SHA-256 digest is one fingerprint: a generation computes exactly one. */
+  @Test
+  void generationFingerprintsOnce() throws Exception {
+    var provider = new Provider("MynaCountingSha256", "1", "counts SHA-256 digests") {};
+    provider.put("MessageDigest.SHA-256", CountingSha256.class.getName());
+    Security.insertProviderAt(provider, 1);
+    try {
+      for (String example :
+          List.of(
+              "examples/buffer.seam",
+              "examples/constants.seam",
+              "examples/truffle.seam",
+              "tests/bemo/bemo.seam")) {
+        var module = Dsl.parse(Files.readString(Path.of(example)));
+        int[] count = CountingSha256.COUNT.get();
+        count[0] = 0;
+        Generator.generate(module, true);
+        assertEquals(1, count[0], example + " generate");
+        count[0] = 0;
+        Validator.validate(module, true);
+        // Validation hashes only to name the header check a const, enum or flag set must avoid.
+        boolean values =
+            !module.constants().isEmpty()
+                || !module.enums().isEmpty()
+                || !module.flagSets().isEmpty();
+        assertEquals(values ? 1 : 0, count[0], example + " validate");
+        Path out = Files.createTempDirectory("myna-generate-once");
+        try {
+          count[0] = 0;
+          var stdout = new java.io.ByteArrayOutputStream();
+          var stderr = new java.io.ByteArrayOutputStream();
+          assertEquals(
+              0,
+              dev.elide.myna.cli.Main.run(
+                  new String[] {"generate", example, "--out", out.toString(), "--jni"},
+                  new java.io.PrintStream(stdout),
+                  new java.io.PrintStream(stderr)),
+              stderr.toString());
+          assertEquals(1, count[0], example + " CLI generate --jni");
+        } finally {
+          try (var files = Files.walk(out)) {
+            for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(file);
+          }
+        }
+      }
+    } finally {
+      Security.removeProvider(provider.getName());
+    }
+  }
+
+  @Test
+  void constantsGoldenOutputs() throws Exception {
+    var actual = generate(Files.readString(Path.of("examples/constants.seam")));
+    assertFalse(actual.isEmpty());
+    try (var files = Files.list(Path.of("tests/golden/constants"))) {
+      assertTrue(files.findAny().isPresent());
+    }
+    for (var output : actual.entrySet())
+      assertEquals(
+          Files.readString(Path.of("tests/golden/constants", output.getKey())),
+          output.getValue(),
+          output.getKey());
+  }
+
   @Test
   void determinismIgnoresCommentsWhitespaceAndDeclarationOrder() {
     String a =
@@ -971,10 +1174,192 @@ class GeneratorTest {
   }
 
   @Test
+  void nativeImageRecordsAreCStructs() {
+    String source =
+        MODULE
+            + "opaque Handle\n"
+            + "struct Rec size=80 align=8\n"
+            + "field signed64 type=i64 offset=0\n"
+            + "field unsigned64 type=u64 offset=8\n"
+            + "field size type=usize offset=16\n"
+            + "field offset type=isize offset=24\n"
+            + "field ratio type=f64 offset=32\n"
+            + "field next type=ptr<Rec> offset=40\n"
+            + "field handle type=ptr<Handle> offset=48\n"
+            + "field signed32 type=i32 offset=56\n"
+            + "field unsigned32 type=u32 offset=60\n"
+            + "field scale type=f32 offset=64\n"
+            + "field signed16 type=i16 offset=68\n"
+            + "field unsigned16 type=u16 offset=70\n"
+            + "field flag type=bool offset=72\n"
+            + "field letter type=char offset=73\n"
+            + "field signed8 type=i8 offset=74\n"
+            + "field unsigned8 type=u8 offset=75\n"
+            + "end\n"
+            + "import first return=i64 error=no_failure\n"
+            + "param rec type=ptr<Rec>\n"
+            + "end\n";
+    String ni = generate(source).get("MynaNative.java");
+    String expected =
+        """
+            @CStruct(value = "Rec", addStructKeyword = true)
+            public interface Rec extends PointerBase {
+                int SIZE = 80;
+                int ALIGNMENT = 8;
+                @CField("signed64") long signed64();
+                @CField("signed64") void signed64(long value);
+                @CFieldAddress("signed64") CLongPointer addressOfSigned64();
+                @CField("unsigned64") long unsigned64();
+                @CField("unsigned64") void unsigned64(long value);
+                @CFieldAddress("unsigned64") CLongPointer addressOfUnsigned64();
+                @CField("size") long size();
+                @CField("size") void size(long value);
+                @CFieldAddress("size") WordPointer addressOfSize();
+                @CField("offset") long offset();
+                @CField("offset") void offset(long value);
+                @CFieldAddress("offset") WordPointer addressOfOffset();
+                @CField("ratio") double ratio();
+                @CField("ratio") void ratio(double value);
+                @CFieldAddress("ratio") CDoublePointer addressOfRatio();
+                @CField("next") Rec next();
+                @CField("next") void next(Rec value);
+                @CFieldAddress("next") PointerBase addressOfNext();
+                @CField("handle") Handle handle();
+                @CField("handle") void handle(Handle value);
+                @CFieldAddress("handle") PointerBase addressOfHandle();
+                @CField("signed32") int signed32();
+                @CField("signed32") void signed32(int value);
+                @CFieldAddress("signed32") CIntPointer addressOfSigned32();
+                @CField("unsigned32") int unsigned32();
+                @CField("unsigned32") void unsigned32(int value);
+                @CFieldAddress("unsigned32") CIntPointer addressOfUnsigned32();
+                @CField("scale") float scale();
+                @CField("scale") void scale(float value);
+                @CFieldAddress("scale") CFloatPointer addressOfScale();
+                @CField("signed16") short signed16();
+                @CField("signed16") void signed16(short value);
+                @CFieldAddress("signed16") CShortPointer addressOfSigned16();
+                @CField("unsigned16") short unsigned16();
+                @CField("unsigned16") void unsigned16(short value);
+                @CFieldAddress("unsigned16") CShortPointer addressOfUnsigned16();
+                @CField("flag") boolean flag();
+                @CField("flag") void flag(boolean value);
+                @CFieldAddress("flag") CCharPointer addressOfFlag();
+                @CField("letter") byte letter();
+                @CField("letter") void letter(byte value);
+                @CFieldAddress("letter") CCharPointer addressOfLetter();
+                @CField("signed8") byte signed8();
+                @CField("signed8") void signed8(byte value);
+                @CFieldAddress("signed8") CCharPointer addressOfSigned8();
+                @CField("unsigned8") byte unsigned8();
+                @CField("unsigned8") void unsigned8(byte value);
+                @CFieldAddress("unsigned8") CCharPointer addressOfUnsigned8();
+            }
+        """;
+    assertTrue(ni.contains(expected), ni);
+    assertTrue(ni.contains("    public interface Handle extends PointerBase {}\n"), ni);
+    for (String i :
+        List.of(
+            "org.graalvm.nativeimage.c.struct.CStruct",
+            "org.graalvm.nativeimage.c.struct.CField",
+            "org.graalvm.nativeimage.c.struct.CFieldAddress"))
+      assertTrue(ni.contains("import " + i + ";\n"), i);
+    // Records are typed pointers: no static accessor classes, no raw offset reads.
+    assertFalse(ni.contains("static final class Rec"), ni);
+    assertFalse(ni.contains("((Pointer) record)"), ni);
+    assertFalse(ni.contains("import org.graalvm.word.Pointer;"), ni);
+    assertTrue(ni.contains(" long first(Rec rec)"), ni);
+    // Accessor names may not redeclare a word method or another field's address accessor.
+    for (String method : List.of("isNull", "isNonNull", "rawValue", "equal", "notEqual"))
+      assertEquals(
+          "field collides with a Native Image word method: " + method,
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> generate(source.replace("unsigned8 type=u8", method + " type=u8")))
+              .getMessage());
+    assertEquals(
+        "field collides with the Native Image address accessor addressOfNext of next",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> generate(source.replace("unsigned8 type=u8", "addressOfNext type=u8")))
+            .getMessage());
+    // Fields x and X would both generate addressOfX.
+    assertEquals(
+        "field collides with the Native Image address accessor addressOfSigned8 of Signed8",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> generate(source.replace("unsigned8 type=u8", "Signed8 type=u8")))
+            .getMessage());
+    // Declared types are nested in the Native Image class: they may not shadow it or a name it
+    // imports or declares.
+    for (String type : List.of("PointerBase", "CStruct", "CField", "CCharPointer", "String")) {
+      for (String shadow :
+          List.of(
+              source.replace("opaque Handle", "opaque " + type),
+              source
+                  .replace("struct Rec", "struct " + type)
+                  .replace("ptr<Rec>", "ptr<" + type + ">")))
+        assertEquals(
+            "type shadows generated name: " + type,
+            assertThrows(IllegalArgumentException.class, () -> generate(shadow)).getMessage());
+    }
+    String named = source.replace(MODULE.strip(), MODULE.strip() + " java_class=Handle");
+    assertEquals(
+        "type shadows generated name: Handle",
+        assertThrows(IllegalArgumentException.class, () -> generate(named)).getMessage());
+    assertTrue(
+        generate(source.replace("opaque Handle", "opaque Pointer").replace("<Handle>", "<Pointer>"))
+            .get("MynaNative.java")
+            .contains("public interface Pointer extends PointerBase {}"));
+  }
+
+  @Test
+  void typedOpaquePointers() {
+    String source =
+        MODULE
+            + "opaque Handle\n"
+            + "struct Pair size=16 align=8\n"
+            + "field left type=i64 offset=0\n"
+            + "field right type=ptr<ptr<u8>> offset=8\n"
+            + "end\n"
+            + "callback Visit return=i32\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param pair type=ptr<Pair>\n"
+            + "end\n"
+            + "import open return=ptr<Handle> error=no_failure"
+            + " native_leaf=false@explicit_contract\n"
+            + "param name type=ptr<u8>\n"
+            + "end\n"
+            + "import peek return=ptr<Pair> error=no_failure\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param names type=ptr<ptr<Pair>>\n"
+            + "end\n"
+            + "export visit symbol=x_visit return=i32 java=fixture.Ops.visit isolate=thread"
+            + " error=abort\n"
+            + "param handle type=ptr<Handle>\n"
+            + "param pair type=ptr<Pair> access=read\n"
+            + "end\n";
+    String ni = generate(source).get("MynaNative.java");
+    assertTrue(ni.contains("    public interface Handle extends PointerBase {}\n"), ni);
+    // A transitioning @CFunction returning ptr<Opaque> returns the opaque interface.
+    assertTrue(
+        ni.contains(
+            "    @CFunction(value = \"open\")\n"
+                + "    public static native Handle open(CCharPointer name);\n"),
+        ni);
+    // Default leaves carry the same types; ptr<ptr<…>> keeps today's carriers.
+    assertTrue(ni.contains("Pair invoke(Handle handle, PointerBase names);"), ni);
+    assertTrue(ni.contains("public static Pair peek(Handle handle, PointerBase names) {"), ni);
+    assertTrue(ni.contains("int invoke(Handle handle, Pair pair);"), ni);
+    assertTrue(ni.contains("Handle handle, @CConst Pair pair) {"), ni);
+    assertTrue(ni.contains("@CField(\"right\") CCharPointerPointer right();"), ni);
+  }
+
+  @Test
   void scalarFunctionCarriers() {
     for (String type : List.of("i32", "u32", "i64", "u64", "f32", "f64")) {
       assertEquals(
-          9,
+          10,
           generate(
                   MODULE
                       + "import identity return="
@@ -1241,5 +1626,295 @@ class GeneratorTest {
   void relaxedNeverPermitsUnprovenNoAlias() {
     var module = Dsl.parse(VALID.replace("access=read", "access=read noalias=true@heuristic"));
     assertThrows(IllegalArgumentException.class, () -> Generator.generate(module, false));
+  }
+
+  static final String PROPERTIES =
+      "META-INF/native-image/dev.elide.myna/dev.elide.myna.generated.MynaNative/"
+          + "native-image.properties";
+
+  @Test
+  void nativeImageClassAlwaysHasTheGeneratedContextAndConstantAccessors() {
+    String constants =
+        MODULE
+            + "const ANALYSIS_MAGIC type=u32 value=0x3141514b\n"
+            + "const LEVEL type=u8 value=200\n"
+            + "const DEPTH type=i16 value=-2\n"
+            + "const LIMIT type=u64 value=0xffffffffffffffff\n"
+            + "const FLOOR type=i64 value=-9223372036854775808\n"
+            + "const SPAN type=usize value=4096\n"
+            + FUNCTION
+            + PARAM
+            + "end\n";
+    String java = generate(constants).get("MynaNative.java");
+    assertTrue(java.contains("import org.graalvm.nativeimage.c.CContext;\n"), java);
+    assertTrue(java.contains("import org.graalvm.nativeimage.c.constant.CConstant;\n"), java);
+    assertTrue(
+        java.contains("import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;\n"), java);
+    assertTrue(java.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), java);
+    // The seam.h check: a macro only this generation's header defines, resolved by the C query.
+    var outputs = generate(constants);
+    String check = "SAMPLE_SEAM_ABI_" + outputs.get("seam.abi").strip();
+    assertTrue(
+        java.contains("    @CConstant(\"" + check + "\") static native int seamHeaderCheck();\n"),
+        java);
+    assertTrue(
+        outputs.get("seam.h").contains("\n#define " + check + " 1\n"), outputs.get("seam.h"));
+    assertTrue(
+        outputs.get("seam.h").contains("\n#define SAMPLE_SEAM_ABI \""), outputs.get("seam.h"));
+    // Nothing calls it: wrappers, leaf or not, are unchanged by the check.
+    assertEquals(1, java.split("seamHeaderCheck", -1).length - 1, java);
+    // Each const reads its macro from seam.h; SVM replaces the call with the value at parse time.
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_ANALYSIS_MAGIC\") public static native int"
+                + " analysisMagic();\n"),
+        java);
+    // A narrow const's macro has type int in C (UINT8_C(200) is 200), so SVM must narrow it.
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_LEVEL\") @AllowNarrowingCast public static native byte"
+                + " level();\n"),
+        java);
+    assertTrue(
+        java.contains(
+            "    @CConstant(\"SAMPLE_DEPTH\") @AllowNarrowingCast public static native short"
+                + " depth();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_LIMIT\") public static native long limit();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_FLOOR\") public static native long floor();\n"),
+        java);
+    assertTrue(
+        java.contains("    @CConstant(\"SAMPLE_SPAN\") public static native long span();\n"), java);
+    // Without constants or a consumer context the class still names the generated context and
+    // checks the header; nothing needs narrowing.
+    String plain = generate(VALID).get("MynaNative.java");
+    assertTrue(
+        plain.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), plain);
+    assertTrue(plain.contains("static native int seamHeaderCheck();"), plain);
+    assertFalse(plain.contains("seamHeaderAbi"), plain);
+    assertFalse(plain.contains("AllowNarrowingCast"), plain);
+    // A consumer context is delegated to, never the annotation value.
+    String bemo =
+        generate(MODULE.replace("\n", " java_package=a.b c_context=a.b.Ctx\n") + FUNCTION + "end\n")
+            .get("MynaNative.java");
+    assertTrue(bemo.contains("\n@CContext(MynaNativeDirectives.class)\npublic final class"), bemo);
+    assertFalse(bemo.contains("a.b.Ctx"), bemo);
+  }
+
+  /** The string constants of a generated directives class, decoded, in declaration order. */
+  static List<String> headerPieces(String directives) {
+    var pieces = new ArrayList<String>();
+    var declaration =
+        java.util.regex.Pattern.compile(
+            "private static final String HEADER_(\\d+) =(.*?);\n", java.util.regex.Pattern.DOTALL);
+    var literal = java.util.regex.Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
+    var matcher = declaration.matcher(directives);
+    while (matcher.find()) {
+      assertEquals(String.valueOf(pieces.size()), matcher.group(1));
+      var piece = new StringBuilder();
+      var parts = literal.matcher(matcher.group(2));
+      while (parts.find()) piece.append(unescape(parts.group(1)));
+      pieces.add(piece.toString());
+    }
+    return pieces;
+  }
+
+  static String unescape(String body) {
+    var out = new StringBuilder();
+    for (int i = 0; i < body.length(); i++) {
+      char c = body.charAt(i);
+      if (c != '\\') {
+        out.append(c);
+        continue;
+      }
+      char e = body.charAt(++i);
+      switch (e) {
+        case 'n' -> out.append('\n');
+        case 'r' -> out.append('\r');
+        case 't' -> out.append('\t');
+        case '"', '\\' -> out.append(e);
+        case 'u' -> {
+          out.append((char) Integer.parseInt(body.substring(i + 1, i + 5), 16));
+          i += 4;
+        }
+        default -> {
+          int end = i;
+          while (end < body.length()
+              && end < i + 3
+              && body.charAt(end) >= '0'
+              && body.charAt(end) <= '7') end++;
+          assertTrue(end > i, "unknown escape \\" + e);
+          out.append((char) Integer.parseInt(body.substring(i, end), 8));
+          i = end - 1;
+        }
+      }
+    }
+    return out.toString();
+  }
+
+  @Test
+  void directivesSupplyTheHeaderAndAreNoFeature() {
+    var output = generate(VALID);
+    String directives = output.get("MynaNativeDirectives.java");
+    assertNotNull(directives, output.keySet().toString());
+    // Everything qualified, so no declared or consumer name can shadow an import.
+    assertFalse(directives.contains("\nimport "), directives);
+    assertTrue(
+        directives.contains(
+            "public final class MynaNativeDirectives implements"
+                + " org.graalvm.nativeimage.c.CContext.Directives {\n"),
+        directives);
+    assertTrue(directives.contains("    public MynaNativeDirectives() {}\n"), directives);
+    assertTrue(directives.endsWith("    }\n}\n"), directives);
+    assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
+    // Written once per builder JVM into a directory the builder removes when it exits.
+    assertTrue(directives.contains("createTempDirectory(\"myna-seam\")"), directives);
+    assertTrue(directives.contains("Runtime.getRuntime().addShutdownHook("), directives);
+    assertTrue(
+        directives.contains("        return java.util.List.of(Header.INCLUDE);\n"), directives);
+    // The check is the bindings' fingerprinted @CConstant, not a hosted Feature: nothing here reads
+    // the bindings, and an image without the Native Image class never touches this class.
+    for (String gone :
+        List.of("Feature", "beforeAnalysis", "ABI_FINGERPRINT", "seamHeaderAbi", "MynaNative\""))
+      assertFalse(directives.contains(gone), gone);
+    // Without a consumer context nothing is delegated.
+    assertFalse(directives.contains("Directives context ="), directives);
+    assertFalse(directives.contains("return context."), directives);
+    // The check needs no flag: the generated properties register no Feature.
+    assertFalse(output.get(PROPERTIES).contains("--features"), output.get(PROPERTIES));
+    assertFalse(output.get(PROPERTIES).contains("Directives"), output.get(PROPERTIES));
+  }
+
+  @Test
+  void directivesDelegateToTheConsumerContext() throws Exception {
+    var output = generate(Files.readString(Path.of("tests/bemo/bemo.seam")));
+    String directives = output.get("BemoImportsDirectives.java");
+    assertTrue(
+        directives.contains(
+            "    private final org.graalvm.nativeimage.c.CContext.Directives context =\n"
+                + "        new fixture.bemo.BemoDirectives();\n"),
+        directives);
+    for (String method :
+        List.of(
+            "isInConfiguration",
+            "getMacroDefinitions",
+            "getOptions",
+            "getLibraries",
+            "getLibraryPaths"))
+      assertTrue(directives.contains("        return context." + method + "();\n"), method);
+    // The consumer's headers first, then seam.h.
+    assertTrue(
+        directives.contains(
+            "        var headers = new java.util.ArrayList<String>(context.getHeaderFiles());\n"
+                + "        headers.add(Header.INCLUDE);\n"
+                + "        return headers;\n"),
+        directives);
+    assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
+  }
+
+  @Test
+  void directivesSplitLargeHeaders() {
+    var source = new StringBuilder(MODULE);
+    for (int i = 0; i < 160; i++) {
+      source.append("struct Record").append(i).append(" size=64 align=8\n");
+      for (int f = 0; f < 8; f++)
+        source
+            .append("field value")
+            .append(f)
+            .append(" type=i64 offset=")
+            .append(f * 8)
+            .append('\n');
+      source.append("end\n");
+    }
+    var output = generate(source.toString());
+    String header = output.get("seam.h");
+    assertTrue(header.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 64 * 1024);
+    var pieces = headerPieces(output.get("MynaNativeDirectives.java"));
+    assertTrue(pieces.size() >= 4, String.valueOf(pieces.size()));
+    for (String piece : pieces)
+      assertTrue(
+          piece.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 16 * 1024,
+          String.valueOf(piece.length()));
+    assertEquals(header, String.join("", pieces));
+  }
+
+  @Test
+  void headerPiecesKeepCharactersWholeAndLiteralsSafe() {
+    String smile = new String(Character.toChars(0x1F600));
+    String line = smile.repeat(5000) + "\n"; // 20000 UTF-8 bytes in one line
+    String text = "a\"b\\c\\u000a\r\t\u0001\u007fé\n" + line + "tail";
+    var pieces = dev.elide.myna.backend.NativeImageDirectives.pieces(text, 16 * 1024);
+    assertEquals(text, String.join("", pieces));
+    for (String piece : pieces) {
+      assertTrue(piece.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 16 * 1024);
+      assertFalse(Character.isLowSurrogate(piece.charAt(0)), "split inside a surrogate pair");
+      assertFalse(Character.isHighSurrogate(piece.charAt(piece.length() - 1)));
+    }
+    String literal = dev.elide.myna.backend.NativeImageDirectives.literal(text);
+    assertTrue(literal.chars().allMatch(c -> c >= 0x20 && c < 0x7f), literal);
+    assertEquals(text, unescape(literal.substring(1, literal.length() - 1)));
+    // javac translates unicode escapes (a `u` after an odd run of backslashes) before lexing; none
+    // may spell a quote, a backslash or a line terminator.
+    var escapes = new ArrayList<String>();
+    for (int i = 0, run = 0; i < literal.length(); i++) {
+      char c = literal.charAt(i);
+      if (c == 'u' && run % 2 == 1) escapes.add(literal.substring(i + 1, i + 5));
+      run = c == '\\' ? run + 1 : 0;
+    }
+    assertEquals(List.of("00e9", "d83d", "de00"), escapes.subList(0, 3));
+    for (String unsafe : List.of("000a", "000d", "0022", "005c"))
+      assertFalse(escapes.contains(unsafe), unsafe);
+    assertEquals(List.of(""), dev.elide.myna.backend.NativeImageDirectives.pieces("", 16));
+  }
+
+  /**
+   * {@code enum=}/{@code flags=} references add typed forms beside the raw bindings and never
+   * change a binding's transition: the leaf interfaces, symbols and {@code @CFunction} declarations
+   * are the same with and without them, in the Native Image class, and so is the AOT FFM and
+   * Truffle leaf choice.
+   */
+  @Test
+  void enumReferencesNeverChangeTransition() throws Exception {
+    String typed = Files.readString(Path.of("examples/constants.seam"));
+    String raw = typed.replaceAll("(?m)^ *when .*\n", "").replaceAll(" (enum|flags)=[A-Za-z]+", "");
+    assertNotEquals(typed, raw);
+    var withRefs = generate(typed);
+    var without = generate(raw);
+    for (Function f : Dsl.parse(typed).functions())
+      assertEquals(
+          Seam.nativeLeaf(f),
+          Seam.nativeLeaf(
+              Dsl.parse(raw).functions().stream()
+                  .filter(g -> g.name().equals(f.name()))
+                  .findFirst()
+                  .orElseThrow()),
+          f.name());
+    java.util.function.Function<String, List<String>> transitions =
+        text ->
+            text.lines()
+                .filter(line ->
+                    line.contains("CFunction")
+                        || line.contains("Transition")
+                        || line.contains("_Leaf")
+                        || line.contains("forSymbol")
+                        || line.contains("Uninterruptible"))
+                .toList();
+    assertEquals(
+        transitions.apply(without.get("Consts.java")),
+        transitions.apply(withRefs.get("Consts.java")));
+    assertTrue(withRefs.get("Consts.java").contains("statusEnum("));
+    for (String file : List.of("ConstsFFM.java", "ConstsTruffle.java"))
+      assertEquals(
+          without.get(file).lines().filter(GeneratorTest::bindingLine).toList(),
+          withRefs.get(file).lines().filter(GeneratorTest::bindingLine).toList(),
+          file);
+  }
+
+  /** Lines that describe a binding, not the descriptor's fingerprint or a comment. */
+  private static boolean bindingLine(String line) {
+    return !line.strip().startsWith("//") && !line.contains("ABI_FINGERPRINT");
   }
 }

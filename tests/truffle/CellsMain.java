@@ -43,6 +43,85 @@ public final class CellsMain {
       return new Object[] {sum, CompilerDirectives.inCompiledCode()};
     }
   }
+  /**
+   * A guest's own reads and writes of a buffer: NativeBytes' scalar messages through a dispatched
+   * library, from compiled code. A scope failure is returned as text, so the caller sees that
+   * compiled code checked the scope (and kept running compiled) rather than touching the memory.
+   */
+  static final class BufferProbe extends NativeCell {
+    @Node.Child private com.oracle.truffle.api.interop.InteropLibrary interop =
+        com.oracle.truffle.api.interop.InteropLibrary.getFactory().createDispatched(2);
+    BufferProbe() { super("buffer-probe", 2); }
+    @Override public Object execute(Object[] arguments) {
+      Object buffer = arguments[0];
+      Object result;
+      try {
+        interop.writeBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8, (Long) arguments[1]);
+        result = interop.readBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8) + interop.readBufferByte(buffer, 0);
+      } catch (NativeCellException e) {
+        // The guest error a closed or foreign scope raises: what a guest language's catch sees.
+        result = describe(e);
+      } catch (com.oracle.truffle.api.interop.InteropException e) {
+        throw CompilerDirectives.shouldNotReachHere(e);
+      }
+      return new Object[] {result, CompilerDirectives.inCompiledCode()};
+    }
+    @CompilerDirectives.TruffleBoundary
+    static String describe(NativeCellException e) {
+      return e.getMessage() + " (" + e.getCause().getClass().getSimpleName() + ": " + e.getCause().getMessage() + ")";
+    }
+  }
+  /**
+   * NativeBytes' scalar messages from compiled code check the arena scope before their word access
+   * (#128): a confined arena owned by another thread, then a closed one, fail as the segment's own
+   * accessors do, and the memory is not touched.
+   */
+  static void bufferScopes() throws Exception {
+    NativeFunction probe = new BufferProbe().function();
+    java.lang.foreign.Arena confined = java.lang.foreign.Arena.ofConfined();
+    java.lang.foreign.MemorySegment segment = confined.allocate(16, 8);
+    segment.set(java.lang.foreign.ValueLayout.JAVA_BYTE, 0, (byte) 1);
+    NativeBytes bytes = NativeBytes.of(segment, true);
+    compiled("buffer messages over a confined arena", probe, i -> new Object[] {bytes, i}, i -> i + 1);
+    // A confined arena owned by another, live thread, which closes it once this thread is done.
+    var owned = new java.util.concurrent.SynchronousQueue<java.lang.foreign.MemorySegment>();
+    var done = new java.util.concurrent.CountDownLatch(1);
+    Thread owner = new Thread(() -> {
+      try (java.lang.foreign.Arena arena = java.lang.foreign.Arena.ofConfined()) {
+        owned.put(arena.allocate(16, 8));
+        done.await();
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    });
+    owner.start();
+    NativeBytes foreign = NativeBytes.of(owned.take(), true);
+    expectScopeFailure(probe, foreign, "native buffer is confined to another thread (WrongThreadException: Attempted access outside owning thread)", "another thread's confined arena");
+    done.countDown();
+    owner.join();
+    // Closed by its owner, this thread: the next message fails before its word access.
+    confined.close();
+    expectScopeFailure(probe, bytes, "native buffer's arena is closed (IllegalStateException: Already closed)", "a closed confined arena");
+    // The global arena has no scope to check, so the same compiled code still runs over it.
+    java.lang.foreign.MemorySegment global = java.lang.foreign.Arena.global().allocate(16, 8);
+    global.set(java.lang.foreign.ValueLayout.JAVA_BYTE, 0, (byte) 2);
+    Object[] outcome = (Object[]) probe.call(NativeBytes.of(global, true), 40L);
+    if (!Long.valueOf(42).equals(outcome[0]) || !(Boolean) outcome[1]) throw new AssertionError("global buffer: " + outcome[0] + ", compiled " + outcome[1]);
+    System.out.println("buffer messages checked the arena scope in compiled code: wrong thread, closed");
+  }
+  /**
+   * Every call fails as expected, without touching the memory, from compiled code: the guest error
+   * is caught in the same compiled root, so neither a failure nor its handler deoptimizes. Repeated
+   * calls also prove a failure does not invalidate the root.
+   */
+  static void expectScopeFailure(NativeFunction probe, NativeBytes bytes, String expected, String what) {
+    for (int call = 0; call < 8; call++) {
+      Object[] outcome = (Object[]) probe.call(bytes, 5L);
+      if (!expected.equals(outcome[0])) throw new AssertionError(what + ": " + outcome[0]);
+      if (!(Boolean) outcome[1]) throw new AssertionError(what + ": the scope failure left compiled code at call " + call);
+    }
+  }
+
   /** Creates and closes a resource many times inside one compiled root, to measure what a create allocates. */
   static final class Creates extends NativeCell {
     static final int CALLS = 1024;
@@ -137,6 +216,27 @@ public final class CellsMain {
     }
     System.out.println(what + " ran in compiled code");
   }
+  /**
+   * The Native Image ownership wrapper of a call borrow with align=16 (#120): a pinned byte[] starts
+   * on 8 bytes, so the array overload copies, and the dummy for an empty buffer is aligned too.
+   * Without assertions in this image, only the address says so.
+   */
+  static void ownershipAlignment() {
+    for (int length : new int[] {0, 1, 3, 17, 255, 256, 4097, 40_000}) {
+      byte[] array = new byte[length];
+      long at = CellApiOwnership.addressOfBorrow(array);
+      if (at % 16 != 0) throw new AssertionError("addressOfBorrow(byte[" + length + "]) at " + Long.toHexString(at));
+      // The callee writes the copy; the array receives it back.
+      CellApiOwnership.fill(array, (byte) 7);
+      for (byte b : array) if (b != 7) throw new AssertionError("fill(byte[" + length + "]) was not written back");
+      // One buffer copied, the other pinned, in one call.
+      byte[] input = new byte[length], output = new byte[length];
+      java.util.Arrays.fill(input, (byte) 2);
+      long sum = CellApiOwnership.transfer(input, output, org.graalvm.word.WordFactory.nullPointer());
+      if (sum != 2L * length) throw new AssertionError("transfer(byte[" + length + "]) = " + sum);
+      for (byte b : output) if (b != 2) throw new AssertionError("transfer did not fill its pinned output");
+    }
+  }
   public static void main(String[] args) throws Exception {
     if (CellApi.BINDING_ABI_VERSION != 2) throw new AssertionError("binding ABI");
     String runtime = Truffle.getRuntime().getName();
@@ -144,12 +244,14 @@ public final class CellsMain {
     if (runtime.contains("Default") || runtime.contains("Interpreted"))
       throw new AssertionError("optimizing Truffle runtime missing from the image: " + runtime);
     CellChecks.run(CellApiTruffle::function);
+    ownershipAlignment();
     try (Context context = Context.newBuilder().allowExperimentalOptions(true)
         .option("engine.CompileImmediately", "true").option("engine.BackgroundCompilation", "false")
         .option("engine.MultiTier", "false").option("engine.CompilationFailureAction", "Throw").build()) {
       context.enter();
       try {
         compiled("add", new Probe(new CellApiTruffle.add_Cell()).function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
+        bufferScopes();
         compiled("typed add", new TypedAdd().function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
         compiled("sleepyAdd", new Probe(new CellApiTruffle.sleepyAdd_Cell()).function(), i -> new Object[] {i, 2L}, i -> i + 2);
         byte[] large = new byte[Borrow.pinThreshold() * 2];
@@ -206,9 +308,16 @@ public final class CellsMain {
         java.lang.foreign.MemorySegment lent = java.lang.foreign.Arena.global().allocate(64);
         lent.fill((byte) 3);
         allocates("add", new CellApiTruffle.add_Cell(), 0, 5, 2, 3);
+        CellChecks.guestConstants(CellApiTruffle.constants(), true);
         allocates("checksum of native bytes", new CellApiTruffle.checksum_Cell(), 0, 64 * 3, NativeBytes.of(lent, false));
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 0, 64 * 2, new HeapBytes(small, false));
         allocates("checksum of a pinned heap array", new CellApiTruffle.checksum_Cell(), 32, large.length, pinned);
+        // A parameter with an align fact costs what one without it does: native memory, a copy
+        // on the scratch stack, and text pushed there, with the alignment checks folded away.
+        allocates("utf16Probe of aligned native bytes", new CellApiTruffle.utf16Probe_Cell(), 0, 0, NativeBytes.of(lent, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a copied heap array", new CellApiTruffle.utf16Probe_Cell(), 0, 0, new HeapBytes(small, false), 64L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, "hello world", 11L, 0, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a guest string", new CellApiTruffle.utf16Probe_Cell(), 0, 0, CellChecks.guest("hello world"), 11L, 0, NativePointer.NULL, 0L);
         allocates("sleepyAdd", new CellApiTruffle.sleepyAdd_Cell(), 0, 9, 4L, 5L);
         // Text goes straight onto the scratch stack, ASCII or not: no UTF-8 array.
         allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 0, 11, "hello world");
@@ -220,14 +329,35 @@ public final class CellsMain {
         allocates("strlen of an ASCII guest string", new CellApiTruffle.strlen_Cell(), 0, 11, CellChecks.guest("hello world"));
         allocates("strlen of a Latin-1 guest string", new CellApiTruffle.strlen_Cell(), 0, 13, CellChecks.guest("h\u00e9llo w\u00f6rld"));
         allocates("strlen of a wide guest string", new CellApiTruffle.strlen_Cell(), 0, 21, CellChecks.guest("\u3053\u3093\u306b\u3061\u306f\u4e16\u754c"));
+        // An access=cstring parameter scans the bytes it lent for a NUL: still no allocation.
+        allocates("titleLength of an ASCII guest string", new CellApiTruffle.titleLength_Cell(), 0, 11, CellChecks.guest("hello world"));
+        allocates("titleLength of a Latin-1 guest string", new CellApiTruffle.titleLength_Cell(), 0, 13, CellChecks.guest("h\u00e9llo w\u00f6rld"));
+        allocates("titleLength of a wide guest string", new CellApiTruffle.titleLength_Cell(), 0, 21, CellChecks.guest("\u3053\u3093\u306b\u3061\u306f\u4e16\u754c"));
+        allocates("titleLength of a string", new CellApiTruffle.titleLength_Cell(), 0, 11, "hello world");
         allocates("checksum of a wide guest string", new CellApiTruffle.checksum_Cell(), 0, 3 * 0xe2 + 3 * 0x82 + 3 * 0xac, CellChecks.guest("\u20ac\u20ac\u20ac"));
         // A truffle_buffer parameter pins a large heap array (the pin is the only allocation) and
         // copies a small one without a terminator.
         allocates("sumBytes of a pinned heap array", new CellApiTruffle.sumBytes_Cell(), 32, large.length, pinned, (long) large.length, NativePointer.NULL);
         if (pinsPerCall < 16) throw new AssertionError("sumBytes did not pin its large heap array: " + pinsPerCall + " bytes per call");
+        // A batch costs what its elements do as single borrows: three small heap arrays are three
+        // scratch copies above the batch's arrays, and three native buffers are lent in place, so
+        // neither allocates, as three single-buffer calls do not.
+        byte[] first = {1, 2, 3}, second = {4}, third = new byte[64];
+        allocates("digest of three small heap arrays", new CellApiTruffle.digest_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, first, second, third),
+            BufferArray.of(new HeapBytes(first, false), new HeapBytes(second, false), new HeapBytes(third, false)));
+        byte[] lentBytes = new byte[64];
+        java.util.Arrays.fill(lentBytes, (byte) 3);
+        allocates("digest of three native buffers", new CellApiTruffle.digest_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, lentBytes, lentBytes, lentBytes),
+            BufferArray.of(NativeBytes.of(lent, false), NativeBytes.of(lent, false), NativeBytes.of(lent, false)));
+        allocates("merge of a string batch and a nullable batch", new CellApiTruffle.merge_Cell(), 0,
+            CellChecks.foldBatch(CellChecks.foldBatch(CellChecks.FNV_OFFSET, "abc".getBytes(), first), null, second),
+            BufferArray.of("abc", new HeapBytes(first, false)), BufferArray.of(null, new HeapBytes(second, false)));
         allocates("sumBytes of a copied heap array", new CellApiTruffle.sumBytes_Cell(), 0, 64 * 2, new HeapBytes(small, false), 64L, NativePointer.NULL);
         // Two declared borrows beside a pointer: lending native memory both ways and copying both
-        // heap arrays allocate nothing, and two pinned arrays allocate their two pins.
+        // heap arrays allocate nothing. With large heap arrays only the output is pinned: the input
+        // declares align=16, and a pinned array's data starts on an 8-byte boundary, so it is copied.
         java.lang.foreign.MemorySegment written = java.lang.foreign.Arena.global().allocate(64);
         java.lang.foreign.MemorySegment copied = java.lang.foreign.Arena.global().allocate(8);
         allocates("transfer between native buffers", new CellApiTruffle.transfer_Cell(), 0, 64 * 3,
@@ -238,7 +368,7 @@ public final class CellsMain {
             new HeapBytes(small, false), new HeapBytes(new byte[64], true), NativePointer.NULL);
         allocates("transfer between pinned heap arrays", new CellApiTruffle.transfer_Cell(), 64, large.length,
             pinned, new HeapBytes(new byte[large.length], true), NativePointer.NULL);
-        if (pinsPerCall < 32) throw new AssertionError("transfer did not pin both large heap arrays: " + pinsPerCall + " bytes per call");
+        if (pinsPerCall < 16 || pinsPerCall >= 32) throw new AssertionError("transfer did not pin exactly its large output array: " + pinsPerCall + " bytes per call");
         // A nullable borrow from compiled code. One call site sees an absent and a present output
         // in turn and stays compiled; absent, in any spelling, lends the null address and derives
         // length zero without allocating, exactly as lending native memory does.
@@ -279,6 +409,9 @@ public final class CellsMain {
         // A cell's typed execute from host code, which is compiled ahead of time and has no
         // partial evaluation: the borrow must still stay out of the heap.
         hostExecute(bean, "host execute: checksum of native bytes", 0, new CellApiTruffle.checksum_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of aligned native bytes", 0, new CellApiTruffle.addressOfBorrow_Cell(), NativeBytes.of(lent, false));
+        hostExecute(bean, "host execute: addressOfBorrow of a copied heap array", 0, new CellApiTruffle.addressOfBorrow_Cell(), new HeapBytes(small, false));
+        hostExecute(bean, "host execute: addressOf of a copied heap array", 0, new CellApiTruffle.addressOf_Cell(), new HeapBytes(small, false), 64L);
         hostExecute(bean, "host execute: checksum of a copied heap array", 0, new CellApiTruffle.checksum_Cell(), new HeapBytes(small, false));
         hostExecute(bean, "host execute: checksum of a pinned heap array", 32, new CellApiTruffle.checksum_Cell(), pinned);
         hostExecute(bean, "host execute: strlen of a string", 0, new CellApiTruffle.strlen_Cell(), "hello world");

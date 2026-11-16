@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.model;
 
+import java.math.BigInteger;
 import java.util.*;
 
 /** Language-neutral, immutable ABI model. Source diagnostics are excluded from identity. */
@@ -77,7 +78,9 @@ public final class Seam {
     READ,
     WRITE,
     READ_WRITE,
-    UNSPECIFIED
+    UNSPECIFIED,
+    /** A read-only NUL-terminated string with no length: read access, up to its terminator. */
+    CSTRING
   }
 
   public enum Provenance {
@@ -186,7 +189,18 @@ public final class Seam {
       boolean nullable,
       Ownership ownership,
       Access access,
-      SortedMap<String, Fact> facts) {
+      SortedMap<String, Fact> facts,
+      GroupRef group) {
+    public Parameter(
+        String name,
+        Type type,
+        boolean nullable,
+        Ownership ownership,
+        Access access,
+        SortedMap<String, Fact> facts) {
+      this(name, type, nullable, ownership, access, facts, null);
+    }
+
     public Parameter {
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
     }
@@ -204,7 +218,37 @@ public final class Seam {
       String include,
       String callback,
       boolean isolateThread,
-      SortedMap<String, Fact> facts) {
+      SortedMap<String, Fact> facts,
+      GroupRef returnsGroup) {
+    public Function(
+        String name,
+        String symbol,
+        Direction direction,
+        Type returns,
+        List<Parameter> parameters,
+        ErrorConvention error,
+        String sentinel,
+        String javaTarget,
+        String include,
+        String callback,
+        boolean isolateThread,
+        SortedMap<String, Fact> facts) {
+      this(
+          name,
+          symbol,
+          direction,
+          returns,
+          parameters,
+          error,
+          sentinel,
+          javaTarget,
+          include,
+          callback,
+          isolateThread,
+          facts,
+          null);
+    }
+
     public Function {
       parameters = List.copyOf(parameters);
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
@@ -234,13 +278,24 @@ public final class Seam {
       List<Parameter> parameters,
       String javaType,
       String ffmTarget,
-      String ffmSentinel) {
+      String ffmSentinel,
+      GroupRef returnsGroup) {
     public Signature(String name, Type returns, List<Parameter> parameters) {
-      this(name, returns, parameters, null, null, null);
+      this(name, returns, parameters, null, null, null, null);
     }
 
     public Signature(String name, Type returns, List<Parameter> parameters, String javaType) {
-      this(name, returns, parameters, javaType, null, null);
+      this(name, returns, parameters, javaType, null, null, null);
+    }
+
+    public Signature(
+        String name,
+        Type returns,
+        List<Parameter> parameters,
+        String javaType,
+        String ffmTarget,
+        String ffmSentinel) {
+      this(name, returns, parameters, javaType, ffmTarget, ffmSentinel, null);
     }
 
     public Signature {
@@ -248,7 +303,154 @@ public final class Seam {
     }
   }
 
-  public record Field(String name, Type type, long offset) {}
+  /**
+   * A struct field; {@code group} names the enum or flag set annotating it, or is null. {@code
+   * count}, on a {@code ptr<T>} field, names the integer field of the same struct that counts the
+   * elements it points to, or is null. {@code cases} name the group that applies for each value of
+   * a tag field ({@code when tag=binary enum=BinaryOp}); a field has cases or a group, not both.
+   */
+  public record Field(
+      String name, Type type, long offset, GroupRef group, String count, List<FieldCase> cases) {
+    public Field {
+      cases = List.copyOf(cases);
+    }
+
+    public Field(String name, Type type, long offset, GroupRef group, String count) {
+      this(name, type, offset, group, count, List.of());
+    }
+
+    public Field(String name, Type type, long offset) {
+      this(name, type, offset, null);
+    }
+
+    public Field(String name, Type type, long offset, GroupRef group) {
+      this(name, type, offset, group, null);
+    }
+
+    /** This field with {@code c} appended to its cases. */
+    public Field withCase(FieldCase c) {
+      var all = new ArrayList<>(cases);
+      all.add(c);
+      return withCases(all);
+    }
+
+    /** This field with {@code cases} in place of its own. */
+    public Field withCases(List<FieldCase> cases) {
+      return new Field(name, type, offset, group, count, cases);
+    }
+  }
+
+  /** {@code when TAG=VALUE enum=E}: while field {@code tagField} holds {@code value}, read as E. */
+  public record FieldCase(String tagField, String value, GroupRef group) {}
+
+  /** A named integer constant: {@code const NAME type=u32 value=0x10}. */
+  public record Constant(String name, Scalar type, BigInteger value) {}
+
+  public record EnumValue(String name, BigInteger value) {}
+
+  /** A closed list of named values over an integer carrier; values are sorted by number. */
+  public record EnumGroup(String name, Scalar type, List<EnumValue> values) {
+    public EnumGroup {
+      values = values.stream().sorted(Comparator.comparing(EnumValue::value)).toList();
+    }
+
+    /**
+     * Whether Java gets {@code int} switch keys for this enum: a 64-bit carrier, which Java cannot
+     * switch on, whose every value an {@code int} holds ({@code 0..Integer.MAX_VALUE} when
+     * unsigned; when signed, the {@code int} range without {@code Integer.MIN_VALUE}, the key of
+     * values outside it).
+     */
+    public boolean intKeys() {
+      return wide() && keyable();
+    }
+
+    /** Whether the carrier is 64 bits wide, too wide for a Java {@code switch}. */
+    public boolean wide() {
+      return type == Scalar.U64
+          || type == Scalar.USIZE
+          || type == Scalar.I64
+          || type == Scalar.ISIZE;
+    }
+
+    /**
+     * Whether every value is an {@code int} other than {@code Integer.MIN_VALUE}, the key of values
+     * no label names: {@code 0..Integer.MAX_VALUE} for an unsigned carrier, the {@code int} range
+     * without {@code Integer.MIN_VALUE} for a signed one.
+     */
+    public boolean keyable() {
+      BigInteger min = BigInteger.valueOf(unsignedKeys() ? 0 : Integer.MIN_VALUE + 1L);
+      BigInteger max = BigInteger.valueOf(Integer.MAX_VALUE);
+      return values.stream()
+          .allMatch(v -> v.value().compareTo(min) >= 0 && v.value().compareTo(max) <= 0);
+    }
+
+    /** Whether {@code key(long)} reads its value as unsigned: an unsigned carrier. */
+    public boolean unsignedKeys() {
+      return switch (type) {
+        case U8, U16, U32, U64, USIZE -> true;
+        default -> false;
+      };
+    }
+  }
+
+  public record FlagBit(String name, int bit) {}
+
+  /**
+   * A multi-bit field of a flag word, bits {@code low..high} inclusive: {@code range kind = 8..15}.
+   * {@code enumName} names the enum its values belong to, or is null for a raw number.
+   */
+  public record FlagRange(String name, int low, int high, String enumName) {
+    public int width() {
+      return high - low + 1;
+    }
+
+    /** The range's bits in place: {@code ((1 << width) - 1) << low}. */
+    public BigInteger mask() {
+      return valueMask().shiftLeft(low);
+    }
+
+    /** The range's bits shifted down to bit 0: {@code (1 << width) - 1}. */
+    public BigInteger valueMask() {
+      return BigInteger.ONE.shiftLeft(width()).subtract(BigInteger.ONE);
+    }
+  }
+
+  /**
+   * A set of named bit indices over an integer carrier; bits are sorted by index and ranges by
+   * their low bit. {@code cBitfields} opts the set into a generated {@code @CBitfield} accessor
+   * struct.
+   */
+  public record FlagSet(
+      String name, Scalar type, List<FlagBit> bits, boolean cBitfields, List<FlagRange> ranges) {
+    public FlagSet {
+      bits = bits.stream().sorted(Comparator.comparingInt(FlagBit::bit)).toList();
+      ranges = ranges.stream().sorted(Comparator.comparingInt(FlagRange::low)).toList();
+    }
+
+    public FlagSet(String name, Scalar type, List<FlagBit> bits, boolean cBitfields) {
+      this(name, type, bits, cBitfields, List.of());
+    }
+
+    public FlagSet(String name, Scalar type, List<FlagBit> bits) {
+      this(name, type, bits, false);
+    }
+
+    /** Every declared bit: the bits' masks and the ranges' masks. */
+    public BigInteger all() {
+      BigInteger all = BigInteger.ZERO;
+      for (FlagBit b : bits) all = all.setBit(b.bit());
+      for (FlagRange r : ranges) all = all.or(r.mask());
+      return all;
+    }
+  }
+
+  public enum GroupKind {
+    ENUM,
+    FLAGS
+  }
+
+  /** A reference from a field, parameter or return to a declared enum or flag set. */
+  public record GroupRef(GroupKind kind, String name) {}
 
   public record Struct(String name, long size, int alignment, List<Field> fields) {
     public Struct {
@@ -266,16 +468,34 @@ public final class Seam {
    * initialized in place. {@code success} lists the results that mean the resource exists. Only
    * Truffle cells project the handle forms; the other ownership APIs leave those functions to their
    * raw bindings.
+   *
+   * <p>A resource may have several constructors ({@code create=a,b}), each validated and projected
+   * as a single create is. The ownership APIs name each wrapper after its import, except for a
+   * resource with exactly one constructor, whose wrapper keeps the name {@code create}.
    */
   public record Resource(
       String name,
-      String create,
+      List<String> creates,
       String destroy,
       boolean shared,
       String handle,
       List<Long> success) {
     public Resource {
+      creates = List.copyOf(creates);
       success = List.copyOf(success);
+    }
+
+    /** Whether {@code function} is one of this resource's constructors. */
+    public boolean createdBy(String function) {
+      return creates.contains(function);
+    }
+
+    /**
+     * The name of the ownership wrapper of constructor {@code create}: {@code create} for a
+     * resource's only constructor, and the import's own name when there are several.
+     */
+    public String wrapperName(String create) {
+      return creates.size() == 1 ? "create" : create;
     }
 
     /** The parameter the create function writes through, or null for a returned pointer. */
@@ -303,10 +523,35 @@ public final class Seam {
    *     one call; otherwise the resource whose create the function is, for {@code
    *     lifetime=resource:NAME}: the create keeps the buffer until that resource is destroyed
    */
-  public record BufferBorrow(String function, String parameter, String length, String resource) {
+  public record BufferBorrow(
+      String function,
+      String parameter,
+      String length,
+      String resource,
+      String count,
+      boolean elementsNullable) {
+    public BufferBorrow(String function, String parameter, String length, String resource) {
+      this(function, parameter, length, resource, null, false);
+    }
+
+    /**
+     * A batch of buffers: {@code parameter} is a {@code ptr<ptr<u8>>} array of buffers, {@code
+     * length} an integer array of their byte lengths, and {@code count} the scalar number of
+     * elements of both.
+     */
+    public static BufferBorrow batch(
+        String function, String sources, String lengths, String count, boolean elementsNullable) {
+      return new BufferBorrow(function, sources, lengths, null, count, elementsNullable);
+    }
+
     /** Whether the borrow outlives the call, held by the resource the function creates. */
     public boolean held() {
       return resource != null;
+    }
+
+    /** Whether the borrow is a batch: an array of buffers with a parallel array of lengths. */
+    public boolean batch() {
+      return count != null;
     }
   }
 
@@ -347,6 +592,7 @@ public final class Seam {
     return parameter.type() instanceof Pointer p
         && (p.pointee() == Scalar.U8 || p.pointee() == Scalar.I8 || p.pointee() == Scalar.CHAR)
         && (parameter.access() == Access.READ
+            || parameter.access() == Access.CSTRING
             || parameter.access() == Access.READ_WRITE
             || parameter.access() == Access.WRITE);
   }
@@ -360,7 +606,12 @@ public final class Seam {
 
   public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.myna.generated";
 
-  /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
+  /**
+   * {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. {@code
+   * abiDeclared} is true when the module line names {@code abi=}: only then is {@code abiVersion}
+   * emitted as the {@code ABI_VERSION} constant (the canonical JSON records the version either
+   * way).
+   */
   public record Module(
       String name,
       int abiVersion,
@@ -374,7 +625,122 @@ public final class Seam {
       List<Resource> resources,
       List<BufferBorrow> borrows,
       NativeConfig nativeConfig,
-      TruffleConfig truffleConfig) {
+      TruffleConfig truffleConfig,
+      List<Constant> constants,
+      List<EnumGroup> enums,
+      List<FlagSet> flagSets,
+      boolean abiDeclared,
+      boolean rustImplementation) {
+    /** A module without the opt-in Rust implementer trait ({@code rust_implementation=trait}). */
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets,
+        boolean abiDeclared) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          abiDeclared,
+          false);
+    }
+
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          false);
+    }
+
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          List.of(),
+          List.of(),
+          List.of());
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -491,6 +857,45 @@ public final class Seam {
       callbacks = callbacks.stream().sorted(Comparator.comparing(Signature::name)).toList();
       structs = structs.stream().sorted(Comparator.comparing(Struct::name)).toList();
       functions = functions.stream().sorted(Comparator.comparing(Function::symbol)).toList();
+      constants = constants.stream().sorted(Comparator.comparing(Constant::name)).toList();
+      enums = enums.stream().sorted(Comparator.comparing(EnumGroup::name)).toList();
+      flagSets = flagSets.stream().sorted(Comparator.comparing(FlagSet::name)).toList();
+      structs = canonicalCases(structs, enums);
+    }
+
+    /**
+     * Each tagged field's cases in canonical order: by tag field, then by the tag enum's value
+     * number, so the order of {@code when} lines never changes the fingerprint. Values the enum
+     * does not declare (rejected by validation) sort last, by name.
+     */
+    private static List<Struct> canonicalCases(List<Struct> structs, List<EnumGroup> enums) {
+      if (structs.stream().flatMap(s -> s.fields().stream()).allMatch(f -> f.cases().size() < 2))
+        return structs;
+      var result = new ArrayList<Struct>();
+      for (Struct s : structs) {
+        var fields = new ArrayList<Field>();
+        for (Field f : s.fields()) {
+          Comparator<FieldCase> order =
+              Comparator.comparing(FieldCase::tagField)
+                  .thenComparing(
+                      c -> caseValue(s, enums, c), Comparator.nullsLast(Comparator.naturalOrder()))
+                  .thenComparing(FieldCase::value);
+          fields.add(f.withCases(f.cases().stream().sorted(order).toList()));
+        }
+        result.add(new Struct(s.name(), s.size(), s.alignment(), fields));
+      }
+      return List.copyOf(result);
+    }
+
+    private static BigInteger caseValue(Struct s, List<EnumGroup> enums, FieldCase c) {
+      for (Field tag : s.fields())
+        if (tag.name().equals(c.tagField())
+            && tag.group() != null
+            && tag.group().kind() == GroupKind.ENUM)
+          for (EnumGroup e : enums)
+            if (e.name().equals(tag.group().name()))
+              for (EnumValue v : e.values()) if (v.name().equals(c.value())) return v.value();
+      return null;
     }
 
     public Module withTarget(String target) {
@@ -507,7 +912,67 @@ public final class Seam {
           resources,
           borrows,
           nativeConfig,
-          truffleConfig);
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          abiDeclared,
+          rustImplementation);
+    }
+
+    /**
+     * The Rust trait an implementation of this module's imports implements, with {@code
+     * rust_implementation=trait}: the module name in upper camel case, then {@code Implementation}.
+     */
+    public String rustImplementationTrait() {
+      var out = new StringBuilder();
+      for (String part : name.split("[^A-Za-z0-9]+"))
+        if (!part.isEmpty())
+          out.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+      return out.append("Implementation").toString();
+    }
+
+    /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
+    public boolean declaresConstants() {
+      return abiDeclared || !constants.isEmpty() || !enums.isEmpty() || !flagSets.isEmpty();
+    }
+
+    /** The declared enum named {@code name}, or null. */
+    public EnumGroup enumGroup(String name) {
+      for (EnumGroup e : enums) if (e.name().equals(name)) return e;
+      return null;
+    }
+
+    /**
+     * The enum a struct field's {@code enum=} or {@code when ... enum=} names when its carrier is
+     * narrower than the field's type (a narrowed reference), or null: the field keeps its raw
+     * integer type, and readers check that the raw value fits the enum's carrier.
+     */
+    public EnumGroup narrowed(GroupRef ref, Type fieldType) {
+      if (ref == null || ref.kind() != GroupKind.ENUM) return null;
+      EnumGroup e = enumGroup(ref.name());
+      return e == null || e.type() == fieldType ? null : e;
+    }
+
+    /** The group a field's own type spells: its reference unless that reference narrows. */
+    public GroupRef fieldTypeGroup(Field f) {
+      return narrowed(f.group(), f.type()) == null ? f.group() : null;
+    }
+
+    /**
+     * Whether Java gets {@code int} switch keys for {@code e}: its values are {@link
+     * EnumGroup#keyable keyable}, and its carrier is 64 bits wide or a struct field references it
+     * narrowed, so a {@code key(long)} reads the field's wide value.
+     */
+    public boolean intKeys(EnumGroup e) {
+      if (!e.keyable()) return false;
+      if (e.wide()) return true;
+      for (Struct s : structs)
+        for (Field f : s.fields()) {
+          if (narrowed(f.group(), f.type()) == e) return true;
+          for (FieldCase c : f.cases()) if (narrowed(c.group(), f.type()) == e) return true;
+        }
+      return false;
     }
 
     public String javaPackageName() {
@@ -525,6 +990,29 @@ public final class Seam {
      */
     public List<Resource> returnedResources() {
       return resources.stream().filter(r -> r.handle() == null).toList();
+    }
+
+    /**
+     * Whether a resource's constructors report a status and write its pointer through a {@code
+     * ptr<ptr<R>>} out-parameter ({@code handle=PARAMETER}), rather than initializing a struct in
+     * place: the usual C shape for "status plus handle".
+     */
+    public boolean outPointer(Resource r) {
+      if (r.handle() == null || r.handleField() != null) return false;
+      Type slot = new Pointer(new Pointer(new Named(r.name())));
+      for (Function f : functions)
+        if (r.createdBy(f.name()))
+          for (Parameter p : f.parameters())
+            if (p.name().equals(r.handleParameter())) return p.type().equals(slot);
+      return false;
+    }
+
+    /**
+     * The resources the Rust, Native Image and FFM ownership APIs own: those whose constructors
+     * return their pointer, and those that write it through an out-parameter.
+     */
+    public List<Resource> ownedResources() {
+      return resources.stream().filter(r -> r.handle() == null || outPointer(r)).toList();
     }
 
     /**
@@ -548,6 +1036,16 @@ public final class Seam {
 
     public String foreignFeatureClass() {
       return javaClass == null ? "MynaForeignFeature" : javaClass + "ForeignFeature";
+    }
+
+    /** The dependency-free class of literal constants, flag predicates and name functions. */
+    public String constantsClass() {
+      return nativeClass() + "Constants";
+    }
+
+    /** The {@code @CContext} directives class of the Native Image output. */
+    public String directivesClass() {
+      return nativeClass() + "Directives";
     }
 
     public String truffleClass() {

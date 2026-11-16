@@ -5,19 +5,30 @@ import com.oracle.svm.guest.staging.c.CGlobalData;
 import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.Uninterruptible;
+import org.graalvm.nativeimage.c.CContext;
+import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.InvokeCFunctionPointer;
+import org.graalvm.nativeimage.c.struct.CField;
+import org.graalvm.nativeimage.c.struct.CFieldAddress;
+import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.nativeimage.c.type.VoidPointer;
-import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
+@CContext(CellApiDirectives.class)
 public final class CellApi {
     private CellApi() {}
     public static final String ABI_FINGERPRINT = "b0542c4c6f8cef9b1c522e705eff5edfaf92e35ce3c12df27587421382a0602d";
     public static final int BINDING_ABI_VERSION = 2;
+    /**
+     * The seam.h check. Only this generation's header defines the macro, and the image build's
+     * C query resolves every @CConstant of this class, so mixing generations fails the build.
+     * Never called; it costs the image nothing.
+     */
+    @CConstant("TRUFFLE_DEMO_SEAM_ABI_b0542c4c6f8cef9b1c522e705eff5edfaf92e35ce3c12df27587421382a0602d") static native int seamHeaderCheck();
     public interface add_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
@@ -34,7 +45,7 @@ public final class CellApi {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        long invoke(PointerBase counter);
+        long invoke(Counter counter);
     }
     public interface fill_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
@@ -82,7 +93,7 @@ public final class CellApi {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
         @InvokeCFunctionPointer(transition = CFunction.Transition.NO_TRANSITION)
-        void invoke(PointerBase value, PointerBase result);
+        void invoke(Pair value, Pair result);
     }
     public interface widen_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
@@ -104,6 +115,70 @@ public final class CellApi {
         static final CGlobalData<strlen_Leaf> strlen = CGlobalDataFactory.forSymbol("cells_strlen");
         static final CGlobalData<swap_Leaf> swap = CGlobalDataFactory.forSymbol("cells_swap_myna_ref");
         static final CGlobalData<widen_Leaf> widen = CGlobalDataFactory.forSymbol("cells_widen");
+        static final CGlobalData<CFunctionPointer> counterCreate = CGlobalDataFactory.forSymbol("cells_counter_create");
+        static final CGlobalData<CFunctionPointer> counterDestroy = CGlobalDataFactory.forSymbol("cells_counter_destroy");
+        static final CGlobalData<CFunctionPointer> sleepyAdd = CGlobalDataFactory.forSymbol("cells_sleepy_add");
+        static final CGlobalData<CFunctionPointer> swap$declared = CGlobalDataFactory.forSymbol("cells_swap");
+    }
+    /** The linked address of cells_add, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer add_address() {
+        return MynaSymbols.add.get();
+    }
+    /** The linked address of cells_checksum, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer checksum_address() {
+        return MynaSymbols.checksum.get();
+    }
+    /** The linked address of cells_counter_create, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterCreate_address() {
+        return MynaSymbols.counterCreate.get();
+    }
+    /** The linked address of cells_counter_destroy, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterDestroy_address() {
+        return MynaSymbols.counterDestroy.get();
+    }
+    /** The linked address of cells_counter_next, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterNext_address() {
+        return MynaSymbols.counterNext.get();
+    }
+    /** The linked address of cells_fill, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer fill_address() {
+        return MynaSymbols.fill.get();
+    }
+    /** The linked address of cells_low_byte, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer lowByte_address() {
+        return MynaSymbols.lowByte.get();
+    }
+    /** The linked address of cells_peek, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer peek_address() {
+        return MynaSymbols.peek.get();
+    }
+    /** The linked address of cells_poke, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer poke_address() {
+        return MynaSymbols.poke.get();
+    }
+    /** The linked address of cells_raw_length, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer rawLength_address() {
+        return MynaSymbols.rawLength.get();
+    }
+    /** The linked address of cells_scale, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer scale_address() {
+        return MynaSymbols.scale.get();
+    }
+    /** The linked address of cells_sleepy_add, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer sleepyAdd_address() {
+        return MynaSymbols.sleepyAdd.get();
+    }
+    /** The linked address of cells_strlen, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer strlen_address() {
+        return MynaSymbols.strlen.get();
+    }
+    /** The linked address of cells_swap, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer swap_address() {
+        return MynaSymbols.swap$declared.get();
+    }
+    /** The linked address of cells_widen, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer widen_address() {
+        return MynaSymbols.widen.get();
     }
     /** Runtime address: never initialized in the build host. */
     private static final class add_Binding {
@@ -153,22 +228,17 @@ public final class CellApi {
     private static final class widen_Binding {
         static final widen_Leaf ADDRESS = MynaSymbols.widen.get();
     }
-    public static final class Pair {
-        private Pair() {}
-        public static final int SIZE = 16;
-        public static final int ALIGNMENT = 8;
-        public static long left(PointerBase record) {
-            return ((Pointer) record).readLong(0);
-        }
-        public static void left(PointerBase record, long value) {
-            ((Pointer) record).writeLong(0, value);
-        }
-        public static long right(PointerBase record) {
-            return ((Pointer) record).readLong(8);
-        }
-        public static void right(PointerBase record, long value) {
-            ((Pointer) record).writeLong(8, value);
-        }
+    public interface Counter extends PointerBase {}
+    @CStruct(value = "Pair", addStructKeyword = true)
+    public interface Pair extends PointerBase {
+        int SIZE = 16;
+        int ALIGNMENT = 8;
+        @CField("left") long left();
+        @CField("left") void left(long value);
+        @CFieldAddress("left") CLongPointer addressOfLeft();
+        @CField("right") long right();
+        @CField("right") void right(long value);
+        @CFieldAddress("right") CLongPointer addressOfRight();
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
@@ -189,16 +259,16 @@ public final class CellApi {
         return MynaSymbols.checksum.get().invoke(bytes, count);
     }
     @CFunction(value = "cells_counter_create")
-    public static native PointerBase counterCreate(long start);
+    public static native Counter counterCreate(long start);
     @CFunction(value = "cells_counter_destroy")
-    public static native void counterDestroy(PointerBase counter);
+    public static native void counterDestroy(Counter counter);
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")
     public static counterNext_Leaf counterNextLeafPointer() {
         return counterNext_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static long counterNext(PointerBase counter) {
+    public static long counterNext(Counter counter) {
         return MynaSymbols.counterNext.get().invoke(counter);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
@@ -272,7 +342,7 @@ public final class CellApi {
         return swap_Binding.ADDRESS;
     }
     @AlwaysInline("Myna native leaf call")
-    public static void swap(PointerBase value, PointerBase result) {
+    public static void swap(Pair value, Pair result) {
         MynaSymbols.swap.get().invoke(value, result);
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */

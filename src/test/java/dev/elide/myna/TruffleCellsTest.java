@@ -4,12 +4,17 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.serialize.SeamJson;
+import java.net.URLClassLoader;
 import java.nio.file.*;
 import java.util.*;
+import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 
 /** The generated Truffle cells: a projection of the same seam the other backends emit. */
@@ -232,13 +237,14 @@ class TruffleCellsTest {
                 "META-INF/native-image/dev.elide.myna/dev.elide.myna.generated.MynaNative/native-image.properties");
     assertTrue(
         transitionsOnly.endsWith(
-            "Args ="
+            "$MynaSymbols"
                 + " --initialize-at-build-time=dev.elide.myna.generated.MynaTruffle,dev.elide.myna.generated.MynaTruffle$slow_Cell\n"),
         transitionsOnly);
     assertEquals(
         Set.of(
             "META-INF/native-image/dev.elide.myna/fixture.cells.CellApi/native-image.properties",
             "CellApi.java",
+            "CellApiDirectives.java",
             "CellApiFFM.java",
             "CellApiForeignFeature.java",
             "CellApiOwnership.java",
@@ -605,6 +611,67 @@ class TruffleCellsTest {
     assertTrue(
         narrow.contains("coerce_bytes.execute(arguments[0])"),
         "the buffer is the only guest argument");
+  }
+
+  /**
+   * An approved {@code align} fact reaches the coercion of a byte parameter, whichever shape it has
+   * (C string or raw bytes); a heuristic one is refused (#120).
+   */
+  @Test
+  void alignFactsReachByteCoercions() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read"
+            + " align=8@explicit_contract truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "  param text type=ptr<char> nullable=false ownership=borrowed access=read"
+            + " align=2@explicit_contract\n"
+            + "end\n";
+    String truffle = generate(MODULE + decode).get("MynaTruffle.java");
+    assertTrue(
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"data\", false, false, false, false, 8);"),
+        truffle);
+    assertTrue(
+        truffle.contains(
+            "new AlignedBytesCoercion(\"decode\", \"text\", false, false, false, true, 2);"),
+        truffle);
+    // Only an approved fact is a requirement; validation refuses the rest.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + decode.replace("align=8@explicit_contract", "align=8@heuristic")));
+  }
+
+  /**
+   * A byte pointer that is not a borrow takes any power-of-two align up to 2^29, page sizes above
+   * 4096 included: its cell lends an empty buffer a copy at that alignment. Every malformed value
+   * fails with the align message, whichever check would see it first.
+   */
+  @Test
+  void alignOnCellByteParametersAbovePagesAndMalformed() {
+    String decode =
+        "import decode return=i32 error=no_failure\n"
+            + "  param data type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+            + " align=4096@explicit_contract truffle_buffer=true@explicit_contract\n"
+            + "  param count type=u64\n"
+            + "end\n";
+    for (String align : new String[] {"4096", "16384", "65536", "2097152"}) {
+      String truffle =
+          generate(MODULE + decode.replace("align=4096", "align=" + align)).get("MynaTruffle.java");
+      assertTrue(
+          truffle.contains(
+              "new OverAlignedBytesCoercion(\"decode\", \"data\", false, true, false, false, "
+                  + align
+                  + ");"),
+          truffle);
+    }
+    for (String bad : new String[] {"99999999999999999999", "abc", "0"}) {
+      var refused =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> generate(MODULE + decode.replace("align=4096", "align=" + bad)));
+      assertEquals("align requires a positive integer: " + bad, refused.getMessage());
+    }
   }
 
   /**
@@ -988,6 +1055,17 @@ class TruffleCellsTest {
   }
 
   /**
+   * A failed create throws its own status after a best-effort copy: a copy that fails cannot
+   * replace the status the guest needs.
+   */
+  @Test
+  void failedCreateThrowsStatusAfterBestEffortCopy() {
+    String truffle = generate(OwnershipTest.HANDLES).get("ApiTruffle.java");
+    assertTrue(truffle.contains("throw out.copyToAfterFailure("), truffle);
+    assertFalse(truffle.contains("out.copyTo(arguments[1]);\n"), truffle);
+  }
+
+  /**
    * A create with a handle keeps its C shape for the guest, who passes a buffer for the struct. The
    * create writes into a struct the runtime owns; the cell compares the result with the listed
    * statuses, reads the resource from that struct and returns its owner, and the guest's buffer
@@ -1016,13 +1094,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread());
                                 adopted = true;
@@ -1131,13 +1207,11 @@ class TruffleCellsTest {
                             try {
                                 int status = invoke(borrow_schema.address(), borrow_schema.length(), out.address());
                                 if (!(status == 0L || status == 2L)) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.status("layoutCompile", status, this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.status("layoutCompile", status, this));
                                 }
                                 long created = out.pointerAt(8L);
                                 if (created == 0) {
-                                    out.copyTo(arguments[1]);
-                                    throw NativeCellException.noResource("layoutCompile", this);
+                                    throw out.copyToAfterFailure(arguments[1], NativeCellException.noResource("layoutCompile", this));
                                 }
                                 NativeResource resource = new NativeResource("Layout", created, DESTRUCTOR, Thread.currentThread(), null, null, borrow_schema.keep());
                                 adopted = true;
@@ -1218,6 +1292,125 @@ class TruffleCellsTest {
             .get("ApiTruffle.java");
     assertTrue(ffm.contains(", null, null, borrow_schema.keep());"), ffm);
     assertTrue(ffm.contains("ApiFFM.layoutCompile(MemorySegment.ofAddress(schema), length,"), ffm);
+    // The create call itself passes the guest's segment, as a call borrow's does (#120): the
+    // linker refuses a closed or foreign-thread segment before native code runs, and holds a
+    // shared arena open for the call. The borrow still keeps the buffer afterwards.
+    assertTrue(
+        ffm.contains(
+            "int status = scoped(coerce_schema.segment(arguments[0]), borrow_schema.address(),"
+                + " borrow_schema.length(), out.address());"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        @CompilerDirectives.TruffleBoundary\n"
+                + "        private static int scoped$1(MemorySegment schema, long length, long"
+                + " result) {\n"
+                + "            try {\n"
+                + "                return ApiFFM.layoutCompile(schema, length,"
+                + " MemorySegment.ofAddress(result));\n"),
+        ffm);
+    // invoke keeps raw addresses, and a held borrow is never lent without its borrow.
+    assertTrue(
+        ffm.contains("        public static int invoke(long schema, long length, long result) {\n"),
+        ffm);
+    assertFalse(ffm.contains("lent_"), ffm);
+    // Native Image cells pass addresses only: nothing about them changes.
+    assertFalse(truffle.contains("segment"), truffle);
+  }
+
+  /**
+   * A create that holds one borrow while lending two or more call borrows in place must not emit
+   * the in-place fast path: the held borrow's {@code borrow_<held>}/ {@code lent_<held>} locals are
+   * not in scope at the in-place point, and {@code borrow_<held>.keep()} is folded into the
+   * create's owner construction. The fast path is gated on call-borrow segments, so the suite's
+   * sole held-borrow fixture (1 held + 1 call borrow) skipped it; a create the validator accepts
+   * with two call borrows beside the held one used to generate a class that {@code javac} rejected.
+   */
+  @Test
+  void heldBorrowBesideTwoCallBorrowsSkipsTheInPlaceFastPath() {
+    // A create with one held borrow (data, kept by Adopted) and two call borrows (key, key2):
+    // OwnershipValidator accepts this shape, and the in-place fast path would otherwise be
+    // emitted (two lent segments) referencing locals that do not exist there.
+    String source =
+        MODULE.replace(
+                "module cells target=aarch64-apple-darwin truffle_cells=true",
+                "module cells target=aarch64-apple-darwin truffle_cells=true"
+                    + " truffle_backend=ffm")
+            + "struct Adopted size=24 align=8\n"
+            + "  field data type=ptr<u8> offset=0\n"
+            + "  field length type=u64 offset=8\n"
+            + "  field sum type=i64 offset=16\n"
+            + "end\n"
+            + "resource Adopted representation=native threading=confined create=adopt"
+            + " destroy=adoptedRelease handle=adopted success=0\n"
+            + "borrow adopt data length=length lifetime=resource:Adopted\n"
+            + "borrow adopt key length=keyLength lifetime=call\n"
+            + "borrow adopt key2 length=keyLength2 lifetime=call\n"
+            + "import adopt return=i32 error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " readonly=true@explicit_contract\n"
+            + "  param length type=u64\n"
+            + "  param key type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+            + "  param keyLength type=u32\n"
+            + "  param key2 type=ptr<u8> nullable=true ownership=borrowed access=read"
+            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+            + "  param keyLength2 type=u32\n"
+            + "  param adopted type=ptr<Adopted> nullable=false ownership=borrowed"
+            + " access=write\n"
+            + "end\n"
+            + "import adoptedRelease return=void error=no_failure nounwind=true@explicit_contract"
+            + " native_leaf=false@explicit_contract\n"
+            + "  param adopted type=ptr<Adopted> nullable=false ownership=transferred_to_callee"
+            + " access=read_write\n"
+            + "end\n";
+    String truffle = generate(source).get("MynaTruffle.java");
+    // The held borrow is acquired through its HeldBytesCoercion and kept by the resource.
+    assertTrue(truffle.contains("new HeldBytesCoercion(\"adopt\", \"data\", true)"), truffle);
+    assertTrue(truffle.contains("borrow_data.keep()"), truffle);
+    // The two call borrows still lend their segments in the slow path.
+    assertTrue(truffle.contains("coerce_key.segment(arguments["), truffle);
+    assertTrue(truffle.contains("coerce_key2.segment(arguments["), truffle);
+    // So does the held one, for the create call (#120).
+    assertTrue(truffle.contains("coerce_data.segment(arguments[0])"), truffle);
+    // The held buffer is never lent in place: no lent_data local is ever declared.
+    assertFalse(truffle.contains("lent_data"), truffle);
+    // The in-place fast path (which would reference borrow_data/lent_data before they are
+    // declared) is not emitted when a create holds a borrow: the cell falls back to the
+    // regular borrowed scoped call, acquired inside the borrow wrappers. Its markers are the
+    // NativeBytes lent_ declarations and the coerce_<name>.scoped(arguments[...]) calls, which
+    // only the in-place block emits (the slow path uses coerce_<name>.segment(...) instead).
+    assertFalse(truffle.contains("NativeBytes lent_"), truffle);
+    assertFalse(truffle.contains("coerce_key.scoped(arguments["), truffle);
+    assertFalse(truffle.contains("coerce_key2.scoped(arguments["), truffle);
+    // The slow path is intact: the held borrow is acquired and released in a wrapper, and
+    // the scoped call passes each lent segment beside its address.
+    assertTrue(
+        truffle.contains("Borrow borrow_data = coerce_data.execute(arguments[0]);"), truffle);
+    assertTrue(truffle.contains("borrow_data.release();"), truffle);
+    assertTrue(truffle.contains("int status = scoped("), truffle);
+    assertTrue(
+        truffle.contains("borrow_data.address()"),
+        "the held buffer's address reaches the scoped call from inside its wrapper");
+    // The same create without the held borrow (three call borrows, none held) still emits the
+    // in-place fast path, confirming the skip is specific to held borrows.
+    String noHeld =
+        generate(
+                source
+                    .replace(
+                        "borrow adopt data length=length lifetime=resource:Adopted\n",
+                        "borrow adopt data length=length lifetime=call\n")
+                    .replace(
+                        "param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+                            + " readonly=true@explicit_contract\n",
+                        "param data type=ptr<u8> nullable=true ownership=borrowed access=read"
+                            + " nocapture=true@explicit_contract"
+                            + " readonly=true@explicit_contract\n"))
+            .get("MynaTruffle.java");
+    assertFalse(noHeld.contains("HeldBytesCoercion"), noHeld);
+    assertTrue(noHeld.contains("NativeBytes lent_data"), noHeld);
+    assertTrue(noHeld.contains("coerce_data.scoped(arguments["), noHeld);
   }
 
   @Test
@@ -1626,5 +1819,166 @@ class TruffleCellsTest {
           output.getValue(),
           output.getKey());
     assertEquals(SeamJson.fingerprint(Dsl.parse(example())) + "\n", actual.get("seam.abi"));
+  }
+
+  static final String NAMED =
+      "module named target=x86_64-unknown-linux-gnu java_package=fixture.named java_class=Named"
+          + " truffle_cells=true\n"
+          + "const MAGIC type=u32 value=0x80000001\n"
+          + "const LIMIT type=u64 value=0xffffffffffffffff\n"
+          + "enum Status type=i32\n  value null_result = -1\n  value ok = 0\n"
+          + "  value syntax_error = 0x10\nend\n"
+          + "enum Level type=u8\n  value low = 0\n  value high = 255\nend\n"
+          + "enum Big type=u64\n  value top = 0xfffffffffffffffe\nend\n"
+          + "flags Perms type=u32\n  bit read = 0\n  bit sticky = 31\nend\n";
+
+  /** Compiles the generated Truffle class of {@link #NAMED} against the test class path. */
+  private static Class<?> compileNamed() throws Exception {
+    return compileTruffle(NAMED, "fixture.named", "Named");
+  }
+
+  /** Compiles the generated Truffle class {@code pkg.<cls>Truffle} of {@code seam}. */
+  private static Class<?> compileTruffle(String seam, String pkg, String cls) throws Exception {
+    var java = generate(seam).get(cls + "Truffle.java");
+    Path dir = Files.createTempDirectory("myna-names");
+    Path source = dir.resolve(pkg.replace('.', '/') + "/" + cls + "Truffle.java");
+    Files.createDirectories(source.getParent());
+    Files.writeString(source, java);
+    var compiler = ToolProvider.getSystemJavaCompiler();
+    assertNotNull(compiler, "javac is required to compile generated Java");
+    int status =
+        compiler.run(
+            null,
+            null,
+            null,
+            "-proc:none",
+            "-cp",
+            System.getProperty("java.class.path"),
+            "-d",
+            dir.toString(),
+            source.toString());
+    assertEquals(0, status, java);
+    var loader =
+        new URLClassLoader(
+            new java.net.URL[] {dir.toUri().toURL()}, TruffleCellsTest.class.getClassLoader());
+    return Class.forName(pkg + "." + cls + "Truffle", true, loader);
+  }
+
+  @Test
+  void namesReturnNullWhenUnlisted() throws Exception {
+    Class<?> truffle = compileNamed();
+    ClassLoader loader = truffle.getClassLoader();
+    var status = Class.forName("fixture.named.NamedTruffle$StatusNames", true, loader);
+    var name = status.getMethod("name", int.class);
+    assertEquals(
+        TruffleString.fromJavaStringUncached("ok", TruffleString.Encoding.UTF_8),
+        name.invoke(null, 0));
+    assertEquals("null_result", name.invoke(null, -1).toString());
+    assertEquals("syntax_error", name.invoke(null, 0x10).toString());
+    assertNull(name.invoke(null, 2), "an unlisted value has no name");
+    // The same instance every time: an image-heap constant, never a new string.
+    assertSame(name.invoke(null, 0), name.invoke(null, 0));
+    var level = Class.forName("fixture.named.NamedTruffle$LevelNames", true, loader);
+    var levelName = level.getMethod("name", byte.class);
+    assertEquals("high", levelName.invoke(null, (byte) -1).toString(), "u8 255 is byte -1");
+    assertNull(levelName.invoke(null, (byte) 1));
+    // The overload taking what the lowByte-style cell returns: 255 as an int, no narrowing.
+    var levelGuest = level.getMethod("name", int.class);
+    assertEquals("high", levelGuest.invoke(null, 255).toString());
+    assertNull(levelGuest.invoke(null, -1), "-1 is not a u8 value");
+    assertThrows(NoSuchMethodException.class, () -> status.getMethod("name", long.class));
+    var big = Class.forName("fixture.named.NamedTruffle$BigNames", true, loader);
+    var bigName = big.getMethod("name", long.class);
+    assertEquals(
+        "top", bigName.invoke(null, -2L).toString(), "u64 above Long.MAX_VALUE is raw bits");
+    assertNull(bigName.invoke(null, 0L));
+    // Flag sets get no name class: a mask is not one name.
+    assertThrows(
+        ClassNotFoundException.class,
+        () -> Class.forName("fixture.named.NamedTruffle$PermsNames", true, loader));
+  }
+
+  @Test
+  void generatedConstantsReadMembers() throws Exception {
+    Object constants = compileNamed().getMethod("constants").invoke(null);
+    var interop = InteropLibrary.getUncached();
+    assertTrue(interop.hasMembers(constants));
+    assertEquals(
+        0x80000001L, interop.readMember(constants, "MAGIC"), "u32 is a long, as cells return it");
+    assertEquals(-1L, interop.readMember(constants, "LIMIT"));
+    Object status = interop.readMember(constants, "Status");
+    assertEquals(-1, interop.readMember(status, "null_result"));
+    assertEquals(0x10, interop.readMember(status, "syntax_error"));
+    assertEquals(
+        255, interop.readMember(interop.readMember(constants, "Level"), "high"), "u8 is an int");
+    Object perms = interop.readMember(constants, "Perms");
+    assertEquals(1L, interop.readMember(perms, "read"));
+    assertEquals(
+        0x80000000L, interop.readMember(perms, "sticky"), "bit 31 of u32 is a positive long");
+    assertThrows(UnknownIdentifierException.class, () -> interop.readMember(status, "missing"));
+    var members = interop.getMembers(constants);
+    assertEquals(6, interop.getArraySize(members));
+    assertEquals(
+        "LIMIT",
+        interop.readArrayElement(members, 0),
+        "consts in name order, then enums, then flags");
+    assertEquals("Perms", interop.readArrayElement(members, 5));
+  }
+
+  /**
+   * A flag at the sign bit of a signed carrier is the value a cell returning that mask gives a
+   * guest: narrow signed results are sign-extended and i32/i64 stay signed, so the mask is
+   * negative.
+   */
+  @Test
+  void signedFlagMasksAreWhatCellsReturn() throws Exception {
+    String seam =
+        "module signs target=x86_64-unknown-linux-gnu java_package=fixture.signs java_class=Signs"
+            + " truffle_cells=true\n"
+            + "flags F8 type=i8\n  bit low = 0\n  bit top = 7\nend\n"
+            + "flags F16 type=i16\n  bit top = 15\nend\n"
+            + "flags F32 type=i32\n  bit top = 31\nend\n"
+            + "flags F64 type=i64\n  bit top = 63\nend\n"
+            + "flags FSize type=isize\n  bit top = 63\nend\n"
+            + "flags U8 type=u8\n  bit top = 7\nend\n"
+            + "flags U32 type=u32\n  bit top = 31\nend\n";
+    Object constants =
+        compileTruffle(seam, "fixture.signs", "Signs").getMethod("constants").invoke(null);
+    var interop = InteropLibrary.getUncached();
+    assertEquals(1, interop.readMember(interop.readMember(constants, "F8"), "low"));
+    assertEquals((int) (byte) 0x80, interop.readMember(interop.readMember(constants, "F8"), "top"));
+    assertEquals(
+        (int) (short) 0x8000, interop.readMember(interop.readMember(constants, "F16"), "top"));
+    assertEquals(
+        Integer.MIN_VALUE, interop.readMember(interop.readMember(constants, "F32"), "top"));
+    assertEquals(Long.MIN_VALUE, interop.readMember(interop.readMember(constants, "F64"), "top"));
+    assertEquals(Long.MIN_VALUE, interop.readMember(interop.readMember(constants, "FSize"), "top"));
+    // Unsigned carriers keep their number, as cells widen them.
+    assertEquals(0x80, interop.readMember(interop.readMember(constants, "U8"), "top"));
+    assertEquals(0x80000000L, interop.readMember(interop.readMember(constants, "U32"), "top"));
+  }
+
+  @Test
+  void constantsOnlyWhenDeclared() throws Exception {
+    var plain = generate(MODULE + ADD).get("MynaTruffle.java");
+    assertFalse(plain.contains("NativeConstants"));
+    assertFalse(plain.contains("TruffleString"));
+    var properties =
+        generate(NAMED)
+            .get(
+                "META-INF/native-image/dev.elide.myna/fixture.named.Named/native-image.properties");
+    assertNotNull(properties);
+    assertTrue(properties.contains("fixture.named.NamedTruffle$StatusNames"), properties);
+    assertTrue(properties.contains("fixture.named.NamedTruffle$BigNames"), properties);
+    assertFalse(properties.contains("PermsNames"), properties);
+    var clash =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> generate(NAMED + "import constants return=i32 error=no_failure\nend\n"));
+    assertEquals(
+        "Truffle cell constants collides with the generated constants() accessor",
+        clash.getMessage());
+    // Without anything declared, an import may still be called constants.
+    generate(MODULE + "import constants return=i32 error=no_failure\nend\n");
   }
 }

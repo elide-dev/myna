@@ -602,4 +602,98 @@ pub fn scale_probe(thread: *mut core::ffi::c_void) -> i64 {
         empty.write_text(self.contracts.read_text().replace("@seam_inspect", "@not_present"))
         self.assertIn("no contract symbols", self.apply(original, output, empty, ok=False).stdout)
 
+    def test_constants_header(self):
+        header = ROOT / "tests/golden/constants/seam.h"
+        source = self.work / "constants_check.c"
+        source.write_text('''#include "seam.h"
+#include <string.h>
+#ifdef __cplusplus
+#define CHECK static_assert
+#else
+#define CHECK _Static_assert
+#endif
+CHECK(CONSTANTS_MAGIC == 0x3141514bu, "magic");
+CHECK(CONSTANTS_ABI_VERSION == 3 && sizeof(CONSTANTS_ABI_VERSION) == 4, "module abi version");
+CHECK(sizeof(((struct Record *)0)->raw) == 8 && sizeof(constants_unary_op_t) == 4, "narrowed field stays raw");
+CHECK(sizeof(struct Unary) == 4, "unary record");
+CHECK(CONSTANTS_LIMIT == 0xffffffffffffffffull, "limit");
+CHECK(CONSTANTS_FLOOR < 0 && CONSTANTS_FLOOR == (-9223372036854775807ll - 1), "floor");
+CHECK(CONSTANTS_STATUS_NULL_RESULT == -1 && CONSTANTS_STATUS_SYNTAX_ERROR == 16, "status");
+CHECK(CONSTANTS_LEVEL_HIGH == 255, "level");
+CHECK(CONSTANTS_PERMS_STICKY == 0x80000000u && CONSTANTS_PERMS_ALL == 0x80000003u, "perms");
+CHECK(CONSTANTS_WIDE_LAST == 0x8000000000000000ull, "wide");
+CHECK(sizeof(CONSTANTS_PERMS_STICKY) == 4 && sizeof(CONSTANTS_MAGIC) == 4, "u32 width");
+CHECK(sizeof(CONSTANTS_LIMIT) == 8 && sizeof(CONSTANTS_FLOOR) == 8, "64-bit width");
+CHECK(sizeof(CONSTANTS_LEVEL_HIGH) >= 1, "u8");
+CHECK(sizeof(constants_status_t) == 4 && sizeof(constants_level_t) == 1, "typedef sizes");
+CHECK(sizeof(struct constants_wide_bits) == 8, "bits size");
+CHECK(offsetof(struct Record, wide) == 8 && offsetof(struct Record, wideBits) == 8, "union offset");
+CHECK(CONSTANTS_PACKED_KIND_SHIFT == 8 && CONSTANTS_PACKED_KIND_MASK == 0xff00u, "kind range");
+CHECK(CONSTANTS_PACKED_DEPTH_SHIFT == 16 && CONSTANTS_PACKED_DEPTH_MASK == 0xf0000u, "depth range");
+CHECK(CONSTANTS_PACKED_ALL == 0xfff05u && sizeof(CONSTANTS_PACKED_KIND_MASK) == 4, "packed all");
+CHECK(sizeof(struct constants_packed_bits) == 4, "packed bits size");
+CHECK(CONSTANTS_OCTET_CODE_MASK == 0xffu && CONSTANTS_OCTET_ALL == 0xffu, "whole-word range");
+#if CONSTANTS_STATUS_OK != 0
+#error "macros must work in #if"
+#endif
+static int classify(constants_status_t status) {
+  switch (status) {
+    case CONSTANTS_STATUS_NULL_RESULT: return 1;
+    case CONSTANTS_STATUS_OK: return 2;
+    case CONSTANTS_STATUS_INTERNAL_ERROR: return 3;
+    case CONSTANTS_STATUS_SYNTAX_ERROR: return 4;
+    default: return 0;
+  }
+}
+int main(void) {
+  struct Record r;
+  memset(&r, 0, sizeof r);
+  r.wideBits.first = 1;
+  if (r.wide != CONSTANTS_WIDE_FIRST) return 1;
+  r.wide = 0;
+  r.wideBits.last = 1;
+  if (r.wide != CONSTANTS_WIDE_LAST) return 2;
+  r.perms = CONSTANTS_PERMS_READ | CONSTANTS_PERMS_WRITE;
+  if ((r.perms & ~CONSTANTS_PERMS_ALL) != 0) return 3;
+  if (classify(-1) != 1 || classify(16) != 4 || classify(5) != 0) return 4;
+  if (strcmp(constants_status_name(CONSTANTS_STATUS_OK), "ok") != 0) return 5;
+  if (constants_status_name(99) != NULL || constants_level_name(7) != NULL) return 6;
+  struct Node n;
+  memset(&n, 0, sizeof n);
+  n.packed = constants_packed_with_depth(
+      constants_packed_with_kind(CONSTANTS_PACKED_OPEN, CONSTANTS_KIND_BOXED), 9);
+  if (n.packed != 0x90501u) return 7;
+  if (constants_packed_kind(n.packed) != CONSTANTS_KIND_BOXED) return 8;
+  if (constants_packed_depth(n.packed) != 9 || n.packedBits.depth != 9) return 9;
+  if (n.packedBits.kind != CONSTANTS_KIND_BOXED || !n.packedBits.open) return 10;
+  n.packed = constants_packed_with_kind(constants_packed_with_depth(n.packed, 0x13), CONSTANTS_KIND_LAST);
+  if (n.packed != 0x3ff01u || (n.packed & ~CONSTANTS_PACKED_ALL) != 0) return 11;
+  if (((n.packed | 0x2u) & ~CONSTANTS_PACKED_ALL) == 0) return 12;
+  if (constants_octet_code(constants_octet_with_code(0x12, 0xa5)) != 0xa5) return 13;
+  return 0;
+}
+''')
+        cpp = self.work / "constants_check.cpp"
+        cpp.write_text(source.read_text())
+        for name, std, compiler, checked in (("c", "-std=c11", "clang", source), ("cpp", "-std=c++17", "clang++", cpp)):
+            binary = self.work / ("constants_" + name)
+            run(llvm(compiler), std, "-pedantic", "-Wall", "-Wextra", "-Werror", "-I", header.parent, checked, "-o", binary)
+            run(binary)
+
+    def test_constants_rust(self):
+        for name, golden in (("check", "constants"), ("ownership_check", "constants-ownership")):
+            test = self.work / name
+            os.environ["SEAM_GENERATED"] = str(ROOT / "tests/golden" / golden)
+            run("rustc", "--edition=2024", "--test", "-C", "opt-level=2", ROOT / "tests/constants" / (name + ".rs"), "-o", test)
+            run(test)
+
+    def test_views_rust(self):
+        """Counted views: slices of the counted length; index count and, in debug builds, a null
+        pointer with a nonzero count panic; a null pointer with a zero count is empty."""
+        test = self.work / "views_check"
+        os.environ["SEAM_GENERATED"] = str(ROOT / "tests/golden/views")
+        run("rustc", "--edition=2024", "--test", "-C", "opt-level=2", "-C", "debug-assertions",
+            ROOT / "tests/views/check.rs", "-o", test)
+        run(test)
+
 if __name__ == "__main__": main(sys.modules[__name__], "llvm-integration")

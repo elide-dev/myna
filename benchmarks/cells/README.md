@@ -3,8 +3,10 @@
 Run `mise run build:jvm`, `mise run bench:cells-build`, then `mise run bench:cells`. Results, the
 Native Image build log, per-process samples with each process's Truffle compilation trace, input
 and binary hashes, commands and toolchain identities are retained under `build/cells/`. The
-`Truffle cell costs` workflow runs the same experiment on the hosted ARM machine. Use the same
-machine and build for comparisons.
+`Truffle cell costs` workflow runs the same experiment on the hosted ARM machine with one process
+per case (`--forks 1`), a smoke run that keeps every compiled-path, allocation and checksum check
+within a short job; publishable numbers use the default five. Use the same machine and build for
+comparisons.
 
 Every case is one fresh process running one language-less Truffle root (a `NativeCell` driven
 through its `NativeFunction` wrapper from the host) that contains the whole measured loop. The
@@ -36,6 +38,13 @@ the shared comparison kernel, each call depending on the previous result:
 - `hand-step`: `Cells.step` behind a hand-written `@TruffleBoundary`, the shape cells are compared
   with for transitioning imports; `glue-boundary-step` is the generated cell with
   `truffle_transitions=boundary`.
+
+Buffer cases measure `NativeBytes`' own scalar buffer messages, the path a guest's reads and writes
+take, through a dispatched `InteropLibrary`: each step writes the recurrence's value with
+`writeBufferLong` and reads it back with `readBufferLong`. `buffer-native` uses a segment of the
+global arena (no scope to check), `buffer-shared` one of a shared arena and `buffer-confined` one
+of an arena confined to the measuring thread, so the three show what the messages' scope check
+costs (#128).
 
 Slab cases call a ten-argument entry (two byte buffers, two opaque pointers, five integers),
 exported as a leaf (`slab`) and as a transition (`slab-step`): `direct-*` passes raw addresses,
