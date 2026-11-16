@@ -58,6 +58,16 @@ final class OwnershipValidator {
       require(!RESERVED.contains(m.nativeClass()), "reserved native/ownership class name");
     }
     if (m.rustImplementation()) rustImplementation(m);
+    // Each FFM binding has a NAME_address() accessor beside the NAME(...) call.
+    var importNames = new HashSet<String>();
+    m.functions().forEach(f -> importNames.add(f.name()));
+    for (Function f : m.functions())
+      require(
+          !importNames.contains(f.name() + "_address")
+              || m.functions().stream()
+                  .filter(g -> g.name().equals(f.name() + "_address"))
+                  .allMatch(g -> !g.abiParameters().isEmpty()),
+          "FFM address accessor " + f.name() + "_address() collides with the import of that name");
     var functions = new HashMap<String, Function>();
     m.functions().forEach(f -> functions.put(f.name(), f));
     var names = new HashSet<String>();
@@ -214,8 +224,13 @@ final class OwnershipValidator {
               || p.access() == Access.READ_WRITE,
           "call buffer requires read, write or read_write access: " + form);
       require(
-          Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(length.type()),
-          "buffer length must be a 32/64-bit integer (bytes): " + form + " length=" + b.length());
+          // usize is size_t, the 64-bit unsigned case on the supported (LP64) targets.
+          Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64, Scalar.USIZE)
+              .contains(length.type()),
+          "buffer length must be a 32/64-bit integer or usize (bytes): "
+              + form
+              + " length="
+              + b.length());
       // A held buffer is captured by its create, which is the point of holding it.
       if (!b.held())
         require(

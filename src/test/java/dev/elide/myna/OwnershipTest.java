@@ -922,6 +922,39 @@ class OwnershipTest {
         Dsl.parse(opted).withTarget("x86_64-unknown-linux-gnu").rustImplementation());
   }
 
+  @Test
+  void usizeLengthsAndResolvedAddresses() {
+    // usize is size_t: a 64-bit unsigned length in every wrapper.
+    var output =
+        Generator.generate(
+            Dsl.parse(TRANSFER.replace("param count type=u64", "param count type=usize")), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains("pub unsafe fn transfer(session: *mut super::Session, input: &[u8]"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("ApiOwnership.java").contains("long length1 = arg1.byteSize();"),
+        output.get("ApiOwnership.java"));
+    // FFM: the address each binding resolved, without a second lookup.
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public MemorySegment transfer_address() {\n"
+                + "            if (this.transfer_address == null) throw new"
+                + " UnsatisfiedLinkError(\"transfer\");\n"
+                + "            return this.transfer_address;\n"
+                + "        }\n"),
+        ffm);
+    // An import named like an accessor, taking nothing, would collide with it.
+    String clash = TRANSFER + "import transfer_address return=i32 error=no_failure\nend\n";
+    assertEquals(
+        "FFM address accessor transfer_address() collides with the import of that name",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(clash), true))
+            .getMessage());
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";
@@ -1709,7 +1742,8 @@ class OwnershipTest {
         Arguments.of(
             "param capacity type=u32",
             "param capacity type=u16",
-            "buffer length must be a 32/64-bit integer (bytes): transfer output length=capacity"),
+            "buffer length must be a 32/64-bit integer or usize (bytes): transfer output"
+                + " length=capacity"),
         Arguments.of(
             " nounwind=true@explicit_contract\n",
             "\n",

@@ -119,6 +119,21 @@ public final class ConstsFFM {
             this.setLevel_address = lookup.find("consts_set_level").orElse(null);
             this.status_address = lookup.find("consts_status").orElse(null);
         }
+        /** The resolved address of consts_blocking_status, valid while the library arena is open. */
+        public MemorySegment blockingStatus_address() {
+            if (this.blockingStatus_address == null) throw new UnsatisfiedLinkError("consts_blocking_status");
+            return this.blockingStatus_address;
+        }
+        /** The resolved address of consts_set_level, valid while the library arena is open. */
+        public MemorySegment setLevel_address() {
+            if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");
+            return this.setLevel_address;
+        }
+        /** The resolved address of consts_status, valid while the library arena is open. */
+        public MemorySegment status_address() {
+            if (this.status_address == null) throw new UnsatisfiedLinkError("consts_status");
+            return this.status_address;
+        }
         public int blockingStatus(MemorySegment session) throws Throwable {
             if (this.blockingStatus_address == null) throw new UnsatisfiedLinkError("consts_blocking_status");
             return (int) ConstsFFM.blockingStatus_Downcall.HANDLE.invokeExact(this.blockingStatus_address, session);
@@ -149,6 +164,16 @@ public final class ConstsFFM {
             java.util.Objects.requireNonNull(lookup);
             this.setLevel_address = lookup.find("consts_set_level").orElse(null);
             this.status_address = lookup.find("consts_status").orElse(null);
+        }
+        /** The resolved address of consts_set_level, valid while the library arena is open. */
+        public MemorySegment setLevel_address() {
+            if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");
+            return this.setLevel_address;
+        }
+        /** The resolved address of consts_status, valid while the library arena is open. */
+        public MemorySegment status_address() {
+            if (this.status_address == null) throw new UnsatisfiedLinkError("consts_status");
+            return this.status_address;
         }
         public void setLevel(byte level, MemorySegment session) throws Throwable {
             if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");

@@ -115,6 +115,10 @@ public final class FfmBindingMain {
         if (binding.liveCount() != 0) throw new AssertionError("failed adoption leaked");
         // An unavailable destructor must preserve the adoption error and report cleanup failure.
         var lookup = SymbolLookup.libraryLookup(Path.of(args[0]), library);
+        // The address the binding resolved, for a symbol handed to native code rather than called.
+        if (binding.checksum_address().address() != lookup.find("buffer_checksum").orElseThrow().address())
+          throw new AssertionError("resolved address");
+        rejects(UnsatisfiedLinkError.class, () -> missing.liveCount_address());
         var noDestructor = new NativeApiFFM.LibraryBinding(symbol -> symbol.equals("ticket_destroy")
             ? java.util.Optional.empty() : lookup.find(symbol));
         var adoptedAddress = new AtomicReference<MemorySegment>();

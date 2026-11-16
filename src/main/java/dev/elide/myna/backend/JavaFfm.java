@@ -524,6 +524,23 @@ public final class JavaFfm implements Backend {
           .append(").orElse(null);\n");
     }
     out.append("        }\n");
+    // The address this binding resolved, for a symbol handed to native code rather than called:
+    // the same lookup result, held by this instance, never a second lookup or an image constant.
+    for (FfmFunction function : functions) {
+      Function f = function.function();
+      out.append("        /** The resolved address of ")
+          .append(function.symbol().replace("\"", ""))
+          .append(", valid while the library arena is open. */\n")
+          .append("        public MemorySegment ")
+          .append(f.name())
+          .append("_address() {\n            if (this.")
+          .append(f.name())
+          .append("_address == null) throw new UnsatisfiedLinkError(")
+          .append(function.symbol())
+          .append(");\n            return this.")
+          .append(f.name())
+          .append("_address;\n        }\n");
+    }
     for (FfmFunction function : functions) {
       Function f = function.function();
       String carrier = function.carrier();

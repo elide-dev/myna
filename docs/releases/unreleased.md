@@ -65,6 +65,12 @@ the same output as before.
   without the option generate the same output (see
   [implementing imports in Rust](../ownership.md#implementing-imports-in-rust)).
 
+## Status-plus-out-pointer constructors, `usize` lengths, C strings (#141)
+
+- A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
+- `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
+  from the same lookup, for symbols handed to native code rather than called.
+
 ## Breaking changes
 
 | # | Change | Affects | Migration |
