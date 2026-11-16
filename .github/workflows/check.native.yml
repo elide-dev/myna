@@ -50,7 +50,7 @@ jobs:
           - os: ubuntu-24.04
           - os: macos-15
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+    timeout-minutes: 40
     steps:
       - name: "Setup: Harden Runner"
         if: runner.os == 'Linux'
@@ -101,9 +101,6 @@ jobs:
           MYNA_PYTHON_TIMEOUT: 14m
         run: mise exec -- scripts/python.sh tests/sanitizers.py asan --duration 600
       - run: mise run test:tsan
-      - run: mise run test:native-image
-      - name: Measure SVM text crossover
-        run: mise exec -- python3 benchmarks/text/run.py --output build/reports/text-crossover.json
       - run: mise run bench:comparison-build
         if: runner.os == 'Linux'
       - run: mise run bench:comparison-smoke
@@ -125,7 +122,7 @@ jobs:
           report_type: test_results
           use_oidc: true
           plugins: noop
-          files: build/reports/native-e2e.xml,build/reports/llvm-integration.xml,build/reports/native-image-integration.xml
+          files: build/reports/native-e2e.xml,build/reports/llvm-integration.xml
           disable_search: true
           flags: native-${{ matrix.os }}
           fail_ci_if_error: true
@@ -156,3 +153,55 @@ jobs:
             build/static-jni-test/jni-app
             build/static-jni-test/generated/seam-jni.*
             build/aot-ffm-test/jni*.bc
+
+  # The Native Image suite builds a dozen images; it runs beside the native job so neither takes
+  # much longer than the suite itself.
+  native-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - name: "Setup: Harden Runner"
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select Apple SDK and linker
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+      - name: Setup tools
+        uses: ./.github/actions/setup
+      - name: Build native CLI and object applicator
+        run: mise run build:llvm
+      - run: mise run test:native-image
+      - name: Measure SVM text crossover
+        run: mise exec -- python3 benchmarks/text/run.py --output build/reports/text-crossover.json
+      - name: Upload Native Image test results to Codecov
+        if: ${{ !cancelled() && hashFiles('build/reports/native-image-integration.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          files: build/reports/native-image-integration.xml
+          disable_search: true
+          flags: native-image-${{ matrix.os }}
+          fail_ci_if_error: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: native-image-${{ matrix.os }}
+          path: build/reports/

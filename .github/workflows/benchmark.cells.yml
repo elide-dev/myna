@@ -24,7 +24,7 @@ concurrency:
 jobs:
   cells:
     runs-on: ${{ vars.MYNA_ARM_BENCH_RUNNER || 'ubuntu-24.04-arm' }}
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,7 +35,9 @@ jobs:
       - uses: ./.github/actions/setup-graalvm
       - run: mise run build:jvm
       - run: mise exec -- python3 benchmarks/cells/run.py build
-      - run: mise exec -- python3 benchmarks/cells/run.py run
+      # One process per case keeps every compiled-path, allocation and checksum check while the
+      # job stays short; publishable numbers come from five processes on a benchmark host.
+      - run: mise exec -- python3 benchmarks/cells/run.py run --forks 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
