@@ -77,3 +77,45 @@ unsafe fn parsed_new(value: u64) -> *mut u64 {
     LIVE.fetch_sub(1, Ordering::SeqCst);
 }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_value(p: *const u64) -> u64 { unsafe { p.read() } }
+// Batches: an array of buffers with a parallel array of lengths. Each digest folds in the count
+// and then, per element, its length and every byte (or NULL_ELEMENT for an absent element), so the
+// callers' expected values prove the native side saw exactly the bytes they lent. A null batch
+// with count zero is the empty batch, which folds in ABSENT; any other null array is an error.
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const NULL_ELEMENT: u64 = u64::MAX - 1;
+fn mix(hash: u64, value: u64) -> u64 { (hash ^ value).wrapping_mul(0x100_0000_01b3) }
+unsafe fn fold_bytes(mut hash: u64, bytes: *const u8, length: u64) -> u64 {
+    hash = mix(hash, length);
+    for i in 0..length as usize { hash = mix(hash, u64::from(unsafe { bytes.add(i).read() })); }
+    hash
+}
+unsafe fn fold_batch(hash: u64, sources: *const *mut u8, lengths: *const u64, wide: bool, count: u64, nullable: bool) -> Option<u64> {
+    if sources.is_null() || lengths.is_null() {
+        return if sources.is_null() && lengths.is_null() && count == 0 { Some(mix(hash, ABSENT)) } else { None };
+    }
+    let mut hash = mix(hash, count);
+    for i in 0..count as usize {
+        let source = unsafe { sources.add(i).read() };
+        let length = if wide { unsafe { lengths.add(i).read() } } else { u64::from(unsafe { (lengths as *const u32).add(i).read() }) };
+        if source.is_null() {
+            if !nullable || length != 0 { return None; }
+            hash = mix(hash, NULL_ELEMENT);
+        } else {
+            hash = unsafe { fold_bytes(hash, source, length) };
+        }
+    }
+    Some(hash)
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_batch_digest(sources: *const *mut u8, lengths: *const u64, count: u64) -> u64 {
+    unsafe { fold_batch(FNV_OFFSET, sources, lengths, true, count, false) }.unwrap_or(u64::MAX)
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_batch_merge(
+    key: *const u8, key_length: u32, inputs: *const *mut u8, input_lengths: *const u64, input_count: u64,
+    deps: *const *mut u8, dep_lengths: *const u32, dep_count: u32,
+) -> u64 {
+    if key.is_null() { return u64::MAX; }
+    let hash = unsafe { fold_bytes(FNV_OFFSET, key, u64::from(key_length)) };
+    unsafe { fold_batch(hash, inputs, input_lengths, true, input_count, false) }
+        .and_then(|hash| unsafe { fold_batch(hash, deps, dep_lengths as *const u64, false, u64::from(dep_count), true) })
+        .unwrap_or(u64::MAX)
+}

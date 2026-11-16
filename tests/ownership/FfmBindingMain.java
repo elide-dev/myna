@@ -87,6 +87,7 @@ public final class FfmBindingMain {
         if (binding.tally(bytes.asSlice(3, 0)) != 0) throw new AssertionError("empty input is present");
         rejects(IllegalArgumentException.class, () -> binding.tally(MemorySegment.ofArray(new byte[0])));
         rejects(IllegalStateException.class, () -> binding.tally(closed));
+        batches(binding, memory, closed);
         var failure = new AtomicReference<Throwable>();
         var thread = new Thread(() -> {
           try {
@@ -175,6 +176,64 @@ public final class FfmBindingMain {
     }
     verifyConfinedResources(Path.of(args[0]));
     System.out.println("Explicit FFM library lifetime and buffer borrowing passed");
+  }
+
+  // The fixture's batch digest (tests/ownership/native.rs): the count, then each element's length
+  // and bytes, or NULL_ELEMENT for an absent one; the empty batch folds in ABSENT.
+  static final long FNV_OFFSET = 0xcbf29ce484222325L;
+  static final long NULL_ELEMENT = -2L;
+  static long mix(long hash, long value) { return (hash ^ value) * 0x100000001b3L; }
+  static long fold(long hash, byte[] bytes) {
+    hash = mix(hash, bytes.length);
+    for (byte b : bytes) hash = mix(hash, b & 0xff);
+    return hash;
+  }
+  static long foldBatch(long hash, byte[]... buffers) {
+    if (buffers.length == 0) return mix(hash, 1L << 32);
+    hash = mix(hash, buffers.length);
+    for (byte[] buffer : buffers) hash = buffer == null ? mix(hash, NULL_ELEMENT) : fold(hash, buffer);
+    return hash;
+  }
+
+  /** Three buffers of different sizes, one empty; the empty batch; two batches in one call. */
+  private static void batches(NativeApiFFM.LibraryBinding binding, Arena memory, MemorySegment closed) throws Throwable {
+    byte[] a = {1, 2, 3}, b = {(byte) 255}, empty = {};
+    var sa = memory.allocateFrom(ValueLayout.JAVA_BYTE, a);
+    var sb = memory.allocateFrom(ValueLayout.JAVA_BYTE, b);
+    var three = new MemorySegment[] {sa, sb.asSlice(1, 0), sb.asReadOnly()};
+    if (binding.digest(three) != foldBatch(FNV_OFFSET, a, empty, b)) throw new AssertionError("batch digest");
+    if (binding.digest(new MemorySegment[] {MemorySegment.NULL}) != foldBatch(FNV_OFFSET, empty))
+      throw new AssertionError("an element at address zero is present and empty");
+    if (binding.digest(new MemorySegment[0]) != foldBatch(FNV_OFFSET)) throw new AssertionError("empty batch");
+    var many = new MemorySegment[20];
+    var bytes = new byte[20][];
+    for (int i = 0; i < many.length; i++) {
+      bytes[i] = new byte[i];
+      for (int j = 0; j < i; j++) bytes[i][j] = (byte) (i * 7 + j);
+      many[i] = memory.allocateFrom(ValueLayout.JAVA_BYTE, bytes[i]);
+    }
+    if (binding.digest(many) != foldBatch(FNV_OFFSET, bytes)) throw new AssertionError("large batch");
+    var key = memory.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 7, (byte) 8);
+    long expected = foldBatch(foldBatch(fold(FNV_OFFSET, new byte[] {7, 8}), a, b), b, null, empty);
+    if (binding.merge(key, new MemorySegment[] {sa, sb}, new MemorySegment[] {sb, null, sb.asSlice(0, 0)}) != expected)
+      throw new AssertionError("two batches");
+    expected = foldBatch(foldBatch(fold(FNV_OFFSET, new byte[] {7, 8}), a), null, null);
+    if (binding.merge(key, new MemorySegment[] {sa}, new MemorySegment[] {MemorySegment.NULL, null}) != expected)
+      throw new AssertionError("absent elements");
+    // Each element is validated exactly as a single buffer is, before the call.
+    rejects(NullPointerException.class, () -> binding.digest(new MemorySegment[] {sa, null}));
+    rejects(NullPointerException.class, () -> binding.digest(null));
+    rejects(IllegalArgumentException.class, () -> binding.digest(new MemorySegment[] {MemorySegment.ofArray(a)}));
+    rejects(IllegalStateException.class, () -> binding.digest(new MemorySegment[] {sa, closed}));
+    rejects(IllegalArgumentException.class, () -> binding.digest(new MemorySegment[] {MemorySegment.NULL.reinterpret(1)}));
+    var failure = new AtomicReference<Throwable>();
+    var thread = new Thread(() -> {
+      try {
+        rejects(WrongThreadException.class, () -> binding.digest(new MemorySegment[] {sa}));
+      } catch (Throwable error) { failure.set(error); }
+    });
+    thread.start(); thread.join();
+    if (failure.get() != null) throw failure.get();
   }
 
   private static void verifyConfinedResources(Path path) throws Throwable {

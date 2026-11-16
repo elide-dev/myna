@@ -46,6 +46,37 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
     return null;
   }
 
+  /** The batch whose count is {@code p}, or null. */
+  BufferBorrow count(Parameter p) {
+    for (BufferBorrow b : borrows) if (b.batch() && b.count().equals(p.name())) return b;
+    return null;
+  }
+
+  /** Whether {@code p} is a length or count the wrapper derives instead of taking. */
+  boolean derived(Parameter p) {
+    return length(p) != null || count(p) != null;
+  }
+
+  /** Whether any borrow of the function is a batch. */
+  boolean batched() {
+    return borrows.stream().anyMatch(BufferBorrow::batch);
+  }
+
+  /** The element type of a batch's lengths array. */
+  Scalar lengthElement(BufferBorrow b) {
+    return (Scalar) ((Pointer) parameter(b.length()).type()).pointee();
+  }
+
+  /** The scalar type of a batch's count. */
+  Scalar countType(BufferBorrow b) {
+    return (Scalar) parameter(b.count()).type();
+  }
+
+  /** The largest value a 32-bit integer type carries, as a Java {@code long} literal. */
+  static String max32(Scalar type) {
+    return type == Scalar.I32 ? "2147483647L" : "4294967295L";
+  }
+
   private Parameter parameter(String name) {
     return function.parameters().stream()
         .filter(p -> p.name().equals(name))
@@ -134,6 +165,6 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
   /** Whether a parameter other than a buffer is a pointer, which the wrapper cannot vouch for. */
   boolean passesPointers() {
     return function.parameters().stream()
-        .anyMatch(p -> buffer(p) == null && p.type() instanceof Pointer);
+        .anyMatch(p -> buffer(p) == null && length(p) == null && p.type() instanceof Pointer);
   }
 }

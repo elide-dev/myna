@@ -78,3 +78,27 @@ end
 import parsedValue symbol=parsed_value return=u64 error=no_failure nounwind=true@explicit_contract
   param parsed type=ptr<Parsed> nullable=false ownership=borrowed access=read
 end
+# A batch borrow: sources[i] is a buffer of lengths[i] bytes for i < count, each read during the
+# call only. The wrappers take an array of buffers and build both arrays for the call; an empty
+# batch passes null arrays with count zero, which the declaration accepts.
+borrow digest sources lengths=lengths count=count lifetime=call
+import digest symbol=buffer_batch_digest return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+# Two batches beside a single buffer, each with its own lengths and count. The elements of deps may
+# be absent: a null element with length zero.
+borrow merge key length=keyLength lifetime=call
+borrow merge inputs lengths=inputLengths count=inputCount lifetime=call
+borrow merge deps lengths=depLengths count=depCount lifetime=call elements_nullable=true
+import merge symbol=buffer_batch_merge return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param key type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param keyLength type=u32
+  param inputs type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputLengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputCount type=u64
+  param deps type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depLengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depCount type=u32
+end

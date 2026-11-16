@@ -59,6 +59,24 @@ the same output as before.
 - A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
 - Ownership and call-buffer validation errors name the function and parameter they concern.
 
+## Batches of borrowed buffers (#132)
+
+`borrow F SOURCES lengths=LENGTHS count=COUNT lifetime=call [elements_nullable=true]` declares an
+array of read buffers with a parallel array of lengths: `SOURCES[i]` holds `LENGTHS[i]` bytes for
+`i < COUNT`, each read during the call only (see
+[batches of buffers](../ownership.md#batches-of-buffers)). One import may declare several beside
+single buffers.
+
+- **Rust**: the wrapper takes `&[&[u8]]` (`&[Option<&[u8]>]` with nullable elements) and builds both
+  arrays on the stack for up to eight buffers, in a `Vec` otherwise. `seam.rs` gains `BufferBatch` and
+  `OptionalBufferBatch`, safe iterators an implementation builds from the raw arrays.
+- **Native Image**: `NativeBuffer[]` and `byte[][]` overloads that acquire or pin each element under the
+  single-buffer rules, with the arrays on the stack for up to eight elements.
+- **FFM**: a `MemorySegment[]` overload, each segment validated as a single buffer is.
+- The empty batch passes null arrays with count zero. `seam.h` and `seam.ll` are unchanged: the arrays
+  carry the `nocapture` and `readonly` facts they declare. Static JNI keeps the raw binding, and Truffle
+  cells reject a batch import until it opts out with `truffle_cell=false@explicit_contract`.
+
 ## Breaking changes
 
 | # | Change | Affects | Migration |

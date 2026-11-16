@@ -33,7 +33,8 @@ generated outputs. Three further module options require it:
 Two per-import facts refine the module choice:
 
 - `truffle_cell=false@explicit_contract` opts one import out. Imports with by-value records or
-  callback parameters must opt out: those shapes need language glue.
+  callback parameters must opt out: those shapes need language glue. So must an import with a
+  [batch of buffers](ownership.md#batches-of-buffers), which cells do not lend yet.
 - `truffle_raw_pointers=true@explicit_contract` lets guest numbers stand in for pointer arguments
   of that import (`bun:ffi` compatibility). By default a pointer argument must be an interop pointer
   or, where the parameter is nullable, interop `null`.

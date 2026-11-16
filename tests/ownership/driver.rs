@@ -69,5 +69,56 @@ fn main() {
         panic!("release during unwinding");
     }).is_err());
     assert_eq!(unsafe { seam::liveCount() }, 0);
+    batches();
     println!("Rust ownership passed");
+}
+
+// The fixture's batch digest: the count, then each element's length and bytes, or NULL_ELEMENT
+// for an absent one; the empty batch, passed as null arrays, folds in ABSENT instead.
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const NULL_ELEMENT: u64 = u64::MAX - 1;
+fn mix(hash: u64, value: u64) -> u64 { (hash ^ value).wrapping_mul(0x100_0000_01b3) }
+fn fold(hash: u64, bytes: &[u8]) -> u64 {
+    bytes.iter().fold(mix(hash, bytes.len() as u64), |hash, &byte| mix(hash, u64::from(byte)))
+}
+fn fold_batch(hash: u64, buffers: &[Option<&[u8]>]) -> u64 {
+    if buffers.is_empty() { return mix(hash, 1 << 32); }
+    buffers.iter().fold(mix(hash, buffers.len() as u64), |hash, buffer| match buffer {
+        Some(bytes) => fold(hash, bytes),
+        None => mix(hash, NULL_ELEMENT),
+    })
+}
+
+fn batches() {
+    use seam::ownership::*;
+    // Three buffers of different sizes, one of them empty: the native side folds exactly them.
+    let (a, b): ([u8; 3], [u8; 1]) = ([1, 2, 3], [255]);
+    let three: [&[u8]; 3] = [&a, &[], &b];
+    assert_eq!(digest(&three), fold_batch(FNV_OFFSET, &[Some(&a), Some(&[]), Some(&b)]));
+    // The empty batch passes null arrays with count zero.
+    assert_eq!(digest(&[]), fold_batch(FNV_OFFSET, &[]));
+    // More than eight buffers take the heap path.
+    let many: Vec<Vec<u8>> = (0..20u8).map(|i| (0..i).collect()).collect();
+    let slices: Vec<&[u8]> = many.iter().map(Vec::as_slice).collect();
+    let expected: Vec<Option<&[u8]>> = slices.iter().copied().map(Some).collect();
+    assert_eq!(digest(&slices), fold_batch(FNV_OFFSET, &expected));
+    // Two batches beside a single buffer; an absent element of deps is a null with length zero.
+    let key = [7u8, 8];
+    let deps: [Option<&[u8]>; 3] = [Some(&b), None, Some(&[])];
+    let expected = fold_batch(fold_batch(fold(FNV_OFFSET, &key), &[Some(&a), Some(&b)]), &deps);
+    assert_eq!(merge(&key, &[&a, &b], &deps), expected);
+    let expected = fold_batch(fold_batch(fold(FNV_OFFSET, &key), &[]), &[]);
+    assert_eq!(merge(&key, &[], &[]), expected);
+    // The implementation side's view of the raw arrays.
+    let pointers = [a.as_ptr().cast_mut(), core::ptr::null_mut(), b.as_ptr().cast_mut()];
+    let lengths = [3u32, 0, 1];
+    let view = unsafe { seam::BufferBatch::from_raw(pointers.as_ptr(), lengths.as_ptr(), 3u64) };
+    assert_eq!(view.len(), 3);
+    assert_eq!(view.get(2), Some(&b[..]));
+    assert_eq!(view.get(3), None);
+    assert_eq!(view.collect::<Vec<_>>(), [&a[..], &[], &b[..]]);
+    let view = unsafe { seam::OptionalBufferBatch::from_raw(pointers.as_ptr(), lengths.as_ptr(), 3u32) };
+    assert_eq!(view.collect::<Vec<_>>(), [Some(&a[..]), None, Some(&b[..])]);
+    let mut view = unsafe { seam::BufferBatch::<u64>::from_raw(core::ptr::null(), core::ptr::null(), 0i32) };
+    assert_eq!((view.len(), view.next()), (0, None));
 }

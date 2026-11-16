@@ -506,10 +506,35 @@ public final class Seam {
    *     one call; otherwise the resource whose create the function is, for {@code
    *     lifetime=resource:NAME}: the create keeps the buffer until that resource is destroyed
    */
-  public record BufferBorrow(String function, String parameter, String length, String resource) {
+  public record BufferBorrow(
+      String function,
+      String parameter,
+      String length,
+      String resource,
+      String count,
+      boolean elementsNullable) {
+    public BufferBorrow(String function, String parameter, String length, String resource) {
+      this(function, parameter, length, resource, null, false);
+    }
+
+    /**
+     * A batch of buffers: {@code parameter} is a {@code ptr<ptr<u8>>} array of buffers, {@code
+     * length} an integer array of their byte lengths, and {@code count} the scalar number of
+     * elements of both.
+     */
+    public static BufferBorrow batch(
+        String function, String sources, String lengths, String count, boolean elementsNullable) {
+      return new BufferBorrow(function, sources, lengths, null, count, elementsNullable);
+    }
+
     /** Whether the borrow outlives the call, held by the resource the function creates. */
     public boolean held() {
       return resource != null;
+    }
+
+    /** Whether the borrow is a batch: an array of buffers with a parallel array of lengths. */
+    public boolean batch() {
+      return count != null;
     }
   }
 

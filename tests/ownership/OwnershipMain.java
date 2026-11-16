@@ -188,6 +188,7 @@ public final class OwnershipMain {
     verifySeveralBuffers(empty);
     verifyNullableBuffers(empty);
     verifyConstructors(empty);
+    verifyBatches(empty);
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
   }
 
@@ -373,6 +374,107 @@ public final class OwnershipMain {
     check(NativeApiOwnership.tally(empty) == 0);
     input.dispose();
     output.dispose();
+  }
+
+  // The fixture's batch digest (tests/ownership/native.rs): the count, then each element's length
+  // and bytes, or NULL_ELEMENT for an absent one; the empty batch folds in ABSENT.
+  static final long FNV_OFFSET = 0xcbf29ce484222325L;
+
+  static long mix(long hash, long value) {
+    return (hash ^ value) * 0x100000001b3L;
+  }
+
+  static long fold(long hash, byte[] bytes) {
+    hash = mix(hash, bytes.length);
+    for (byte b : bytes) hash = mix(hash, b & 0xff);
+    return hash;
+  }
+
+  static long foldBatch(long hash, byte[]... buffers) {
+    if (buffers.length == 0) return mix(hash, 1L << 32);
+    hash = mix(hash, buffers.length);
+    for (byte[] buffer : buffers) hash = buffer == null ? mix(hash, -2L) : fold(hash, buffer);
+    return hash;
+  }
+
+  /**
+   * Batches: three buffers of different sizes, one empty, lent off-heap and from arrays; the empty
+   * batch; more than eight elements; two batches beside a single buffer in one call; and a failure
+   * that releases exactly the elements already acquired.
+   */
+  private static void verifyBatches(NativeApiOwnership.NativeBuffer empty) {
+    byte[] a = {1, 2, 3}, b = {(byte) 255}, none = {};
+    check(NativeApiOwnership.digest(new byte[][] {a, none, b}) == foldBatch(FNV_OFFSET, a, none, b));
+    check(NativeApiOwnership.digest(new byte[0][]) == foldBatch(FNV_OFFSET));
+    check(NativeApiOwnership.digest(new NativeApiOwnership.NativeBuffer[0]) == foldBatch(FNV_OFFSET));
+    byte[][] many = new byte[20][];
+    for (int i = 0; i < many.length; i++) {
+      many[i] = new byte[i];
+      for (int j = 0; j < i; j++) many[i][j] = (byte) (i * 7 + j);
+    }
+    check(NativeApiOwnership.digest(many) == foldBatch(FNV_OFFSET, many));
+    Buffer first = new Buffer("a");
+    Buffer second = new Buffer("b");
+    for (int i = 0; i < 3; i++) first.pointer.write(i, a[i]);
+    second.pointer.write(0, b[0]);
+    second.size = 1;
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.digest(new NativeApiOwnership.NativeBuffer[] {first, empty, second})
+        == foldBatch(FNV_OFFSET, a, none, b));
+    check(Buffer.EVENTS.toString().equals("+ar +br -br -ar "));
+    var large = new NativeApiOwnership.NativeBuffer[12];
+    byte[][] expected = new byte[12][];
+    for (int i = 0; i < large.length; i++) {
+      // A buffer is acquired once per call; the others are present and empty.
+      large[i] = i == 9 ? first : empty;
+      expected[i] = i == 9 ? a : none;
+    }
+    check(NativeApiOwnership.digest(large) == foldBatch(FNV_OFFSET, expected));
+    check(first.leases == 0);
+    // A failure releases what was acquired, in reverse, and the call never reaches native code.
+    Buffer.EVENTS.setLength(0);
+    second.failAcquire = true;
+    rejects(() -> NativeApiOwnership.digest(new NativeApiOwnership.NativeBuffer[] {first, second}));
+    check(Buffer.EVENTS.toString().equals("+ar -ar ") && first.leases == 0 && second.leases == 0);
+    second.failAcquire = false;
+    Buffer.EVENTS.setLength(0);
+    second.size = -1;
+    rejects(() -> NativeApiOwnership.digest(new NativeApiOwnership.NativeBuffer[] {first, second}));
+    check(Buffer.EVENTS.toString().equals("+ar +br -br -ar "));
+    second.size = 1;
+    try {
+      NativeApiOwnership.digest(new NativeApiOwnership.NativeBuffer[] {first, null});
+      throw new AssertionError("an absent element was accepted where none may be");
+    } catch (NullPointerException expected2) {
+      check(first.leases == 0);
+    }
+    try {
+      NativeApiOwnership.digest(new byte[][] {a, null});
+      throw new AssertionError("an absent element was accepted where none may be");
+    } catch (NullPointerException expected2) {
+      // Pinned elements were unpinned.
+    }
+    // Two batches beside a single buffer; the second batch's elements may be absent.
+    byte[] key = {7, 8};
+    long two = foldBatch(foldBatch(fold(FNV_OFFSET, key), a, b), b, null, none);
+    check(NativeApiOwnership.merge(key, new byte[][] {a, b}, new byte[][] {b, null, none}) == two);
+    Buffer keys = new Buffer("k");
+    keys.pointer.write(0, (byte) 7);
+    keys.pointer.write(1, (byte) 8);
+    keys.size = 2;
+    Buffer third = new Buffer("c");
+    third.pointer.write(0, b[0]);
+    third.size = 1;
+    Buffer.EVENTS.setLength(0);
+    check(NativeApiOwnership.merge(keys, new NativeApiOwnership.NativeBuffer[] {first, second},
+        new NativeApiOwnership.NativeBuffer[] {third, null, empty}) == two);
+    check(Buffer.EVENTS.toString().equals("+kr +ar +br +cr -cr -br -ar -kr "));
+    third.dispose();
+    long nothing = foldBatch(foldBatch(fold(FNV_OFFSET, key)));
+    check(NativeApiOwnership.merge(key, new byte[0][], new byte[0][]) == nothing);
+    first.dispose();
+    second.dispose();
+    keys.dispose();
   }
 
   private static void verifyConfinedResources() throws Throwable {

@@ -138,7 +138,24 @@ public final class Dsl {
             require(
                 lifetime.equals("call") || (holder != null && !holder.isEmpty()),
                 "lifetime is call or resource:RESOURCE: " + lifetime);
-            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
+            // A batch names an array of lengths and a count; a single buffer names its length.
+            if (opts.containsKey("lengths") || opts.containsKey("count")) {
+              String elements = opts.remove("elements_nullable");
+              require(
+                  elements == null || elements.equals("true") || elements.equals("false"),
+                  "elements_nullable is true or false: " + elements);
+              require(
+                  holder == null, "a batch borrow has lifetime=call: " + words[1] + " " + words[2]);
+              borrows.add(
+                  BufferBorrow.batch(
+                      words[1],
+                      words[2],
+                      takeRequired(opts, "lengths"),
+                      takeRequired(opts, "count"),
+                      "true".equals(elements)));
+            } else
+              borrows.add(
+                  new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
             empty(opts);
           }
           case "opaque" -> {

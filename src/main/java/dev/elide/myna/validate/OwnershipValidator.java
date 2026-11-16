@@ -169,7 +169,32 @@ final class OwnershipValidator {
     // Identifiers contain no space, so "function parameter" is a unique key.
     var buffers = new HashSet<String>();
     var lengths = new HashSet<String>();
+    // A batch's three parameters belong to it alone.
+    var batched = new HashMap<String, BufferBorrow>();
+    for (BufferBorrow b : m.borrows())
+      if (b.batch())
+        for (String name : List.of(b.parameter(), b.length(), b.count()))
+          require(
+              batched.putIfAbsent(b.function() + " " + name, b) == null,
+              "a batch borrow's sources, lengths and count belong to it alone: "
+                  + b.function()
+                  + " "
+                  + name);
+    for (BufferBorrow b : m.borrows())
+      if (!b.batch())
+        for (String name : List.of(b.parameter(), b.length()))
+          require(
+              !batched.containsKey(b.function() + " " + name),
+              "a batch borrow's sources, lengths and count belong to it alone: "
+                  + b.function()
+                  + " "
+                  + name
+                  + " is also borrowed by "
+                  + b.function()
+                  + " "
+                  + b.parameter());
     for (BufferBorrow b : m.borrows()) {
+      if (b.batch()) continue;
       require(
           buffers.add(b.function() + " " + b.parameter()),
           "duplicate borrow: " + b.function() + " " + b.parameter());
@@ -184,6 +209,10 @@ final class OwnershipValidator {
       nativeCall(f);
       var params = new HashMap<String, Parameter>();
       f.parameters().forEach(p -> params.put(p.name(), p));
+      if (b.batch()) {
+        batch(m, b, f, params);
+        continue;
+      }
       var p = params.get(b.parameter());
       var length = params.get(b.length());
       require(
@@ -244,6 +273,79 @@ final class OwnershipValidator {
                 + " "
                 + other.name());
     }
+  }
+
+  /**
+   * A batch: {@code sources[i]} is a buffer of {@code lengths[i]} bytes for {@code i < count}. The
+   * callee reads only those bytes and the two arrays up to {@code count}, and keeps none of it past
+   * the call. The arrays are read-only borrows with the facts a single read buffer needs, and they
+   * may be null for the empty batch.
+   */
+  private static void batch(Module m, BufferBorrow b, Function f, Map<String, Parameter> params) {
+    String form =
+        b.function() + " " + b.parameter() + " lengths=" + b.length() + " count=" + b.count();
+    require(!b.held(), "a batch borrow has lifetime=call: " + form);
+    // seam.rs defines the implementation side's views of a batch beside the declared types.
+    for (String name : List.of("BufferBatch", "OptionalBufferBatch", "BatchLength"))
+      require(
+          !m.opaqueTypes().contains(name)
+              && m.structs().stream().noneMatch(x -> x.name().equals(name))
+              && m.callbacks().stream().noneMatch(x -> x.name().equals(name)),
+          name + " is reserved for the views of a batch borrow: " + form);
+    Parameter sources = params.get(b.parameter());
+    Parameter lengths = params.get(b.length());
+    Parameter count = params.get(b.count());
+    require(
+        sources != null
+            && lengths != null
+            && count != null
+            && sources != lengths
+            && sources != count
+            && lengths != count,
+        "a batch borrow names three distinct parameters of " + f.name() + ": " + form);
+    require(
+        f.returns() instanceof Scalar || constructor(m, f),
+        "call borrow cannot return a pointer: " + b.function() + " " + b.parameter());
+    require(
+        sources.type().equals(new Pointer(new Pointer(Scalar.U8))),
+        "batch sources must be ptr<ptr<u8>>: " + b.function() + " " + b.parameter());
+    require(
+        lengths.type() instanceof Pointer pointer
+            && Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(pointer.pointee()),
+        "batch lengths must point to u32, u64, i32 or i64: " + b.function() + " " + b.length());
+    require(
+        Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(count.type()),
+        "batch count must be a 32/64-bit integer: " + b.function() + " " + b.count());
+    for (Parameter array : List.of(sources, lengths)) {
+      String at = b.function() + " " + array.name();
+      require(
+          array.ownership() == Ownership.BORROWED && array.access() == Access.READ,
+          "a batch array is a borrowed read-only pointer (access=read): " + at);
+      require(array.nullable(), "a batch array is nullable=true, null for the empty batch: " + at);
+      require(
+          approved(array.facts(), "nocapture") && approved(array.facts(), "readonly"),
+          "a batch array requires approved nocapture=true and readonly=true: " + at);
+      require(
+          !array.facts().containsKey("dereferenceable")
+              && !array.facts().containsKey("noalias")
+              && !array.facts().containsKey("align")
+              && !array.facts().containsKey("nonnull"),
+          "a batch array cannot impose extent, alignment, noalias or nonnull preconditions: " + at);
+    }
+    require(
+        m.truffleConfig() == null || !Seam.truffleCell(m, f),
+        "a batch borrow has no Truffle cell yet; opt out with truffle_cell=false@explicit_contract"
+            + " on "
+            + f.name()
+            + ": "
+            + form);
+    for (Parameter other : f.parameters())
+      require(
+          other.type() instanceof Scalar || other.type() instanceof Pointer,
+          "call buffer wrappers pass only scalars and pointers beside their buffers: "
+              + b.function()
+              + " "
+              + other.name());
   }
 
   /**

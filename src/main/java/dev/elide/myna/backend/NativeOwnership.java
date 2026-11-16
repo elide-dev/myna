@@ -106,6 +106,7 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
+    if (m.callBorrows().stream().anyMatch(BufferBorrow::batch)) out.append(BATCH_HELPERS);
     for (CallBorrows call : CallBorrows.of(m)) buffers(m, call, out);
     return out.append("}\n").toString();
   }
@@ -129,10 +130,11 @@ public final class NativeOwnership implements Backend {
     // Pointer arguments keep the raw binding's carriers, typed records and opaques included.
     for (int i = 0; i < create.parameters().size(); i++) {
       Parameter p = create.parameters().get(i);
-      if (buffer != null && call.length(p) != null) continue;
+      if (buffer != null && call.derived(p)) continue;
+      BufferBorrow lent = buffer != null ? call.buffer(p) : null;
       String carrier =
-          buffer != null && call.buffer(p) != null
-              ? buffer
+          lent != null
+              ? (lent.batch() ? buffer + "[]" : buffer)
               : NativeImage.qualifiedCarrier(m, p.type());
       params.add(carrier + " arg" + i);
       args.add("arg" + i);
@@ -152,6 +154,82 @@ public final class NativeOwnership implements Backend {
         .append("            if (address == 0) return null;\n")
         .append("            return adoptUnsafe(address, factory);\n        }\n");
   }
+
+  /**
+   * The lending of a batch's elements, shared by every batch wrapper of the class. The pointer and
+   * length arrays share one region: {@code count} words of pointers, then {@code count} lengths of
+   * 8 bytes ({@code wide}) or 4. A present empty element is lent the region's own address, which is
+   * non-null and read for zero bytes; an absent one is the null pointer with length zero. A failure
+   * releases or unpins exactly the elements already held, in reverse, and the call never reaches
+   * native code.
+   */
+  private static final String BATCH_HELPERS =
+"""
+    private static void lendBatch(NativeBuffer[] buffers, org.graalvm.word.Pointer arrays, int count, boolean wide, long maxLength, boolean elementsNullable) {
+        int held = 0;
+        try {
+            org.graalvm.word.Pointer lengths = arrays.add(8 * count);
+            for (int i = 0; i < count; i++) {
+                NativeBuffer buffer = buffers[i];
+                long length = 0;
+                long address = 0;
+                if (buffer == null) {
+                    if (!elementsNullable) throw new NullPointerException("absent batch element");
+                } else {
+                    buffer.acquire(false);
+                    held = i + 1;
+                    length = buffer.byteSize();
+                    address = buffer.address();
+                    if (length < 0 || length > maxLength || (address == 0 && length != 0))
+                        throw new IllegalArgumentException("invalid buffer extent");
+                    if (address == 0) address = arrays.rawValue();
+                }
+                held = i + 1;
+                arrays.writeLong(8 * i, address);
+                if (wide) lengths.writeLong(8 * i, length);
+                else lengths.writeInt(4 * i, (int) length);
+            }
+        } catch (RuntimeException | Error failure) {
+            releaseBatch(buffers, held);
+            throw failure;
+        }
+    }
+
+    private static void releaseBatch(NativeBuffer[] buffers, int held) {
+        for (int i = held - 1; i >= 0; i--) if (buffers[i] != null) buffers[i].release(false);
+    }
+
+    private static void pinBatch(byte[][] buffers, org.graalvm.nativeimage.PinnedObject[] pins, org.graalvm.word.Pointer arrays, int count, boolean wide, boolean elementsNullable) {
+        try {
+            org.graalvm.word.Pointer lengths = arrays.add(8 * count);
+            for (int i = 0; i < count; i++) {
+                byte[] buffer = buffers[i];
+                long address = 0;
+                int length = 0;
+                if (buffer == null) {
+                    if (!elementsNullable) throw new NullPointerException("absent batch element");
+                } else if (buffer.length == 0) {
+                    address = arrays.rawValue();
+                } else {
+                    pins[i] = org.graalvm.nativeimage.PinnedObject.create(buffer);
+                    address = pins[i].addressOfArrayElement(0).rawValue();
+                    length = buffer.length;
+                }
+                arrays.writeLong(8 * i, address);
+                if (wide) lengths.writeLong(8 * i, length);
+                else lengths.writeInt(4 * i, length);
+            }
+        } catch (RuntimeException | Error failure) {
+            unpinBatch(pins, count);
+            throw failure;
+        }
+    }
+
+    private static void unpinBatch(org.graalvm.nativeimage.PinnedObject[] pins, int count) {
+        for (int i = count - 1; i >= 0; i--) if (pins[i] != null) pins[i].close();
+    }
+
+""";
 
   /** What an absent buffer passes: the null pointer, in the buffer's own word carrier. */
   private static final String NULL_POINTER = "org.graalvm.word.WordFactory.nullPointer()";
@@ -195,12 +273,42 @@ public final class NativeOwnership implements Backend {
     var arrayParams = new ArrayList<String>();
     var arguments = new ArrayList<String>();
     var buffers = new ArrayList<Buffer>();
+    // Batches are lent after the single buffers, in parameter order, and released before them.
+    var batches = new ArrayList<Buffer>();
     int index = 0;
     for (Parameter p : f.parameters()) {
       String name = "arg" + index++;
       BufferBorrow buffer = call.buffer(p);
       BufferBorrow length = call.length(p);
-      if (buffer != null) {
+      BufferBorrow count = call.count(p);
+      if (buffer != null && buffer.batch()) {
+        String s = call.suffix(buffer);
+        batches.add(new Buffer(name, s, buffer));
+        nativeParams.add("NativeBuffer[] " + name);
+        arrayParams.add("byte[][] " + name);
+        arguments.add(
+            "count"
+                + s
+                + " == 0 ? "
+                + NULL_POINTER
+                + " : org.graalvm.word.WordFactory.pointer(arrays"
+                + s
+                + ".rawValue())");
+      } else if (length != null && length.batch()) {
+        String s = call.suffix(length);
+        arguments.add(
+            "count"
+                + s
+                + " == 0 ? "
+                + NULL_POINTER
+                + " : org.graalvm.word.WordFactory.pointer(arrays"
+                + s
+                + ".rawValue() + 8L * count"
+                + s
+                + ")");
+      } else if (count != null) {
+        arguments.add("count" + call.suffix(count));
+      } else if (buffer != null) {
         buffers.add(new Buffer(name, call.suffix(buffer), buffer));
         nativeParams.add("NativeBuffer " + name);
         arrayParams.add("byte[] " + name);
@@ -294,7 +402,15 @@ public final class NativeOwnership implements Backend {
           .append(");\n");
       pad += "    ";
     }
+    for (Buffer b : batches) {
+      batchOpen(call, b, false, pad, out);
+      pad += "        ";
+    }
     out.append(pad).append(invoke).append('\n');
+    for (Buffer b : batches.reversed()) {
+      pad = pad.substring(8);
+      batchClose(b, false, pad, out);
+    }
     for (Buffer b : buffers.reversed()) {
       pad = pad.substring(4);
       out.append(pad)
@@ -329,7 +445,9 @@ public final class NativeOwnership implements Backend {
     // A pinned array's data starts on an 8-byte boundary, so a stricter align fact is met by a
     // copy,
     // which the several-array code below makes.
-    if (buffers.size() == 1 && call.align(buffers.getFirst().borrow()) <= PINNED_ALIGNMENT) {
+    if (buffers.size() == 1
+        && batches.isEmpty()
+        && call.align(buffers.getFirst().borrow()) <= PINNED_ALIGNMENT) {
       String name = buffers.getFirst().name();
       if (call.nullable(buffers.getFirst().borrow()))
         out.append("        if (")
@@ -475,7 +593,15 @@ public final class NativeOwnership implements Backend {
       }
       pad += "    ";
     }
+    for (Buffer b : batches) {
+      batchOpen(call, b, true, pad, out);
+      pad += "        ";
+    }
     out.append(pad).append(invoke).append('\n');
+    for (Buffer b : batches.reversed()) {
+      pad = pad.substring(8);
+      batchClose(b, true, pad, out);
+    }
     for (Buffer b : buffers.reversed()) {
       pad = pad.substring(4);
       String s = b.suffix();
@@ -517,5 +643,107 @@ public final class NativeOwnership implements Backend {
       out.append(pad).append("}\n");
     }
     out.append("    }\n");
+  }
+
+  /**
+   * Opens one batch: its two arrays share a region on the stack for up to eight elements and in
+   * unmanaged memory otherwise, and every element is acquired (or pinned, for {@code byte[][]}) in
+   * order before the call. A {@code null} batch array is rejected; an empty one is the empty batch,
+   * which passes null arrays with count zero.
+   */
+  private static void batchOpen(
+      CallBorrows call, Buffer b, boolean arrays, String pad, StringBuilder out) {
+    String s = b.suffix();
+    boolean wide = call.lengthElement(b.borrow()).bytes == 8;
+    Scalar element = call.lengthElement(b.borrow());
+    String max = wide ? "Long.MAX_VALUE" : CallBorrows.max32(element);
+    out.append(pad)
+        .append("int count")
+        .append(s)
+        .append(" = ")
+        .append(b.name())
+        .append(".length;\n")
+        .append(pad)
+        .append("org.graalvm.word.Pointer arrays")
+        .append(s)
+        .append(" = count")
+        .append(s)
+        .append(
+            " > 8\n"
+                + pad
+                + "    ?"
+                + " org.graalvm.nativeimage.UnmanagedMemory.malloc(org.graalvm.word.WordFactory.unsigned(16L"
+                + " * count")
+        .append(s)
+        .append("))\n")
+        .append(pad)
+        .append("    : org.graalvm.nativeimage.StackValue.get(128);\n");
+    if (arrays)
+      out.append(pad)
+          .append("org.graalvm.nativeimage.PinnedObject[] pins")
+          .append(s)
+          .append(" = count")
+          .append(s)
+          .append(" == 0 ? null : new org.graalvm.nativeimage.PinnedObject[count")
+          .append(s)
+          .append("];\n");
+    out.append(pad).append("try {\n").append(pad).append("    ");
+    if (arrays)
+      out.append("pinBatch(")
+          .append(b.name())
+          .append(", pins")
+          .append(s)
+          .append(", arrays")
+          .append(s)
+          .append(", count")
+          .append(s)
+          .append(", ")
+          .append(wide)
+          .append(", ")
+          .append(b.borrow().elementsNullable())
+          .append(");\n");
+    else
+      out.append("lendBatch(")
+          .append(b.name())
+          .append(", arrays")
+          .append(s)
+          .append(", count")
+          .append(s)
+          .append(", ")
+          .append(wide)
+          .append(", ")
+          .append(max)
+          .append(", ")
+          .append(b.borrow().elementsNullable())
+          .append(");\n");
+    out.append(pad).append("    try {\n");
+  }
+
+  private static void batchClose(Buffer b, boolean arrays, String pad, StringBuilder out) {
+    String s = b.suffix();
+    out.append(pad)
+        .append("    } finally {\n")
+        .append(pad)
+        .append("        ")
+        .append(
+            arrays
+                ? "if (pins" + s + " != null) unpinBatch(pins" + s + ", count" + s + ");\n"
+                : "releaseBatch(" + b.name() + ", count" + s + ");\n")
+        .append(pad)
+        .append("    }\n")
+        .append(pad)
+        .append("} finally {\n")
+        .append(pad)
+        .append("    if (count")
+        .append(s)
+        .append(" > 8) org.graalvm.nativeimage.UnmanagedMemory.free(arrays")
+        .append(s)
+        .append(");\n")
+        .append(pad)
+        .append("    java.lang.ref.Reference.reachabilityFence(")
+        .append(b.name())
+        .append(");\n")
+        .append(pad)
+        .append("}\n");
   }
 }

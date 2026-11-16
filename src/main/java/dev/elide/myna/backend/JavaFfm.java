@@ -440,9 +440,12 @@ public final class JavaFfm implements Backend {
         int index = 0;
         for (Parameter p : create.parameters()) {
           String arg = "arg" + index++;
-          if (buffers && call.length(p) != null) continue;
+          if (buffers && call.derived(p)) continue;
+          BufferBorrow lent = buffers ? call.buffer(p) : null;
           params.add(
-              (buffers && call.buffer(p) != null ? "MemorySegment" : Types.ffmCarrier(p.type()))
+              (lent != null
+                      ? (lent.batch() ? "MemorySegment[]" : "MemorySegment")
+                      : Types.ffmCarrier(p.type()))
                   + " "
                   + arg);
           args.add(arg);
@@ -550,9 +553,13 @@ public final class JavaFfm implements Backend {
           .append(function.arguments())
           .append(");\n        }\n");
     }
+    boolean batches = false;
     for (CallBorrows call : CallBorrows.of(m))
-      if (functions.stream().anyMatch(f -> f.function().name().equals(call.function().name())))
+      if (functions.stream().anyMatch(f -> f.function().name().equals(call.function().name()))) {
         buffer(call, out);
+        batches |= call.batched();
+      }
+    if (batches) out.append(LEND_BATCH);
     out.append("    }\n");
   }
 
@@ -566,6 +573,8 @@ public final class JavaFfm implements Backend {
   private static void buffer(CallBorrows call, StringBuilder out) {
     Function f = call.function();
     boolean several = call.borrows().size() > 1;
+    // A batch's arrays always live in the arena, so every buffer takes the conditional form there.
+    boolean batched = call.batched();
     var params = new ArrayList<String>();
     var args = new ArrayList<String>();
     var checks = new StringBuilder();
@@ -577,6 +586,50 @@ public final class JavaFfm implements Backend {
       String arg = "arg" + index++;
       BufferBorrow buffer = call.buffer(p);
       BufferBorrow length = call.length(p);
+      BufferBorrow count = call.count(p);
+      if (buffer != null && buffer.batch()) {
+        String s = call.suffix(buffer);
+        params.add("MemorySegment[] " + arg);
+        args.add("arrays" + s);
+        Scalar element = call.lengthElement(buffer);
+        boolean wide = element.bytes == 8;
+        temporary
+            .append("                int count")
+            .append(s)
+            .append(" = ")
+            .append(arg)
+            .append(".length;\n")
+            .append("                MemorySegment arrays")
+            .append(s)
+            .append(" = count")
+            .append(s)
+            .append(" == 0 ? MemorySegment.NULL : lendBatch(")
+            .append(arg)
+            .append(", empty, ")
+            .append(wide)
+            .append(", ")
+            .append(wide ? "Long.MAX_VALUE" : CallBorrows.max32(element))
+            .append(", ")
+            .append(buffer.elementsNullable())
+            .append(");\n");
+        continue;
+      }
+      if (length != null && length.batch()) {
+        String s = call.suffix(length);
+        args.add(
+            "count"
+                + s
+                + " == 0 ? MemorySegment.NULL : arrays"
+                + s
+                + ".asSlice(8L * count"
+                + s
+                + ")");
+        continue;
+      }
+      if (count != null) {
+        args.add("count" + call.suffix(count));
+        continue;
+      }
       if (buffer == null) {
         if (length != null)
           args.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
@@ -672,7 +725,7 @@ public final class JavaFfm implements Backend {
           .append("                MemorySegment pointer")
           .append(s)
           .append(" = ")
-          .append(several ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
+          .append(several || batched ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
           // Aligned like the fact, which LLVM's align attribute makes independent of the extent.
           .append(
               call.align(buffer) > 1
@@ -687,6 +740,28 @@ public final class JavaFfm implements Backend {
             + "("
             + String.join(", ", args)
             + ");\n";
+    // A batch passes its elements' addresses in memory, not as segments the linker keeps alive, so
+    // each array of segments stays reachable until the call returns.
+    if (batched) {
+      var fences = new StringBuilder();
+      for (int i = 0; i < f.parameters().size(); i++) {
+        BufferBorrow b = call.buffer(f.parameters().get(i));
+        if (b != null && b.batch())
+          fences
+              .append("                java.lang.ref.Reference.reachabilityFence(arg")
+              .append(i)
+              .append(");\n");
+      }
+      invoke =
+          (f.returns() == Scalar.VOID ? "" : Types.ffmCarrier(f.returns()) + " result = ")
+              + "this."
+              + f.name()
+              + "("
+              + String.join(", ", args)
+              + ");\n"
+              + fences
+              + (f.returns() == Scalar.VOID ? "" : "                return result;\n");
+    }
     out.append(
             several
                 ? "        /** Borrows each entire native segment for this call; lengths are in"
@@ -700,21 +775,60 @@ public final class JavaFfm implements Backend {
         .append('(')
         .append(String.join(", ", params))
         .append(") throws Throwable {\n")
-        .append(checks)
-        .append("            if (")
-        .append(String.join(" && ", present))
-        .append(") {\n")
-        .append(lent)
-        .append("                ")
-        .append(invoke);
-    if (f.returns() == Scalar.VOID) out.append("                return;\n");
-    out.append("            }\n")
-        .append("            try (Arena empty = Arena.ofConfined()) {\n")
+        .append(checks);
+    // A batch's arrays need the arena whatever its buffers are.
+    if (!batched) {
+      out.append("            if (")
+          .append(String.join(" && ", present))
+          .append(") {\n")
+          .append(lent)
+          .append("                ")
+          .append(invoke);
+      if (f.returns() == Scalar.VOID) out.append("                return;\n");
+      out.append("            }\n");
+    }
+    out.append("            try (Arena empty = Arena.ofConfined()) {\n")
         .append(temporary)
         .append("                ")
         .append(invoke)
         .append("            }\n        }\n");
   }
+
+  /**
+   * Lends a batch's native segments, validated exactly as a single buffer is, into one arena
+   * region: {@code count} addresses, then {@code count} lengths of 8 bytes ({@code wide}) or 4. A
+   * present empty element is lent the region's own address, non-null and read for zero bytes; an
+   * absent one ({@code null} or a native segment of length zero at address zero) passes the null
+   * pointer with length zero where the elements may be absent.
+   */
+  private static final String LEND_BATCH =
+"""
+        private static MemorySegment lendBatch(MemorySegment[] buffers, Arena arena, boolean wide, long maxLength, boolean elementsNullable) {
+            int count = buffers.length;
+            MemorySegment arrays = arena.allocate(16L * count, 8);
+            for (int i = 0; i < count; i++) {
+                MemorySegment buffer = buffers[i];
+                long address = 0;
+                long length = 0;
+                if (buffer == null || (buffer.isNative() && buffer.address() == 0 && buffer.byteSize() == 0)) {
+                    if (buffer == null && !elementsNullable) throw new NullPointerException("absent batch element");
+                    if (!elementsNullable) address = arrays.address();
+                } else {
+                    if (!buffer.isNative()) throw new IllegalArgumentException("native segment required");
+                    if (!buffer.scope().isAlive()) throw new IllegalStateException("closed buffer");
+                    if (!buffer.isAccessibleBy(Thread.currentThread())) throw new WrongThreadException();
+                    length = buffer.byteSize();
+                    if (length != 0 && buffer.address() == 0) throw new IllegalArgumentException("null buffer address");
+                    if (length > maxLength) throw new IllegalArgumentException("buffer length exceeds ABI range");
+                    address = length == 0 ? arrays.address() : buffer.address();
+                }
+                arrays.setAtIndex(ValueLayout.JAVA_LONG, i, address);
+                if (wide) arrays.setAtIndex(ValueLayout.JAVA_LONG, count + i, length);
+                else arrays.setAtIndex(ValueLayout.JAVA_INT, 2L * count + i, (int) length);
+            }
+            return arrays;
+        }
+""";
 
   /**
    * FFM passes records by value natively, so only exports (which Native Image publishes in

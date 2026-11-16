@@ -200,6 +200,76 @@ Negative lengths, lengths outside the ABI integer range, and null addresses with
 
 An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. A `null` array for a nullable buffer is not pinned and passes the null pointer. There is no overload that mixes arrays with `NativeBuffer`s.
 
+### Batches of buffers
+
+An import that takes a batch of buffers passes them as two parallel arrays and a count:
+
+```text
+borrow digest sources lengths=lengths count=count lifetime=call
+import digest symbol=buffer_batch_digest return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+```
+
+The contract is the single-buffer one applied per element: the callee reads only
+`sources[i][0 .. lengths[i]]` for `i < count`, reads the two arrays only up to `count`, and keeps
+none of it past the call.
+
+- `sources` is a borrowed `ptr<ptr<u8>>` and `lengths` a borrowed pointer to `u32`, `u64`, `i32` or
+  `i64`, each `access=read`, `nullable=true` and with approved `nocapture` and `readonly`; `count` is
+  a 32- or 64-bit integer. Neither array may declare `align`, `dereferenceable`, `noalias` or
+  `nonnull`: `seam.ll` gives them the facts a single read buffer gets, and no extent.
+- **The empty batch is a null `sources` and a null `lengths` with count zero**, which every wrapper
+  passes for an empty array of buffers.
+- Elements are read-only and present: each is non-null, and a present empty element gets a non-null
+  address with length zero. With `elements_nullable=true` an element may be absent instead, and then
+  is the null pointer with length zero.
+- An import may declare several batches beside single buffers. The three parameters of a batch
+  belong to it alone. A batch ends with the call: `lifetime=resource:` is rejected.
+
+| Wrapper | Batch | Absent element |
+| --- | --- | --- |
+| Rust | `&[&[u8]]`, or `&[Option<&[u8]>]` | `None` |
+| Native Image, off-heap | `NativeBuffer[]` | `null` |
+| Native Image, arrays | `byte[][]` | `null` |
+| FFM | `MemorySegment[]` | `null`, or a native segment of length zero at address zero |
+
+- **Rust** builds both arrays on the stack for up to eight buffers and in two `Vec`s otherwise
+  (`extern crate alloc` in the `ownership` module), with no other allocation. A length or count
+  that does not fit its type panics before the foreign call.
+- **Native Image** acquires each `NativeBuffer` (or pins each non-empty `byte[]`) in order, after
+  the function's single buffers, and releases or unpins them in reverse after the call. Each is
+  validated as a single buffer is; a failure releases exactly the elements already held, and the
+  call never reaches native code. Both arrays share one region: 128 bytes of stack for up to eight
+  elements, unmanaged memory (freed after the call) otherwise. `byte[][]` allocates the
+  `PinnedObject[]` its pins need. A `null` batch array is rejected; pass an empty one.
+  The caller must not change the batch array during the call.
+- **FFM** validates each segment as a single buffer is (native, alive, accessible from the calling
+  thread, within the length type), writes the arrays into a confined arena that lives for the call,
+  and keeps the segment array reachable until the call returns. The linker does not keep an
+  element's scope alive as it does for a segment argument, so a segment of a shared arena must not
+  be closed by another thread during the call.
+- **Static JNI** generates no buffer adapter for an import with a batch; its raw binding remains.
+- **Truffle cells** do not lend batches yet: an import with one must declare
+  `truffle_cell=false@explicit_contract`.
+
+An implementation in Rust can read a batch through the safe views `seam.rs` defines when a module
+declares one:
+
+```rust
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn buffer_batch_digest(sources: *const *mut u8, lengths: *const u64, count: u64) -> u64 {
+    let batch = unsafe { seam::BufferBatch::from_raw(sources, lengths, count) };
+    batch.map(|bytes| bytes.len() as u64).sum()
+}
+```
+
+`BufferBatch<'a, L>` yields `&'a [u8]` and `OptionalBufferBatch<'a, L>` yields `Option<&'a [u8]>`,
+where `L` is the length type (`u64` by default). Both are `Iterator`, `ExactSizeIterator` and
+`FusedIterator`, and `get(i)` indexes the elements not yet yielded.
+
 ## Creates that report a status (Truffle cells only)
 
 Many C creates do not return the resource. They return a status and write the resource through a
@@ -293,7 +363,7 @@ With `truffle_cells=true`, the same declarations project into guest-callable cel
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

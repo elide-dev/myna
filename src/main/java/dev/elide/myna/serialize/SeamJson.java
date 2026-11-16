@@ -159,8 +159,16 @@ public final class SeamJson {
                               + quote(b.function())
                               + ",\"parameter\":"
                               + quote(b.parameter())
-                              + ",\"length\":"
-                              + quote(b.length())
+                              // A batch names its arrays and count; single buffers keep their
+                              // form.
+                              + (b.batch()
+                                  ? ",\"lengths\":"
+                                      + quote(b.length())
+                                      + ",\"count\":"
+                                      + quote(b.count())
+                                      + ",\"elementsNullable\":"
+                                      + b.elementsNullable()
+                                  : ",\"length\":" + quote(b.length()))
                               // A held borrow names its resource; call borrows keep their form.
                               + (b.held()
                                   ? ",\"lifetime\":\"resource\",\"resource\":" + quote(b.resource())
