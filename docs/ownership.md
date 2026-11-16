@@ -367,7 +367,9 @@ pub unsafe extern "C" fn buffer_batch_digest(sources: *const *mut u8, lengths: *
 ```
 
 `BufferBatch<'a, L>` yields `&'a [u8]` and `OptionalBufferBatch<'a, L>` yields `Option<&'a [u8]>`,
-where `L` is the length type (`u64` by default). Each is a `Copy`, `Send` and `Sync` view with
+where `L` is the length type (`u64` by default). `BatchLength` is sealed: only `u32`, `u64`, `i32`
+and `i64` implement it, so a view that crosses threads never runs a length conversion of the
+caller's own. Each is a `Copy`, `Send` and `Sync` view with
 `len()`, `is_empty()`, `get(i)` (counted from the start) and `iter()`, and is `IntoIterator`; the
 iterators are `ExactSizeIterator` and `FusedIterator`. `from_raw` requires that, unless the count
 is zero, both arrays are non-null, valid for `count` reads, and stay valid and unmodified for
