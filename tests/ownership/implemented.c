@@ -88,6 +88,15 @@ int main(int argc, char **argv) {
   // The release accepts null as a no-op.
   parsed_release(NULL);
   CHECK(ticket_live() == 0);
+  // Status plus out-pointer stays raw in the trait; the C caller sees the same ABI.
+  char error[32] = {0};
+  struct Surface *surface = NULL;
+  CHECK(surface_open(7, &surface, (uint8_t *)error, sizeof error) == 0 && surface_width(surface) == 7);
+  CHECK(surface_open(-1, &surface, (uint8_t *)error, sizeof error) == 3);
+  CHECK(error[0] == 'n' && error[13] == 'h');
+  surface_close(surface);
+  CHECK(title_length((const uint8_t *)"hello") == 5);
+  CHECK(ticket_live() == 0);
   puts("Rust implementation trait passed");
   return 0;
 }

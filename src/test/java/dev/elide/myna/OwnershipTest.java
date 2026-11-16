@@ -1050,6 +1050,81 @@ class OwnershipTest {
             .getMessage());
   }
 
+  static final String CSTRING =
+      "module strings target=aarch64-apple-darwin java_class=Api\n"
+          + "import titleLength symbol=title_length return=u64 error=no_failure"
+          + " nounwind=true@explicit_contract\n"
+          + "  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "end\n";
+
+  @Test
+  void cStringsAreLentNulTerminated() {
+    var output = Generator.generate(Dsl.parse(CSTRING), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains("    pub fn titleLength(title: &::core::ffi::CStr) -> u64 {\n"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("seam.ll").contains("@title_length(ptr captures(none) readonly %title)"),
+        output.get("seam.ll"));
+    assertTrue(output.get("seam.h").contains("uint64_t title_length(uint8_t const * title);"));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "MemorySegment text0 = empty.allocateFrom(java.util.Objects.requireNonNull(arg0));"),
+        ffm);
+    assertTrue(
+        ffm.contains("        public long titleLength(String arg0) throws Throwable {\n"), ffm);
+    // Truffle cells lend a guest string NUL-terminated, read-only.
+    String cells =
+        Generator.generate(
+                Dsl.parse(CSTRING.replace("java_class=Api", "java_class=Api truffle_cells=true")),
+                true)
+            .get("ApiTruffle.java");
+    assertTrue(
+        cells.contains(
+            "this.coerce_title = new BytesCoercion(\"titleLength\", \"title\", false, false,"
+                + " false);"),
+        cells);
+    // The implementer trait takes a CStr, and a null one aborts.
+    String trait =
+        Generator.generate(
+                Dsl.parse(
+                    CSTRING.replace("java_class=Api", "java_class=Api rust_implementation=trait")),
+                true)
+            .get("seam.rs");
+    assertTrue(trait.contains("    fn titleLength(title: &::core::ffi::CStr) -> u64;\n"), trait);
+    assertTrue(
+        trait.contains("if title.is_null() { ::core::panic!(\"titleLength: null title\") }"),
+        trait);
+    for (var rejection :
+        List.of(
+            List.of(
+                " readonly=true@explicit_contract",
+                "",
+                "access=cstring requires approved nocapture=true and readonly=true: titleLength"
+                    + " title"),
+            List.of(
+                "type=ptr<u8>",
+                "type=ptr<u16>",
+                "access=cstring requires a borrowed ptr<u8>: titleLength title"),
+            List.of(
+                "import titleLength",
+                "borrow titleLength title length=title lifetime=call\nimport titleLength",
+                "a C string has no length and is no borrow's buffer or length: titleLength"
+                    + " title"))) {
+      String changed = CSTRING.replace(rejection.get(0), rejection.get(1));
+      assertEquals(
+          rejection.get(2),
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> Generator.generate(Dsl.parse(changed), true))
+              .getMessage());
+    }
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";

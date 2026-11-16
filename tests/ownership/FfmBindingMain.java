@@ -193,6 +193,9 @@ public final class FfmBindingMain {
           throw new AssertionError("failed surfaceFrom");
         if (binding.liveCount() != 2) throw new AssertionError("surfaces live");
         surface.run(); from.run();
+        // A C string: NUL-terminated UTF-8 in the call's arena.
+        if (binding.titleLength("h\u00e9llo") != 6) throw new AssertionError("title length");
+        rejects(NullPointerException.class, () -> binding.titleLength((String) null));
         if (binding.liveCount() != 0) throw new AssertionError("surfaces released");
         // The release accepts null as a no-op; no owner ever passes it one.
         binding.release(MemorySegment.NULL);

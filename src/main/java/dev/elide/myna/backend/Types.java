@@ -38,7 +38,8 @@ final class Types {
   }
 
   static String c(Parameter p) {
-    if (p.type() instanceof Pointer ptr && p.access() == Access.READ)
+    if (p.type() instanceof Pointer ptr
+        && (p.access() == Access.READ || p.access() == Access.CSTRING))
       return c(ptr.pointee()) + " const *";
     return c(p.type());
   }
@@ -73,14 +74,16 @@ final class Types {
   static String rust(Parameter p, String q) {
     if (p.group() != null) return q + p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee(), q);
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee(), q);
     return rust(p.type(), q);
   }
 
   static String rust(Parameter p) {
     if (p.group() != null) return p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee());
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee());
     return rust(p.type());
   }
 

@@ -640,6 +640,9 @@ public final class JavaFfm implements Backend {
     var lent = new StringBuilder();
     var temporary = new StringBuilder();
     var present = new ArrayList<String>();
+    // C strings need the call's arena whatever the buffers are, so every buffer is lent from it.
+    var text = new StringBuilder();
+    boolean strings = f.parameters().stream().anyMatch(CallBorrows::cstring);
     int index = 0;
     for (Parameter p : f.parameters()) {
       String arg = "arg" + index++;
@@ -648,7 +651,18 @@ public final class JavaFfm implements Backend {
       if (buffer == null) {
         if (length != null)
           args.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
-        else {
+        else if (CallBorrows.cstring(p)) {
+          // NUL-terminated UTF-8 in the call's arena; null is the null pointer where allowed.
+          params.add("String " + arg);
+          args.add("text" + (index - 1));
+          text.append("                MemorySegment text")
+              .append(index - 1)
+              .append(" = ")
+              .append(p.nullable() ? arg + " == null ? MemorySegment.NULL : " : "")
+              .append("empty.allocateFrom(")
+              .append(p.nullable() ? arg : "java.util.Objects.requireNonNull(" + arg + ")")
+              .append(");\n");
+        } else {
           params.add(Types.ffmCarrier(p.type()) + " " + arg);
           args.add(arg);
         }
@@ -740,7 +754,7 @@ public final class JavaFfm implements Backend {
           .append("                MemorySegment pointer")
           .append(s)
           .append(" = ")
-          .append(several ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
+          .append(several || strings ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
           // Aligned like the fact, which LLVM's align attribute makes independent of the extent.
           .append(
               call.align(buffer) > 1
@@ -768,8 +782,17 @@ public final class JavaFfm implements Backend {
         .append('(')
         .append(String.join(", ", params))
         .append(") throws Throwable {\n")
-        .append(checks)
-        .append("            if (")
+        .append(checks);
+    if (strings) {
+      out.append("            try (Arena empty = Arena.ofConfined()) {\n")
+          .append(temporary)
+          .append(text)
+          .append("                ")
+          .append(invoke)
+          .append("            }\n        }\n");
+      return;
+    }
+    out.append("            if (")
         .append(String.join(" && ", present))
         .append(") {\n")
         .append(lent)

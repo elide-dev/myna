@@ -24,6 +24,7 @@ final class RustImplementation {
     PLAIN,
     BUFFER,
     LENGTH,
+    CSTRING,
     DESTROYED,
     RESOURCE
   }
@@ -55,6 +56,7 @@ final class RustImplementation {
     for (Parameter p : f.abiParameters()) {
       Kind kind = Kind.PLAIN;
       if (borrows.buffer(p) != null) kind = Kind.BUFFER;
+      else if (CallBorrows.cstring(p)) kind = Kind.CSTRING;
       else if (borrows.length(p) != null) kind = Kind.LENGTH;
       else if (p.type() instanceof Pointer pointer
           && pointer.pointee() instanceof Named named
@@ -138,6 +140,7 @@ final class RustImplementation {
   private static String traitType(Shape shape, Parameter p) {
     return switch (shape.kind(p)) {
       case LENGTH -> null;
+      case CSTRING -> p.nullable() ? "Option<&::core::ffi::CStr>" : "&::core::ffi::CStr";
       case BUFFER -> {
         String slice = p.access() == Access.READ ? "&[u8]" : "&mut [u8]";
         yield p.nullable() ? "Option<" + slice + ">" : slice;
@@ -227,6 +230,23 @@ final class RustImplementation {
     for (Parameter p : f.abiParameters()) {
       switch (shape.kind(p)) {
         case LENGTH -> {}
+        case CSTRING -> {
+          String text = "unsafe { ::core::ffi::CStr::from_ptr(" + p.name() + ".cast()) }";
+          if (p.nullable())
+            args.add("if " + p.name() + ".is_null() { None } else { Some(" + text + ") }");
+          else {
+            // A CStr from null is undefined, and no result is safe to make up.
+            body.append(pad)
+                .append("if ")
+                .append(p.name())
+                .append(".is_null() { ::core::panic!(\"")
+                .append(f.name())
+                .append(": null ")
+                .append(p.name())
+                .append("\") }\n");
+            args.add(text);
+          }
+        }
         case PLAIN -> args.add(p.name());
         case BUFFER -> {
           BufferBorrow b = shape.borrows().buffer(p);

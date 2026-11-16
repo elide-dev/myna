@@ -178,6 +178,30 @@ end
 - A pointer result beside a borrow stays rejected, except for a resource's [constructor](#constructors-with-call-scoped-buffers), which returns a fresh resource: nothing yet ties any other returned pointer to the buffer it may point into.
 - No wrapper checks that two buffers of one call are disjoint. Rust's borrow rules exclude a `&mut` slice that overlaps another; everywhere else, passing overlapping memory as a read buffer and a writable buffer breaks the read contract above and is the caller's error.
 
+### C strings
+
+```text
+import titleLength symbol=title_length return=u64 error=no_failure nounwind=true@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
+```
+
+`access=cstring` declares a read-only NUL-terminated string with no length: a borrowed `ptr<u8>`
+of an import, read during the call up to its terminator and not retained. It needs approved
+`nocapture` and `readonly`, the facts `seam.ll` then carries as for any read-only borrow, and it can
+be no borrow's buffer or length. The raw bindings keep their pointer carriers (`uint8_t const *` in
+`seam.h`, `*const u8` in Rust). The wrappers:
+
+- **Rust**: `&::core::ffi::CStr` (`Option<&CStr>` when nullable), in the `ownership` wrapper of the
+  import, and in the [implementer trait](#implementing-imports-in-rust), where a null one aborts.
+- **FFM**: a `String` overload on `LibraryBinding`, which writes NUL-terminated UTF-8 into the
+  call's confined arena (null is the null pointer when the parameter is nullable, and a
+  `NullPointerException` otherwise).
+- **Truffle cells**: a guest string or bytes, lent NUL-terminated and read-only, as any C string
+  parameter of a cell is.
+- **Native Image**: no wrapper yet; the raw binding takes a `CCharPointer` (for example from
+  `CTypeConversion.toCString`).
+
 ### Nullable buffers
 
 A buffer parameter that is `nullable=true` may be absent, as an optional output buffer is:

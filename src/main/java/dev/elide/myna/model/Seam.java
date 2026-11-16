@@ -78,7 +78,9 @@ public final class Seam {
     READ,
     WRITE,
     READ_WRITE,
-    UNSPECIFIED
+    UNSPECIFIED,
+    /** A read-only NUL-terminated string with no length: read access, up to its terminator. */
+    CSTRING
   }
 
   public enum Provenance {
@@ -550,6 +552,7 @@ public final class Seam {
     return parameter.type() instanceof Pointer p
         && (p.pointee() == Scalar.U8 || p.pointee() == Scalar.I8 || p.pointee() == Scalar.CHAR)
         && (parameter.access() == Access.READ
+            || parameter.access() == Access.CSTRING
             || parameter.access() == Access.READ_WRITE
             || parameter.access() == Access.WRITE);
   }

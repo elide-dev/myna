@@ -111,3 +111,7 @@ end
 import surfaceWidth symbol=surface_width return=i64 error=no_failure nounwind=true@explicit_contract
   param surface type=ptr<Surface> nullable=false ownership=borrowed access=read
 end
+# A NUL-terminated string read during the call, with no length: a String in Java, a &CStr in Rust.
+import titleLength symbol=title_length return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end

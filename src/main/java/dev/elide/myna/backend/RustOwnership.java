@@ -11,7 +11,7 @@ final class RustOwnership {
   private RustOwnership() {}
 
   static String generate(Module m) {
-    if (m.ownedResources().isEmpty() && m.callBorrows().isEmpty()) return "";
+    if (m.ownedResources().isEmpty() && CallBorrows.of(m).isEmpty()) return "";
     var out =
         new StringBuilder(
             "\n"
@@ -159,7 +159,16 @@ final class RustOwnership {
               length.parameter()
                   + (call.nullable(length) ? ".1" : ".len()")
                   + ".try_into().expect(\"buffer length exceeds ABI range\")");
-        else {
+        else if (CallBorrows.cstring(p)) {
+          // A C string is its own terminator: the CStr vouches for it.
+          if (p.nullable()) {
+            params.add(p.name() + ": Option<&::core::ffi::CStr>");
+            args.add(p.name() + ".map_or(::core::ptr::null(), |text| text.as_ptr().cast())");
+          } else {
+            params.add(p.name() + ": &::core::ffi::CStr");
+            args.add(p.name() + ".as_ptr().cast()");
+          }
+        } else {
           // Declared types live in the parent module; scalars are spelled the same either way.
           params.add(p.name() + ": " + Types.rust(p, "super::"));
           args.add(p.name());

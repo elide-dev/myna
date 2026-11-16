@@ -108,3 +108,9 @@ unsafe fn surface_new(width: i64, out: *mut *mut i64, error: *mut u8, capacity: 
     LIVE.fetch_sub(1, Ordering::SeqCst);
 }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn surface_width(p: *const i64) -> i64 { unsafe { p.read() } }
+// The bytes of a NUL-terminated string before its terminator.
+#[unsafe(no_mangle)] pub unsafe extern "C" fn title_length(title: *const u8) -> u64 {
+    let mut n = 0;
+    while unsafe { title.add(n).read() } != 0 { n += 1; }
+    n as u64
+}

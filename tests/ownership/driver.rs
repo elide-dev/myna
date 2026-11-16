@@ -78,6 +78,8 @@ fn main() {
     assert_eq!(unsafe { seam::liveCount() }, 2);
     drop((surface, from));
     assert_eq!(unsafe { seam::liveCount() }, 0);
+    // A C string: the CStr is its own terminator.
+    assert_eq!(titleLength(c"hello"), 5);
     assert!(std::panic::catch_unwind(|| {
         let _owner = Ticket::create().unwrap();
         panic!("release during unwinding");

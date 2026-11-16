@@ -414,7 +414,7 @@ public final class TruffleCells implements Backend {
         if (t instanceof Pointer || t instanceof FunctionPointer) {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
-            boolean writable = p.access() != Access.READ;
+            boolean writable = p.access() != Access.READ && p.access() != Access.CSTRING;
             // A parameter with an align fact takes the coercion that honors it, one that costs more
             // above 16, where no scratch copy satisfies it. The others keep the smaller one, which
             // a compiled call inlines to keep its borrow out of the heap.

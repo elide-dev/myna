@@ -130,7 +130,8 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    for (CallBorrows call : CallBorrows.of(m)) buffers(m, call, out);
+    // A C string alone gets no Native Image wrapper: it passes as the raw CCharPointer.
+    for (CallBorrows call : CallBorrows.of(m)) if (!call.borrows().isEmpty()) buffers(m, call, out);
     return out.append("}\n").toString();
   }
 

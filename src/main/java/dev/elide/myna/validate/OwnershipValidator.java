@@ -198,6 +198,28 @@ final class OwnershipValidator {
               + " "
               + p.name());
     }
+    // A C string: a read-only NUL-terminated ptr<u8> with no length, lent for the call.
+    for (Function f : m.functions())
+      for (Parameter p : f.parameters()) {
+        if (p.access() != Access.CSTRING) continue;
+        String text = f.name() + " " + p.name();
+        require(
+            f.direction() == Direction.IMPORT,
+            "access=cstring applies to import parameters: " + text);
+        nativeCall(f);
+        require(
+            p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
+            "access=cstring requires a borrowed ptr<u8>: " + text);
+        require(
+            approved(p.facts(), "nocapture") && approved(p.facts(), "readonly"),
+            "access=cstring requires approved nocapture=true and readonly=true: " + text);
+        require(
+            m.borrows().stream()
+                .noneMatch(b ->
+                    b.function().equals(f.name())
+                        && (b.parameter().equals(p.name()) || b.length().equals(p.name()))),
+            "a C string has no length and is no borrow's buffer or length: " + text);
+      }
     // A function may declare several borrows; each has a buffer and a length of its own.
     // Identifiers contain no space, so "function parameter" is a unique key.
     var buffers = new HashSet<String>();

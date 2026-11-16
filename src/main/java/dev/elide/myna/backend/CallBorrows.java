@@ -19,6 +19,16 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
   static List<CallBorrows> of(Module m) {
     var names = new LinkedHashSet<String>();
     m.callBorrows().forEach(b -> names.add(b.function()));
+    // An import with a C string parameter gets the same wrappers, unless a buffer of it is held.
+    var held = new HashSet<String>();
+    m.borrows()
+        .forEach(b -> {
+          if (b.held()) held.add(b.function());
+        });
+    for (Function f : m.functions())
+      if (f.direction() == Direction.IMPORT
+          && !held.contains(f.name())
+          && f.parameters().stream().anyMatch(CallBorrows::cstring)) names.add(f.name());
     var result = new ArrayList<CallBorrows>();
     for (String name : names)
       result.add(
@@ -134,6 +144,11 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
   /** Whether a parameter other than a buffer is a pointer, which the wrapper cannot vouch for. */
   boolean passesPointers() {
     return function.parameters().stream()
-        .anyMatch(p -> buffer(p) == null && p.type() instanceof Pointer);
+        .anyMatch(p -> buffer(p) == null && !cstring(p) && p.type() instanceof Pointer);
+  }
+
+  /** Whether the parameter is a NUL-terminated string ({@code access=cstring}). */
+  static boolean cstring(Parameter p) {
+    return p.access() == Access.CSTRING;
   }
 }
