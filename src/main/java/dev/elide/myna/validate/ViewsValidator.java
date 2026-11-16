@@ -19,6 +19,7 @@ final class ViewsValidator {
     var functions = new HashSet<String>();
     for (Function f : m.functions()) functions.add(f.name());
     var elements = new TreeMap<String, String>();
+    var accessors = new HashMap<String, String>();
     for (Struct s : m.structs()) {
       var counted = new HashMap<String, String>();
       for (Field f : s.fields()) {
@@ -67,12 +68,19 @@ final class ViewsValidator {
                 + f.name()
                 + ": both name count="
                 + count.name());
-        // The FFM view and element accessors, and the Native Image element helper, are static
-        // methods of the generated classes beside the functions' own.
-        for (String accessor : List.of(s.name() + "_" + f.name(), s.name() + "_" + f.name() + "At"))
+        // The FFM view, owner, element, count and loop accessors, and the Native Image element
+        // helper, are static methods of the generated classes beside the functions' own and each
+        // other's: a field `a_count` must not meet field `a`'s count accessor.
+        String base = s.name() + "_" + f.name();
+        for (String accessor : List.of(base, base + "At", base + "_count", base + "_at")) {
           require(
               !functions.contains(accessor),
               where + ": accessor " + accessor + " collides with function " + accessor);
+          String owner = accessors.putIfAbsent(accessor, where);
+          require(
+              owner == null,
+              where + ": accessor " + accessor + " collides with an accessor of " + owner);
+        }
       }
     }
     // A struct that is the element of a view gains Native Image's indexed addressOf(long).

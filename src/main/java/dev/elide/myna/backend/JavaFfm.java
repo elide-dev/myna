@@ -88,6 +88,7 @@ public final class JavaFfm implements Backend {
       }
       for (Views v : Views.of(m, s)) view(v, out);
     }
+    if (m.structs().stream().anyMatch(s -> !Views.of(m, s).isEmpty())) viewBytes(out);
     for (FfmFunction prepared : functions) {
       Function f = prepared.function();
       var args = new ArrayList<String>();
@@ -208,69 +209,141 @@ public final class JavaFfm implements Backend {
   }
 
   /**
-   * {@code <Struct>_<field>(record)}, the counted elements as one segment sized {@code count *
-   * elementSize} ({@link MemorySegment#NULL} when the pointer is null), and {@code
-   * <Struct>_<field>(record, i)}, element {@code i} with {@code Objects.checkIndex}: a slice for a
-   * struct element, the value for a scalar one. Static like the {@code _OFFSET} constants, so the
-   * names cannot collide with the record's other members.
+   * The accessors of one counted view, all static like the {@code _OFFSET} constants:
+   *
+   * <ul>
+   *   <li>{@code <Struct>_<field>_count(record)}, the count widened unsigned;
+   *   <li>{@code <Struct>_<field>(record)} and {@code (record, owner)}, the elements as one
+   *       read-only segment of {@code count * elementSize} bytes, in the global scope or the
+   *       owner's;
+   *   <li>{@code <Struct>_<field>_at(view, i)}, element {@code i} of a view taken once: a slice for
+   *       a struct, the value for a scalar, the element pointer for a pointer array, with no
+   *       restricted call;
+   *   <li>{@code <Struct>_<field>(record, i)} and, for segment elements, {@code (record, i,
+   *       owner)}, element {@code i} through one view.
+   * </ul>
+   *
+   * Every bad count, and every index outside the count, is an {@code IndexOutOfBoundsException}.
    */
   private static void view(Views v, StringBuilder out) {
     String name = v.struct().name() + "_" + v.pointer().name();
-    String count = countRead(v);
     String size = v.elementSize() + "L";
     String imported =
         " A record an import returns is a zero-length segment: reinterpret it to "
             + v.struct().name()
-            + "_LAYOUT first. */\n";
-    String base = "record.get(ValueLayout.ADDRESS, " + v.pointer().offset() + "L)";
-    out.append("    /** The ")
-        .append(v.count().name())
-        .append(" elements at ")
-        .append(v.pointer().name())
-        .append(", empty when it is null; valid for as long as the record is.")
-        .append(imported)
-        .append("    public static MemorySegment ")
-        .append(name)
-        .append("(MemorySegment record) {\n")
-        .append("        MemorySegment base = ")
-        .append(base)
-        .append(";\n        long count = ")
-        .append(count)
-        .append(";\n        if (base.address() == 0L) {\n            assert count == 0L : \"")
+            + "_LAYOUT first.";
+    String carrier = Types.ffmCarrier(v.element());
+    boolean segment = carrier.equals("MemorySegment");
+    boolean wide = v.countType() == Scalar.U64 || v.countType() == Scalar.USIZE;
+    out.append("    /** The count of ")
         .append(v.label())
-        .append(" is null with a nonzero count\";\n")
-        .append("            return MemorySegment.NULL;\n        }\n")
-        .append("        return base.reinterpret(Math.multiplyExact(count, ")
-        .append(size)
-        .append("));\n    }\n");
-    // The count is read once and checked before anything is built; the element is addressed
-    // directly, so the count is never multiplied here.
+        .append(": ")
+        .append(v.count().name())
+        .append(", widened unsigned")
+        .append(wide ? " (above Long.MAX_VALUE it reads negative, which every view rejects)." : ".")
+        .append(imported)
+        .append(" */\n    public static long ")
+        .append(name)
+        .append("_count(MemorySegment record) {\n        return ")
+        .append(countRead(v))
+        .append(";\n    }\n");
+    for (boolean owned : List.of(false, true)) {
+      out.append("    /** The ")
+          .append(v.count().name())
+          .append(" elements at ")
+          .append(v.pointer().name())
+          .append(", read-only")
+          .append(
+              owned
+                  ? " and alive while owner is (the record's own lifetime is the caller's"
+                      + " contract)."
+                  : "; valid for as long as the record is, which the caller ensures.")
+          .append(" IndexOutOfBoundsException for a count the pointer cannot hold.")
+          .append(imported)
+          .append(" */\n    public static MemorySegment ")
+          .append(name)
+          .append(owned ? "(MemorySegment record, Arena owner) {\n" : "(MemorySegment record) {\n")
+          .append("        MemorySegment base = record.get(ValueLayout.ADDRESS, ")
+          .append(v.pointer().offset())
+          .append("L);\n        long bytes = seam$viewBytes(base, ")
+          .append(name)
+          .append("_count(record), ")
+          .append(size)
+          .append(", \"")
+          .append(v.label())
+          .append("\", \"")
+          .append(v.count().name())
+          .append("\");\n        return base.reinterpret(bytes")
+          .append(owned ? ", owner, null" : "")
+          .append(").asReadOnly();\n    }\n");
+    }
+    // The loop shape: element i of a view taken once, with no restricted call per element.
+    String index = "java.util.Objects.checkIndex(i, view.byteSize() / " + size + ")";
+    out.append("    /** Element i of a view of ")
+        .append(v.label())
+        .append(" taken once; IndexOutOfBoundsException unless 0 <= i < ")
+        .append(v.count().name())
+        .append(". */\n    public static ")
+        .append(carrier)
+        .append(' ')
+        .append(name)
+        .append("_at(MemorySegment view, long i) {\n        return view.");
+    if (v.element() instanceof Named)
+      out.append("asSlice(").append(index).append(" * ").append(size).append(", ").append(size);
+    else out.append("getAtIndex(").append(Types.layout(v.element())).append(", ").append(index);
+    out.append(");\n    }\n");
     out.append("    /** Element i of ")
         .append(v.label())
-        .append("; IndexOutOfBoundsException unless 0 <= i < ")
+        .append(" through one view; IndexOutOfBoundsException unless 0 <= i < ")
         .append(v.count().name())
         .append('.')
         .append(imported)
-        .append("    public static ")
-        .append(Types.ffmCarrier(v.element()))
+        .append(" */\n    public static ")
+        .append(carrier)
         .append(' ')
         .append(name)
-        .append("(MemorySegment record, long i) {\n        java.util.Objects.checkIndex(i, ")
-        .append(count)
-        .append(");\n        MemorySegment base = ")
-        .append(base)
-        .append(";\n        assert base.address() != 0L : \"")
+        .append("(MemorySegment record, long i) {\n        return ")
+        .append(name)
+        .append("_at(")
+        .append(name)
+        .append("(record), i);\n    }\n");
+    if (!segment) return;
+    out.append("    /** Element i of ")
         .append(v.label())
-        .append(" is null with a nonzero count\";\n")
-        .append("        return MemorySegment.ofAddress(base.address() + i * ")
-        .append(size)
-        .append(").reinterpret(")
-        .append(size)
-        .append(')');
-    // A scalar or pointer element is read; a pointer reads as a zero-length segment.
-    if (!(v.element() instanceof Named))
-      out.append(".get(").append(Types.layout(v.element())).append(", 0L)");
-    out.append(";\n    }\n");
+        .append(", read-only and alive while owner is; IndexOutOfBoundsException unless 0 <= i < ")
+        .append(v.count().name())
+        .append('.')
+        .append(imported)
+        .append(" */\n    public static MemorySegment ")
+        .append(name)
+        .append("(MemorySegment record, long i, Arena owner) {\n        return ")
+        .append(name)
+        .append("_at(")
+        .append(name)
+        .append("(record, owner), i)")
+        // An element pointer reads as a new zero-length global segment; scope it too.
+        .append(v.element() instanceof Named ? "" : ".reinterpret(owner, null).asReadOnly()")
+        .append(";\n    }\n");
+  }
+
+  /**
+   * The one check behind every view: a count the pointer cannot hold, whether null with a nonzero
+   * count, a u64 above {@code Long.MAX_VALUE} or a byte size that overflows, is an {@code
+   * IndexOutOfBoundsException} naming the view and its count field. The {@code $} keeps the name
+   * out of the descriptor's namespace.
+   */
+  private static void viewBytes(StringBuilder out) {
+    out.append(
+        """
+            /** The byte size of a counted view; IndexOutOfBoundsException for a count the pointer cannot hold. */
+            private static long seam$viewBytes(MemorySegment base, long count, long size, String view, String field) {
+                if (count < 0L || count > Long.MAX_VALUE / size)
+                    throw new IndexOutOfBoundsException(view + ": " + field + " " + Long.toUnsignedString(count) + " overflows a byte size");
+                if (count != 0L && base.address() == 0L)
+                    throw new IndexOutOfBoundsException(view + " is null with " + field + " " + count);
+                return count * size;
+            }
+        """);
   }
 
   /** The count field as a {@code long}: narrow carriers zero-extend, a u64 is its raw bits. */
