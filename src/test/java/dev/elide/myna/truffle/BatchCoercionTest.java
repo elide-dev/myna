@@ -197,6 +197,86 @@ class BatchCoercionTest {
     }
   }
 
+  /**
+   * An FFM leaf cell lends a confined segment in place; guest code run while a later element is
+   * read (here a host proxy array's {@code get(1)}) closes its arena. The recheck before the call
+   * refuses the batch, so the call never sees the freed address, and the stack is balanced.
+   */
+  @Test
+  void anElementClosedWhileLaterOnesAreCoercedFailsBeforeTheCall() {
+    long top = top();
+    var cell = new LeafCell();
+    try (org.graalvm.polyglot.Context context =
+        org.graalvm.polyglot.Context.newBuilder()
+            .option("engine.WarnInterpreterOnly", "false")
+            .build()) {
+      var function = context.asValue(cell.function());
+      Arena arena = Arena.ofConfined();
+      MemorySegment first = arena.allocate(4);
+      NativeBytes element = NativeBytes.of(first, false);
+      var closing =
+          new org.graalvm.polyglot.proxy.ProxyArray() {
+            public Object get(long index) {
+              if (index == 0) return element;
+              arena.close();
+              return "later";
+            }
+
+            public void set(long index, org.graalvm.polyglot.Value value) {
+              throw new UnsupportedOperationException();
+            }
+
+            public long getSize() {
+              return 2;
+            }
+          };
+      var failure =
+          assertThrows(
+              org.graalvm.polyglot.PolyglotException.class, () -> function.execute(closing));
+      assertTrue(failure.getMessage().contains("was closed before the call"), failure.getMessage());
+      assertEquals(0, cell.calls);
+      // Without the close, the same element is lent in place and the call is made.
+      try (Arena open = Arena.ofConfined()) {
+        MemorySegment live = open.allocate(4);
+        assertEquals(
+            live.address(),
+            function
+                .execute(
+                    org.graalvm.polyglot.proxy.ProxyArray.fromArray(
+                        NativeBytes.of(live, false), "x"))
+                .asLong());
+        assertEquals(1, cell.calls);
+      }
+    }
+    assertEquals(top, top());
+  }
+
+  /** An FFM leaf cell that returns the address lent for element 0, as the call would see it. */
+  static final class LeafCell extends NativeCell {
+    @com.oracle.truffle.api.nodes.Node.Child
+    private BatchCoercion batch =
+        new BatchCoercion("first", "sources", false, true, Long.MAX_VALUE, true, true);
+
+    int calls;
+
+    LeafCell() {
+      super("first", 1);
+    }
+
+    @Override
+    public Object execute(Object[] arguments) {
+      checkArity(arguments);
+      Batch lent = batch.execute(arguments[0]);
+      try {
+        lent.recheck(this);
+        calls++;
+        return MemorySegment.ofAddress(lent.address()).reinterpret(8).get(ValueLayout.JAVA_LONG, 0);
+      } finally {
+        lent.release();
+      }
+    }
+  }
+
   /** A cell that lends a batch and returns its count. */
   static final class CountCell extends NativeCell {
     @com.oracle.truffle.api.nodes.Node.Child

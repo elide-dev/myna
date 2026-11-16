@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.nodes.Node;
 import java.lang.foreign.MemorySegment;
 
 /**
@@ -43,6 +45,16 @@ public final class Batch {
   private Object[] owners;
 
   private boolean released;
+
+  /**
+   * The segments an FFM cell lent in place, confined to this thread under a native leaf, which
+   * {@link #recheck} validates again once every element has been coerced: the first in a field, any
+   * others in an array made only for a second one.
+   */
+  private MemorySegment inPlace;
+
+  private MemorySegment[] moreInPlace;
+  private int moreCount;
 
   /** The empty batch until {@link #reserve} fills it: null arrays with count zero. */
   Batch() {}
@@ -118,6 +130,49 @@ public final class Batch {
   void absorbCopy(int index, Borrow.Copy copy, long length, boolean wide) {
     put(index, copy.address, length, wide);
     own(index, copy);
+  }
+
+  /** Records a segment lent in place, for {@link #recheck}. */
+  void lentInPlace(MemorySegment segment) {
+    if (inPlace == null) {
+      inPlace = segment;
+      return;
+    }
+    MemorySegment[] more = moreInPlace;
+    if (more == null) moreInPlace = more = new MemorySegment[count];
+    more[moreCount++] = segment;
+  }
+
+  /**
+   * Validates, right before the call and after every element has been coerced, that each segment
+   * lent in place is still open and confined to this thread. Coercing a later element can run guest
+   * code (an array's element reads, a string's or buffer's messages), which could close an earlier
+   * element's arena on this very thread; once this check passes, nothing can until the call
+   * returns, since the import is a native leaf, which cannot call back, and no other thread can
+   * close a confined arena. A batch with nothing lent in place costs one branch.
+   *
+   * @throws NativeCellException if a segment was closed or is no longer confined to this thread;
+   *     the cell's {@code finally} then releases the batch, and the call never happens
+   */
+  public void recheck(Node location) {
+    MemorySegment segment = inPlace;
+    if (segment == null) return;
+    if (!open(segment)) throw closed(location);
+    MemorySegment[] more = moreInPlace;
+    for (int i = 0; i < moreCount; i++) if (!open(more[i])) throw closed(location);
+  }
+
+  @TruffleBoundary
+  private static boolean open(MemorySegment segment) {
+    return segment.scope().isAlive() && segment.isAccessibleBy(Thread.currentThread());
+  }
+
+  @TruffleBoundary
+  private static NativeCellException closed(Node location) {
+    return NativeCellException.of(
+        location,
+        "borrowed native buffer's arena was closed before the call: a batch element lent in"
+            + " place was closed while later elements were coerced");
   }
 
   /** The scratch stack's current top, where the next copy goes. */

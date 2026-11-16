@@ -476,6 +476,31 @@ public final class CellChecks {
     closing.close();
     rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), NativeBytes.of(live, false)));
     check(scratchTop() == top, "scratch stack balanced after a closed element");
+    // digest is a leaf, so a confined element is lent in place; a host proxy array whose get(1)
+    // closes element 0's arena fails the call before native code runs, as a recheck right before
+    // the downcall finds the arena closed.
+    try (org.graalvm.polyglot.Context context = org.graalvm.polyglot.Context.newBuilder()
+        .option("engine.WarnInterpreterOnly", "false").build()) {
+      var digest = context.asValue(cells.apply("digest"));
+      Arena racing = Arena.ofConfined();
+      NativeBytes first = NativeBytes.of(racing.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 1), false);
+      var closingArray = new org.graalvm.polyglot.proxy.ProxyArray() {
+        public Object get(long index) {
+          if (index == 0) return first;
+          racing.close();
+          return new HeapBytes(a, false);
+        }
+        public void set(long index, org.graalvm.polyglot.Value value) { throw new UnsupportedOperationException(); }
+        public long getSize() { return 2; }
+      };
+      try {
+        digest.execute(closingArray);
+        throw new AssertionError("a batch element closed during coercion reached native code");
+      } catch (org.graalvm.polyglot.PolyglotException expected) {
+        check(expected.getMessage().contains("was closed before the call"), "recheck message: " + expected.getMessage());
+      }
+    }
+    check(scratchTop() == top, "scratch stack balanced after a recheck failure");
     System.out.println("batch scopes passed");
   }
   /** The refusal a cell raises for {@code args}, which it must refuse. */

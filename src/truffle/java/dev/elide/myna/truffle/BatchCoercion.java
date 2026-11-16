@@ -19,9 +19,9 @@ import java.lang.foreign.MemorySegment;
  *
  * <p>The array's size is read once, and each element exactly once, as it is lent: what the call
  * lends, and what its release undoes, is what was read, whatever the guest stores into the array
- * meanwhile (and never re-read). Native memory lent in place must stay open for the whole call,
- * coercion of the later elements included, which may run guest code. A failure to lend element
- * {@code k} releases the {@code k} elements before it.
+ * meanwhile (and never re-read). An FFM cell validates the elements it lent in place again right
+ * before its call ({@link Batch#recheck}), since coercing later elements may run guest code. A
+ * failure to lend element {@code k} releases the {@code k} elements before it.
  *
  * <p>The arrays take {@code 16 * count} bytes of the current thread's scratch stack, above which
  * the elements' copies stack, so a batch of small buffers costs what as many single borrows do; a
@@ -127,6 +127,8 @@ public final class BatchCoercion extends Coercion {
     if (leaf && confinedHere(segment)) {
       Borrow lent = element.execute(bytes);
       batch.absorb(index, lent, wide);
+      // Validated again right before the call, once guest code can no longer run: Batch.recheck.
+      batch.lentInPlace(segment);
       return lent.length();
     }
     long length = bytes.size();

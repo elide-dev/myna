@@ -108,7 +108,8 @@ single buffers.
   carry the `nocapture` and `readonly` facts they declare. Static JNI keeps the raw binding.
 - **Truffle cells** take a guest array of buffers or strings, or null for the empty batch, and lend
   each element under the single-buffer rules, with both arrays on the scratch stack. FFM cells lend
-  a confined segment in place under a native leaf, as the host wrapper does, and copy other scoped
+  a confined segment in place under a native leaf, as the host wrapper does, checking it again right
+  before the call since coercing later elements may run guest code, and copy other scoped
   native elements onto the scratch stack, since a downcall cannot hold their scope. A compiled call
   allocates nothing beyond its elements' own lending. `BufferArray` passes a batch from host code.
 

@@ -371,8 +371,7 @@ code can pass a `BufferArray.of(..)`.
 - The array's size is read once and checked (a negative size, or more than 134217727 elements,
   is a guest error before anything is lent), and each element is read once, as it is lent; what
   the call lends and its release undoes is what was read, never re-read, whatever the guest stores
-  into the array meanwhile. Native memory lent in place must stay open for the whole call,
-  including the coercion of later elements, which may run guest code.
+  into the array meanwhile.
 - The pointer and length arrays take `16 * count` bytes of the thread's scratch stack, and the
   elements' copies stack above them, so the whole batch pops in one step. Arrays too large for the
   stack (above 1024 elements, or not fitting beside outstanding copies) take a confined arena of
@@ -386,7 +385,13 @@ code can pass a `BufferArray.of(..)`.
   sentinel thread that never starts, kept in a run-time-initialized holder) under a native leaf.
   Any other (shared, automatic, or confined under an import that can call back) is copied through
   its segment, a scope-checked read that refuses a closed or foreign-thread arena, straight onto
-  the scratch stack. Native Image cells lend native memory in place, as for a single buffer.
+  the scratch stack. Coercing a later element can run guest code (an array's element reads, a
+  string's or buffer's messages), which could close an element already lent in place, so once
+  every argument is coerced, right before the downcall, the cell checks again that each element it
+  lent in place is open and confined to this thread, and otherwise fails the call as a closed
+  single buffer's does, releasing the batch. From there nothing can close it: no other thread can
+  close a confined arena, and a leaf cannot call back. A batch with nothing lent in place pays one
+  branch. Native Image cells lend native memory in place, as for a single buffer.
 - A batch is a `Batch`, not a `Borrow`, so single borrows keep their layout. A compiled batch call
   allocates only what lending its elements needs: nothing for native memory, scratch copies and
   scoped copies, a `PinnedObject` per pinned element, an arena per element copied past the scratch

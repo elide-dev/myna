@@ -1101,6 +1101,14 @@ public final class TruffleCells implements Backend {
       String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));
       if (check != null) callBlock.append(indent).append(check).append('\n');
     }
+    // Once every argument is coerced, and so no guest code can run before the call, each batch
+    // validates the scopes of the elements it lent in place (FFM cells under a native leaf).
+    if (ffm && Seam.nativeLeaf(f))
+      for (String borrow : borrows) {
+        String declared = borrow.substring(0, borrow.indexOf(' '));
+        if (batchLocals.contains(declared))
+          callBlock.append(indent).append(declared).append(".recheck(this);\n");
+      }
     for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');
     for (int i = borrows.size() - 1; i >= 0; i--) {
