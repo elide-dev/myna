@@ -102,6 +102,14 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
                       run(work / "binding-app", library).stdout)
 
+    def test_ffm_struct_pointers_are_sized(self):
+        from ffm_pointers import build_pointers_fixture
+        work, generated, classes, library = build_pointers_fixture()
+        self.assertIn("public static final AddressLayout Node_POINTER", (generated / "PointersFFM.java").read_text())
+        native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                     "--features=fixture.pointers.PointersForeignFeature", "PointersMain", "-o", work / "pointers-app")
+        self.assertIn("FFM struct pointers passed", run(work / "pointers-app", library).stdout)
+
     def test_binding_abi2_default_leaf_static_linkage_and_gc(self):
         work = ROOT / "build/fast-test"
         fixture = ROOT / "tests/fast"

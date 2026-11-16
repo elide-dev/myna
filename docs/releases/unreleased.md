@@ -52,6 +52,21 @@ Image gains `addressOf(long)` on element structs and an asserted, always-inlined
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
 
+## Sized struct pointers in FFM (#135)
+
+Java FFM types `ptr<Struct>` parameters, returns and fields of imports, callbacks and structs, and the
+out slot of a struct resource's out-pointer constructor, with a
+new `<Struct>_POINTER` constant, `ValueLayout.ADDRESS.withTargetLayout(<Struct>_LAYOUT)`. The constant
+is emitted only for structs some pointer targets. An import's `ptr<Struct>` result, a callback's
+`ptr<Struct>` argument and `record.get(<Struct>_POINTER, offset)` are segments of the struct's size, so
+records and their counted views need no `reinterpret`. **A null one is sized too**, and reading through
+it is an unchecked native read that crashes. Test `address() == 0` first (see breaking change 15).
+Pointers to opaque types, scalars and pointers, a counted view's pointer, and pointer-array elements stay
+zero-length, and Truffle FFM cells are unchanged. Every pointer field inside a cycle of pointer fields
+(`next: ptr<Node>`, or a mutual cycle) targets a padding layout of the pointee's size and alignment.
+Layouts are declared pointees first (see [types and layouts](../dsl.md#types-and-layouts)). Layouts stay
+static final constants, with no work per call. The C ABI, `seam.json` and fingerprints are unchanged.
+
 ## Resources with several constructors (#139)
 
 - `create=` takes a comma-separated list of imports. Rust, Native Image and FFM owners gain one
@@ -148,8 +163,9 @@ single buffers.
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
 | 14 | An import named `NAME_address` with no parameters beside an import `NAME` is rejected: FFM bindings gain a `NAME_address()` accessor per import. | descriptors with such a pair of imports | rename one |
 | 15 | `NativeBytes` buffer messages over a closed arena, or a confined arena's memory on another thread, throw `NativeCellException` (a guest error a guest `try`/`catch` handles), with the `IllegalStateException` or `WrongThreadException` the segment accessors throw as its cause. HotSpot previously let those raw host exceptions escape (an internal error to guest languages), and a Native Image did not check at all (#128). | hosts that caught `IllegalStateException`/`WrongThreadException` from `NativeBytes` messages | catch `NativeCellException`, or inspect `getCause()` |
+| 16 | FFM `ptr<Struct>` results, callback arguments and field reads are segments of the struct's size, not zero-length. **A null one is a sized segment at address 0, so a read through it, or through a dangling pointer, is an unchecked native read that crashes the process where it used to throw `IndexOutOfBoundsException`.** A pointer misaligned for the struct, including a sentinel such as `(T *)-1`, is an `IllegalArgumentException` after the call completes. Structs that a pointer targets gain `<Struct>_POINTER`, and struct layouts can be declared in a different order. The FFM class of such a module calls the restricted `withTargetLayout` when it is initialized, so with `--illegal-native-access=deny` it needs native access even before its first downcall. | FFM consumers of struct pointers | test `address() == 0` or `equals(MemorySegment.NULL)` before reading, never `byteSize() == 0`; existing `reinterpret` calls still work; declare sentinel-carrying pointers `ptr<void>`; enable native access for the module, as downcalls already require |
 
-Not broken: FFM output (comments only), Truffle cell signatures and behaviour (except row 15), leaf status of every
+Not broken: FFM output apart from row 16 (otherwise additions and comments only), Truffle cell signatures and behaviour (except row 15), leaf status of every
 import, export entry-point signatures at the C level.
 
 ### The header check
