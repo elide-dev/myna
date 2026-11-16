@@ -26,12 +26,18 @@ final class RustImplementation {
     LENGTH,
     CSTRING,
     DESTROYED,
-    RESOURCE
+    RESOURCE,
+    /** A constructor's ptr<ptr<R>> out-parameter: the entry point writes the box into it. */
+    OUT
   }
 
   /** One import's projection: what each parameter becomes, and the resource it constructs. */
   private record Shape(
-      Function function, CallBorrows borrows, Map<String, Kind> kinds, Resource creates) {
+      Function function,
+      CallBorrows borrows,
+      Map<String, Kind> kinds,
+      Resource creates,
+      boolean outPointer) {
     Kind kind(Parameter p) {
       return kinds.get(p.name());
     }
@@ -44,18 +50,22 @@ final class RustImplementation {
 
   private static Shape shape(Module m, Function f) {
     var returned = new HashMap<String, Resource>();
-    m.returnedResources().forEach(r -> returned.put(r.name(), r));
+    m.ownedResources().forEach(r -> returned.put(r.name(), r));
     boolean callBorrows = m.callBorrows().stream().anyMatch(b -> b.function().equals(f.name()));
     CallBorrows borrows = callBorrows ? CallBorrows.of(m, f) : new CallBorrows(f, List.of());
     Resource destroys =
-        m.returnedResources().stream()
+        m.ownedResources().stream()
             .filter(r -> r.destroy().equals(f.name()))
             .findFirst()
             .orElse(null);
+    Resource creates =
+        m.ownedResources().stream().filter(r -> r.createdBy(f.name())).findFirst().orElse(null);
+    boolean outPointer = creates != null && m.outPointer(creates);
     var kinds = new HashMap<String, Kind>();
     for (Parameter p : f.abiParameters()) {
       Kind kind = Kind.PLAIN;
-      if (borrows.buffer(p) != null) kind = Kind.BUFFER;
+      if (outPointer && p.name().equals(creates.handleParameter())) kind = Kind.OUT;
+      else if (borrows.buffer(p) != null) kind = Kind.BUFFER;
       else if (CallBorrows.cstring(p)) kind = Kind.CSTRING;
       else if (borrows.length(p) != null) kind = Kind.LENGTH;
       else if (p.type() instanceof Pointer pointer
@@ -66,9 +76,7 @@ final class RustImplementation {
       }
       kinds.put(p.name(), kind);
     }
-    Resource creates =
-        m.returnedResources().stream().filter(r -> r.createdBy(f.name())).findFirst().orElse(null);
-    return new Shape(f, borrows, kinds, creates);
+    return new Shape(f, borrows, kinds, creates, outPointer);
   }
 
   private static List<Function> imports(Module m) {
@@ -95,7 +103,7 @@ final class RustImplementation {
         .append(" {\n");
     // A shared resource may be used and destroyed from any thread (threading=shared), which only
     // a Send + Sync type survives; a confined one stays on its creating thread.
-    for (Resource r : m.returnedResources())
+    for (Resource r : m.ownedResources())
       out.append("    /// What a `")
           .append(r.name())
           .append("` handle points to: the implementation's own type, never read by callers.\n")
@@ -115,7 +123,13 @@ final class RustImplementation {
           .append('(')
           .append(String.join(", ", params))
           .append(')');
-      if (shape.creates() != null && shape.creates().handle() == null)
+      if (shape.outPointer())
+        out.append(" -> Result<Box<Self::")
+            .append(shape.creates().name())
+            .append(">, ")
+            .append(Types.rust(f.returns(), f.returnsGroup()))
+            .append('>');
+      else if (shape.creates() != null && shape.creates().handle() == null)
         out.append(" -> Option<Box<Self::").append(shape.creates().name()).append(">>");
       else if (f.returns() != Scalar.VOID)
         out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
@@ -139,7 +153,7 @@ final class RustImplementation {
   /** The trait's type for one parameter, or null for a length its buffer's slice carries. */
   private static String traitType(Shape shape, Parameter p) {
     return switch (shape.kind(p)) {
-      case LENGTH -> null;
+      case LENGTH, OUT -> null;
       case CSTRING -> p.nullable() ? "Option<&::core::ffi::CStr>" : "&::core::ffi::CStr";
       case BUFFER -> {
         String slice = p.access() == Access.READ ? "&[u8]" : "&mut [u8]";
@@ -229,7 +243,7 @@ final class RustImplementation {
     String early = null;
     for (Parameter p : f.abiParameters()) {
       switch (shape.kind(p)) {
-        case LENGTH -> {}
+        case LENGTH, OUT -> {}
         case CSTRING -> {
           String text = "unsafe { ::core::ffi::CStr::from_ptr(" + p.name() + ".cast()) }";
           if (p.nullable())
@@ -338,7 +352,57 @@ final class RustImplementation {
     if (early != null) out.append(pad).append(early);
     out.append(body);
     String call = implementation + "::" + f.name() + "(" + String.join(", ", args) + ")";
-    if (shape.creates() != null && shape.creates().handle() == null)
+    if (shape.outPointer()) {
+      // Ok writes the box into the slot (or drops it when the slot is null, which only a nullable
+      // parameter allows) and returns the first success status; Err returns its own status.
+      String slot = shape.creates().handleParameter();
+      String group = f.returnsGroup() == null ? null : q + f.returnsGroup().name();
+      long first = shape.creates().success().getFirst();
+      String success = group == null ? String.valueOf(first) : group + "(" + first + ")";
+      var succeeded = new ArrayList<String>();
+      for (long value : shape.creates().success())
+        succeeded.add((group == null ? "status" : "status.0") + " == " + value);
+      out.append(pad)
+          .append("match ")
+          .append(call)
+          .append(" {\n")
+          .append(pad)
+          .append("    Ok(owned) => {\n")
+          .append(pad)
+          .append("        if ")
+          .append(slot)
+          .append(".is_null() {\n")
+          .append(pad)
+          .append("            drop(owned);\n")
+          .append(pad)
+          .append("        } else {\n")
+          .append(pad)
+          .append("            unsafe { ")
+          .append(slot)
+          .append(".write(Box::into_raw(owned).cast()) };\n")
+          .append(pad)
+          .append("        }\n")
+          .append(pad)
+          .append("        ")
+          .append(success)
+          .append('\n')
+          .append(pad)
+          .append("    }\n")
+          .append(pad)
+          .append("    Err(status) => {\n")
+          .append(pad)
+          .append("        ::core::debug_assert!(!(")
+          .append(String.join(" || ", succeeded))
+          .append("), \"")
+          .append(f.name())
+          .append(": Err with a success status\");\n")
+          .append(pad)
+          .append("        status\n")
+          .append(pad)
+          .append("    }\n")
+          .append(pad)
+          .append("}\n");
+    } else if (shape.creates() != null && shape.creates().handle() == null)
       out.append(pad)
           .append("match ")
           .append(call)

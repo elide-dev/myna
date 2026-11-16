@@ -46,6 +46,10 @@ end
 import rawLength symbol=cells_raw_length return=usize error=no_failure truffle_raw_pointers=true@explicit_contract
   param text type=ptr<void>
 end
+# access=cstring: a guest string lent NUL-terminated, refused with an embedded NUL.
+import titleLength symbol=cells_title_length return=usize error=no_failure nounwind=true@explicit_contract
+  param text type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
 import strlen symbol=cells_strlen return=usize error=no_failure
   param text type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
 end

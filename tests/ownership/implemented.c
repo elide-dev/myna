@@ -95,6 +95,12 @@ int main(int argc, char **argv) {
   CHECK(surface_open(-1, &surface, (uint8_t *)error, sizeof error) == 3);
   CHECK(error[0] == 'n' && error[13] == 'h');
   surface_close(surface);
+  // A null slot (the parameter is nullable): the implementation's box is dropped, nothing leaks.
+  CHECK(surface_open(5, NULL, NULL, 0) == 0);
+  CHECK(ticket_live() == 0);
+  uint8_t pair[2] = {2, 3};
+  CHECK(surface_from(pair, 2, &surface, NULL, 0) == 0 && surface_width(surface) == 5);
+  surface_close(surface);
   CHECK(title_length((const uint8_t *)"hello") == 5);
   CHECK(ticket_live() == 0);
   puts("Rust implementation trait passed");

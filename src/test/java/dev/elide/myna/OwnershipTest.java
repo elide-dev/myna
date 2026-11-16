@@ -1007,6 +1007,64 @@ class OwnershipTest {
     assertFalse(output.containsKey("ApiTruffle.java"));
   }
 
+  @Test
+  void outPointerStatusesCompareUnsignedAndANullSlotIsAFailure() {
+    // A u8 status of 200 is 200, not -56, in its signed Java carrier.
+    String narrow =
+        OUT_POINTER
+            .replace("import open return=i32", "import open return=u8")
+            .replace("success=0", "success=200");
+    var output = Generator.generate(Dsl.parse(narrow), true);
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "            if (!(Byte.toUnsignedInt(status) == 200)) return"
+                + " onFailure.failed(status);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("            if (address.address() == 0) return onFailure.failed(status);\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains("if (!(Byte.toUnsignedInt(status) == 200)) return onFailure.failed(status);"),
+        java);
+    assertTrue(
+        java.contains("            if (address == 0) return onFailure.failed(status);\n"), java);
+    // u16 and u32 widen too, u32 to a long.
+    for (String[] type :
+        new String[][] {
+          {"u16", "Short.toUnsignedInt(status) == 40000"},
+          {"u32", "Integer.toUnsignedLong(status) == 3000000000L"}
+        }) {
+      String wide =
+          OUT_POINTER
+              .replace("import open return=i32", "import open return=" + type[0])
+              .replace("success=0", "success=" + type[1].replaceAll(".* == |L", ""));
+      assertTrue(
+          Generator.generate(Dsl.parse(wide), true).get("ApiFFM.java").contains(type[1]), type[0]);
+    }
+    // The implementer trait: Ok fills the slot and returns the first success status.
+    String rust =
+        Generator.generate(
+                Dsl.parse(
+                    OUT_POINTER.replace(
+                        "java_class=Api", "java_class=Api rust_implementation=trait")),
+                true)
+            .get("seam.rs");
+    assertTrue(
+        rust.contains(
+            "    fn open(width: i32, error: Option<&mut [u8]>) -> Result<Box<Self::Surface>,"
+                + " i32>;\n"),
+        rust);
+    assertTrue(rust.contains("    fn close(surface: Box<Self::Surface>);\n"), rust);
+    assertTrue(
+        rust.contains("            unsafe { out.write(Box::into_raw(owned).cast()) };\n"), rust);
+    assertTrue(
+        rust.contains(
+            "::core::debug_assert!(!(status == 0), \"open: Err with a success status\");"),
+        rust);
+  }
+
   static Stream<Arguments> outPointerRejections() {
     String out =
         "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n";
@@ -1073,8 +1131,11 @@ class OwnershipTest {
     String ffm = output.get("ApiFFM.java");
     assertTrue(
         ffm.contains(
-            "MemorySegment text0 = empty.allocateFrom(java.util.Objects.requireNonNull(arg0));"),
+            "if (java.util.Objects.requireNonNull(arg0) != null && arg0.indexOf('\\0') >= 0) throw"
+                + " new IllegalArgumentException(\"titleLength title: embedded NUL in a C"
+                + " string\");\n"),
         ffm);
+    assertTrue(ffm.contains("MemorySegment text0 = empty.allocateFrom(arg0);"), ffm);
     assertTrue(
         ffm.contains("        public long titleLength(String arg0) throws Throwable {\n"), ffm);
     // Truffle cells lend a guest string NUL-terminated, read-only.
@@ -1087,6 +1148,11 @@ class OwnershipTest {
         cells.contains(
             "this.coerce_title = new BytesCoercion(\"titleLength\", \"title\", false, false,"
                 + " false);"),
+        cells);
+    assertTrue(
+        cells.contains(
+            "coerce_title.execute(CStrings.checked(arguments[0], \"titleLength\", \"title\","
+                + " this))"),
         cells);
     // The implementer trait takes a CStr, and a null one aborts.
     String trait =

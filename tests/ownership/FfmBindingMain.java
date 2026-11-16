@@ -196,6 +196,8 @@ public final class FfmBindingMain {
         // A C string: NUL-terminated UTF-8 in the call's arena.
         if (binding.titleLength("h\u00e9llo") != 6) throw new AssertionError("title length");
         rejects(NullPointerException.class, () -> binding.titleLength((String) null));
+        // An embedded NUL would end the string early on the C side: refused before any copy.
+        rejects(IllegalArgumentException.class, () -> binding.titleLength("ab\0cd"));
         if (binding.liveCount() != 0) throw new AssertionError("surfaces released");
         // The release accepts null as a no-op; no owner ever passes it one.
         binding.release(MemorySegment.NULL);

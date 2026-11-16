@@ -214,6 +214,9 @@ final class OwnershipValidator {
             approved(p.facts(), "nocapture") && approved(p.facts(), "readonly"),
             "access=cstring requires approved nocapture=true and readonly=true: " + text);
         require(
+            !p.facts().containsKey("align") && !p.facts().containsKey("truffle_buffer"),
+            "access=cstring takes no align or truffle_buffer fact: " + text);
+        require(
             m.borrows().stream()
                 .noneMatch(b ->
                     b.function().equals(f.name())

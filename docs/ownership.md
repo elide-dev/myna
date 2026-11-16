@@ -199,8 +199,14 @@ be no borrow's buffer or length. The raw bindings keep their pointer carriers (`
   `NullPointerException` otherwise).
 - **Truffle cells**: a guest string or bytes, lent NUL-terminated and read-only, as any C string
   parameter of a cell is.
-- **Native Image**: no wrapper yet; the raw binding takes a `CCharPointer` (for example from
-  `CTypeConversion.toCString`).
+- **Native Image**: a `String` overload in the ownership class, converted with
+  `CTypeConversion.toCString` for the call and freed after it.
+
+A Java or guest string with an embedded NUL would end early on the C side, so every Java and
+Truffle wrapper refuses one before copying it: FFM and Native Image throw
+`IllegalArgumentException` naming the function and parameter, and a Truffle cell throws its guest
+error (a nullable argument that is null is not checked). A Rust `&CStr` cannot contain one. An
+`access=cstring` parameter takes no `align` or `truffle_buffer` fact.
 
 ### Nullable buffers
 
@@ -323,12 +329,14 @@ end
 resource `R`. The create returns an integer status, `success=` is required, and every constructor of
 the resource takes this shape with one status type. The parameter may be declared nullable: every
 wrapper passes a slot of its own. On a listed status the slot holds a live resource, adopted as any
-create's is (a null handle then reads as "nothing created"). On any other status nothing is adopted
-and the slot's contents are ignored, whatever the create left there. The caller decides what that
+create's is. On any other status nothing is adopted and the slot's contents are ignored, whatever
+the create left there. A listed status with a null handle created nothing either, and every wrapper
+treats it as a failure with that status. Statuses compare unsigned for unsigned results: a `u8`
+status of 200 matches `success=200` even though Java carries it in a `byte`. The caller decides what that
 status means:
 
 - **FFM**: `ApiFFM.Surface.surfaceOpen(binding, factory, onFailure, width, error)` allocates the slot in
-  a confined arena for the call, and on any other status returns `onFailure.failed(status)`, from a
+  a confined arena for the call (the FFM wrappers keep no per-thread scratch to take it from), and on any other status returns `onFailure.failed(status)`, from a
   generated `Surface.Failure<T>` whose `failed` takes the status in its Java carrier (`int` for an
   `i32`, the declared carrier for an `enum=` result): null, a value, or a throw. The caller can read
   the message buffer it lent there.
@@ -340,9 +348,12 @@ status means:
 - **Truffle cells**: as for a handle field, the guest lends an 8-byte buffer for the slot and
   receives a copy; any other status is a guest error that names it.
 
-With one constructor the wrapper is `create`, as for any resource. The [implementer
-trait](#implementing-imports-in-rust) leaves these constructors, their destroy and their handles
-raw. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
+With one constructor the wrapper is `create`, as for any resource. In the [implementer
+trait](#implementing-imports-in-rust) such a constructor returns `Result<Box<Self::R>, Status>` and
+drops the out-parameter: on `Ok` the entry point writes the box into the slot and returns the first
+`success=` value (a null slot, which only a nullable parameter allows, drops the box instead); on
+`Err(status)` it returns that status, debug-asserting that it is not a success value. The destroy
+takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
 
 ## Borrows held by a resource (Truffle cells only)
 

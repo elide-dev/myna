@@ -433,7 +433,14 @@ public final class TruffleCells implements Backend {
                 .append(field)
                 .append(";\n");
             String local = "borrow_" + p.name();
-            borrows.add(local + " = " + field + ".execute(" + argument + ")");
+            // An access=cstring parameter refuses a string with an embedded NUL before lending it.
+            String lentArgument = argument;
+            if (p.access() == Access.CSTRING) {
+              imports.add(RUNTIME + "CStrings");
+              lentArgument =
+                  "CStrings.checked(" + argument + ", " + quotedName + ", " + declared + ", this)";
+            }
+            borrows.add(local + " = " + field + ".execute(" + lentArgument + ")");
             if (writable && !cell.isHeld(p)) writableBorrows.add(local);
             arguments.add(address(ffm, imports, local + ".address()"));
             // Every borrow, held or not, lends the guest's own segment to the downcall: a held

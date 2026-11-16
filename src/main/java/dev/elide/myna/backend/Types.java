@@ -130,6 +130,29 @@ final class Types {
     };
   }
 
+  /**
+   * A status in its Java carrier compared against a declared {@code success=} value: unsigned
+   * results widen unsigned (a {@code u8} status of 200 is 200, not -56), in the carrier the literal
+   * then takes ({@code L} when the comparison is on longs).
+   */
+  static String statusMatches(Scalar type, boolean charUnsigned, String status, long value) {
+    String widened =
+        switch (type) {
+          case U8 -> "Byte.toUnsignedInt(" + status + ")";
+          case CHAR -> charUnsigned ? "Byte.toUnsignedInt(" + status + ")" : status;
+          case U16 -> "Short.toUnsignedInt(" + status + ")";
+          case U32 -> "Integer.toUnsignedLong(" + status + ")";
+          default -> status;
+        };
+    boolean longs =
+        type == Scalar.U32
+            || type == Scalar.I64
+            || type == Scalar.U64
+            || type == Scalar.USIZE
+            || type == Scalar.ISIZE;
+    return widened + " == " + value + (longs ? "L" : "");
+  }
+
   static String ffmCarrier(Type type) {
     return type instanceof Scalar ? java(type) : "MemorySegment";
   }

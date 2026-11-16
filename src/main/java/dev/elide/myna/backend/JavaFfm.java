@@ -484,8 +484,10 @@ public final class JavaFfm implements Backend {
             .append("            java.util.Objects.requireNonNull(factory);\n");
         if (outPointer) {
           var succeeded = new ArrayList<String>();
+          boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
           for (long value : r.success())
-            succeeded.add("status == " + value + (status.equals("long") ? "L" : ""));
+            succeeded.add(
+                Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
           out.append("            java.util.Objects.requireNonNull(onFailure);\n")
               .append("            ")
               .append(status)
@@ -502,15 +504,17 @@ public final class JavaFfm implements Backend {
               .append("            }\n")
               .append("            if (!(")
               .append(String.join(" || ", succeeded))
-              .append(")) return onFailure.failed(status);\n");
+              .append(")) return onFailure.failed(status);\n")
+              // A success that wrote no handle created nothing either.
+              .append("            if (address.address() == 0) return onFailure.failed(status);\n");
         } else
           out.append("            MemorySegment address = binding.")
               .append(create.name())
               .append('(')
               .append(String.join(", ", args))
               .append(");\n");
-        out.append("            if (address.address() == 0) return null;\n")
-            .append("            try {\n")
+        if (!outPointer) out.append("            if (address.address() == 0) return null;\n");
+        out.append("            try {\n")
             .append(
                 "                return java.util.Objects.requireNonNull(factory.adopt(address,"
                     + " binding::")
@@ -655,12 +659,25 @@ public final class JavaFfm implements Backend {
           // NUL-terminated UTF-8 in the call's arena; null is the null pointer where allowed.
           params.add("String " + arg);
           args.add("text" + (index - 1));
+          // An embedded NUL would silently end the string early on the C side: reject it.
+          checks
+              .append("            if (")
+              .append(
+                  p.nullable()
+                      ? arg + " != null && "
+                      : "java.util.Objects.requireNonNull(" + arg + ") != null && ")
+              .append(arg)
+              .append(".indexOf('\\0') >= 0) throw new IllegalArgumentException(\"")
+              .append(f.name())
+              .append(' ')
+              .append(p.name())
+              .append(": embedded NUL in a C string\");\n");
           text.append("                MemorySegment text")
               .append(index - 1)
               .append(" = ")
               .append(p.nullable() ? arg + " == null ? MemorySegment.NULL : " : "")
               .append("empty.allocateFrom(")
-              .append(p.nullable() ? arg : "java.util.Objects.requireNonNull(" + arg + ")")
+              .append(arg)
               .append(");\n");
         } else {
           params.add(Types.ffmCarrier(p.type()) + " " + arg);

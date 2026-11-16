@@ -189,6 +189,9 @@ public final class OwnershipMain {
     verifyNullableBuffers(empty);
     verifyConstructors(empty);
     verifySurfaces();
+    // A C string: NUL-terminated for the call; an embedded NUL is refused.
+    check(NativeApiOwnership.titleLength("h\u00e9llo") == 6);
+    rejects(() -> NativeApiOwnership.titleLength("ab\0cd"));
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
   }
 

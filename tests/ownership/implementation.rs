@@ -34,27 +34,25 @@ fn live() -> Option<Live> {
     LIVE.fetch_add(1, Ordering::SeqCst);
     Some(Live)
 }
-/// A surface stays raw in the trait: a status-plus-out-pointer create writes its own handle.
-struct SurfaceState {
+/// A surface's constructors report a status and write their handle through an out-pointer; the
+/// trait sees `Result<Box<Surface>, SurfaceStatus>` and the entry points fill the slot.
+pub struct Surface {
     width: i64,
     _live: Live,
 }
-fn surface(width: i64, out: *mut *mut seam::Surface, error: Option<&mut [u8]>) -> seam::SurfaceStatus {
+fn surface(width: i64, error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::SurfaceStatus> {
     let fail = |message: &[u8], status| {
         if let Some(error) = error {
             let n = message.len().min(error.len());
             error[..n].copy_from_slice(&message[..n]);
         }
-        status
+        Err(status)
     };
     if width < 0 {
         return fail(b"negative width", seam::SurfaceStatus::NEGATIVE);
     }
     let Some(live) = live() else { return fail(b"failed", seam::SurfaceStatus::FAILED) };
-    let state = Box::into_raw(Box::new(SurfaceState { width, _live: live }));
-    // SAFETY: the out slot is writable, as the descriptor declares.
-    unsafe { out.write(state.cast()) };
-    seam::SurfaceStatus::OK
+    Ok(Box::new(Surface { width, _live: live }))
 }
 fn sum(bytes: &[u8]) -> u64 {
     bytes.iter().map(|&b| u64::from(b)).sum()
@@ -64,6 +62,7 @@ struct Demo;
 impl seam::OwnershipDemoImplementation for Demo {
     type Parsed = Parsed;
     type Ticket = Ticket;
+    type Surface = Surface;
     fn checksum(bytes: &[u8]) -> u64 {
         sum(bytes)
     }
@@ -112,19 +111,17 @@ impl seam::OwnershipDemoImplementation for Demo {
     fn failNext() {
         FAIL.store(true, Ordering::SeqCst);
     }
-    fn surfaceOpen(width: i32, out: *mut *mut seam::Surface, error: Option<&mut [u8]>) -> seam::SurfaceStatus {
-        surface(i64::from(width), out, error)
+    fn surfaceOpen(width: i32, error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::SurfaceStatus> {
+        surface(i64::from(width), error)
     }
-    fn surfaceFrom(source: &[u8], out: *mut *mut seam::Surface, error: Option<&mut [u8]>) -> seam::SurfaceStatus {
-        surface(sum(source) as i64, out, error)
+    fn surfaceFrom(source: &[u8], error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::SurfaceStatus> {
+        surface(sum(source) as i64, error)
     }
-    fn surfaceClose(surface: *mut seam::Surface) {
-        // SAFETY: a surface is a SurfaceState this implementation boxed, released once.
-        drop(unsafe { Box::from_raw(surface.cast::<SurfaceState>()) });
+    fn surfaceClose(surface: Box<Surface>) {
+        drop(surface);
     }
-    fn surfaceWidth(surface: *const seam::Surface) -> i64 {
-        // SAFETY: a live surface this implementation boxed.
-        unsafe { (*surface.cast::<SurfaceState>()).width }
+    fn surfaceWidth(surface: &Surface) -> i64 {
+        surface.width
     }
     fn titleLength(title: &std::ffi::CStr) -> u64 {
         title.to_bytes().len() as u64

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import java.util.*;
@@ -130,8 +131,7 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    // A C string alone gets no Native Image wrapper: it passes as the raw CCharPointer.
-    for (CallBorrows call : CallBorrows.of(m)) if (!call.borrows().isEmpty()) buffers(m, call, out);
+    for (CallBorrows call : CallBorrows.of(m)) buffers(m, call, out);
     return out.append("}\n").toString();
   }
 
@@ -171,8 +171,10 @@ public final class NativeOwnership implements Backend {
     if (m.outPointer(r)) {
       var succeeded = new ArrayList<String>();
       String status = NativeImage.qualifiedCarrier(m, create.returns());
+      boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
       for (long value : r.success())
-        succeeded.add("status == " + value + (status.equals("long") ? "L" : ""));
+        succeeded.add(
+            Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
       out.append(
               "        /** A status outside the success list goes to onFailure, and nothing is"
                   + " adopted. */\n")
@@ -198,7 +200,8 @@ public final class NativeOwnership implements Backend {
           .append(String.join(" || ", succeeded))
           .append(")) return onFailure.failed(status);\n")
           .append("            long address = slot.readLong(0);\n")
-          .append("            if (address == 0) return null;\n")
+          // A success that wrote no handle created nothing either.
+          .append("            if (address == 0) return onFailure.failed(status);\n")
           .append("            return adoptUnsafe(address, factory);\n        }\n");
       return;
     }
@@ -260,6 +263,7 @@ public final class NativeOwnership implements Backend {
     var arrayParams = new ArrayList<String>();
     var arguments = new ArrayList<String>();
     var buffers = new ArrayList<Buffer>();
+    var texts = new ArrayList<Parameter>();
     int index = 0;
     for (Parameter p : f.parameters()) {
       String name = "arg" + index++;
@@ -272,12 +276,46 @@ public final class NativeOwnership implements Backend {
         arguments.add("pointer" + call.suffix(buffer));
       } else if (length != null)
         arguments.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
-      else {
+      else if (CallBorrows.cstring(p)) {
+        // NUL-terminated in unmanaged memory for the call: a String in, a CCharPointer out.
+        nativeParams.add("String " + name);
+        arrayParams.add("String " + name);
+        arguments.add("text" + (index - 1) + ".get()");
+        texts.add(p);
+      } else {
         String carrier = NativeImage.qualifiedCarrier(m, p.type());
         nativeParams.add(carrier + " " + name);
         arrayParams.add(carrier + " " + name);
         arguments.add(name);
       }
+    }
+    // Each C string is converted first and freed last, around the whole call. Plain try/finally, as
+    // for the buffers.
+    var textOpen = new StringBuilder();
+    var textClose = new StringBuilder();
+    for (Parameter p : texts) {
+      String position = String.valueOf(f.parameters().indexOf(p));
+      String arg = "arg" + position;
+      // An embedded NUL would silently end the string early on the C side: reject it.
+      textOpen
+          .append("        if (")
+          .append(
+              p.nullable()
+                  ? arg + " != null && "
+                  : "java.util.Objects.requireNonNull(" + arg + ") != null && ")
+          .append(arg)
+          .append(".indexOf('\\0') >= 0)\n            throw new IllegalArgumentException(\"")
+          .append(f.name())
+          .append(' ')
+          .append(p.name())
+          .append(": embedded NUL in a C string\");\n")
+          .append("        org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder text")
+          .append(position)
+          .append(" =\n            org.graalvm.nativeimage.c.type.CTypeConversion.toCString(")
+          .append(arg)
+          .append(");\n        try {\n");
+      textClose.insert(
+          0, "        } finally {\n            text" + position + ".close();\n        }\n");
     }
     String invoke =
         (f.returns() == Scalar.VOID ? "" : "return ")
@@ -294,7 +332,8 @@ public final class NativeOwnership implements Backend {
         .append(f.name())
         .append('(')
         .append(String.join(", ", nativeParams))
-        .append(") {\n");
+        .append(") {\n")
+        .append(textOpen);
     String pad = "        ";
     for (Buffer b : buffers) {
       String s = b.suffix();
@@ -378,8 +417,10 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("}\n");
     }
-    out.append("    }\n")
-        .append(
+    out.append(textClose).append("    }\n");
+    // A call with C strings and no buffers has no array form.
+    if (buffers.isEmpty()) return;
+    out.append(
             "    /** Array convenience path; caller prevents conflicting concurrent array access."
                 + " */\n")
         .append("    public static ")
@@ -388,7 +429,8 @@ public final class NativeOwnership implements Backend {
         .append(f.name())
         .append('(')
         .append(String.join(", ", arrayParams))
-        .append(") {\n");
+        .append(") {\n")
+        .append(textOpen);
     // Plain try/finally throughout: try-with-resources compiles to Throwable.addSuppressed, which
     // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
     // A pinned array's data starts on an 8-byte boundary, so a stricter align fact is met by a
@@ -432,7 +474,9 @@ public final class NativeOwnership implements Backend {
                   buffers.getFirst().borrow(), "pointer.rawValue()", "length", "            "))
           .append("            ")
           .append(invoke)
-          .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
+          .append("\n        } finally {\n            pin.close();\n        }\n")
+          .append(textClose)
+          .append("    }\n");
       return;
     }
     // Several arrays: every length is read first, then each non-empty array is pinned in turn; an
@@ -581,6 +625,6 @@ public final class NativeOwnership implements Backend {
             .append(".close();\n");
       out.append(pad).append("}\n");
     }
-    out.append("    }\n");
+    out.append(textClose).append("    }\n");
   }
 }

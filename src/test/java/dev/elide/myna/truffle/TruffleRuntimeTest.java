@@ -560,6 +560,26 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void cStringsRefuseAnEmbeddedNulAndPassEverythingElse() {
+    assertEquals("ok", CStrings.checked("ok", "f", "text", null));
+    Object bytes = new HeapBytes(new byte[] {0}, false);
+    assertSame(bytes, CStrings.checked(bytes, "f", "text", null));
+    assertNull(CStrings.checked(null, "f", "text", null));
+    var guest =
+        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+            "fine", com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_8);
+    assertSame(guest, CStrings.checked(guest, "f", "text", null));
+    assertThrows(NativeCellException.class, () -> CStrings.checked("a\0b", "f", "text", null));
+    var embedded =
+        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+            "a\0b", com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_8);
+    assertTrue(
+        assertThrows(NativeCellException.class, () -> CStrings.checked(embedded, "f", "text", null))
+            .getMessage()
+            .contains("text"));
+  }
+
+  @Test
   void closeAfterFailureDestroysWhatACreateMadeAndKeepsItsFailure() {
     var failure = NativeCellException.of(null, "write-back failed");
     // Nothing made: the failure passes through untouched.

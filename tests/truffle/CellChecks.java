@@ -66,6 +66,11 @@ public final class CellChecks {
     // A string in another encoding, as Python passes one, and one made from a Java string.
     check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
+    // access=cstring: the same lending, and a string with an embedded NUL is refused.
+    check(call(cells, "titleLength", "h\u00e9llo").equals(6L), "titleLength of a host string");
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "titleLength of a guest string");
+    rejects(cells, "titleLength", "ab\0cd");
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("ab\0cd", TruffleString.Encoding.UTF_8));
   }
   /**
    * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,

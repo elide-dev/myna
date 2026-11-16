@@ -17,6 +17,7 @@ int64_t cells_peek(const int64_t *cell) { return *cell; }
 void cells_poke(int64_t *cell, int64_t value) { *cell = value; }
 size_t cells_raw_length(void *text) { return text ? strlen((const char *)text) : 0; }
 size_t cells_strlen(const char *text) { return strlen(text); }
+size_t cells_title_length(const uint8_t *text) { return strlen((const char *)text); }
 uint64_t cells_checksum(const uint8_t *bytes, uint64_t count) {
   uint64_t sum = 0;
   for (uint64_t i = 0; i < count; i++) sum += bytes[i];
