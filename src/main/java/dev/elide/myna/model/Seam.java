@@ -78,7 +78,9 @@ public final class Seam {
     READ,
     WRITE,
     READ_WRITE,
-    UNSPECIFIED
+    UNSPECIFIED,
+    /** A read-only NUL-terminated string with no length: read access, up to its terminator. */
+    CSTRING
   }
 
   public enum Provenance {
@@ -590,6 +592,7 @@ public final class Seam {
     return parameter.type() instanceof Pointer p
         && (p.pointee() == Scalar.U8 || p.pointee() == Scalar.I8 || p.pointee() == Scalar.CHAR)
         && (parameter.access() == Access.READ
+            || parameter.access() == Access.CSTRING
             || parameter.access() == Access.READ_WRITE
             || parameter.access() == Access.WRITE);
   }
@@ -626,7 +629,48 @@ public final class Seam {
       List<Constant> constants,
       List<EnumGroup> enums,
       List<FlagSet> flagSets,
-      boolean abiDeclared) {
+      boolean abiDeclared,
+      boolean rustImplementation) {
+    /** A module without the opt-in Rust implementer trait ({@code rust_implementation=trait}). */
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets,
+        boolean abiDeclared) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          abiDeclared,
+          false);
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -872,7 +916,20 @@ public final class Seam {
           constants,
           enums,
           flagSets,
-          abiDeclared);
+          abiDeclared,
+          rustImplementation);
+    }
+
+    /**
+     * The Rust trait an implementation of this module's imports implements, with {@code
+     * rust_implementation=trait}: the module name in upper camel case, then {@code Implementation}.
+     */
+    public String rustImplementationTrait() {
+      var out = new StringBuilder();
+      for (String part : name.split("[^A-Za-z0-9]+"))
+        if (!part.isEmpty())
+          out.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+      return out.append("Implementation").toString();
     }
 
     /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
@@ -933,6 +990,29 @@ public final class Seam {
      */
     public List<Resource> returnedResources() {
       return resources.stream().filter(r -> r.handle() == null).toList();
+    }
+
+    /**
+     * Whether a resource's constructors report a status and write its pointer through a {@code
+     * ptr<ptr<R>>} out-parameter ({@code handle=PARAMETER}), rather than initializing a struct in
+     * place: the usual C shape for "status plus handle".
+     */
+    public boolean outPointer(Resource r) {
+      if (r.handle() == null || r.handleField() != null) return false;
+      Type slot = new Pointer(new Pointer(new Named(r.name())));
+      for (Function f : functions)
+        if (r.createdBy(f.name()))
+          for (Parameter p : f.parameters())
+            if (p.name().equals(r.handleParameter())) return p.type().equals(slot);
+      return false;
+    }
+
+    /**
+     * The resources the Rust, Native Image and FFM ownership APIs own: those whose constructors
+     * return their pointer, and those that write it through an out-parameter.
+     */
+    public List<Resource> ownedResources() {
+      return resources.stream().filter(r -> r.handle() == null || outPointer(r)).toList();
     }
 
     /**

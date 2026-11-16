@@ -46,6 +46,13 @@ end
 import rawLength symbol=cells_raw_length return=usize error=no_failure truffle_raw_pointers=true@explicit_contract
   param text type=ptr<void>
 end
+# access=cstring: a guest string lent NUL-terminated, refused with an embedded NUL.
+import titleLength symbol=cells_title_length return=usize error=no_failure nounwind=true@explicit_contract
+  param text type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
+import titleOrEmpty symbol=cells_title_or_empty return=usize error=no_failure nounwind=true@explicit_contract
+  param text type=ptr<u8> nullable=true ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
 import strlen symbol=cells_strlen return=usize error=no_failure
   param text type=ptr<char> nullable=false ownership=borrowed access=read nonnull=true@explicit_contract readonly=true@explicit_contract
 end
@@ -180,6 +187,24 @@ import parsedRelease symbol=cells_parsed_release return=void error=no_failure no
 end
 import parsedValue symbol=cells_parsed_value return=u64 error=no_failure
   param parsed type=ptr<Parsed> nullable=false ownership=borrowed access=read
+end
+# A status-plus-out-pointer create: the cell writes the handle into a slot the runtime owns, copies
+# it to the guest's 8-byte buffer, and adopts it on a success status; the error buffer's length is a
+# size_t.
+opaque Window
+resource Window representation=native threading=confined create=windowOpen destroy=windowClose handle=out success=0
+borrow windowOpen error length=capacity lifetime=call
+import windowOpen symbol=cells_window_open return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i64
+  param out type=ptr<ptr<Window>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+import windowClose symbol=cells_window_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param window type=ptr<Window> nullable=false ownership=transferred_to_callee access=read_write
+end
+import windowWidth symbol=cells_window_width return=i64 error=no_failure
+  param window type=ptr<Window> nullable=false ownership=borrowed access=read
 end
 opaque Layout
 struct LayoutResult size=24 align=8

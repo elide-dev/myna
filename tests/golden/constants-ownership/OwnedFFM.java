@@ -111,6 +111,26 @@ public final class OwnedFFM {
             this.ticketCreate_address = lookup.find("owned_ticket_create").orElse(null);
             this.ticketDestroy_address = lookup.find("owned_ticket_destroy").orElse(null);
         }
+        /** The resolved address of owned_check, valid while the library arena is open. */
+        public MemorySegment check_address() {
+            if (this.check_address == null) throw new UnsatisfiedLinkError("owned_check");
+            return this.check_address;
+        }
+        /** The resolved address of owned_permissions, valid while the library arena is open. */
+        public MemorySegment permissions_address() {
+            if (this.permissions_address == null) throw new UnsatisfiedLinkError("owned_permissions");
+            return this.permissions_address;
+        }
+        /** The resolved address of owned_ticket_create, valid while the library arena is open. */
+        public MemorySegment ticketCreate_address() {
+            if (this.ticketCreate_address == null) throw new UnsatisfiedLinkError("owned_ticket_create");
+            return this.ticketCreate_address;
+        }
+        /** The resolved address of owned_ticket_destroy, valid while the library arena is open. */
+        public MemorySegment ticketDestroy_address() {
+            if (this.ticketDestroy_address == null) throw new UnsatisfiedLinkError("owned_ticket_destroy");
+            return this.ticketDestroy_address;
+        }
         public int check(MemorySegment bytes, long count, int mode) throws Throwable {
             if (this.check_address == null) throw new UnsatisfiedLinkError("owned_check");
             return (int) OwnedFFM.check_Downcall.HANDLE.invokeExact(this.check_address, bytes, count, mode);
