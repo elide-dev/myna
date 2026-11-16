@@ -522,10 +522,7 @@ public final class JavaFfm implements Backend {
               .append('(')
               .append(String.join(", ", args))
               .append(");\n")
-              // A struct resource is read sized to its layout; an opaque one stays an address.
-              .append("                address = slot.get(")
-              .append(layouts.value(new Pointer(new Named(r.name()))))
-              .append(", 0);\n")
+              .append(slotRead(layouts, r, String.join(" || ", succeeded)))
               .append("            }\n")
               .append("            if (!(")
               .append(String.join(" || ", succeeded))
@@ -558,6 +555,23 @@ public final class JavaFfm implements Backend {
       }
       out.append("    }\n");
     }
+  }
+
+  /**
+   * The read of an out-pointer constructor's slot. An opaque resource is a plain address. A struct
+   * resource is read sized to its layout, which rejects an address misaligned for the struct, so it
+   * is read only on a success status: a failed constructor may leave junk in the slot, and that
+   * status must still reach the caller's {@code Failure}.
+   */
+  private static String slotRead(StructLayouts layouts, Resource r, String succeeded) {
+    String layout = layouts.value(new Pointer(new Named(r.name())));
+    if (layout.equals("ValueLayout.ADDRESS"))
+      return "                address = slot.get(ValueLayout.ADDRESS, 0);\n";
+    return "                address = ("
+        + succeeded
+        + ") ? slot.get("
+        + layout
+        + ", 0) : MemorySegment.NULL;\n";
   }
 
   /** Instance addresses retain their lookup scope; only the address-free adapters are static. */

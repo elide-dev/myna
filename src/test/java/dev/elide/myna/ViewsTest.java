@@ -571,7 +571,11 @@ class ViewsTest {
                         "struct Surface size=8 align=8\n  field id type=i64 offset=0\nend\n")),
                 true)
             .get("ApiFFM.java");
-    assertTrue(struct.contains("address = slot.get(Surface_POINTER, 0);\n"), struct);
+    // Read only on success: junk a failed constructor leaves need not be aligned.
+    assertTrue(
+        struct.contains(
+            "address = (status == 0) ? slot.get(Surface_POINTER, 0) : MemorySegment.NULL;\n"),
+        struct);
     assertTrue(
         struct.contains(
             "public static final AddressLayout Surface_POINTER ="

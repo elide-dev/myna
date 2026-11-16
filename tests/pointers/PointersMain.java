@@ -79,6 +79,22 @@ public final class PointersMain {
       MemorySegment none = binding.none();
       check(none.address() == 0 && none.byteSize() == Node_LAYOUT.byteSize(), "null return");
     }
+    try (Arena library = Arena.ofConfined()) {
+      var binding = new PointersFFM.LibraryBinding(Path.of(args[0]), library);
+      // An out-pointer constructor hands its factory a struct resource sized to the struct.
+      long width = PointersFFM.Box.<Long>create(binding, (address, destroy, thread) -> {
+        check(address.byteSize() == Box_LAYOUT.byteSize(), "sized resource");
+        long value = address.get(ValueLayout.JAVA_LONG, Box_width_OFFSET);
+        destroy.destroy(address);
+        return value;
+      }, status -> { throw new AssertionError("status " + status); }, 7L);
+      check(width == 7L, "resource width");
+      // A failed one leaves junk misaligned for a Box in its slot: the status still reaches onFailure.
+      long failed = PointersFFM.Box.<Long>create(binding, (address, destroy, thread) -> {
+        throw new AssertionError("adopted junk");
+      }, status -> (long) status, -1L);
+      check(failed == 3L, "failure status");
+    }
     System.out.println("FFM struct pointers passed");
   }
 }
