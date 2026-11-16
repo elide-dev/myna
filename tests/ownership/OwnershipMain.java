@@ -212,6 +212,11 @@ public final class OwnershipMain {
       throw new AssertionError("a failed create was adopted");
     }, status -> status + ": " + new String(message, 0, 14, java.nio.charset.StandardCharsets.US_ASCII), -1, message);
     check(why.equals("3: negative width"));
+    // A C string beside a call buffer on one constructor.
+    Owner titled = NativeApiOwnership.Surface.surfaceTitled(Owner::new, refuse, "abc", message);
+    check(NativeApi.surfaceWidth(WordFactory.pointer(titled.address())) == 3);
+    titled.registration.clean();
+    rejects(() -> NativeApiOwnership.Surface.surfaceTitled(Owner::new, refuse, "ab\0c", message));
     NativeApi.failNext();
     check(NativeApiOwnership.Surface.surfaceFrom(Owner::new, status -> null, new byte[] {1}, (byte[]) null) == null);
     check(NativeApi.liveCount() == 2);

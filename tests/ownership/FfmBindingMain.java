@@ -188,6 +188,11 @@ public final class FfmBindingMain {
           throw new AssertionError("a failed create was adopted");
         }, status -> status + ": " + message.getString(0), -1, message);
         if (!why.equals("3: negative width")) throw new AssertionError(why);
+        // A C string beside a call buffer on one constructor.
+        var titled = NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "abcd", message);
+        if (binding.surfaceWidth(widths.get(2)) != 4) throw new AssertionError("titled width");
+        titled.run();
+        rejects(IllegalArgumentException.class, () -> NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "ab\0cd", message));
         binding.failNext();
         if (NativeApiFFM.Surface.surfaceFrom(binding, adopt, status -> null, source, null) != null)
           throw new AssertionError("failed surfaceFrom");

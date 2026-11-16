@@ -4,43 +4,76 @@ package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.strings.AbstractTruffleString;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import org.graalvm.nativeimage.ImageInfo;
 
 /**
- * The check an {@code access=cstring} parameter's cell makes before lending a string: one with an
- * embedded NUL would end early on the C side, so it is a guest error. Only strings are scanned,
- * behind a boundary; any other value passes through untouched, and cells without such a parameter
- * never call this.
+ * What an {@code access=cstring} parameter's cell does around its borrow. It takes strings only: a
+ * Java {@code String}, a {@code TruffleString}, or any interop string, converted with {@code
+ * asTruffleString}. Once the string is lent NUL-terminated, the encoded bytes are scanned for an
+ * embedded NUL, which would end the string early on the C side: no Java string is made, and the
+ * scan reads the bytes the borrow just wrote.
  */
 public final class CStrings {
   private CStrings() {}
 
-  /** Returns {@code value}, or throws if it is a string with an embedded NUL. */
-  public static Object checked(Object value, String function, String parameter, Node node) {
-    if (value instanceof AbstractTruffleString text) {
-      if (hasNul(text)) throw embeddedNul(function, parameter, value, node);
-    } else if (value instanceof String text) {
-      if (hasNul(text)) throw embeddedNul(function, parameter, value, node);
+  private static final boolean IMAGE = ImageInfo.inImageCode();
+
+  /**
+   * Returns {@code value} as a string the coercion lends, or throws a guest error for anything that
+   * is not a string. A nullable parameter also takes interop {@code null}.
+   */
+  public static Object strings(
+      Object value, boolean nullable, String function, String parameter, Node node) {
+    if (value instanceof AbstractTruffleString || value instanceof String) return value;
+    return foreign(value, nullable, function, parameter, node);
+  }
+
+  @TruffleBoundary
+  private static Object foreign(
+      Object value, boolean nullable, String function, String parameter, Node node) {
+    if (value == null) {
+      if (nullable) return null;
+    } else {
+      InteropLibrary interop = InteropLibrary.getUncached(value);
+      if (nullable && interop.isNull(value)) return value;
+      if (interop.isString(value))
+        try {
+          return interop.asTruffleString(value);
+        } catch (UnsupportedMessageException e) {
+          // Not a string after all: reported below.
+        }
     }
-    return value;
+    throw NativeCellException.type(function, parameter, "string", value, node);
   }
 
-  @TruffleBoundary
-  private static boolean hasNul(AbstractTruffleString text) {
-    return text.toJavaStringUncached().indexOf('\0') >= 0;
+  /** Refuses a lent string whose encoded bytes hold a NUL before its terminator. */
+  public static void checkLent(Borrow borrow, String function, String parameter, Node node) {
+    long address = borrow.address();
+    long length = borrow.length();
+    if (address == 0 || length == 0) return;
+    if (IMAGE) {
+      for (long i = 0; i < length; i++)
+        if (ImageMemory.getByte(address, i) == 0) throw embeddedNul(function, parameter, node);
+      return;
+    }
+    MemorySegment bytes = MemorySegment.ofAddress(address).reinterpret(length);
+    for (long i = 0; i < length; i++)
+      if (bytes.get(ValueLayout.JAVA_BYTE, i) == 0) throw embeddedNul(function, parameter, node);
   }
 
-  /** Behind a boundary: String.indexOf is blocklisted for runtime compilation. */
-  @TruffleBoundary
-  private static boolean hasNul(String text) {
-    return text.indexOf('\0') >= 0;
-  }
-
-  private static NativeCellException embeddedNul(
-      String function, String parameter, Object value, Node node) {
+  private static NativeCellException embeddedNul(String function, String parameter, Node node) {
     CompilerDirectives.transferToInterpreter();
-    return NativeCellException.type(
-        function, parameter, "C string without an embedded NUL", value, node);
+    return message(function, parameter, node);
+  }
+
+  @TruffleBoundary
+  private static NativeCellException message(String function, String parameter, Node node) {
+    return NativeCellException.of(node, function, " ", parameter, ": embedded NUL in a C string");
   }
 }

@@ -75,6 +75,8 @@ the same output as before.
 - `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
   Rust wrappers and implementer trait, a `String` overload in FFM, a guest string in Truffle cells
   (see [C strings](../ownership.md#c-strings)).
+- An import may no longer be named `NAME_address` with no parameters beside an import `NAME`: it
+  would collide with that binding's accessor.
 - `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
   from the same lookup, for symbols handed to native code rather than called.
 

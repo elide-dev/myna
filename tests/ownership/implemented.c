@@ -34,6 +34,10 @@ static int violate(const char *which) {
   } else if (strcmp(which, "destroy") == 0) {
     ticket_destroy(NULL);
     puts("destroy returned");
+  } else if (strcmp(which, "err-success") == 0) {
+    // The implementation returns Err with a success status: no handle to report it with.
+    struct Surface *slot = (struct Surface *)0xdeadbeef;
+    printf("status %d\n", surface_open(-7, &slot, NULL, 0));
   } else if (strcmp(which, "query") == 0) {
     printf("value %llu\n", (unsigned long long)parsed_value(NULL));
   } else {
@@ -100,6 +104,8 @@ int main(int argc, char **argv) {
   CHECK(ticket_live() == 0);
   uint8_t pair[2] = {2, 3};
   CHECK(surface_from(pair, 2, &surface, NULL, 0) == 0 && surface_width(surface) == 5);
+  surface_close(surface);
+  CHECK(surface_titled((const uint8_t *)"abcd", &surface, NULL, 0) == 0 && surface_width(surface) == 4);
   surface_close(surface);
   CHECK(title_length((const uint8_t *)"hello") == 5);
   CHECK(ticket_live() == 0);

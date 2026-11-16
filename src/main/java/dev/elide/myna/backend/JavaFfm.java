@@ -469,8 +469,11 @@ public final class JavaFfm implements Backend {
             args.add("slot");
             continue;
           }
+          // A C string is the String of the binding's wrapper, which converts it for the call.
           params.add(
-              (buffers && call.buffer(p) != null ? "MemorySegment" : Types.ffmCarrier(p.type()))
+              (buffers && call.buffer(p) != null
+                      ? "MemorySegment"
+                      : CallBorrows.cstring(p) ? "String" : Types.ffmCarrier(p.type()))
                   + " "
                   + arg);
           args.add(arg);
@@ -787,11 +790,13 @@ public final class JavaFfm implements Backend {
             + String.join(", ", args)
             + ");\n";
     out.append(
-            several
-                ? "        /** Borrows each entire native segment for this call; lengths are in"
-                    + " bytes. */\n"
-                : "        /** Borrows the entire native segment for this call; length is in bytes."
-                    + " */\n")
+            call.borrows().isEmpty()
+                ? "        /** Lends each string NUL-terminated as UTF-8 for this call. */\n"
+                : several
+                    ? "        /** Borrows each entire native segment for this call; lengths are in"
+                        + " bytes. */\n"
+                    : "        /** Borrows the entire native segment for this call; length is in"
+                        + " bytes. */\n")
         .append("        public ")
         .append(Types.ffmCarrier(f.returns()))
         .append(' ')

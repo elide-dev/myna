@@ -88,7 +88,7 @@ enum SurfaceStatus type=i32
   value failed = 4
 end
 opaque Surface
-resource Surface representation=native threading=shared create=surfaceOpen,surfaceFrom destroy=surfaceClose handle=out success=0
+resource Surface representation=native threading=shared create=surfaceOpen,surfaceFrom,surfaceTitled destroy=surfaceClose handle=out success=0
 borrow surfaceOpen error length=capacity lifetime=call
 borrow surfaceFrom source length=length lifetime=call
 borrow surfaceFrom error length=capacity lifetime=call
@@ -101,6 +101,14 @@ end
 import surfaceFrom symbol=surface_from return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param source type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param length type=u64
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+# A constructor with a C string beside its call buffer: the title's length is the width.
+borrow surfaceTitled error length=capacity lifetime=call
+import surfaceTitled symbol=surface_titled return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
   param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
   param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
   param capacity type=usize

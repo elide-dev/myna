@@ -249,6 +249,10 @@ public final class CellsMain {
         allocates("strlen of an ASCII guest string", new CellApiTruffle.strlen_Cell(), 0, 11, CellChecks.guest("hello world"));
         allocates("strlen of a Latin-1 guest string", new CellApiTruffle.strlen_Cell(), 0, 13, CellChecks.guest("h\u00e9llo w\u00f6rld"));
         allocates("strlen of a wide guest string", new CellApiTruffle.strlen_Cell(), 0, 21, CellChecks.guest("\u3053\u3093\u306b\u3061\u306f\u4e16\u754c"));
+        // An access=cstring parameter scans the bytes it lent for a NUL: still no allocation.
+        allocates("titleLength of an ASCII guest string", new CellApiTruffle.titleLength_Cell(), 0, 11, CellChecks.guest("hello world"));
+        allocates("titleLength of a wide guest string", new CellApiTruffle.titleLength_Cell(), 0, 21, CellChecks.guest("\u3053\u3093\u306b\u3061\u306f\u4e16\u754c"));
+        allocates("titleLength of a string", new CellApiTruffle.titleLength_Cell(), 0, 11, "hello world");
         allocates("checksum of a wide guest string", new CellApiTruffle.checksum_Cell(), 0, 3 * 0xe2 + 3 * 0x82 + 3 * 0xac, CellChecks.guest("\u20ac\u20ac\u20ac"));
         // A truffle_buffer parameter pins a large heap array (the pin is the only allocation) and
         // copies a small one without a terminator.

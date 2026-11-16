@@ -149,14 +149,16 @@ end
                 # Contract violations: debug builds abort on each; release builds avoid undefined
                 # behavior, and abort only where no result is safe to make up.
                 for violation, released in (("length", "checksum 0"), ("null-buffer", "checksum 0"),
-                                            ("destroy", "destroy returned"), ("query", None)):
+                                            ("destroy", "destroy returned"), ("query", None),
+                                            ("err-success", None)):
                     result = run(app, violation, ok=False)
                     if name == "release" and released is not None:
                         self.assertEqual(result.returncode, 0, (violation, result.stderr))
                         self.assertIn(released, result.stdout)
                     else:
                         self.assertNotEqual(result.returncode, 0, (name, violation, result.stdout))
-                        self.assertIn("panic in a function that cannot unwind", result.stderr)
+                        # Either form of the abort a panic in an extern "C" function makes.
+                        self.assertRegex(result.stderr, "cannot unwind|aborting")
             # A shared resource is used and destroyed from any thread, so its type must be Send + Sync.
             local = work / "local.rs"
             local.write_text((ROOT / "tests/ownership/implementation.rs").read_text()

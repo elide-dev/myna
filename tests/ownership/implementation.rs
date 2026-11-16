@@ -48,6 +48,10 @@ fn surface(width: i64, error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::S
         }
         Err(status)
     };
+    // A canary for the contract violation the entry point must abort on: Err with a success status.
+    if width == -7 {
+        return Err(seam::SurfaceStatus::OK);
+    }
     if width < 0 {
         return fail(b"negative width", seam::SurfaceStatus::NEGATIVE);
     }
@@ -116,6 +120,9 @@ impl seam::OwnershipDemoImplementation for Demo {
     }
     fn surfaceFrom(source: &[u8], error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::SurfaceStatus> {
         surface(sum(source) as i64, error)
+    }
+    fn surfaceTitled(title: &std::ffi::CStr, error: Option<&mut [u8]>) -> Result<Box<Surface>, seam::SurfaceStatus> {
+        surface(title.to_bytes().len() as i64, error)
     }
     fn surfaceClose(surface: Box<Surface>) {
         drop(surface);

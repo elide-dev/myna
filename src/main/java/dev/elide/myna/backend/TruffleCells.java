@@ -378,6 +378,8 @@ public final class TruffleCells implements Backend {
     var borrows = new ArrayList<String>();
     // The call borrows whose release writes a copy back, which can fail after the call returned.
     var writableBorrows = new HashSet<String>();
+    // The NUL check of each C string's borrow, by borrow local.
+    var stringChecks = new HashMap<String, String>();
     // The borrows a successful create hands to its resource, which ends them once destroyed.
     var held = new ArrayList<String>();
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
@@ -436,9 +438,21 @@ public final class TruffleCells implements Backend {
             // An access=cstring parameter refuses a string with an embedded NUL before lending it.
             String lentArgument = argument;
             if (p.access() == Access.CSTRING) {
+              // Strings only; the lent bytes are then scanned for an embedded NUL.
               imports.add(RUNTIME + "CStrings");
               lentArgument =
-                  "CStrings.checked(" + argument + ", " + quotedName + ", " + declared + ", this)";
+                  "CStrings.strings("
+                      + argument
+                      + ", "
+                      + p.nullable()
+                      + ", "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this)";
+              stringChecks.put(
+                  local,
+                  "CStrings.checkLent(" + local + ", " + quotedName + ", " + declared + ", this);");
             }
             borrows.add(local + " = " + field + ".execute(" + lentArgument + ")");
             if (writable && !cell.isHeld(p)) writableBorrows.add(local);
@@ -763,7 +777,11 @@ public final class TruffleCells implements Backend {
         // borrow outlives the call, so the resource must keep a borrow of it and the call cannot
         // go without one: skip the fast path whenever the create has any. Its segment still
         // reaches the downcall through scoped.
-        if (held.isEmpty() && segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
+        // A C string is checked on the borrowed path only: no fast path skips it.
+        if (held.isEmpty()
+            && f.parameters().stream().noneMatch(x -> x.access() == Access.CSTRING)
+            && segments.size() > 1
+            && segments.size() <= MAX_PATTERN_BUFFERS)
           unborrowedCall =
               "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
       }
@@ -1016,6 +1034,8 @@ public final class TruffleCells implements Backend {
       callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
+      String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));
+      if (check != null) callBlock.append(indent).append(check).append('\n');
     }
     for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');

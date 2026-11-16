@@ -218,7 +218,10 @@ final class RustOwnership {
         m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
     // A held borrow outlives the call, which only a Truffle cell can express.
     if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) return;
-    boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
+    // A constructor with call buffers or C strings calls the import's wrapper, which lends them.
+    boolean buffers =
+        m.callBorrows().stream().anyMatch(b -> b.function().equals(name))
+            || create.parameters().stream().anyMatch(CallBorrows::cstring);
     CallBorrows call = CallBorrows.of(m, create);
     boolean outPointer = m.outPointer(r);
     var parameters = new ArrayList<String>();
@@ -232,7 +235,10 @@ final class RustOwnership {
       }
       BufferBorrow buffer = buffers ? call.buffer(p) : null;
       arguments.add(p.name());
-      if (buffer == null)
+      if (CallBorrows.cstring(p))
+        parameters.add(
+            p.name() + ": " + (p.nullable() ? "Option<&::core::ffi::CStr>" : "&::core::ffi::CStr"));
+      else if (buffer == null)
         // Declared types live in the parent module; scalars are spelled the same either way.
         parameters.add(p.name() + ": " + Types.rust(p, "super::"));
       else {
@@ -247,6 +253,7 @@ final class RustOwnership {
             .anyMatch(p ->
                 p.type() instanceof Pointer
                     && (!buffers || call.buffer(p) == null)
+                    && !CallBorrows.cstring(p)
                     && !(outPointer && p.name().equals(r.handleParameter())));
     if (outPointer) {
       // Status plus out-pointer: Err carries any status outside the success list, with nothing

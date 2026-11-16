@@ -197,16 +197,19 @@ be no borrow's buffer or length. The raw bindings keep their pointer carriers (`
 - **FFM**: a `String` overload on `LibraryBinding`, which writes NUL-terminated UTF-8 into the
   call's confined arena (null is the null pointer when the parameter is nullable, and a
   `NullPointerException` otherwise).
-- **Truffle cells**: a guest string or bytes, lent NUL-terminated and read-only, as any C string
-  parameter of a cell is.
+- **Truffle cells**: strings only: a Java `String`, a `TruffleString`, or any interop string
+  (converted with `asTruffleString`), lent NUL-terminated and read-only. Bytes, pointers and anything
+  else are a guest error naming the function and parameter.
 - **Native Image**: a `String` overload in the ownership class, converted with
-  `CTypeConversion.toCString` for the call and freed after it.
+  `CTypeConversion.toCString` for the call and freed after it. That conversion uses the image's
+  default charset, UTF-8 unless the image was built with another `file.encoding`; FFM and Truffle
+  always encode UTF-8.
 
 A Java or guest string with an embedded NUL would end early on the C side, so every Java and
 Truffle wrapper refuses one before copying it: FFM and Native Image throw
 `IllegalArgumentException` naming the function and parameter, and a Truffle cell throws its guest
-error (a nullable argument that is null is not checked). A Rust `&CStr` cannot contain one. An
-`access=cstring` parameter takes no `align` or `truffle_buffer` fact.
+error after scanning the bytes it lent, with no Java string made (a nullable argument that is null is not checked). A Rust `&CStr` cannot contain one. An
+`access=cstring` parameter takes no `align`, `dereferenceable` or `truffle_buffer` fact, and its import passes only scalars and pointers beside it. In the implementer trait, `Err` with a success status from an out-pointer constructor aborts in every build: the caller would own whatever its slot held.
 
 ### Nullable buffers
 
@@ -352,7 +355,7 @@ With one constructor the wrapper is `create`, as for any resource. In the [imple
 trait](#implementing-imports-in-rust) such a constructor returns `Result<Box<Self::R>, Status>` and
 drops the out-parameter: on `Ok` the entry point writes the box into the slot and returns the first
 `success=` value (a null slot, which only a nullable parameter allows, drops the box instead); on
-`Err(status)` it returns that status, debug-asserting that it is not a success value. The destroy
+`Err(status)` it returns that status, aborting in every build if it is a success value. The destroy
 takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
 
 ## Borrows held by a resource (Truffle cells only)

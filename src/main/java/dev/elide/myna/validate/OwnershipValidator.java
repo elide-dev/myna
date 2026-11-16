@@ -60,10 +60,13 @@ final class OwnershipValidator {
     if (m.rustImplementation()) rustImplementation(m);
     // Each FFM binding has a NAME_address() accessor beside the NAME(...) call.
     var importNames = new HashSet<String>();
-    m.functions().forEach(f -> importNames.add(f.name()));
+    m.functions().stream()
+        .filter(f -> f.direction() == Direction.IMPORT)
+        .forEach(f -> importNames.add(f.name()));
     for (Function f : m.functions())
       require(
-          !importNames.contains(f.name() + "_address")
+          f.direction() != Direction.IMPORT
+              || !importNames.contains(f.name() + "_address")
               || m.functions().stream()
                   .filter(g -> g.name().equals(f.name() + "_address"))
                   .allMatch(g -> !g.abiParameters().isEmpty()),
@@ -214,8 +217,18 @@ final class OwnershipValidator {
             approved(p.facts(), "nocapture") && approved(p.facts(), "readonly"),
             "access=cstring requires approved nocapture=true and readonly=true: " + text);
         require(
-            !p.facts().containsKey("align") && !p.facts().containsKey("truffle_buffer"),
-            "access=cstring takes no align or truffle_buffer fact: " + text);
+            !p.facts().containsKey("align")
+                && !p.facts().containsKey("truffle_buffer")
+                && !p.facts().containsKey("dereferenceable"),
+            "access=cstring takes no align, dereferenceable or truffle_buffer fact: " + text);
+        // Its wrappers pass every other parameter through, as call buffer wrappers do.
+        for (Parameter other : f.parameters())
+          require(
+              other.type() instanceof Scalar || other.type() instanceof Pointer,
+              "C string wrappers pass only scalars and pointers beside their strings: "
+                  + f.name()
+                  + " "
+                  + other.name());
         require(
             m.borrows().stream()
                 .noneMatch(b ->
@@ -385,6 +398,18 @@ final class OwnershipValidator {
               && status != Scalar.F32
               && status != Scalar.F64,
           "a resource create with an out-pointer returns an integer status: " + create.name());
+      // Every wrapper passes an 8-byte, 8-aligned slot.
+      for (String fact : List.of("align", "dereferenceable"))
+        require(
+            !out.facts().containsKey(fact)
+                || !out.facts().get(fact).enabled()
+                || Long.parseLong(out.facts().get(fact).value()) <= 8,
+            "a resource out-pointer is an 8-byte slot; "
+                + fact
+                + " promises more: "
+                + create.name()
+                + " "
+                + parameter);
     }
     require(
         out != null

@@ -88,7 +88,10 @@ public final class NativeOwnership implements Backend {
           String target = m.ownershipClass() + "." + name;
           constructor(m, r, name, create, "NativeBuffer", target, out);
           constructor(m, r, name, create, "byte[]", target, out);
-        } else constructor(m, r, name, create, null, m.nativeClass() + "." + name, out);
+        } else if (create.parameters().stream().anyMatch(CallBorrows::cstring))
+          // Its C strings are converted by the import's String wrapper, which has no array form.
+          constructor(m, r, name, create, "NativeBuffer", m.ownershipClass() + "." + name, out);
+        else constructor(m, r, name, create, null, m.nativeClass() + "." + name, out);
       }
       out.append(
               "        /** Transfer sole ownership of a live allocation with no outstanding"
@@ -164,7 +167,9 @@ public final class NativeOwnership implements Backend {
       String carrier =
           buffer != null && call.buffer(p) != null
               ? buffer
-              : NativeImage.qualifiedCarrier(m, p.type());
+              : buffer != null && CallBorrows.cstring(p)
+                  ? "String"
+                  : NativeImage.qualifiedCarrier(m, p.type());
       params.add(carrier + " arg" + i);
       args.add("arg" + i);
     }

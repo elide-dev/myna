@@ -1058,11 +1058,10 @@ class OwnershipTest {
         rust);
     assertTrue(rust.contains("    fn close(surface: Box<Self::Surface>);\n"), rust);
     assertTrue(
-        rust.contains("            unsafe { out.write(Box::into_raw(owned).cast()) };\n"), rust);
-    assertTrue(
-        rust.contains(
-            "::core::debug_assert!(!(status == 0), \"open: Err with a success status\");"),
+        rust.contains("            unsafe { out.write(Box::into_raw(myna_owned).cast()) };\n"),
         rust);
+    assertTrue(rust.contains("if status == 0 {\n"), rust);
+    assertTrue(rust.contains("    ::core::panic!(\"open: Err with a success status\");\n"), rust);
   }
 
   static Stream<Arguments> outPointerRejections() {
@@ -1074,6 +1073,10 @@ class OwnershipTest {
             out.replace("access=write", "access=read_write"),
             "a resource out-pointer must be a ptr<ptr<Surface>> parameter with access=write: open"
                 + " out"),
+        Arguments.of(
+            out,
+            out.replace("access=write", "access=write align=64@explicit_contract"),
+            "a resource out-pointer is an 8-byte slot; align promises more: open out"),
         Arguments.of(
             "import open return=i32",
             "import open return=void",
@@ -1151,8 +1154,11 @@ class OwnershipTest {
         cells);
     assertTrue(
         cells.contains(
-            "coerce_title.execute(CStrings.checked(arguments[0], \"titleLength\", \"title\","
-                + " this))"),
+            "coerce_title.execute(CStrings.strings(arguments[0], false, \"titleLength\","
+                + " \"title\", this))"),
+        cells);
+    assertTrue(
+        cells.contains("CStrings.checkLent(borrow_title, \"titleLength\", \"title\", this);"),
         cells);
     // The implementer trait takes a CStr, and a null one aborts.
     String trait =
@@ -1180,8 +1186,28 @@ class OwnershipTest {
                 "import titleLength",
                 "borrow titleLength title length=title lifetime=call\nimport titleLength",
                 "a C string has no length and is no borrow's buffer or length: titleLength"
-                    + " title"))) {
-      String changed = CSTRING.replace(rejection.get(0), rejection.get(1));
+                    + " title"),
+            // A by-value record has no pass-through carrier in every wrapper.
+            List.of(
+                "end\n",
+                "  param pair type=Pair\nend\n",
+                "C string wrappers pass only scalars and pointers beside their strings:"
+                    + " titleLength pair"),
+            List.of(
+                " readonly=true@explicit_contract",
+                " readonly=true@explicit_contract dereferenceable=16@explicit_contract",
+                "access=cstring takes no align, dereferenceable or truffle_buffer fact:"
+                    + " titleLength title"))) {
+      String changed =
+          CSTRING
+              .replace(rejection.get(0), rejection.get(1))
+              .replace(
+                  "module strings target=aarch64-apple-darwin java_class=Api\n",
+                  "module strings target=aarch64-apple-darwin java_class=Api\n"
+                      + "struct Pair size=16 align=8\n"
+                      + "  field a type=i64 offset=0\n"
+                      + "  field b type=i64 offset=8\n"
+                      + "end\n");
       assertEquals(
           rejection.get(2),
           assertThrows(

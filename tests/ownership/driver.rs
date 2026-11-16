@@ -72,6 +72,10 @@ fn main() {
     let from = Surface::surfaceFrom(&[1, 2, 3], None).unwrap();
     assert_eq!(unsafe { seam::surfaceWidth(from.borrow().as_ptr()) }, 6);
     assert_eq!(Surface::surfaceOpen(-1, Some(&mut error)).err(), Some(seam::SurfaceStatus::NEGATIVE));
+    // A C string beside a call buffer on one constructor.
+    let titled = Surface::surfaceTitled(c"abc", Some(&mut error)).unwrap();
+    assert_eq!(unsafe { seam::surfaceWidth(titled.borrow().as_ptr()) }, 3);
+    drop(titled);
     assert_eq!(&error[..14], b"negative width");
     unsafe { seam::failNext(); }
     assert_eq!(Surface::surfaceFrom(&[1], None).err(), Some(seam::SurfaceStatus::FAILED));

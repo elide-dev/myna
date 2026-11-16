@@ -70,7 +70,10 @@ public final class CellChecks {
     check(call(cells, "titleLength", "h\u00e9llo").equals(6L), "titleLength of a host string");
     check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "titleLength of a guest string");
     rejects(cells, "titleLength", "ab\0cd");
-    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("ab\0cd", TruffleString.Encoding.UTF_8));
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("evil.so\0.txt", TruffleString.Encoding.UTF_8));
+    // Strings only: bytes, even NUL-terminated ones, are not a C string parameter's to take.
+    rejects(cells, "titleLength", new HeapBytes(new byte[] {'a', 0}, false));
+    rejects(cells, "titleLength", NativeVoid.INSTANCE);
   }
   /**
    * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,

@@ -114,3 +114,7 @@ unsafe fn surface_new(width: i64, out: *mut *mut i64, error: *mut u8, capacity: 
     while unsafe { title.add(n).read() } != 0 { n += 1; }
     n as u64
 }
+#[unsafe(no_mangle)] pub unsafe extern "C" fn surface_titled(title: *const u8, out: *mut *mut i64, error: *mut u8, capacity: usize) -> i32 {
+    let width = unsafe { title_length(title) } as i64;
+    unsafe { surface_new(width, out, error, capacity) }
+}
