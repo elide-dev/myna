@@ -123,7 +123,19 @@ public final class NativeOwnership implements Backend {
                   + "        }\n"
                   + "    }\n");
     }
-    if (!m.callBorrows().isEmpty())
+    // Call buffers, and the NativeBuffer overloads of constructors with held buffers.
+    boolean held =
+        m.ownedResources().stream()
+            .flatMap(r -> r.creates().stream())
+            .anyMatch(name ->
+                m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))
+                    && JavaFfm.heldWrapper(
+                        m,
+                        m.functions().stream()
+                            .filter(f -> f.name().equals(name))
+                            .findFirst()
+                            .orElseThrow()));
+    if (!m.callBorrows().isEmpty() || held)
       out.append(
 """
         /**
@@ -361,13 +373,28 @@ public final class NativeOwnership implements Backend {
     if (!nullable)
       out.append(pad).append("java.util.Objects.requireNonNull(").append(source).append(");\n");
     // The copy: from the array, or from the consumer's buffer while it is acquired.
-    out.append(pad).append("long length;\n").append(pad).append("org.graalvm.word.Pointer copy;\n");
+    // raw is what malloc returned and what is freed; copy is raw rounded up to an align fact above
+    // malloc's alignment, as the declaration promises the callee.
+    long align = call.align(held);
+    boolean rounded = align > PINNED_ALIGNMENT;
+    out.append(pad)
+        .append("long length;\n")
+        .append(pad)
+        .append("org.graalvm.word.Pointer raw;\n")
+        .append(pad)
+        .append("org.graalvm.word.Pointer copy;\n");
     String copyInto =
-        "                copy ="
-            + " org.graalvm.nativeimage.UnmanagedMemory.malloc(org.graalvm.word.WordFactory.unsigned(Math.max(length,"
-            + " 1)));\n"
-            + "                if (copy.isNull()) throw new OutOfMemoryError(\"held buffer"
-            + " copy\");\n";
+        "                raw = org.graalvm.nativeimage.UnmanagedMemory.malloc("
+            + "org.graalvm.word.WordFactory.unsigned(Math.max(length, 1)"
+            + (rounded ? " + " + align : "")
+            + "));\n"
+            + (rounded
+                ? "                copy = org.graalvm.word.WordFactory.pointer((raw.rawValue() + "
+                    + (align - 1)
+                    + ") & -"
+                    + align
+                    + "L);\n"
+                : "                copy = raw;\n");
     if (nullable)
       out.append(pad)
           .append("if (")
@@ -376,7 +403,9 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("    length = 0;\n")
           .append(pad)
-          .append("    copy = org.graalvm.word.WordFactory.nullPointer();\n")
+          .append("    raw = org.graalvm.word.WordFactory.nullPointer();\n")
+          .append(pad)
+          .append("    copy = raw;\n")
           .append(pad)
           .append("} else {\n");
     else out.append(pad).append("{\n");
@@ -402,7 +431,15 @@ public final class NativeOwnership implements Backend {
           .append(
               "                    if (length < 0 || (from == 0 && length != 0)) throw new"
                   + " IllegalArgumentException(\"invalid buffer extent\");\n")
-          .append(copyInto.replace("                copy", "                    copy"))
+          // Checked before anything is allocated or copied.
+          .append(
+              call.narrow(held)
+                  ? "                    if (length > "
+                      + call.maxLength(held)
+                      + ") throw new IllegalArgumentException(\"buffer length exceeds ABI"
+                      + " range\");\n"
+                  : "")
+          .append(copyInto.replace("                ", "                    "))
           .append(
               "                    for (long i = 0; i < length; i++)\n"
                   + "                        copy.writeByte(org.graalvm.word.WordFactory.signed(i),"
@@ -417,17 +454,6 @@ public final class NativeOwnership implements Backend {
           .append(");\n")
           .append("                }\n");
     out.append(pad).append("}\n");
-    if (call.narrow(held))
-      out.append(pad)
-          .append("if (length > ")
-          .append(call.maxLength(held))
-          .append(") {\n")
-          .append(pad)
-          .append("    org.graalvm.nativeimage.UnmanagedMemory.free(copy);\n")
-          .append(pad)
-          .append("    throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n")
-          .append(pad)
-          .append("}\n");
     String invoke = m.nativeClass() + "." + create.name() + "(" + String.join(", ", args) + ")";
     if (outPointer) {
       var succeeded = new ArrayList<String>();
@@ -451,7 +477,7 @@ public final class NativeOwnership implements Backend {
           .append(String.join(" || ", succeeded))
           .append(") || address == 0) {\n")
           .append(pad)
-          .append("    if (copy.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(copy);\n")
+          .append("    if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);\n")
           .append(pad)
           .append("    return onFailure.failed(status);\n")
           .append(pad)
@@ -464,7 +490,7 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("if (address == 0) {\n")
           .append(pad)
-          .append("    if (copy.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(copy);\n")
+          .append("    if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);\n")
           .append(pad)
           .append("    return null;\n")
           .append(pad)
@@ -472,21 +498,17 @@ public final class NativeOwnership implements Backend {
     out.append(pad)
         .append("// The copy is freed after the native destroy, never before it.\n")
         .append(pad)
-        .append("long kept = copy.rawValue();\n")
+        .append("long kept = raw.rawValue();\n")
+        .append(pad)
+        .append("// A destroy that throws leaves the copy to leak with the resource.\n")
         .append(pad)
         .append("NativeDestructor destructor = handle -> {\n")
         .append(pad)
-        .append("    try {\n")
-        .append(pad)
-        .append("        DESTRUCTOR.destroy(handle);\n")
-        .append(pad)
-        .append("    } finally {\n")
+        .append("    DESTRUCTOR.destroy(handle);\n")
         .append(pad)
         .append(
-            "        if (kept != 0) org.graalvm.nativeimage.UnmanagedMemory.free("
+            "    if (kept != 0) org.graalvm.nativeimage.UnmanagedMemory.free("
                 + "org.graalvm.word.WordFactory.pointer(kept));\n")
-        .append(pad)
-        .append("    }\n")
         .append(pad)
         .append("};\n")
         .append(pad)

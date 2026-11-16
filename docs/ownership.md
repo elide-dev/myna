@@ -459,7 +459,7 @@ trait](#implementing-imports-in-rust) such a constructor returns `Result<Box<Sel
 drops the out-parameter: on `Ok` the entry point writes the box into the slot and returns the first
 `success=` value (a null slot, which only a nullable parameter allows, drops the box instead); on
 `Err(status)` it returns that status, aborting in every build if it is a success value. The destroy
-takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
+takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a [held borrow](#borrows-held-by-a-resource) is wrapped as described there.
 
 ## Borrows held by a resource
 
@@ -488,8 +488,8 @@ end
 until that resource is destroyed. The contract is the create's: on a listed status it may read the
 buffer's `length` bytes at any time until its `destroy` returns, and it never writes them, frees
 them, or uses them after that; on any other status it has kept nothing. The other rules of a
-`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, no alignment or
-extent preconditions), with three differences:
+`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, an `align` fact as
+a caller contract and no extent preconditions), with three differences:
 
 - the function must be a constructor of `NAME`. For a resource the Rust, FFM and Native Image owners
   wrap (one whose create returns its pointer, or writes it through a `ptr<ptr<R>>` out-parameter),
@@ -505,14 +505,29 @@ with the call. The validator rejects a held borrow anywhere else with the rule i
 
 Each owner keeps a held buffer alive in its own way:
 
-- **Rust**: the owner carries the buffer's lifetime, `Doc<'held>`, and the constructor takes
-  `data: &'held [u8]`. The borrow checker then keeps the bytes alive and unmodified until the owner
-  is dropped, and `Drop` still calls the destroy first. Call borrows beside it are lent for the call
-  only, and a C string as `&CStr`. Owners of resources without held borrows keep their plain type.
+- **Rust**: the owner carries the buffer's lifetime, `Doc<'held>`, and takes `data: &'held [u8]`,
+  so the borrow checker keeps the bytes alive and unmodified while the owner exists. Rust does not
+  guarantee that a destructor runs (`mem::forget`, `into_raw`), and the native side may read the
+  buffer until its destroy returns, so:
+  - the safe form is closure-scoped: `Doc::with_create(&bytes, |doc: &Doc| ...)` makes the resource,
+    lends it to the closure by reference, which can neither forget nor move it, and destroys it
+    afterwards, on unwind too. It returns `Option<T>`, or `Result<T, Status>` for an out-pointer
+    create;
+  - `Doc::create(&bytes)` returns the owner as an `unsafe fn`, whose `# Safety` requires dropping
+    it, never leaking it, before `'held` ends; `from_raw` adds the same for held buffers.
+
+  Call borrows beside a held buffer are lent for the call only, and a C string as `&CStr`. Every
+  buffer follows the align policy of other borrows: an empty slice under an `align` fact is lent an
+  aligned static, and a non-empty one's alignment is `debug_assert!`ed. A constructor that also
+  takes a batch gets no Rust wrapper. Owners of resources without held borrows keep their plain
+  type.
 - **FFM and Native Image**: the constructor copies the bytes, once, into native memory the owner
   holds: an arena in FFM (shared or confined as the resource is), unmanaged memory in Native Image.
   The owner's destructor frees it after the native destroy returns, through the same destructor the
-  factory receives, never a cleaner; a create that makes nothing frees it at once. The caller's
+  factory receives, never a cleaner; a create that makes nothing frees it at once. A destroy that
+  throws (a missing symbol, a closed library arena) leaves the copy to leak with the resource, since
+  the native side may still read it. Native Image rounds the copy up to an `align` fact above
+  malloc's alignment, as FFM's arena allocates it. The caller's
   segment, `NativeBuffer` or array may then change or close immediately. These wrappers exist for a
   constructor with exactly one held buffer and no other buffer, batch or C string; any other keeps
   only its raw binding.
@@ -528,7 +543,7 @@ With `truffle_cells=true`, the same declarations project into guest-callable cel
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows a create keeps until its resource is destroyed (Rust, FFM, Native Image and, for `handle=` creates, Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

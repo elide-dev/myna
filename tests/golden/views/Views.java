@@ -48,6 +48,14 @@ public final class Views {
         static final CGlobalData<empty_Leaf> empty = CGlobalDataFactory.forSymbol("views_empty");
         static final CGlobalData<program_Leaf> program = CGlobalDataFactory.forSymbol("views_program");
     }
+    /** The linked address of views_empty, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer empty_address() {
+        return MynaSymbols.empty.get();
+    }
+    /** The linked address of views_program, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer program_address() {
+        return MynaSymbols.program.get();
+    }
     /** Runtime address: never initialized in the build host. */
     private static final class empty_Binding {
         static final empty_Leaf ADDRESS = MynaSymbols.empty.get();

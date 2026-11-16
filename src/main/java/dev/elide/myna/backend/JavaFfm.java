@@ -604,6 +604,19 @@ public final class JavaFfm implements Backend {
     if (outPointer) out.append("            java.util.Objects.requireNonNull(onFailure);\n");
     if (!nullable)
       out.append("            java.util.Objects.requireNonNull(").append(source).append(");\n");
+    // As for call buffers, null or a native segment of length zero at address zero is absent.
+    if (nullable)
+      out.append("            if (")
+          .append(source)
+          .append(" != null && ")
+          .append(source)
+          .append(".isNative() && ")
+          .append(source)
+          .append(".address() == 0 && ")
+          .append(source)
+          .append(".byteSize() == 0) ")
+          .append(source)
+          .append(" = null;\n");
     out.append("            long length = ")
         .append(nullable ? source + " == null ? 0 : " : "")
         .append(source)
@@ -659,11 +672,14 @@ public final class JavaFfm implements Backend {
           .append("                kept.close();\n                return null;\n            }\n");
     out.append(
             "            // The copy is freed after the native destroy, never before it.\n"
+                + "            // A destroy that throws leaves the copy to leak with the resource:"
+                + " the native\n"
+                + "            // side may still read it.\n"
                 + "            NativeDestructor destructor = handle -> {\n"
-                + "                try { binding.")
+                + "                binding.")
         .append(r.destroy())
         .append(
-            "(handle); } finally { kept.close(); }\n"
+            "(handle);\n                kept.close();\n"
                 + "            };\n"
                 + "            try {\n"
                 + "                return java.util.Objects.requireNonNull(factory.adopt(address,"

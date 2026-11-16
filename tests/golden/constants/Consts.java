@@ -196,6 +196,19 @@ public final class Consts {
     private static final class MynaSymbols {
         static final CGlobalData<setLevel_Leaf> setLevel = CGlobalDataFactory.forSymbol("consts_set_level");
         static final CGlobalData<status_Leaf> status = CGlobalDataFactory.forSymbol("consts_status");
+        static final CGlobalData<CFunctionPointer> blockingStatus = CGlobalDataFactory.forSymbol("consts_blocking_status");
+    }
+    /** The linked address of consts_blocking_status, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer blockingStatus_address() {
+        return MynaSymbols.blockingStatus.get();
+    }
+    /** The linked address of consts_set_level, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer setLevel_address() {
+        return MynaSymbols.setLevel.get();
+    }
+    /** The linked address of consts_status, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer status_address() {
+        return MynaSymbols.status.get();
     }
     /** Runtime address: never initialized in the build host. */
     private static final class setLevel_Binding {

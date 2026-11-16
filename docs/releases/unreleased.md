@@ -79,7 +79,8 @@ the same output as before.
   (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
 - A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
 - A constructor that keeps its read-only input (`lifetime=resource:`) is wrapped beyond Truffle cells:
-  Rust owners carry the buffer's lifetime (`Doc<'held>`), and FFM and Native Image copy the bytes
+  Rust owners carry the buffer's lifetime (`Doc<'held>`) behind a closure-scoped safe form
+  (`Doc::with_create`) and an unsafe owner constructor, and FFM and Native Image copy the bytes
   into memory the owner frees after the destroy. A Truffle cell holds a buffer only for a `handle=`
   create (see [borrows held by a resource](../ownership.md#borrows-held-by-a-resource)).
 - `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
@@ -87,6 +88,9 @@ the same output as before.
   (see [C strings](../ownership.md#c-strings)).
 - An import may no longer be named `NAME_address` with no parameters beside an import `NAME`: it
   would collide with that binding's accessor.
+- The Native Image class gains `NAME_address()` per import too, from the linked `CGlobalData` symbol
+  read at run time; its `native-image.properties` now initializes `MynaSymbols` at build time
+  whenever the module has imports.
 - `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
   from the same lookup, for symbols handed to native code rather than called.
 

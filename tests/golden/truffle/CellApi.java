@@ -115,6 +115,69 @@ public final class CellApi {
         static final CGlobalData<strlen_Leaf> strlen = CGlobalDataFactory.forSymbol("cells_strlen");
         static final CGlobalData<swap_Leaf> swap = CGlobalDataFactory.forSymbol("cells_swap_myna_ref");
         static final CGlobalData<widen_Leaf> widen = CGlobalDataFactory.forSymbol("cells_widen");
+        static final CGlobalData<CFunctionPointer> counterCreate = CGlobalDataFactory.forSymbol("cells_counter_create");
+        static final CGlobalData<CFunctionPointer> counterDestroy = CGlobalDataFactory.forSymbol("cells_counter_destroy");
+        static final CGlobalData<CFunctionPointer> sleepyAdd = CGlobalDataFactory.forSymbol("cells_sleepy_add");
+    }
+    /** The linked address of cells_add, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer add_address() {
+        return MynaSymbols.add.get();
+    }
+    /** The linked address of cells_checksum, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer checksum_address() {
+        return MynaSymbols.checksum.get();
+    }
+    /** The linked address of cells_counter_create, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterCreate_address() {
+        return MynaSymbols.counterCreate.get();
+    }
+    /** The linked address of cells_counter_destroy, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterDestroy_address() {
+        return MynaSymbols.counterDestroy.get();
+    }
+    /** The linked address of cells_counter_next, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer counterNext_address() {
+        return MynaSymbols.counterNext.get();
+    }
+    /** The linked address of cells_fill, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer fill_address() {
+        return MynaSymbols.fill.get();
+    }
+    /** The linked address of cells_low_byte, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer lowByte_address() {
+        return MynaSymbols.lowByte.get();
+    }
+    /** The linked address of cells_peek, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer peek_address() {
+        return MynaSymbols.peek.get();
+    }
+    /** The linked address of cells_poke, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer poke_address() {
+        return MynaSymbols.poke.get();
+    }
+    /** The linked address of cells_raw_length, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer rawLength_address() {
+        return MynaSymbols.rawLength.get();
+    }
+    /** The linked address of cells_scale, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer scale_address() {
+        return MynaSymbols.scale.get();
+    }
+    /** The linked address of cells_sleepy_add, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer sleepyAdd_address() {
+        return MynaSymbols.sleepyAdd.get();
+    }
+    /** The linked address of cells_strlen, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer strlen_address() {
+        return MynaSymbols.strlen.get();
+    }
+    /** The linked address of cells_swap, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer swap_address() {
+        return MynaSymbols.swap.get();
+    }
+    /** The linked address of cells_widen, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer widen_address() {
+        return MynaSymbols.widen.get();
     }
     /** Runtime address: never initialized in the build host. */
     private static final class add_Binding {

@@ -190,6 +190,10 @@ public final class OwnershipMain {
     verifyConstructors(empty);
     verifyBatches(empty);
     verifyHeld();
+    // The linked address of an import, read at run time, the same each time.
+    check(NativeApi.docSum_address().rawValue() != 0);
+    check(NativeApi.docSum_address().rawValue() == NativeApi.docSum_address().rawValue());
+    check(NativeApi.ticketCreate_address().rawValue() != NativeApi.docSum_address().rawValue());
     verifySurfaces();
     // A C string: NUL-terminated for the call; an embedded NUL is refused.
     check(NativeApiOwnership.titleLength("h\u00e9llo") == 6);
