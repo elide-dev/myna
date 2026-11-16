@@ -37,6 +37,13 @@ the shared comparison kernel, each call depending on the previous result:
   with for transitioning imports; `glue-boundary-step` is the generated cell with
   `truffle_transitions=boundary`.
 
+Buffer cases measure `NativeBytes`' own scalar buffer messages, the path a guest's reads and writes
+take, through a dispatched `InteropLibrary`: each step writes the recurrence's value with
+`writeBufferLong` and reads it back with `readBufferLong`. `buffer-native` uses a segment of the
+global arena (no scope to check), `buffer-shared` one of a shared arena and `buffer-confined` one
+of an arena confined to the measuring thread, so the three show what the messages' scope check
+costs (#128).
+
 Slab cases call a ten-argument entry (two byte buffers, two opaque pointers, five integers),
 exported as a leaf (`slab`) and as a transition (`slab-step`): `direct-*` passes raw addresses,
 `invoke-*` calls the cell's static `invoke` with the same raw addresses,
