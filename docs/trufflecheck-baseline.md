@@ -311,7 +311,8 @@ once per digest with `gh`, and the result is cached beside the JAR. Pass `--skip
 
 trufflecheck is a pinned download rather than a git submodule. Myna needs only the Error Prone JAR and the profiles
 tarball. Both are release assets with build provenance, and the sha256 pins in `tools/trufflecheck.json` make the
-inputs exact without a submodule checkout. Nothing is vendored into the repository.
+inputs exact without a submodule checkout. Nothing is vendored into the repository. The agent skill's marketplace entry is pinned to the same
+release (`"ref": "v0.1.1"`); bump that `ref` together with the version and sha256s in `tools/trufflecheck.json`.
 
 ### As a CI job
 

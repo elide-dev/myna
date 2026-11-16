@@ -1,6 +1,6 @@
 {
   "extraKnownMarketplaces": {
-    "trufflecheck": { "source": { "source": "github", "repo": "elide-dev/trufflecheck" } }
+    "trufflecheck": { "source": { "source": "github", "repo": "elide-dev/trufflecheck", "ref": "v0.1.1" } }
   },
   "enabledPlugins": {
     "elide-dev@trufflecheck": true,
