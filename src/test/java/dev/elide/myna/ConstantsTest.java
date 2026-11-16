@@ -285,10 +285,16 @@ class ConstantsTest {
                 + " accessor of field raw"),
         Arguments.of(
             "flags F type=u32\n bit int = 0\nend\n",
-            "flags F: bit int: predicate int is a reserved Java name"),
+            "flags F: bit int: predicate int is a reserved Java name; rename the bit (generated"
+                + " Java predicates use the bit's name)"),
+        Arguments.of(
+            "flags F type=u32\n range hash_code = 0..3\nend\n",
+            "flags F: range hash_code: getter hashCode is a reserved Java name; rename the range"
+                + " (generated Java getters and with setters use the range's name)"),
         Arguments.of(
             "flags F type=u32\n bit has_unknown = 0\nend\n",
-            "flags F: bit has_unknown: predicate hasUnknown is a reserved Java name"),
+            "flags F: bit has_unknown: predicate hasUnknown is a reserved Java name; rename the bit"
+                + " (generated Java predicates use the bit's name)"),
         Arguments.of(
             "enum Status type=f32\n value ok = 0\nend\n",
             "enum Status: carrier must be an integer scalar, found f32"),

@@ -230,7 +230,13 @@ final class ConstantsValidator {
       String predicate = Names.lowerCamel(b.name());
       require(
           !RESERVED_ACCESSORS.contains(predicate) && !predicate.equals("hasUnknown"),
-          where + "bit " + b.name() + ": predicate " + predicate + " is a reserved Java name");
+          where
+              + "bit "
+              + b.name()
+              + ": predicate "
+              + predicate
+              + " is a reserved Java name; rename the bit (generated Java predicates use the"
+              + " bit's name)");
     }
     require(
         !f.cBitfields() || unsigned(f.type()),
@@ -297,9 +303,17 @@ final class ConstantsValidator {
       }
       String getter = Names.javaRangeGetter(r.name());
       String setter = Names.javaRangeSetter(r.name());
-      require(
-          !RESERVED_ACCESSORS.contains(getter),
-          where + "range " + r.name() + ": getter " + getter + " is a reserved Java name");
+      for (String method : List.of(getter, setter))
+        require(
+            !RESERVED_ACCESSORS.contains(method),
+            where
+                + "range "
+                + r.name()
+                + ": "
+                + (method.equals(getter) ? "getter " : "setter ")
+                + method
+                + " is a reserved Java name; rename the range (generated Java getters and with"
+                + " setters use the range's name)");
       for (String method : List.of(getter, setter)) {
         String other = javaMethods.putIfAbsent(method, "range " + r.name());
         require(
