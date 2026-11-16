@@ -172,6 +172,12 @@ today. It is tracked upstream as elide-dev/graal#239; `@CField` is kept and a te
 - **#121**: a failed create reports its `NativeStatusException` even when copying the guest buffer back fails.
 - **#122** (#124): a Truffle FFM cell over a create with one held borrow and two or more call borrows
   generated Java that did not compile. Such a create now skips the in-place fast path.
+- **#128**: in a Native Image, `NativeBytes`' scalar buffer messages (`read/writeBuffer{Byte,Short,Int,Long,Float,Double}`)
+  read and wrote the segment with word operations and no scope check, so a guest could touch freed memory
+  once a confined arena was closed. Every buffer message now checks the scope first, in both runtimes, and
+  throws what the segment's accessors throw (`IllegalStateException`, `WrongThreadException`). The check
+  covers confined arenas fully; for a shared arena closed by another thread it narrows the window but does
+  not hold the scope, so embedders still keep shared arenas open while guest code can reach the buffer.
 - **#123** (#125): `success=` values that the create's return scalar can never represent (so every create
   would fail at run time) are rejected at validation.
 

@@ -43,6 +43,81 @@ public final class CellsMain {
       return new Object[] {sum, CompilerDirectives.inCompiledCode()};
     }
   }
+  /**
+   * A guest's own reads and writes of a buffer: NativeBytes' scalar messages through a dispatched
+   * library, from compiled code. A scope failure is returned as text, so the caller sees that
+   * compiled code checked the scope (and kept running compiled) rather than touching the memory.
+   */
+  static final class BufferProbe extends NativeCell {
+    @Node.Child private com.oracle.truffle.api.interop.InteropLibrary interop =
+        com.oracle.truffle.api.interop.InteropLibrary.getFactory().createDispatched(2);
+    BufferProbe() { super("buffer-probe", 2); }
+    @Override public Object execute(Object[] arguments) {
+      Object buffer = arguments[0];
+      Object result;
+      try {
+        interop.writeBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8, (Long) arguments[1]);
+        result = interop.readBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8) + interop.readBufferByte(buffer, 0);
+      } catch (IllegalStateException | WrongThreadException e) {
+        result = describe(e);
+      } catch (com.oracle.truffle.api.interop.InteropException e) {
+        throw CompilerDirectives.shouldNotReachHere(e);
+      }
+      return new Object[] {result, CompilerDirectives.inCompiledCode()};
+    }
+    @CompilerDirectives.TruffleBoundary
+    static String describe(RuntimeException e) { return e.getClass().getSimpleName() + ": " + e.getMessage(); }
+  }
+  /**
+   * NativeBytes' scalar messages from compiled code check the arena scope before their word access
+   * (#128): a confined arena owned by another thread, then a closed one, fail as the segment's own
+   * accessors do, and the memory is not touched.
+   */
+  static void bufferScopes() throws Exception {
+    NativeFunction probe = new BufferProbe().function();
+    java.lang.foreign.Arena confined = java.lang.foreign.Arena.ofConfined();
+    java.lang.foreign.MemorySegment segment = confined.allocate(16, 8);
+    segment.set(java.lang.foreign.ValueLayout.JAVA_BYTE, 0, (byte) 1);
+    NativeBytes bytes = NativeBytes.of(segment, true);
+    compiled("buffer messages over a confined arena", probe, i -> new Object[] {bytes, i}, i -> i + 1);
+    // A confined arena owned by another, live thread, which closes it once this thread is done.
+    var owned = new java.util.concurrent.SynchronousQueue<java.lang.foreign.MemorySegment>();
+    var done = new java.util.concurrent.CountDownLatch(1);
+    Thread owner = new Thread(() -> {
+      try (java.lang.foreign.Arena arena = java.lang.foreign.Arena.ofConfined()) {
+        owned.put(arena.allocate(16, 8));
+        done.await();
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    });
+    owner.start();
+    NativeBytes foreign = NativeBytes.of(owned.take(), true);
+    expectScopeFailure(probe, foreign, "WrongThreadException: Attempted access outside owning thread", "another thread's confined arena", true);
+    done.countDown();
+    owner.join();
+    // Closed by its owner, this thread: the next message fails before its word access.
+    confined.close();
+    expectScopeFailure(probe, bytes, "IllegalStateException: Already closed", "a closed confined arena", false);
+    // The global arena has no scope to check, so the same compiled code still runs over it.
+    java.lang.foreign.MemorySegment global = java.lang.foreign.Arena.global().allocate(16, 8);
+    global.set(java.lang.foreign.ValueLayout.JAVA_BYTE, 0, (byte) 2);
+    Object[] outcome = (Object[]) probe.call(NativeBytes.of(global, true), 40L);
+    if (!Long.valueOf(42).equals(outcome[0]) || !(Boolean) outcome[1]) throw new AssertionError("global buffer: " + outcome[0] + ", compiled " + outcome[1]);
+    System.out.println("buffer messages checked the arena scope in compiled code: wrong thread, closed");
+  }
+  /**
+   * Every call fails as expected, without touching the memory. A wrong-thread failure is raised by
+   * compiled code; a closed arena's failure deoptimizes at the throw in this fork (the check itself
+   * is compiled: it chose the right exception), so for it {@code compiled} is not required.
+   */
+  static void expectScopeFailure(NativeFunction probe, NativeBytes bytes, String expected, String what, boolean compiled) {
+    for (int call = 0; call < 3; call++) {
+      Object[] outcome = (Object[]) probe.call(bytes, 5L);
+      if (!expected.equals(outcome[0])) throw new AssertionError(what + ": " + outcome[0]);
+      if (compiled && !(Boolean) outcome[1]) throw new AssertionError(what + ": the scope failure left compiled code");
+    }
+  }
   /** Creates and closes a resource many times inside one compiled root, to measure what a create allocates. */
   static final class Creates extends NativeCell {
     static final int CALLS = 1024;
@@ -172,6 +247,7 @@ public final class CellsMain {
       context.enter();
       try {
         compiled("add", new Probe(new CellApiTruffle.add_Cell()).function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
+        bufferScopes();
         compiled("typed add", new TypedAdd().function(), i -> new Object[] {(int) i, 1}, i -> (int) i + 1);
         compiled("sleepyAdd", new Probe(new CellApiTruffle.sleepyAdd_Cell()).function(), i -> new Object[] {i, 2L}, i -> i + 2);
         byte[] large = new byte[Borrow.pinThreshold() * 2];

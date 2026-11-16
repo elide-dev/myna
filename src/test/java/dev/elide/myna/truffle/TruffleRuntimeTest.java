@@ -754,6 +754,106 @@ class TruffleRuntimeTest {
     assertEquals(0, NativeBytes.of(0, 0, false).size());
   }
 
+  /** A buffer message that may fail with the segment accessors' runtime exceptions. */
+  interface BufferMessage {
+    void run(NativeBytes bytes) throws Exception;
+  }
+
+  /** Every scalar read and write message, plus the bulk read, over a 16-byte buffer. */
+  private static final List<BufferMessage> BUFFER_MESSAGES =
+      List.of(
+          b -> INTEROP.readBufferByte(b, 0),
+          b -> INTEROP.writeBufferByte(b, 0, (byte) 1),
+          b -> INTEROP.readBufferShort(b, ByteOrder.LITTLE_ENDIAN, 2),
+          b -> INTEROP.writeBufferShort(b, ByteOrder.BIG_ENDIAN, 2, (short) 1),
+          b -> INTEROP.readBufferInt(b, ByteOrder.BIG_ENDIAN, 4),
+          b -> INTEROP.writeBufferInt(b, ByteOrder.LITTLE_ENDIAN, 4, 1),
+          b -> INTEROP.readBufferLong(b, ByteOrder.LITTLE_ENDIAN, 8),
+          b -> INTEROP.writeBufferLong(b, ByteOrder.BIG_ENDIAN, 8, 1),
+          b -> INTEROP.readBufferFloat(b, ByteOrder.LITTLE_ENDIAN, 0),
+          b -> INTEROP.writeBufferFloat(b, ByteOrder.BIG_ENDIAN, 0, 1f),
+          b -> INTEROP.readBufferDouble(b, ByteOrder.BIG_ENDIAN, 8),
+          b -> INTEROP.writeBufferDouble(b, ByteOrder.LITTLE_ENDIAN, 8, 1d),
+          b -> INTEROP.readBuffer(b, 0, new byte[4], 0, 4));
+
+  /** Asserts that every message fails as the segment's own accessor does, with its message. */
+  private static void assertMessagesFailLikeSegment(NativeBytes bytes) {
+    RuntimeException expected =
+        assertThrows(RuntimeException.class, () -> bytes.segment().get(ValueLayout.JAVA_BYTE, 0));
+    for (BufferMessage message : BUFFER_MESSAGES) {
+      RuntimeException thrown = assertThrows(RuntimeException.class, () -> message.run(bytes));
+      assertSame(expected.getClass(), thrown.getClass());
+      assertEquals(expected.getMessage(), thrown.getMessage());
+    }
+  }
+
+  @Test
+  void nativeBytesMessagesCheckTheArenaScope() throws Exception {
+    // A closed confined arena: every message fails, before any access, as the segment does.
+    Arena confined = Arena.ofConfined();
+    NativeBytes bytes = NativeBytes.of(confined.allocate(16, 8), true);
+    for (BufferMessage message : BUFFER_MESSAGES) message.run(bytes);
+    AtomicReference<Throwable> failure = new AtomicReference<>();
+    Thread other =
+        new Thread(() -> {
+          try {
+            assertMessagesFailLikeSegment(bytes);
+            assertThrows(WrongThreadException.class, () -> INTEROP.readBufferByte(bytes, 0));
+          } catch (Throwable t) {
+            failure.set(t);
+          }
+        });
+    other.start();
+    other.join();
+    assertNull(failure.get());
+    confined.close();
+    assertMessagesFailLikeSegment(bytes);
+    assertThrows(IllegalStateException.class, () -> INTEROP.readBufferLong(bytes, LE, 8));
+    // Bounds come first, as for any buffer: an offset outside it is still an offset error.
+    assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, 16));
+
+    // A closed shared arena: any thread sees it closed.
+    Arena shared = Arena.ofShared();
+    NativeBytes sharedBytes = NativeBytes.of(shared.allocate(16, 8), true);
+    INTEROP.writeBufferLong(sharedBytes, LE, 8, 7);
+    Thread reader =
+        new Thread(() -> {
+          try {
+            assertEquals(7, INTEROP.readBufferLong(sharedBytes, LE, 8));
+          } catch (Throwable t) {
+            failure.set(t);
+          }
+        });
+    reader.start();
+    reader.join();
+    assertNull(failure.get());
+    shared.close();
+    assertMessagesFailLikeSegment(sharedBytes);
+    assertThrows(IllegalStateException.class, () -> INTEROP.readBufferByte(sharedBytes, 0));
+
+    // The global arena and address views have no scope to check, on any thread.
+    NativeBytes global = NativeBytes.of(Arena.global().allocate(16, 8), true);
+    try (Arena arena = Arena.ofConfined()) {
+      NativeBytes view = NativeBytes.of(arena.allocate(16, 8).address(), 16, true);
+      Thread anywhere =
+          new Thread(() -> {
+            try {
+              for (BufferMessage message : BUFFER_MESSAGES) {
+                message.run(global);
+                message.run(view);
+              }
+            } catch (Throwable t) {
+              failure.set(t);
+            }
+          });
+      anywhere.start();
+      anywhere.join();
+      assertNull(failure.get());
+    }
+  }
+
+  private static final ByteOrder LE = ByteOrder.LITTLE_ENDIAN;
+
   @Test
   void heapBytesReadAndWriteThroughInteropWithBounds() throws Exception {
     byte[] array = new byte[16];

@@ -162,7 +162,18 @@ Two guest buffer objects ship in `myna-truffle`:
 
 - `NativeBytes` views native memory (an address and size, or a native `MemorySegment`). It is an
   interop buffer and an interop pointer at once, so cells lend its address with no copy and no pin.
-  `toArrayBuffer(ptr, len)` in `bun:ffi` terms is a consumer API over it.
+  `toArrayBuffer(ptr, len)` in `bun:ffi` terms is a consumer API over it. It does not own the memory:
+  the embedder keeps it alive while guest code can reach the object. Its buffer messages check the
+  segment's scope before every access, in both runtimes, and fail as the segment's own accessors
+  do: `IllegalStateException` once the arena is closed, `WrongThreadException` on a thread other
+  than a confined arena's owner. In a Native Image the scalar messages compile to word reads and
+  writes, so this check is what keeps a guest from reading or writing freed memory there. In
+  compiled code it loads the scope's state and branches, and for a confined arena also compares
+  its owner with the current thread, with no call or allocation; the global arena and
+  `NativeBytes.of(address, size, writable)` views have no scope, and test one field. It is a check,
+  not a hold: unlike a `MemorySegment` accessor on HotSpot, it does not stop another thread from
+  closing a shared arena between the check and the access, so an embedder that closes shared
+  arenas still keeps them open while guest code can reach their `NativeBytes`.
 - `HeapBytes` wraps a Java `byte[]`, for languages without native memory. It is not an interop
   pointer: a heap address never reaches native code unpinned.
 

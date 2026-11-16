@@ -143,7 +143,7 @@ class TruffleIntegrationTests(unittest.TestCase):
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The generated properties cover the cells; the probes are the consumer's own node classes.
-                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates,fixture.cells.CellChecks$GuestConstants",
+                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates,fixture.cells.CellsMain$BufferProbe,fixture.cells.CellChecks$GuestConstants",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
                              f"-Dmyna.cells.libraryPath={self.work}",
@@ -155,6 +155,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         # (CellChecks.guestConstants throws otherwise).
         self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("Truffle cells compiled and passed", result.stdout)
+        # NativeBytes' scalar messages check the arena scope before their word access (#128).
+        self.assertIn("buffer messages checked the arena scope in compiled code: wrong thread, closed", result.stdout)
         # Write-back of a copied buffer after its arena closed: refused, nothing written.
         self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 

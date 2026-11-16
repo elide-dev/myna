@@ -18,6 +18,17 @@ import java.nio.ByteOrder;
  * A zero-copy guest buffer over native memory: an interop buffer and an interop pointer at once.
  * Cells lend its address directly. The caller keeps the memory alive for as long as the object is
  * reachable from guest code; this object does not own or free it.
+ *
+ * <p>Every buffer message checks the segment's scope before it touches the memory, in both
+ * runtimes: once the arena is closed a message throws {@link IllegalStateException}, and on a
+ * thread other than a confined arena's owner {@link WrongThreadException}, the exceptions (and
+ * messages) of the segment's own accessors. A Native Image reads and writes through word
+ * operations, which check nothing themselves, so this check is what keeps a guest from touching
+ * freed memory there. It is a check, not a hold: a shared arena closed by another thread between
+ * the check and the access is not detected, as it would be by a {@code MemorySegment} accessor on
+ * HotSpot, so the caller still keeps a shared arena open while guest code can reach the buffer.
+ * Memory viewed through {@link #of(long, long, boolean)} and the global arena have no scope to
+ * check.
  */
 @ExportLibrary(InteropLibrary.class)
 public final class NativeBytes implements TruffleObject {
@@ -40,12 +51,34 @@ public final class NativeBytes implements TruffleObject {
    */
   final MemorySegment scoped;
 
+  /**
+   * {@link #scoped}'s scope, which buffer messages check before every access, or {@code null}. Held
+   * here so compiled code reads its state without first loading it from the segment.
+   */
+  private final MemorySegment.Scope scope;
+
+  /** Whether {@link #scope} is confined to one thread, so a message checks the thread as well. */
+  private final boolean confined;
+
+  /** A thread that is never started, so no arena is confined to it; created on first use. */
+  private static Thread unowned;
+
   private NativeBytes(MemorySegment segment, boolean writable) {
     this.segment = segment;
     this.writable = writable;
     this.address = segment.address();
     this.size = segment.byteSize();
     this.scoped = size != 0 && !segment.scope().equals(Arena.global().scope()) ? segment : null;
+    this.scope = scoped == null ? null : segment.scope();
+    this.confined = scoped != null && !segment.isAccessibleBy(unowned());
+  }
+
+  /** Only a confined segment is inaccessible to some thread: no other scope has an owner. */
+  private static Thread unowned() {
+    Thread thread = unowned;
+    // A benign race: any thread that never starts will do.
+    if (thread == null) unowned = thread = Thread.ofPlatform().unstarted(() -> {});
+    return thread;
   }
 
   /**
@@ -108,6 +141,29 @@ public final class NativeBytes implements TruffleObject {
   private void check(long offset, int width) throws InvalidBufferOffsetException {
     if (offset < 0 || offset > size - width)
       throw InvalidBufferOffsetException.create(offset, width);
+    checkScope();
+  }
+
+  /**
+   * Fails unless the current thread may access the memory now: its arena is open, and a confined
+   * arena's owner is this thread. A global or address view has nothing to check ({@link #scope} is
+   * {@code null}); a shared or automatic one loads its scope's state and branches; a confined one
+   * also compares the owner with the current thread. Compiled code makes no call and allocates
+   * nothing unless the check fails.
+   */
+  private void checkScope() {
+    MemorySegment.Scope s = scope;
+    if (s != null
+        && !(s.isAlive() && (!confined || segment.isAccessibleBy(Thread.currentThread()))))
+      throw inaccessible(segment);
+  }
+
+  /** The segment accessors' failure, in their order: the owner thread first, then liveness. */
+  @TruffleBoundary
+  private static RuntimeException inaccessible(MemorySegment s) {
+    if (!s.isAccessibleBy(Thread.currentThread()))
+      return new WrongThreadException("Attempted access outside owning thread");
+    return new IllegalStateException("Already closed");
   }
 
   private void checkWrite(long offset, int width)
