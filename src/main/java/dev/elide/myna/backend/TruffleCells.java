@@ -384,6 +384,8 @@ public final class TruffleCells implements Backend {
     var borrows = new ArrayList<String>();
     // The call borrows whose release writes a copy back, which can fail after the call returned.
     var writableBorrows = new HashSet<String>();
+    // The NUL check of each C string's borrow, by borrow local.
+    var stringChecks = new HashMap<String, String>();
     // The borrows a successful create hands to its resource, which ends them once destroyed.
     var held = new ArrayList<String>();
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
@@ -420,7 +422,7 @@ public final class TruffleCells implements Backend {
         if (t instanceof Pointer || t instanceof FunctionPointer) {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
-            boolean writable = p.access() != Access.READ;
+            boolean writable = p.access() != Access.READ && p.access() != Access.CSTRING;
             // A parameter with an align fact takes the coercion that honors it, one that costs more
             // above 16, where no scratch copy satisfies it. The others keep the smaller one, which
             // a compiled call inlines to keep its borrow out of the heap.
@@ -439,7 +441,34 @@ public final class TruffleCells implements Backend {
                 .append(field)
                 .append(";\n");
             String local = "borrow_" + p.name();
-            borrows.add(local + " = " + field + ".execute(" + argument + ")");
+            // An access=cstring parameter refuses a string with an embedded NUL before lending it.
+            String lentArgument = argument;
+            if (p.access() == Access.CSTRING) {
+              // Strings only; the lent bytes are then scanned for an embedded NUL.
+              imports.add(RUNTIME + "CStrings");
+              lentArgument =
+                  "CStrings.strings("
+                      + argument
+                      + ", "
+                      + p.nullable()
+                      + ", "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this)";
+              stringChecks.put(
+                  local,
+                  "CStrings.checkLent("
+                      + local
+                      + ".address(), "
+                      + local
+                      + ".length(), "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this);");
+            }
+            borrows.add(local + " = " + field + ".execute(" + lentArgument + ")");
             if (writable && !cell.isHeld(p)) writableBorrows.add(local);
             arguments.add(address(ffm, imports, local + ".address()"));
             // Every borrow, held or not, lends the guest's own segment to the downcall: a held
@@ -762,7 +791,11 @@ public final class TruffleCells implements Backend {
         // borrow outlives the call, so the resource must keep a borrow of it and the call cannot
         // go without one: skip the fast path whenever the create has any. Its segment still
         // reaches the downcall through scoped.
-        if (held.isEmpty() && segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
+        // A C string is checked on the borrowed path only: no fast path skips it.
+        if (held.isEmpty()
+            && f.parameters().stream().noneMatch(x -> x.access() == Access.CSTRING)
+            && segments.size() > 1
+            && segments.size() <= MAX_PATTERN_BUFFERS)
           unborrowedCall =
               "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
       }
@@ -826,20 +859,25 @@ public final class TruffleCells implements Backend {
                 .filter(p -> p.name().equals(cell.creates().handleParameter()))
                 .findFirst()
                 .orElseThrow();
+        // A ptr<ptr<R>> out-parameter is a one-word struct with the handle at offset 0.
+        boolean outPointer = m.outPointer(cell.creates());
         Struct struct =
-            m.structs().stream()
-                .filter(
-                    x -> x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
-                .findFirst()
-                .orElseThrow();
+            outPointer
+                ? null
+                : m.structs().stream()
+                    .filter(x ->
+                        x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
+                    .findFirst()
+                    .orElseThrow();
+        boolean inPlaceStruct = cell.creates().handleField() == null && !outPointer;
         String guestArgument = guest.get(parameter.name());
         String copy = "out.copyTo(" + guestArgument;
         // A struct the resource lives in is freed by the resource; any other struct, once the
         // cell is done with it.
         before
             .append("NativeStruct out = NativeStruct.")
-            .append(cell.creates().handleField() == null ? "allocateInPlace(" : "allocate(")
-            .append(struct.size())
+            .append(inPlaceStruct ? "allocateInPlace(" : "allocate(")
+            .append(outPointer ? 8 : struct.size())
             .append("L, ")
             .append(guest.get(parameter.name()))
             .append(", ")
@@ -866,17 +904,19 @@ public final class TruffleCells implements Backend {
               .append(", status, this));\n}\n");
         }
         String field = cell.creates().handleField();
-        if (field == null) {
+        if (inPlaceStruct) {
           // The struct is the resource: it lives in the runtime's memory until its destroy.
           body.append("long created = out.address();\n");
           hold = (retained.isEmpty() ? ", null" : ", hold") + ", out";
         } else {
           long offset =
-              struct.fields().stream()
-                  .filter(x -> x.name().equals(field))
-                  .findFirst()
-                  .orElseThrow()
-                  .offset();
+              outPointer
+                  ? 0
+                  : struct.fields().stream()
+                      .filter(x -> x.name().equals(field))
+                      .findFirst()
+                      .orElseThrow()
+                      .offset();
           body.append("long created = out.pointerAt(")
               .append(offset)
               .append("L);\n")
@@ -893,7 +933,8 @@ public final class TruffleCells implements Backend {
         // Spelled out in full: the parents held open, what must stay reachable, and the borrows.
         String parents = retained.isEmpty() ? "null" : "hold";
         // A held borrow needs handle= (OwnershipValidator), so the runtime's struct exists.
-        String kept = cell.creates().handleField() == null ? "out" : "null";
+        String kept =
+            cell.creates().handleField() == null && !m.outPointer(cell.creates()) ? "out" : "null";
         hold =
             ", "
                 + parents
@@ -908,7 +949,8 @@ public final class TruffleCells implements Backend {
         // The runtime's struct is freed explicitly: after the call for a handle field, on failure
         // or by the resource's destroy for a resource initialized in place. Parents are held
         // inside the try, so a closed parent frees the struct too.
-        boolean resourceInPlace = cell.creates().handleField() == null;
+        boolean resourceInPlace =
+            cell.creates().handleField() == null && !m.outPointer(cell.creates());
         String inner = "                ";
         if (!retained.isEmpty()) result.append("            Object hold = null;\n");
         result.append("            boolean adopted = false;\n").append("            try {\n");
@@ -1006,6 +1048,8 @@ public final class TruffleCells implements Backend {
       callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
+      String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));
+      if (check != null) callBlock.append(indent).append(check).append('\n');
     }
     for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');

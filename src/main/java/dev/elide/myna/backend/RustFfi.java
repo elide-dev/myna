@@ -219,6 +219,7 @@ public final class RustFfi implements Backend {
       var byValue = imports.stream().filter(ByValue::applies).toList();
       if (!byValue.isEmpty()) shims(m, byValue, out);
     }
+    out.append(RustImplementation.generate(m));
     out.append(RustOwnership.generate(m));
     return out.toString();
   }

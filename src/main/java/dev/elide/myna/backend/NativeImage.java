@@ -64,7 +64,8 @@ public final class NativeImage implements Backend {
 
   /** {@code @CConst} reaches the C headers Native Image writes for entry points. */
   private static boolean readOnlyPointer(Parameter p) {
-    return p.type() instanceof Pointer && p.access() == Access.READ;
+    return p.type() instanceof Pointer
+        && (p.access() == Access.READ || p.access() == Access.CSTRING);
   }
 
   private static boolean unsignedSmall(Type t) {

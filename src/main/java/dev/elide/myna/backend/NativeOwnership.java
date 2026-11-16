@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
 import java.util.*;
@@ -25,7 +26,7 @@ public final class NativeOwnership implements Backend {
                 + " {\n    private "
                 + m.ownershipClass()
                 + "() {}\n");
-    if (!m.returnedResources().isEmpty())
+    if (!m.ownedResources().isEmpty())
       out.append(
 """
         /** Called exactly once by the consumer when its resource is no longer accessible. */
@@ -44,13 +45,35 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    for (Resource r : m.returnedResources()) {
-      out.append("    public static final class ")
-          .append(r.name())
-          .append(" {\n        private ")
-          .append(r.name())
-          .append("() {}\n")
-          .append("        private static final NativeDestructor DESTRUCTOR = address -> ")
+    for (Resource r : m.ownedResources()) {
+      if (m.outPointer(r)) {
+        Function first =
+            m.functions().stream()
+                .filter(f -> f.name().equals(r.creates().getFirst()))
+                .findFirst()
+                .orElseThrow();
+        out.append("    public static final class ")
+            .append(r.name())
+            .append(" {\n        private ")
+            .append(r.name())
+            .append("() {}\n")
+            .append(
+                "        /**\n"
+                    + "         * What a constructor returns for a status outside its success"
+                    + " list, when it created\n"
+                    + "         * nothing. The out slot is ignored then.\n"
+                    + "         */\n"
+                    + "        @FunctionalInterface\n"
+                    + "        public interface Failure<T> { T failed(")
+            .append(NativeImage.qualifiedCarrier(m, first.returns()))
+            .append(" status); }\n");
+      } else
+        out.append("    public static final class ")
+            .append(r.name())
+            .append(" {\n        private ")
+            .append(r.name())
+            .append("() {}\n");
+      out.append("        private static final NativeDestructor DESTRUCTOR = address -> ")
           .append(m.nativeClass())
           .append('.')
           .append(r.destroy())
@@ -58,12 +81,17 @@ public final class NativeOwnership implements Backend {
       for (String name : r.creates()) {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        // A held borrow outlives the call, which only a Truffle cell can express.
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
         if (m.callBorrows().stream().anyMatch(b -> b.function().equals(name))) {
           // The buffer wrappers of the import lend each buffer for the call only.
           String target = m.ownershipClass() + "." + name;
           constructor(m, r, name, create, "NativeBuffer", target, out);
           constructor(m, r, name, create, "byte[]", target, out);
-        } else constructor(m, r, name, create, null, m.nativeClass() + "." + name, out);
+        } else if (create.parameters().stream().anyMatch(CallBorrows::cstring))
+          // Its C strings are converted by the import's String wrapper, which has no array form.
+          constructor(m, r, name, create, "NativeBuffer", m.ownershipClass() + "." + name, out);
+        else constructor(m, r, name, create, null, m.nativeClass() + "." + name, out);
       }
       out.append(
               "        /** Transfer sole ownership of a live allocation with no outstanding"
@@ -131,13 +159,58 @@ public final class NativeOwnership implements Backend {
     for (int i = 0; i < create.parameters().size(); i++) {
       Parameter p = create.parameters().get(i);
       if (buffer != null && call.derived(p)) continue;
+      boolean outPointer = m.outPointer(r);
+      // The out slot is the constructor's own: one word on its stack frame.
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        args.add("org.graalvm.word.WordFactory.pointer(slot.rawValue())");
+        continue;
+      }
       BufferBorrow lent = buffer != null ? call.buffer(p) : null;
       String carrier =
           lent != null
               ? (lent.batch() ? buffer + "[]" : buffer)
-              : NativeImage.qualifiedCarrier(m, p.type());
+              : buffer != null && CallBorrows.cstring(p)
+                  ? "String"
+                  : NativeImage.qualifiedCarrier(m, p.type());
       params.add(carrier + " arg" + i);
       args.add("arg" + i);
+    }
+    if (m.outPointer(r)) {
+      var succeeded = new ArrayList<String>();
+      String status = NativeImage.qualifiedCarrier(m, create.returns());
+      boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
+      for (long value : r.success())
+        succeeded.add(
+            Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
+      out.append(
+              "        /** A status outside the success list goes to onFailure, and nothing is"
+                  + " adopted. */\n")
+          .append("        public static <T> T ")
+          .append(r.wrapperName(name))
+          .append("(ResourceFactory<T> factory, Failure<? extends T> onFailure")
+          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+          .append(") {\n")
+          .append("            java.util.Objects.requireNonNull(factory);\n")
+          .append("            java.util.Objects.requireNonNull(onFailure);\n")
+          .append(
+              "            org.graalvm.word.Pointer slot ="
+                  + " org.graalvm.nativeimage.StackValue.get(8);\n")
+          .append("            slot.writeLong(0, 0L);\n")
+          .append("            ")
+          .append(status)
+          .append(" status = ")
+          .append(target)
+          .append('(')
+          .append(String.join(", ", args))
+          .append(");\n")
+          .append("            if (!(")
+          .append(String.join(" || ", succeeded))
+          .append(")) return onFailure.failed(status);\n")
+          .append("            long address = slot.readLong(0);\n")
+          // A success that wrote no handle created nothing either.
+          .append("            if (address == 0) return onFailure.failed(status);\n")
+          .append("            return adoptUnsafe(address, factory);\n        }\n");
+      return;
     }
     out.append("        /** Null means native creation failed; the consumer is not called. */\n")
         .append("        public static <T> T ")
@@ -275,6 +348,7 @@ public final class NativeOwnership implements Backend {
     var buffers = new ArrayList<Buffer>();
     // Batches are lent after the single buffers, in parameter order, and released before them.
     var batches = new ArrayList<Buffer>();
+    var texts = new ArrayList<Parameter>();
     int index = 0;
     for (Parameter p : f.parameters()) {
       String name = "arg" + index++;
@@ -315,12 +389,46 @@ public final class NativeOwnership implements Backend {
         arguments.add("pointer" + call.suffix(buffer));
       } else if (length != null)
         arguments.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
-      else {
+      else if (CallBorrows.cstring(p)) {
+        // NUL-terminated in unmanaged memory for the call: a String in, a CCharPointer out.
+        nativeParams.add("String " + name);
+        arrayParams.add("String " + name);
+        arguments.add("text" + (index - 1) + ".get()");
+        texts.add(p);
+      } else {
         String carrier = NativeImage.qualifiedCarrier(m, p.type());
         nativeParams.add(carrier + " " + name);
         arrayParams.add(carrier + " " + name);
         arguments.add(name);
       }
+    }
+    // Each C string is converted first and freed last, around the whole call. Plain try/finally, as
+    // for the buffers.
+    var textOpen = new StringBuilder();
+    var textClose = new StringBuilder();
+    for (Parameter p : texts) {
+      String position = String.valueOf(f.parameters().indexOf(p));
+      String arg = "arg" + position;
+      // An embedded NUL would silently end the string early on the C side: reject it.
+      textOpen
+          .append("        if (")
+          .append(
+              p.nullable()
+                  ? arg + " != null && "
+                  : "java.util.Objects.requireNonNull(" + arg + ") != null && ")
+          .append(arg)
+          .append(".indexOf('\\0') >= 0)\n            throw new IllegalArgumentException(\"")
+          .append(f.name())
+          .append(' ')
+          .append(p.name())
+          .append(": embedded NUL in a C string\");\n")
+          .append("        org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder text")
+          .append(position)
+          .append(" =\n            org.graalvm.nativeimage.c.type.CTypeConversion.toCString(")
+          .append(arg)
+          .append(");\n        try {\n");
+      textClose.insert(
+          0, "        } finally {\n            text" + position + ".close();\n        }\n");
     }
     String invoke =
         (f.returns() == Scalar.VOID ? "" : "return ")
@@ -337,7 +445,8 @@ public final class NativeOwnership implements Backend {
         .append(f.name())
         .append('(')
         .append(String.join(", ", nativeParams))
-        .append(") {\n");
+        .append(") {\n")
+        .append(textOpen);
     String pad = "        ";
     for (Buffer b : buffers) {
       String s = b.suffix();
@@ -429,8 +538,10 @@ public final class NativeOwnership implements Backend {
           .append(pad)
           .append("}\n");
     }
-    out.append("    }\n")
-        .append(
+    out.append(textClose).append("    }\n");
+    // A call with C strings and no buffers has no array form.
+    if (buffers.isEmpty() && batches.isEmpty()) return;
+    out.append(
             "    /** Array convenience path; caller prevents conflicting concurrent array access."
                 + " */\n")
         .append("    public static ")
@@ -439,7 +550,8 @@ public final class NativeOwnership implements Backend {
         .append(f.name())
         .append('(')
         .append(String.join(", ", arrayParams))
-        .append(") {\n");
+        .append(") {\n")
+        .append(textOpen);
     // Plain try/finally throughout: try-with-resources compiles to Throwable.addSuppressed, which
     // Truffle's runtime-compilation blocklist rejects on partially evaluated paths (#87).
     // A pinned array's data starts on an 8-byte boundary, so a stricter align fact is met by a
@@ -485,7 +597,9 @@ public final class NativeOwnership implements Backend {
                   buffers.getFirst().borrow(), "pointer.rawValue()", "length", "            "))
           .append("            ")
           .append(invoke)
-          .append("\n        } finally {\n            pin.close();\n        }\n    }\n");
+          .append("\n        } finally {\n            pin.close();\n        }\n")
+          .append(textClose)
+          .append("    }\n");
       return;
     }
     // Several arrays: every length is read first, then each non-empty array is pinned in turn; an
@@ -642,7 +756,7 @@ public final class NativeOwnership implements Backend {
             .append(".close();\n");
       out.append(pad).append("}\n");
     }
-    out.append("    }\n");
+    out.append(textClose).append("    }\n");
   }
 
   /**

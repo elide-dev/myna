@@ -64,6 +64,27 @@ the same output as before.
   pointer-returning function stay rejected.
 - A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
 - Ownership and call-buffer validation errors name the function and parameter they concern.
+- `rust_implementation=trait` on the module generates, for Rust code that *implements* the imports,
+  a safe `<Module>Implementation` trait and `define_implementations!`, which defines every
+  `extern "C"` entry point from an implementing type. Call borrows arrive as slices, returned
+  resources as associated types owned through `Box`, and everything else as declared. Modules
+  without the option generate the same output (see
+  [implementing imports in Rust](../ownership.md#implementing-imports-in-rust)).
+
+## Status-plus-out-pointer constructors, `usize` lengths, C strings (#141)
+
+- A resource's `handle=PARAMETER` may name a `ptr<ptr<R>>` out-parameter: the "status plus handle"
+  constructor. FFM and Native Image owners take an `onFailure` callback for any status outside
+  `success=`, Rust returns `Result<R, Status>`, and Truffle cells adopt it as other status creates
+  (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
+- A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
+- `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
+  Rust wrappers and implementer trait, a `String` overload in FFM, a guest string in Truffle cells
+  (see [C strings](../ownership.md#c-strings)).
+- An import may no longer be named `NAME_address` with no parameters beside an import `NAME`: it
+  would collide with that binding's accessor.
+- `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
+  from the same lookup, for symbols handed to native code rather than called.
 
 ## Batches of borrowed buffers (#132)
 
@@ -104,6 +125,7 @@ single buffers.
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
 | 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
+| 14 | An import named `NAME_address` with no parameters beside an import `NAME` is rejected: FFM bindings gain a `NAME_address()` accessor per import. | descriptors with such a pair of imports | rename one |
 
 Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
 import, export entry-point signatures at the C level.
