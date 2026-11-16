@@ -749,6 +749,36 @@ public final class CellChecks {
       rejects(cells, "stepperCreate", parent, NativeBytes.of(step, false));
       check(call(cells, "counterLive").equals(0L), "both destroyed");
     }
+    // Two constructors of one resource, each with the owner semantics of a single create, each
+    // lending its guest buffer for the call only: the resource keeps what it computed.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment source = arena.allocate(3);
+      source.set(ValueLayout.JAVA_BYTE, 0, (byte) 1);
+      source.set(ValueLayout.JAVA_BYTE, 1, (byte) 2);
+      source.set(ValueLayout.JAVA_BYTE, 2, (byte) 3);
+      Object parsed = call(cells, "parseText", NativeBytes.of(source, false));
+      check(parsed instanceof NativeResource r && r.type().equals("Parsed"), "parseText owner");
+      source.set(ValueLayout.JAVA_BYTE, 0, (byte) 100);
+      check(call(cells, "parsedValue", parsed).equals(6L), "parsed keeps its own value");
+      byte[] request = {4, 5};
+      Object analyzed = call(cells, "analyzeText", new HeapBytes(request, false), 3);
+      check(analyzed instanceof NativeResource r && r.type().equals("Parsed"), "analyzeText owner");
+      check(call(cells, "parsedValue", analyzed).equals(27L), "analyzed value");
+      Object fromText = call(cells, "analyzeText", "ab", 1);
+      check(call(cells, "parsedValue", fromText).equals(195L), "analyzed text");
+      check(call(cells, "counterLive").equals(3L), "three parsed live");
+      // An absent source reaches native code as null, which parseText reports as failure.
+      check(call(cells, "parseText", NativeVoid.INSTANCE) == NativeVoid.INSTANCE, "absent source is null");
+      check(call(cells, "analyzeText", new HeapBytes(request, false), 0) == NativeVoid.INSTANCE, "failed analyze is null");
+      rejects(cells, "analyzeText", NativeVoid.INSTANCE, 1);
+      check(call(cells, "counterLive").equals(3L), "failures leave nothing live");
+      for (Object owner : new Object[] {parsed, analyzed, fromText})
+        check(call(cells, "parsedRelease", owner) == NativeVoid.INSTANCE, "parsed released");
+      check(call(cells, "parsedRelease", parsed) == NativeVoid.INSTANCE, "second release is a no-op");
+      rejects(cells, "parsedValue", parsed);
+      rejects(cells, "parsedRelease", NativeVoid.INSTANCE);
+      check(call(cells, "counterLive").equals(0L), "parsed destroyed once each");
+    }
     // Creates that report a status and write the resource through a parameter. The guest passes
     // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
     // native side writes into memory the runtime owns and the buffer receives a copy.

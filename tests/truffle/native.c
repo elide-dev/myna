@@ -111,6 +111,35 @@ int64_t cells_stepper_next(Stepper *stepper) {
   return value;
 }
 int64_t cells_counter_live(void) { return live; }
+// Two constructors of one resource, each reading its buffer during the call only: the resource
+// keeps the sum it computed. parse fails on an absent source, analyze on a scale of zero. The
+// release accepts null as a no-op, as free does.
+typedef struct Parsed { uint64_t value; } Parsed;
+static Parsed *parsed_new(uint64_t value) {
+  Parsed *parsed = malloc(sizeof *parsed);
+  if (!parsed) return NULL;
+  parsed->value = value;
+  live++;
+  return parsed;
+}
+Parsed *cells_parse_text(const uint8_t *source, uint64_t length) {
+  if (!source) return NULL;
+  uint64_t sum = 0;
+  for (uint64_t i = 0; i < length; i++) sum += source[i];
+  return parsed_new(sum);
+}
+Parsed *cells_analyze_text(const uint8_t *request, uint32_t length, uint8_t scale) {
+  if (scale == 0) return NULL;
+  uint64_t sum = 0;
+  for (uint32_t i = 0; i < length; i++) sum += request[i];
+  return parsed_new(sum * scale);
+}
+void cells_parsed_release(Parsed *parsed) {
+  if (!parsed) return;
+  free(parsed);
+  live--;
+}
+uint64_t cells_parsed_value(const Parsed *parsed) { return parsed->value; }
 // A create that reports a status and writes its handle into a field of the caller's struct.
 // Statuses 0 and 2 mean the layout exists; 7 means it does not; a first byte of 0xff reports
 // success without writing a handle.

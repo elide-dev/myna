@@ -20,19 +20,6 @@ final class RustOwnership {
                 + "pub mod ownership {\n");
     for (Resource r : m.returnedResources()) {
       String n = r.name();
-      Function create =
-          m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
-      // Declared types live in the parent module; scalars are spelled the same either way.
-      String parameters =
-          String.join(
-              ", ",
-              create.parameters().stream()
-                  .map(p -> p.name() + ": " + Types.rust(p, "super::"))
-                  .toList());
-      // Nothing vouches for a pointer argument, or for how long the resource depends on it.
-      boolean pointers = create.parameters().stream().anyMatch(p -> p.type() instanceof Pointer);
-      String arguments =
-          String.join(", ", create.parameters().stream().map(Parameter::name).toList());
       out.append("    pub struct ")
           .append(n)
           .append(" {\n")
@@ -48,26 +35,9 @@ final class RustOwnership {
             .append(" {}\n    unsafe impl core::marker::Sync for ")
             .append(n)
             .append(" {}\n");
-      out.append("    impl ")
-          .append(n)
-          .append(" {\n")
-          .append(
-              pointers
-                  ? "        /// # Safety\n"
-                      + "        /// Every pointer argument must satisfy the raw function's"
-                      + " requirements, for as long\n"
-                      + "        /// as the created resource depends on it.\n"
-                      + "        pub unsafe fn create("
-                  : "        pub fn create(")
-          .append(parameters)
-          .append(") -> Option<Self> {\n            core::ptr::NonNull::new(unsafe { super::")
-          .append(r.create())
-          .append('(')
-          .append(arguments)
-          .append(
-              ") }).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
-                  + "        }\n")
-          .append(
+      out.append("    impl ").append(n).append(" {\n");
+      for (String name : r.creates()) constructor(m, r, name, out);
+      out.append(
               "        /// # Safety\n"
                   + "        /// Transfer sole ownership of a live allocation from this resource's"
                   + " allocator.\n"
@@ -220,6 +190,63 @@ final class RustOwnership {
           .append(") }\n    }\n");
     }
     return out.append("}\n").toString();
+  }
+
+  /**
+   * One constructor of a resource, named {@code create} for a resource's only constructor and after
+   * its import otherwise. A constructor with call borrows takes their slices and calls the buffer
+   * wrapper of its import, which lends them for the call only: the resource it returns is fresh,
+   * never a view into a buffer.
+   */
+  private static void constructor(Module m, Resource r, String name, StringBuilder out) {
+    Function create =
+        m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+    boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
+    CallBorrows call = CallBorrows.of(m, create);
+    var parameters = new ArrayList<String>();
+    var arguments = new ArrayList<String>();
+    for (Parameter p : create.parameters()) {
+      if (buffers && call.length(p) != null) continue;
+      BufferBorrow buffer = buffers ? call.buffer(p) : null;
+      arguments.add(p.name());
+      if (buffer == null)
+        // Declared types live in the parent module; scalars are spelled the same either way.
+        parameters.add(p.name() + ": " + Types.rust(p, "super::"));
+      else {
+        String slice = p.access() == Access.READ ? "&[u8]" : "&mut [u8]";
+        parameters.add(p.name() + ": " + (call.nullable(buffer) ? "Option<" + slice + ">" : slice));
+      }
+    }
+    // Nothing vouches for a pointer argument, or for how long the resource depends on it. The
+    // slices of a constructor's buffers vouch for themselves, for exactly the call.
+    boolean pointers =
+        create.parameters().stream()
+            .anyMatch(p -> p.type() instanceof Pointer && (!buffers || call.buffer(p) == null));
+    out.append(
+            pointers
+                ? "        /// # Safety\n"
+                    + "        /// Every pointer argument"
+                    + (buffers ? " other than a borrowed buffer" : "")
+                    + " must satisfy the raw function's requirements, for as long\n"
+                    + "        /// as the created resource depends on it.\n"
+                    + "        pub unsafe fn "
+                : "        pub fn ")
+        .append(r.wrapperName(name))
+        .append('(')
+        .append(String.join(", ", parameters))
+        .append(") -> Option<Self> {\n            core::ptr::NonNull::new(")
+        // The buffer wrapper is this module's function of the same name.
+        .append(
+            buffers && !call.passesPointers()
+                ? "self::"
+                : "unsafe { " + (buffers ? "self::" : "super::"))
+        .append(name)
+        .append('(')
+        .append(String.join(", ", arguments))
+        .append(buffers && !call.passesPointers() ? ")" : ") }")
+        .append(
+            ").map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
+                + "        }\n");
   }
 
   /**

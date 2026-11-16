@@ -45,6 +45,25 @@ fn main() {
     assert_eq!(tally(Some(&bytes)), 5);
     assert_eq!(tally(Some(&[])), 0);
     assert_eq!(tally(None), ABSENT);
+    // Two constructors of one resource, each named after its import, each lending its buffer for
+    // the call only: the resource keeps what it computed, not the buffer.
+    let mut source = [1u8, 2, 3];
+    let parsed = Parsed::parse(Some(&source)).unwrap();
+    source[0] = 100;
+    assert_eq!(unsafe { seam::parsedValue(parsed.borrow().as_ptr()) }, 6);
+    assert!(Parsed::parse(None).is_none());
+    let empty = Parsed::parse(Some(&[])).unwrap();
+    assert_eq!(unsafe { seam::parsedValue(empty.borrow().as_ptr()) }, 0);
+    let analyzed = Parsed::analyze(&source, 2).unwrap();
+    assert_eq!(unsafe { seam::parsedValue(analyzed.borrow().as_ptr()) }, 210);
+    assert_eq!(unsafe { seam::liveCount() }, 3);
+    unsafe { seam::failNext(); }
+    assert!(Parsed::analyze(&source, 1).is_none());
+    drop((parsed, empty));
+    std::thread::spawn(move || drop(analyzed)).join().unwrap();
+    // The release accepts null as a no-op; no owner ever passes it one.
+    unsafe { seam::release(core::ptr::null_mut()); }
+    assert_eq!(unsafe { seam::liveCount() }, 0);
     assert!(std::panic::catch_unwind(|| {
         let _owner = Ticket::create().unwrap();
         panic!("release during unwinding");

@@ -114,7 +114,13 @@ public final class Dsl {
               }
             resources.add(
                 new Resource(
-                    words[1], create, destroy, threading.equals("shared"), handle, success));
+                    words[1],
+                    // Several constructors are a comma-separated list, each an import's name.
+                    List.of(create.split(",", -1)),
+                    destroy,
+                    threading.equals("shared"),
+                    handle,
+                    success));
             empty(opts);
           }
           case "borrow" -> {

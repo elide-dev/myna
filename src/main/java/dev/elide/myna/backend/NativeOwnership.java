@@ -45,15 +45,6 @@ public final class NativeOwnership implements Backend {
 
 """);
     for (Resource r : m.returnedResources()) {
-      Function create =
-          m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
-      var params = new ArrayList<String>();
-      var args = new ArrayList<String>();
-      // Pointer arguments keep the raw binding's carriers, typed records and opaques included.
-      for (int i = 0; i < create.parameters().size(); i++) {
-        params.add(NativeImage.qualifiedCarrier(m, create.parameters().get(i).type()) + " arg" + i);
-        args.add("arg" + i);
-      }
       out.append("    public static final class ")
           .append(r.name())
           .append(" {\n        private ")
@@ -63,22 +54,18 @@ public final class NativeOwnership implements Backend {
           .append(m.nativeClass())
           .append('.')
           .append(r.destroy())
-          .append("(org.graalvm.word.WordFactory.pointer(address));\n")
-          .append("        /** Null means native creation failed; the consumer is not called. */\n")
-          .append("        public static <T> T create(ResourceFactory<T> factory")
-          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
-          .append(") {\n")
-          .append("            java.util.Objects.requireNonNull(factory);\n")
-          .append("            long address = ")
-          .append(m.nativeClass())
-          .append('.')
-          .append(r.create())
-          .append('(')
-          .append(String.join(", ", args))
-          .append(").rawValue();\n")
-          .append("            if (address == 0) return null;\n")
-          .append("            return adoptUnsafe(address, factory);\n        }\n")
-          .append(
+          .append("(org.graalvm.word.WordFactory.pointer(address));\n");
+      for (String name : r.creates()) {
+        Function create =
+            m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        if (m.callBorrows().stream().anyMatch(b -> b.function().equals(name))) {
+          // The buffer wrappers of the import lend each buffer for the call only.
+          String target = m.ownershipClass() + "." + name;
+          constructor(m, r, name, create, "NativeBuffer", target, out);
+          constructor(m, r, name, create, "byte[]", target, out);
+        } else constructor(m, r, name, create, null, m.nativeClass() + "." + name, out);
+      }
+      out.append(
               "        /** Transfer sole ownership of a live allocation with no outstanding"
                   + " borrows. */\n")
           .append(
@@ -121,6 +108,49 @@ public final class NativeOwnership implements Backend {
 """);
     for (CallBorrows call : CallBorrows.of(m)) buffers(m, call, out);
     return out.append("}\n").toString();
+  }
+
+  /**
+   * One constructor of a resource: {@code create} for a resource's only constructor, the import's
+   * name otherwise. With {@code buffer} set, each call-borrowed buffer takes that carrier, its
+   * length drops out, and {@code target} is the import's buffer wrapper of the same carriers.
+   */
+  private static void constructor(
+      Module m,
+      Resource r,
+      String name,
+      Function create,
+      String buffer,
+      String target,
+      StringBuilder out) {
+    CallBorrows call = CallBorrows.of(m, create);
+    var params = new ArrayList<String>();
+    var args = new ArrayList<String>();
+    // Pointer arguments keep the raw binding's carriers, typed records and opaques included.
+    for (int i = 0; i < create.parameters().size(); i++) {
+      Parameter p = create.parameters().get(i);
+      if (buffer != null && call.length(p) != null) continue;
+      String carrier =
+          buffer != null && call.buffer(p) != null
+              ? buffer
+              : NativeImage.qualifiedCarrier(m, p.type());
+      params.add(carrier + " arg" + i);
+      args.add("arg" + i);
+    }
+    out.append("        /** Null means native creation failed; the consumer is not called. */\n")
+        .append("        public static <T> T ")
+        .append(r.wrapperName(name))
+        .append("(ResourceFactory<T> factory")
+        .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+        .append(") {\n")
+        .append("            java.util.Objects.requireNonNull(factory);\n")
+        .append("            long address = ")
+        .append(target)
+        .append('(')
+        .append(String.join(", ", args))
+        .append(").rawValue();\n")
+        .append("            if (address == 0) return null;\n")
+        .append("            return adoptUnsafe(address, factory);\n        }\n");
   }
 
   /** What an absent buffer passes: the null pointer, in the buffer's own word carrier. */

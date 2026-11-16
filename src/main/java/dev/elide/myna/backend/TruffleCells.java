@@ -87,7 +87,7 @@ public final class TruffleCells implements Backend {
     return new Cell(
         f,
         CallBorrows.of(m, f),
-        m.resources().stream().filter(r -> r.create().equals(f.name())).findFirst().orElse(null),
+        m.resources().stream().filter(r -> r.createdBy(f.name())).findFirst().orElse(null),
         m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null));
   }
 

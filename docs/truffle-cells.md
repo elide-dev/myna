@@ -358,7 +358,7 @@ the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThres
 
 ## Ownership
 
-A `resource` declaration makes the `create` import's cell return a `NativeResource`: a guest-visible
+A `resource` declaration makes each `create` import's cell (every one, for [several constructors](ownership.md#several-constructors)) return a `NativeResource`: a guest-visible
 owner that is an interop pointer while open, exposes a `close` member, closes exactly once, and
 refuses access from any thread other than its required thread when the resource is confined. The
 `destroy` import's cell takes that owner and closes it; a pointer or a foreign owner is rejected, and

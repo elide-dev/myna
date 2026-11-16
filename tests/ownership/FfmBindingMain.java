@@ -137,6 +137,39 @@ public final class FfmBindingMain {
         if (NativeApiFFM.Ticket.create(binding, (address, destructor, threadConstraint) -> {
           throw new AssertionError("null creation must not be adopted");
         }) != null) throw new AssertionError("null native allocation");
+        // Two constructors of one resource, named after their imports, each lending its segment
+        // for the call only: the resource keeps what it computed, never the buffer.
+        NativeApiFFM.ResourceFactory<Action> adopt = (address, destructor, threadConstraint) -> {
+          if (threadConstraint != null || address.address() == 0) throw new AssertionError("shared owner");
+          return () -> destructor.destroy(address);
+        };
+        var values = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> observe = (address, destructor, threadConstraint) -> {
+          values.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var source = memory.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 1, (byte) 2, (byte) 3);
+        var parsed = NativeApiFFM.Parsed.parse(binding, observe, source.asReadOnly());
+        source.set(ValueLayout.JAVA_BYTE, 0, (byte) 100);
+        var empty = NativeApiFFM.Parsed.parse(binding, observe, memory.allocate(0));
+        var analyzed = NativeApiFFM.Parsed.analyze(binding, observe, source, (byte) 2);
+        if (binding.parsedValue(values.get(0)) != 6 || binding.parsedValue(values.get(1)) != 0
+            || binding.parsedValue(values.get(2)) != 210 || binding.liveCount() != 3)
+          throw new AssertionError("constructors");
+        // An absent source reaches native code as null, which parse reports as failure.
+        if (NativeApiFFM.Parsed.parse(binding, adopt, null) != null
+            || NativeApiFFM.Parsed.parse(binding, adopt, MemorySegment.NULL) != null)
+          throw new AssertionError("absent source");
+        // A constructor's buffer is validated before native code runs, as any call buffer is.
+        rejects(IllegalArgumentException.class, () -> NativeApiFFM.Parsed.analyze(binding, adopt,
+            MemorySegment.ofArray(new byte[1]), (byte) 1));
+        rejects(IllegalStateException.class, () -> NativeApiFFM.Parsed.analyze(binding, adopt, closed, (byte) 1));
+        binding.failNext();
+        if (NativeApiFFM.Parsed.analyze(binding, adopt, source, (byte) 1) != null) throw new AssertionError("failed analyze");
+        parsed.run(); empty.run(); analyzed.run();
+        // The release accepts null as a no-op; no owner ever passes it one.
+        binding.release(MemorySegment.NULL);
+        if (binding.liveCount() != 0) throw new AssertionError("constructed resources leaked");
       }
       rejects(IllegalStateException.class, () -> binding.liveCount());
     }

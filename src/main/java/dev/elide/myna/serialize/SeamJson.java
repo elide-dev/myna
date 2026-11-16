@@ -129,8 +129,14 @@ public final class SeamJson {
                               + quote(r.name())
                               + ",\"representation\":\"native\",\"threading\":"
                               + quote(r.shared() ? "shared" : "confined")
+                              // One constructor keeps its string form; several are a list.
                               + ",\"create\":"
-                              + quote(r.create())
+                              + (r.creates().size() == 1
+                                  ? quote(r.creates().getFirst())
+                                  : "["
+                                      + String.join(
+                                          ",", r.creates().stream().map(SeamJson::quote).toList())
+                                      + "]")
                               + ",\"destroy\":"
                               + quote(r.destroy())
                               + (r.handle() == null

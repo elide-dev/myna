@@ -15,7 +15,55 @@ import ticketDestroy symbol=ticket_destroy return=void error=no_failure nounwind
 end
 ```
 
-This declaration is an explicit implementation contract: the constructor returns either null or sole ownership of a fresh, live resource; the destructor consumes that ownership exactly once. Constructors take scalar and pointer arguments. All scalar values must be handled without undefined behavior; invalid inputs can return null. Pointer arguments pass through every generated create wrapper unchanged, under their own declared contracts: the generator vouches for none of them, so the Rust `create` is an `unsafe fn` whenever it takes one. A resource created from another resource's handle (a stream from its session) must not outlive that parent. In the Native Image, FFM and Rust wrappers the parent's lifetime is the consumer's to enforce; Truffle cells enforce it for guest code, where the created owner holds its parent open unless the parameter is declared `nocapture`. A `borrow` cannot be declared on a create, because a create returns a pointer. A successful allocation satisfies the destructor's requirements. Both functions must be native imports, returning normally without unwinding across the ABI. Resources are opaque; no Rust or Java object layout is assumed.
+This declaration is an explicit implementation contract: the constructor returns either null or sole ownership of a fresh, live resource; the destructor consumes that ownership exactly once. Constructors take scalar and pointer arguments. All scalar values must be handled without undefined behavior; invalid inputs can return null. Pointer arguments pass through every generated create wrapper unchanged, under their own declared contracts: the generator vouches for none of them, so the Rust `create` is an `unsafe fn` whenever it takes one. A resource created from another resource's handle (a stream from its session) must not outlive that parent. In the Native Image, FFM and Rust wrappers the parent's lifetime is the consumer's to enforce; Truffle cells enforce it for guest code, where the created owner holds its parent open unless the parameter is declared `nocapture`. A create may take [call-scoped buffers](#constructors-with-call-scoped-buffers). A successful allocation satisfies the destructor's requirements. The destructor's parameter may be `nullable=true` when it accepts null as a no-op, as `free` does: no generated owner passes it null, so the wrappers are the same, and `seam.ll` carries no `nonnull` fact for it. Both functions must be native imports, returning normally without unwinding across the ABI. Resources are opaque; no Rust or Java object layout is assumed.
+
+### Several constructors
+
+A resource may have several constructors, listed in `create=`:
+
+```text
+opaque Parsed
+resource Parsed representation=native threading=shared create=parse,analyze destroy=release
+```
+
+Each constructor is validated and projected exactly as a single create is: it returns the resource
+pointer (or, with `handle=`, reports a status and writes it through the named parameter, which every
+constructor must then have), it is a returning `no_failure` native import with approved `nounwind`,
+and it takes scalars and pointers only. A function constructs at most one resource and is never
+also a destroy. The ownership APIs name each constructor's wrapper after its import:
+`Parsed::parse(..)` and `Parsed::analyze(..)` in Rust, `Parsed.parse(factory, ..)` and
+`Parsed.analyze(factory, ..)` in Java; such an import cannot be named after a member every owner
+already has (`adoptUnsafe`, `DESTRUCTOR`, `from_raw`, `into_raw`, `borrow`, `pointer`, `_thread`).
+A resource with exactly one constructor keeps the name `create` and generates what it always has,
+and `seam.json` keeps its string form; several constructors are a list there, and therefore in the
+fingerprint. Each constructor's Truffle cell returns an owner, as a single create's does.
+
+### Constructors with call-scoped buffers
+
+A constructor may declare `borrow ... lifetime=call` buffers, including one that returns the
+resource pointer:
+
+```text
+borrow parse source length=length lifetime=call
+import parse symbol=parsed_parse return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param source type=ptr<u8> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+end
+```
+
+The returned handle is a fresh owned resource, never a view into the buffer, and the buffer
+contract already says the callee stops using the buffer before it returns. Every rule of a
+[call-scoped buffer](#call-scoped-buffers-including-off-heap-storage) applies. The constructor's
+wrappers take the buffers in place of pointer and length and lend them for the call only, through
+the same buffer wrappers as any other call borrow: `Parsed::parse(source: Option<&[u8]>)` in Rust,
+`Parsed.parse(factory, NativeBuffer)` and `Parsed.parse(factory, byte[])` in Native Image,
+`Parsed.parse(binding, factory, MemorySegment)` in FFM; the Truffle cell lends the guest's buffer
+as any cell does. The import's own buffer wrapper (`ownership::parse`, `NativeApiOwnership.parse`,
+the `LibraryBinding` overload, the static JNI `parseBuffer`) is generated too and returns the raw
+pointer. A wrapper adds nothing to the create but the call borrow's own work: no allocation beyond
+it and no change to leaf status or transitions. A call borrow on any other function that returns a
+pointer stays rejected. A create that keeps its buffer past the call declares a
+[held borrow](#borrows-held-by-a-resource-truffle-cells-only) instead.
 
 `threading=confined` requires access and destruction on the creating/adopting thread. `threading=shared` explicitly permits access and destruction from other threads, with the native implementation providing any necessary synchronization. It does not request reference counting or shared ownership. These are strong contracts, not properties inferred from the function signatures.
 
@@ -23,7 +71,7 @@ This declaration is an explicit implementation contract: the constructor returns
 
 `seam.rs` retains the raw ABI and adds `ownership::Ticket`:
 
-- `create(...) -> Option<Ticket>` adopts successful allocations.
+- `create(...) -> Option<Ticket>` adopts successful allocations; with [several constructors](#several-constructors), each is an associated function named after its import.
 - `Drop` calls the declared destructor, including during Rust unwinding.
 - `borrow() -> TicketBorrow<'_>` ties a view to its owner; moving or dropping the owner while that view remains in use fails compilation.
 - `into_raw()` consumes the owner without destroying the resource, transferring the release obligation to the caller.
@@ -47,7 +95,7 @@ public interface ResourceFactory<T> {
 }
 ```
 
-Use `NativeApiOwnership.Ticket.create(myResourceFactory)` to allocate and return your own managed object. The generated factory passes a reusable destructor callback and the required thread (`null` for shared resources). A null native result returns null without invoking the consumer. An exception or null result from adoption triggers immediate native cleanup. **A failed adoption must roll back its registrations without freeing the address**; a successful adoption transfers the sole release obligation to the consumer. `adoptUnsafe` supports existing native allocations under the same contract; null arguments are rejected before adoption.
+Use `NativeApiOwnership.Ticket.create(myResourceFactory)` to allocate and return your own managed object (with several constructors, `NativeApiOwnership.Parsed.parse(myResourceFactory, ...)` and so on, one per import). The generated factory passes a reusable destructor callback and the required thread (`null` for shared resources). A null native result returns null without invoking the consumer. An exception or null result from adoption triggers immediate native cleanup. **A failed adoption must roll back its registrations without freeing the address**; a successful adoption transfers the sole release obligation to the consumer. `adoptUnsafe` supports existing native allocations under the same contract; null arguments are rejected before adoption.
 
 The consumer owns access guards, exactly-once release, aliases, synchronization, and integration with its GC or scope system. The callback must not run while a native borrow is active. The generator cannot enforce those guarantees inside an arbitrary consumer implementation. Lifecycle callbacks are not automatically eligible for `NO_TRANSITION`.
 
@@ -85,7 +133,7 @@ end
 
 - Each borrow names a buffer and a length parameter of its own. Two borrows of one buffer, one length shared by two buffers, and a buffer that is another borrow's length are rejected. Every rule above applies to each buffer. The order of the `borrow` lines does not matter: the descriptor sorts them by function and buffer, and wrappers follow the parameter order.
 - Any other parameter is a scalar or a pointer. A pointer that is not a declared buffer **passes through every wrapper unchanged**, in the carrier the raw binding already uses for its type. The borrow declarations say nothing about it: it keeps its own declared nullability, access and ownership, and meeting them stays the caller's responsibility, exactly as on the raw binding. Callback, by-value record and isolate-thread parameters are rejected beside a borrow.
-- A pointer result beside a borrow stays rejected: nothing yet ties a returned pointer to the buffer it may point into.
+- A pointer result beside a borrow stays rejected, except for a resource's [constructor](#constructors-with-call-scoped-buffers), which returns a fresh resource: nothing yet ties any other returned pointer to the buffer it may point into.
 - No wrapper checks that two buffers of one call are disjoint. Rust's borrow rules exclude a `&mut` slice that overlaps another; everywhere else, passing overlapping memory as a read buffer and a writable buffer breaks the read contract above and is the caller's error.
 
 ### Nullable buffers
@@ -241,7 +289,7 @@ With `truffle_cells=true`, the same declarations project into guest-callable cel
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, scalar and pointer constructor arguments, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

@@ -187,7 +187,51 @@ public final class OwnershipMain {
     NativeApiOwnership.increment(empty);
     verifySeveralBuffers(empty);
     verifyNullableBuffers(empty);
+    verifyConstructors(empty);
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
+  }
+
+  /**
+   * Two constructors of one resource, named after their imports, each lending its buffer for the
+   * call only: the resource keeps what it computed, never the buffer. The release accepts null.
+   */
+  private static void verifyConstructors(NativeApiOwnership.NativeBuffer empty) {
+    check(NativeApi.liveCount() == 0);
+    Buffer source = new Buffer("source");
+    source.pointer.write(0, (byte) 1);
+    source.pointer.write(1, (byte) 2);
+    source.pointer.write(2, (byte) 3);
+    Buffer.EVENTS.setLength(0);
+    Owner parsed = NativeApiOwnership.Parsed.parse(Owner::new, source);
+    check(Buffer.EVENTS.toString().equals("+sourcer -sourcer ") && source.leases == 0);
+    source.pointer.write(0, (byte) 100);
+    check(NativeApi.parsedValue(WordFactory.pointer(parsed.address())) == 6);
+    Owner analyzed = NativeApiOwnership.Parsed.analyze(Owner::new, source, (byte) 2);
+    check(NativeApi.parsedValue(WordFactory.pointer(analyzed.address())) == 210);
+    byte[] bytes = {4, 5};
+    Owner fromArray = NativeApiOwnership.Parsed.analyze(Owner::new, bytes, (byte) 3);
+    check(NativeApi.parsedValue(WordFactory.pointer(fromArray.address())) == 27);
+    Owner fromEmpty = NativeApiOwnership.Parsed.parse(Owner::new, empty);
+    check(NativeApi.parsedValue(WordFactory.pointer(fromEmpty.address())) == 0);
+    check(NativeApi.liveCount() == 4);
+    // An absent source reaches native code as the null pointer, which parse reports as failure:
+    // the consumer is not called.
+    check(NativeApiOwnership.Parsed.parse(Owner::new, (byte[]) null) == null);
+    check(NativeApiOwnership.Parsed.parse(Owner::new, (NativeApiOwnership.NativeBuffer) null) == null);
+    // A buffer that cannot be acquired never reaches native code, and nothing is created.
+    source.failAcquire = true;
+    rejects(() -> NativeApiOwnership.Parsed.analyze(Owner::new, source, (byte) 1));
+    source.failAcquire = false;
+    check(source.leases == 0 && NativeApi.liveCount() == 4);
+    NativeApi.failNext();
+    check(NativeApiOwnership.Parsed.analyze((address, destructor, thread) -> {
+      throw new AssertionError("null creation must not be adopted");
+    }, bytes, (byte) 1) == null);
+    for (Owner owner : new Owner[] {parsed, analyzed, fromArray, fromEmpty}) owner.registration.clean();
+    // The release accepts null as a no-op; no owner ever passes it one.
+    NativeApi.release(WordFactory.nullPointer());
+    check(NativeApi.liveCount() == 0);
+    source.dispose();
   }
 
   /** Two buffers with lengths of their own beside a pointer that passes through unchanged. */

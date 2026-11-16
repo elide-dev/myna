@@ -56,3 +56,25 @@ import liveCount symbol=ticket_live return=i64 error=no_failure nounwind=true@ex
 end
 import failNext symbol=ticket_fail_next return=void error=no_failure nounwind=true@explicit_contract
 end
+# A resource with two constructors, each named after its import in the ownership APIs. Each takes a
+# call-scoped buffer: the callee reads it during the call only and returns a fresh resource that
+# never points into it. The release accepts null as a no-op, as free does; no owner passes it one.
+opaque Parsed
+resource Parsed representation=native threading=shared create=parse,analyze destroy=release
+borrow parse source length=length lifetime=call
+borrow analyze request length=length lifetime=call
+import parse symbol=parsed_parse return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param source type=ptr<u8> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+end
+import analyze symbol=parsed_analyze return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param request type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u32
+  param scale type=u8
+end
+import release symbol=parsed_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param parsed type=ptr<Parsed> nullable=true ownership=transferred_to_callee access=read_write
+end
+import parsedValue symbol=parsed_value return=u64 error=no_failure nounwind=true@explicit_contract
+  param parsed type=ptr<Parsed> nullable=false ownership=borrowed access=read
+end

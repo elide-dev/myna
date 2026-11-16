@@ -112,7 +112,7 @@ public final class FfmCellsMain {
       bytes.fill((byte) 5);
       if (CellApiTruffle.checksum_Cell.invoke(bytes.address(), 4) != 20) throw new AssertionError("invoke checksum");
     }
-    if (CellApiTruffle.CELLS.length != 43) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
+    if (CellApiTruffle.CELLS.length != 47) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
     // Only an image compiles at run time here; on HotSpot the fixture runs without a compiler.
     // The same guest code as the image runs compiled; here interpreted, for the result.
     if (!ImageInfo.inImageRuntimeCode()) CellChecks.guestConstants(CellApiTruffle.constants(), false);

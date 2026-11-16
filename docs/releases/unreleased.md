@@ -40,6 +40,19 @@ Image gains `addressOf(long)` on element structs and an asserted, always-inlined
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
 
+## Resources with several constructors (#139)
+
+- `create=` takes a comma-separated list of imports. Rust, Native Image and FFM owners gain one
+  constructor per import, named after it; a resource with one constructor keeps `create` and
+  generates the same output, and `seam.json` lists constructors only when there are several (see
+  [several constructors](../ownership.md#several-constructors)).
+- A resource constructor, including one that returns the resource pointer, may declare call-scoped
+  buffers. Its owner constructors take the buffers and lend them for the call only, as every call
+  borrow wrapper does; Truffle cells lend the guest's buffer. Call borrows on any other
+  pointer-returning function stay rejected.
+- A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
+- Ownership and call-buffer validation errors name the function and parameter they concern.
+
 ## Breaking changes
 
 | # | Change | Affects | Migration |

@@ -44,6 +44,10 @@ final class OwnershipValidator {
           "Send",
           "Sync");
 
+  /** Members of each generated owner that a constructor named after its import would shadow. */
+  private static final Set<String> GENERATED_MEMBERS =
+      Set.of("adoptUnsafe", "DESTRUCTOR", "from_raw", "into_raw", "borrow", "pointer", "_thread");
+
   static void validate(Module m) {
     if (!m.resources().isEmpty() || !m.borrows().isEmpty()) {
       require(
@@ -56,7 +60,8 @@ final class OwnershipValidator {
     var functions = new HashMap<String, Function>();
     m.functions().forEach(f -> functions.put(f.name(), f));
     var names = new HashSet<String>();
-    var lifecycle = new HashSet<String>();
+    // Each lifecycle function, by the resource it belongs to.
+    var lifecycle = new HashMap<String, String>();
     var rustTypes = new HashSet<String>();
     for (Resource r : m.resources()) {
       // A resource initialized in place is the struct its handle parameter points to; every other
@@ -77,42 +82,84 @@ final class OwnershipValidator {
       require(!RESERVED.contains(r.name()), "reserved resource name");
       require(!r.name().equals(m.ownershipClass()), "resource shadows generated ownership class");
       require(!r.name().equals(m.ffmClass()), "resource shadows generated FFM class");
-      var create = functions.get(r.create());
-      var destroy = functions.get(r.destroy());
-      require(create != null && destroy != null, "unknown resource lifecycle function");
+      String form = r.name() + " create=" + String.join(",", r.creates());
       require(
-          lifecycle.add(r.create()) && lifecycle.add(r.destroy()),
-          "lifecycle functions must be distinct per resource");
-      nativeCall(create);
+          r.creates().stream().noneMatch(String::isEmpty),
+          "resource create lists the names of imports: " + form);
+      var destroy = functions.get(r.destroy());
+      require(
+          destroy != null,
+          "unknown resource lifecycle function: " + r.name() + " destroy=" + r.destroy());
+      require(
+          lifecycle.putIfAbsent(r.destroy(), r.name()) == null,
+          "lifecycle functions must be distinct per resource: "
+              + r.destroy()
+              + " is a lifecycle function of "
+              + lifecycle.get(r.destroy())
+              + " and "
+              + r.name());
       nativeCall(destroy);
-      Type pointer = new Pointer(new Named(r.name()));
-      if (r.handle() == null) {
-        require(create.returns().equals(pointer), "resource create must return ptr<resource>");
-        require(r.success().isEmpty(), "success applies to a resource create with a handle");
-      } else {
-        handle(m, r, create);
-      }
-      // Pointer arguments pass through each create wrapper under their own declared contracts,
-      // including another resource's handle: that parent's lifetime is the consumer's to keep.
-      for (Parameter argument : create.parameters())
+      for (String name : r.creates()) {
+        var create = functions.get(name);
+        require(create != null, "unknown resource lifecycle function: " + form + ": " + name);
+        // A function constructs at most one resource, and is never also a destroy.
+        String other = lifecycle.putIfAbsent(name, r.name());
         require(
-            argument.type() instanceof Scalar || argument.type() instanceof Pointer,
-            "resource create takes only scalar and pointer arguments: "
-                + r.create()
-                + " "
-                + argument.name());
+            other == null,
+            "lifecycle functions must be distinct per resource: "
+                + name
+                + " is a lifecycle function of "
+                + other
+                + " and "
+                + r.name());
+        nativeCall(create);
+        Type pointer = new Pointer(new Named(r.name()));
+        if (r.handle() == null) {
+          require(
+              create.returns().equals(pointer),
+              "resource create must return ptr<resource>: " + name + " for " + r.name());
+          require(r.success().isEmpty(), "success applies to a resource create with a handle");
+        } else {
+          handle(m, r, create);
+        }
+        // Pointer arguments pass through each create wrapper under their own declared contracts,
+        // including another resource's handle: that parent's lifetime is the consumer's to keep.
+        for (Parameter argument : create.parameters())
+          require(
+              argument.type() instanceof Scalar || argument.type() instanceof Pointer,
+              "resource create takes only scalar and pointer arguments: "
+                  + name
+                  + " "
+                  + argument.name());
+      }
+      // Several constructors are named after their imports beside the generated members.
+      if (r.creates().size() > 1)
+        for (String name : r.creates())
+          require(
+              !GENERATED_MEMBERS.contains(name),
+              "a resource constructor's wrapper is named after its import, which "
+                  + name
+                  + " shadows: "
+                  + form);
       require(
           destroy.returns() == Scalar.VOID && destroy.parameters().size() == 1,
-          "resource destroy must take one pointer and return void");
+          "resource destroy must take one pointer and return void: " + r.destroy());
       var p = destroy.parameters().getFirst();
+      // A destroy may accept null, as free does: no generated owner passes it one.
       require(
-          p.type().equals(pointer)
-              && !p.nullable()
+          p.type().equals(new Pointer(new Named(r.name())))
               && p.ownership() == Ownership.TRANSFERRED_TO_CALLEE
               && p.access() == Access.READ_WRITE,
-          "resource destroy requires a non-null transferred_to_callee read_write resource pointer");
+          "resource destroy requires a transferred_to_callee read_write resource pointer: "
+              + r.destroy()
+              + " "
+              + p.name());
       require(
-          p.facts().isEmpty(), "resource destroy cannot require additional pointer preconditions");
+          p.facts().isEmpty(),
+          "resource destroy cannot require additional pointer preconditions: "
+              + r.destroy()
+              + " "
+              + p.name());
     }
     // A function may declare several borrows; each has a buffer and a length of its own.
     // Identifiers contain no space, so "function parameter" is a unique key.
@@ -129,6 +176,7 @@ final class OwnershipValidator {
     for (BufferBorrow b : m.borrows()) {
       Function f = functions.get(b.function());
       require(f != null, "unknown borrow function: " + b.function());
+      String form = b.function() + " " + b.parameter();
       nativeCall(f);
       var params = new HashMap<String, Parameter>();
       f.parameters().forEach(p -> params.put(p.name(), p));
@@ -136,15 +184,22 @@ final class OwnershipValidator {
       var length = params.get(b.length());
       require(
           p != null && length != null && p != length,
-          "borrow must identify distinct buffer and length parameters");
+          "borrow must identify distinct buffer and length parameters: "
+              + form
+              + " length="
+              + b.length());
       if (b.held()) held(m, b, f, p);
-      require(f.returns() instanceof Scalar, "call borrow cannot return a pointer");
+      // A declared constructor returns a fresh owned resource, never a view into its buffers, and
+      // a call borrow ends before it returns. Nothing ties any other returned pointer to a buffer.
+      require(
+          f.returns() instanceof Scalar || constructor(m, f),
+          "call borrow cannot return a pointer: " + form);
       require(
           !lengths.contains(b.function() + " " + b.parameter()),
           "call buffer cannot be another borrow's length: " + b.function() + " " + b.parameter());
       require(
           p.type().equals(new Pointer(Scalar.U8)) && p.ownership() == Ownership.BORROWED,
-          "call buffer requires borrowed ptr<u8>");
+          "call buffer requires borrowed ptr<u8>: " + form);
       // A nullable buffer may be absent: its wrappers pass the null pointer with length zero, which
       // the callee must accept. Nothing more is required of the declaration.
       // A write buffer is a writable one: no wrapper relies on the callee not reading it.
@@ -152,26 +207,29 @@ final class OwnershipValidator {
           p.access() == Access.READ
               || p.access() == Access.WRITE
               || p.access() == Access.READ_WRITE,
-          "call buffer requires read, write or read_write access");
+          "call buffer requires read, write or read_write access: " + form);
       require(
           Set.of(Scalar.U32, Scalar.I32, Scalar.U64, Scalar.I64).contains(length.type()),
-          "buffer length must be a 32/64-bit integer (bytes)");
+          "buffer length must be a 32/64-bit integer (bytes): " + form + " length=" + b.length());
       // A held buffer is captured by its create, which is the point of holding it.
       if (!b.held())
-        require(approved(p.facts(), "nocapture"), "call buffer requires approved nocapture=true");
+        require(
+            approved(p.facts(), "nocapture"),
+            "call buffer requires approved nocapture=true: " + form);
       if (p.access() == Access.READ)
         require(
-            approved(p.facts(), "readonly"), "shared call buffer requires approved readonly=true");
+            approved(p.facts(), "readonly"),
+            "shared call buffer requires approved readonly=true: " + form);
       // An align fact is a caller contract: seam.ll promises it, debug builds of the wrappers check
       // it, and Truffle cells copy a buffer that violates it. Extent and noalias stay rejected.
       require(
           !p.facts().containsKey("dereferenceable") && !p.facts().containsKey("noalias"),
-          "call buffer cannot impose extent or noalias preconditions");
+          "call buffer cannot impose extent or noalias preconditions: " + form);
       // Every wrapper lends a present empty buffer an aligned dummy, which bounds what it can be.
       if (p.facts().containsKey("align"))
         require(
             Long.parseLong(p.facts().get("align").value()) <= 4096,
-            "call buffer align must be at most 4096");
+            "call buffer align must be at most 4096: " + form);
       // Other pointers pass through each wrapper under their own declared contracts. Callbacks,
       // by-value records and isolate threads have no pass-through carrier in every backend.
       for (Parameter other : f.parameters())
@@ -197,8 +255,11 @@ final class OwnershipValidator {
         m.resources().stream().filter(x -> x.name().equals(b.resource())).findFirst().orElse(null);
     require(r != null, "a held borrow names a declared resource: " + form);
     require(
-        r.create().equals(b.function()),
-        "a held borrow belongs to its resource's create, " + r.create() + ": " + form);
+        r.createdBy(b.function()),
+        "a held borrow belongs to its resource's create, "
+            + String.join(",", r.creates())
+            + ": "
+            + form);
     require(
         m.truffleConfig() != null && Seam.truffleCell(m, f),
         "a held borrow is generated for Truffle cells only; " + f.name() + " needs one: " + form);
@@ -223,7 +284,7 @@ final class OwnershipValidator {
     require(
         m.truffleConfig() != null && Seam.truffleCell(m, create),
         "a resource handle is generated for Truffle cells only; "
-            + r.create()
+            + create.name()
             + " needs one: "
             + form);
     String parameter = r.handleParameter();
@@ -290,13 +351,20 @@ final class OwnershipValidator {
     }
   }
 
+  /** Whether {@code f} is the constructor of a resource it returns a pointer to. */
+  private static boolean constructor(Module m, Function f) {
+    return m.returnedResources().stream().anyMatch(r -> r.createdBy(f.name()));
+  }
+
   private static void nativeCall(Function f) {
     require(
         f.direction() == Direction.IMPORT
             && f.error() == ErrorConvention.NO_FAILURE
             && !Validator.enabled(f.facts(), "noreturn"),
-        "ownership wrappers require returning no_failure native imports");
-    require(approved(f.facts(), "nounwind"), "ownership wrappers require approved nounwind=true");
+        "ownership wrappers require returning no_failure native imports: " + f.name());
+    require(
+        approved(f.facts(), "nounwind"),
+        "ownership wrappers require approved nounwind=true: " + f.name());
   }
 
   private static boolean approved(Map<String, Fact> facts, String key) {

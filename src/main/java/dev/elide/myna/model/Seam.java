@@ -428,16 +428,34 @@ public final class Seam {
    * initialized in place. {@code success} lists the results that mean the resource exists. Only
    * Truffle cells project the handle forms; the other ownership APIs leave those functions to their
    * raw bindings.
+   *
+   * <p>A resource may have several constructors ({@code create=a,b}), each validated and projected
+   * as a single create is. The ownership APIs name each wrapper after its import, except for a
+   * resource with exactly one constructor, whose wrapper keeps the name {@code create}.
    */
   public record Resource(
       String name,
-      String create,
+      List<String> creates,
       String destroy,
       boolean shared,
       String handle,
       List<Long> success) {
     public Resource {
+      creates = List.copyOf(creates);
       success = List.copyOf(success);
+    }
+
+    /** Whether {@code function} is one of this resource's constructors. */
+    public boolean createdBy(String function) {
+      return creates.contains(function);
+    }
+
+    /**
+     * The name of the ownership wrapper of constructor {@code create}: {@code create} for a
+     * resource's only constructor, and the import's own name when there are several.
+     */
+    public String wrapperName(String create) {
+      return creates.size() == 1 ? "create" : create;
     }
 
     /** The parameter the create function writes through, or null for a returned pointer. */

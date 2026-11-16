@@ -579,6 +579,173 @@ class OwnershipTest {
     assertEquals(output, Generator.generate(Dsl.parse(CREATES), false));
   }
 
+  /** Two constructors of one resource, each with a call-scoped buffer, and a nullable release. */
+  static final String CONSTRUCTORS =
+      "module constructors target=aarch64-apple-darwin java_class=Api\n"
+          + "opaque Parsed\n"
+          + "resource Parsed representation=native threading=shared create=parse,analyze"
+          + " destroy=release\n"
+          + "borrow parse source length=length lifetime=call\n"
+          + "borrow analyze request length=length lifetime=call\n"
+          + "import parse return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param source type=ptr<u8> nullable=true ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u64\n"
+          + "end\n"
+          + "import analyze return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param request type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u32\n"
+          + "  param options type=ptr<u64> nullable=true ownership=borrowed access=read\n"
+          + "end\n"
+          + "import release return=void error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param parsed type=ptr<Parsed> nullable=true ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  @Test
+  void severalConstructorsAreNamedAfterTheirImportsAndLendTheirBuffers() {
+    var module = Dsl.parse(CONSTRUCTORS);
+    var output = Generator.generate(module, true);
+    assertEquals(output, Generator.generate(Dsl.parse(CONSTRUCTORS), false));
+    assertEquals(List.of("parse", "analyze"), module.resources().getFirst().creates());
+    // seam.json lists several constructors; one keeps its string form.
+    assertTrue(
+        output.get("seam.json").contains("\"create\":[\"parse\",\"analyze\"],\"destroy\""),
+        output.get("seam.json"));
+    var single =
+        Dsl.parse(
+            CONSTRUCTORS
+                .replace("create=parse,analyze", "create=parse")
+                .replace("borrow analyze request length=length lifetime=call\n", ""));
+    assertTrue(SeamJson.canonical(single).contains("\"create\":\"parse\","));
+    assertNotEquals(SeamJson.fingerprint(module), SeamJson.fingerprint(single));
+    // A nullable release carries no nonnull fact; a constructor's buffer keeps its own facts.
+    String ll = output.get("seam.ll");
+    assertTrue(ll.contains("declare void @release(ptr %parsed) nounwind"), ll);
+    assertTrue(
+        ll.contains("declare ptr @parse(ptr captures(none) readonly %source, i64 %length)"), ll);
+    // Rust: one associated function per constructor, lending each slice through the buffer
+    // wrapper of its import; only the one that passes another pointer through is unsafe.
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            """
+                    pub fn parse(source: Option<&[u8]>) -> Option<Self> {
+                        core::ptr::NonNull::new(self::parse(source)).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+                    /// # Safety
+                    /// Every pointer argument other than a borrowed buffer must satisfy the raw function's requirements, for as long
+                    /// as the created resource depends on it.
+                    pub unsafe fn analyze(request: &[u8], options: *const u64) -> Option<Self> {
+                        core::ptr::NonNull::new(unsafe { self::analyze(request, options) }).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+            """),
+        rust);
+    assertTrue(
+        rust.contains("    pub fn parse(source: Option<&[u8]>) -> *mut super::Parsed {\n"), rust);
+    assertFalse(rust.contains("fn create("), rust);
+    // Native Image: one static per constructor and carrier, over the import's buffer wrappers.
+    String java = output.get("ApiOwnership.java");
+    for (String buffer : new String[] {"NativeBuffer", "byte[]"}) {
+      assertTrue(
+          java.contains(
+              "        public static <T> T parse(ResourceFactory<T> factory, "
+                  + buffer
+                  + " arg0) {\n"
+                  + "            java.util.Objects.requireNonNull(factory);\n"
+                  + "            long address = ApiOwnership.parse(arg0).rawValue();\n"
+                  + "            if (address == 0) return null;\n"
+                  + "            return adoptUnsafe(address, factory);\n"),
+          java);
+      assertTrue(
+          java.contains(
+              "        public static <T> T analyze(ResourceFactory<T> factory, "
+                  + buffer
+                  + " arg0, org.graalvm.nativeimage.c.type.CLongPointer arg2) {\n"),
+          java);
+    }
+    assertTrue(java.contains("    public static Api.Parsed parse(NativeBuffer arg0) {\n"), java);
+    assertFalse(java.contains(" create("), java);
+    // FFM: one static per constructor, taking a segment for each buffer.
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T parse(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.parse(arg0);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T analyze(LibraryBinding binding, ResourceFactory<T>"
+                + " factory, MemorySegment arg0, MemorySegment arg2) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.analyze(arg0, arg2);\n"),
+        ffm);
+    // One constructor keeps the name create, and its call buffers too.
+    var one = Generator.generate(single, true);
+    assertTrue(one.get("seam.rs").contains("pub fn create(source: Option<&[u8]>) -> Option<Self>"));
+    assertTrue(
+        one.get("ApiOwnership.java")
+            .contains("public static <T> T create(ResourceFactory<T> factory, NativeBuffer arg0)"));
+    assertTrue(
+        one.get("ApiFFM.java")
+            .contains(
+                "public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                    + " MemorySegment arg0)"));
+    // Truffle: every constructor's cell returns an owner and lends its buffer for the call.
+    String cells =
+        Generator.generate(
+                Dsl.parse(
+                    CONSTRUCTORS.replace("java_class=Api", "java_class=Api truffle_cells=true")),
+                true)
+            .get("ApiTruffle.java");
+    for (String name : new String[] {"parse", "analyze"}) {
+      int start = cells.indexOf("class " + name + "_Cell");
+      String cell = cells.substring(start, cells.indexOf("public static final class", start + 1));
+      assertTrue(cell.contains("new NativeResource(\"Parsed\", created, DESTRUCTOR"), cell);
+      assertTrue(cell.contains("@Node.Child private BytesCoercion coerce_"), cell);
+      assertTrue(cell.contains(".release();"), cell);
+    }
+  }
+
+  @Test
+  void callBorrowsOnPointerResultsNeedADeclaredConstructor() {
+    // Without the resource, nothing ties the returned pointer to a fresh allocation.
+    String plain =
+        CONSTRUCTORS.replace(
+            "resource Parsed representation=native threading=shared create=parse,analyze"
+                + " destroy=release\n",
+            "");
+    assertEquals(
+        "call borrow cannot return a pointer: analyze request",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(plain), true))
+            .getMessage());
+    // A constructor of another resource is no constructor of this one.
+    String other =
+        CONSTRUCTORS
+            .replace("create=parse,analyze", "create=parse")
+            .replace("import analyze return=ptr<Parsed>", "import analyze return=ptr<u64>");
+    assertEquals(
+        "call borrow cannot return a pointer: analyze request",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(other), true))
+            .getMessage());
+    // Several constructors are named after their imports, so none may shadow an owner's member.
+    String shadow = CONSTRUCTORS.replace("analyze", "borrow");
+    assertEquals(
+        "a resource constructor's wrapper is named after its import, which borrow shadows:"
+            + " Parsed create=parse,borrow",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(shadow), true))
+            .getMessage());
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";
@@ -594,20 +761,58 @@ class OwnershipTest {
             "resource create takes only scalar and pointer arguments: sessionCreate visit"),
         // The handle is the result: null means failure, and nothing else is a create.
         Arguments.of(
-            "return=ptr<Session>", "return=i32", "resource create must return ptr<resource>"),
+            "return=ptr<Session>",
+            "return=i32",
+            "resource create must return ptr<resource>: sessionCreate for Session"),
         Arguments.of(
             "return=ptr<Session>",
             "return=ptr<Stream>",
-            "resource create must return ptr<resource>"),
+            "resource create must return ptr<resource>: sessionCreate for Session"),
         Arguments.of(
             "return=ptr<Session>",
             "return=ptr<ptr<Session>>",
-            "resource create must return ptr<resource>"),
-        // A create returns a pointer, so none of its byte pointers can be a call borrow.
+            "resource create must return ptr<resource>: sessionCreate for Session"),
+        // A constructor's call borrows are byte buffers like any other.
         Arguments.of(
             "import sessionCreate",
             "borrow sessionCreate name length=limits lifetime=call\nimport sessionCreate",
-            "call borrow cannot return a pointer"),
+            "call buffer requires borrowed ptr<u8>: sessionCreate name"),
+        // Several constructors: each is a declared import, constructs one resource only, and is
+        // validated as a single create is.
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate,sessionOpen destroy",
+            "unknown resource lifecycle function: Session create=sessionCreate,sessionOpen:"
+                + " sessionOpen"),
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate, destroy",
+            "resource create lists the names of imports: Session create=sessionCreate,"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,sessionCreate destroy",
+            "lifecycle functions must be distinct per resource: sessionCreate is a lifecycle"
+                + " function of Session and Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,sessionDestroy destroy",
+            "lifecycle functions must be distinct per resource: sessionDestroy is a lifecycle"
+                + " function of Session and Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,streamCreate destroy",
+            "lifecycle functions must be distinct per resource: streamCreate is a lifecycle"
+                + " function of Stream and Stream"),
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate,streamCreate destroy",
+            "resource create must return ptr<resource>: streamCreate for Session"),
+        // A destroy names itself and its parameter.
+        Arguments.of(
+            "  param session type=ptr<Session> nullable=false ownership=transferred_to_callee",
+            "  param session type=ptr<Session> nullable=false ownership=borrowed",
+            "resource destroy requires a transferred_to_callee read_write resource pointer:"
+                + " sessionDestroy session"),
         // Out-parameter handles and in-place results are not a form of resource.
         Arguments.of(
             "create=sessionCreate destroy=sessionDestroy",
@@ -1161,11 +1366,11 @@ class OwnershipTest {
         Arguments.of(
             schema,
             schema.replace(" readonly=true@explicit_contract", ""),
-            "shared call buffer requires approved readonly=true"),
+            "shared call buffer requires approved readonly=true: layoutCompile schema"),
         Arguments.of(
             schema,
             schema.replace("ptr<u8>", "ptr<u16>"),
-            "call buffer requires borrowed ptr<u8>"));
+            "call buffer requires borrowed ptr<u8>: layoutCompile schema"));
   }
 
   @ParameterizedTest
@@ -1258,14 +1463,20 @@ class OwnershipTest {
         Arguments.of(
             "length=capacity",
             "length=output",
-            "borrow must identify distinct buffer and length parameters"),
+            "borrow must identify distinct buffer and length parameters: transfer output"
+                + " length=output"),
         Arguments.of(
             "length=capacity",
             "length=absent",
-            "borrow must identify distinct buffer and length parameters"),
+            "borrow must identify distinct buffer and length parameters: transfer output"
+                + " length=absent"),
         // Out of scope: a result that could point into a borrowed buffer.
-        Arguments.of("return=i32", "return=ptr<Session>", "call borrow cannot return a pointer"),
-        Arguments.of("return=i32", "return=ptr<u8>", "call borrow cannot return a pointer"),
+        Arguments.of(
+            "return=i32",
+            "return=ptr<Session>",
+            "call borrow cannot return a pointer: transfer input"),
+        Arguments.of(
+            "return=i32", "return=ptr<u8>", "call borrow cannot return a pointer: transfer input"),
         // Parameters with no pass-through carrier in every backend.
         Arguments.of(
             "  param flags type=u8\n",
@@ -1283,19 +1494,21 @@ class OwnershipTest {
             output.replace("nullable=false", "nullable=true nonnull=true@explicit_contract"),
             "nonnull contradicts nullable=true"),
         Arguments.of(
-            output, output.replace("ptr<u8>", "ptr<i8>"), "call buffer requires borrowed ptr<u8>"),
+            output,
+            output.replace("ptr<u8>", "ptr<i8>"),
+            "call buffer requires borrowed ptr<u8>: transfer output"),
         Arguments.of(
             output,
             output.replace("ownership=borrowed", "ownership=owned_by_caller"),
-            "call buffer requires borrowed ptr<u8>"),
+            "call buffer requires borrowed ptr<u8>: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=none"),
-            "call buffer requires read, write or read_write access"),
+            "call buffer requires read, write or read_write access: transfer output"),
         Arguments.of(
             output,
             output.replace(" access=read_write", ""),
-            "call buffer requires read, write or read_write access"),
+            "call buffer requires read, write or read_write access: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=write readonly=true@explicit_contract"),
@@ -1303,28 +1516,28 @@ class OwnershipTest {
         Arguments.of(
             output,
             output.replace(" nocapture=true@explicit_contract", ""),
-            "call buffer requires approved nocapture=true"),
+            "call buffer requires approved nocapture=true: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=read"),
-            "shared call buffer requires approved readonly=true"),
+            "shared call buffer requires approved readonly=true: transfer output"),
         Arguments.of(
             output,
             output.replace("\n", " noalias=true@explicit_contract\n"),
-            "call buffer cannot impose extent or noalias preconditions"),
+            "call buffer cannot impose extent or noalias preconditions: transfer output"),
         Arguments.of(
             "param capacity type=u32",
             "param capacity type=u16",
-            "buffer length must be a 32/64-bit integer (bytes)"),
+            "buffer length must be a 32/64-bit integer (bytes): transfer output length=capacity"),
         Arguments.of(
             " nounwind=true@explicit_contract\n",
             "\n",
-            "ownership wrappers require approved nounwind=true"),
+            "ownership wrappers require approved nounwind=true: transfer"),
         Arguments.of(
             "return=i32 error=no_failure nounwind=true@explicit_contract\n",
             "return=void error=no_failure nounwind=true@explicit_contract"
                 + " noreturn=true@explicit_contract native_leaf=false@explicit_contract\n",
-            "ownership wrappers require returning no_failure native imports"));
+            "ownership wrappers require returning no_failure native imports: transfer"));
   }
 
   @ParameterizedTest

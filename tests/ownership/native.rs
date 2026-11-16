@@ -53,3 +53,27 @@ const ABSENT: u64 = 1 << 32;
     if bytes.is_null() { return if count == 0 { ABSENT } else { u64::MAX }; }
     (0..count as usize).map(|i| u64::from(unsafe { bytes.add(i).read() })).sum()
 }
+// Two constructors of one resource, each reading a call-scoped buffer during the call only: the
+// resource holds its own copy of what it computed. parse fails on an absent source, and either
+// fails after ticket_fail_next. release accepts null as a no-op.
+unsafe fn parsed_new(value: u64) -> *mut u64 {
+    if FAIL.swap(false, Ordering::SeqCst) { return core::ptr::null_mut(); }
+    let p = unsafe { malloc(8) } as *mut u64;
+    if !p.is_null() { unsafe { p.write(value); } LIVE.fetch_add(1, Ordering::SeqCst); }
+    p
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_parse(source: *const u8, length: u64) -> *mut u64 {
+    if source.is_null() { return core::ptr::null_mut(); }
+    let sum = (0..length as usize).map(|i| u64::from(unsafe { source.add(i).read() })).sum();
+    unsafe { parsed_new(sum) }
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_analyze(request: *const u8, length: u32, scale: u8) -> *mut u64 {
+    let sum: u64 = (0..length as usize).map(|i| u64::from(unsafe { request.add(i).read() })).sum();
+    unsafe { parsed_new(sum * u64::from(scale)) }
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_release(p: *mut u64) {
+    if p.is_null() { return; }
+    unsafe { free(p as *mut u8); }
+    LIVE.fetch_sub(1, Ordering::SeqCst);
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_value(p: *const u64) -> u64 { unsafe { p.read() } }

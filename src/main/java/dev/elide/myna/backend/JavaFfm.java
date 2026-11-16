@@ -302,50 +302,61 @@ public final class JavaFfm implements Backend {
         }
 """);
     for (Resource r : m.returnedResources()) {
-      Function create =
-          m.functions().stream().filter(f -> f.name().equals(r.create())).findFirst().orElseThrow();
-      var params = new ArrayList<String>();
-      var args = new ArrayList<String>();
-      int index = 0;
-      for (Parameter p : create.parameters()) {
-        String name = "arg" + index++;
-        params.add(Types.ffmCarrier(p.type()) + " " + name);
-        args.add(name);
-      }
       out.append("    public static final class ")
           .append(r.name())
           .append(" {\n")
           .append("        private ")
           .append(r.name())
-          .append("() {}\n")
-          .append(
-              "        public static <T> T create(LibraryBinding binding, ResourceFactory<T>"
-                  + " factory")
-          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
-          .append(") throws Throwable {\n")
-          .append("            java.util.Objects.requireNonNull(factory);\n")
-          .append("            MemorySegment address = binding.")
-          .append(create.name())
-          .append('(')
-          .append(String.join(", ", args))
-          .append(");\n")
-          .append("            if (address.address() == 0) return null;\n")
-          .append("            try {\n")
-          .append(
-              "                return java.util.Objects.requireNonNull(factory.adopt(address,"
-                  + " binding::")
-          .append(r.destroy())
-          .append(", ")
-          .append(r.shared() ? "null" : "Thread.currentThread()")
-          .append("));\n")
-          .append("            } catch (Throwable failure) {\n")
-          .append("                try { binding.")
-          .append(r.destroy())
-          .append("(address); }\n")
-          .append(
-              "                catch (Throwable cleanup) { if (cleanup != failure)"
-                  + " failure.addSuppressed(cleanup); }\n")
-          .append("                throw failure;\n            }\n        }\n    }\n");
+          .append("() {}\n");
+      for (String name : r.creates()) {
+        Function create =
+            m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        // A constructor with call borrows takes each buffer as a segment and calls the binding's
+        // buffer wrapper, which lends it for the call only.
+        boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
+        CallBorrows call = CallBorrows.of(m, create);
+        var params = new ArrayList<String>();
+        var args = new ArrayList<String>();
+        int index = 0;
+        for (Parameter p : create.parameters()) {
+          String arg = "arg" + index++;
+          if (buffers && call.length(p) != null) continue;
+          params.add(
+              (buffers && call.buffer(p) != null ? "MemorySegment" : Types.ffmCarrier(p.type()))
+                  + " "
+                  + arg);
+          args.add(arg);
+        }
+        out.append("        public static <T> T ")
+            .append(r.wrapperName(name))
+            .append("(LibraryBinding binding, ResourceFactory<T> factory")
+            .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+            .append(") throws Throwable {\n")
+            .append("            java.util.Objects.requireNonNull(factory);\n")
+            .append("            MemorySegment address = binding.")
+            .append(create.name())
+            .append('(')
+            .append(String.join(", ", args))
+            .append(");\n")
+            .append("            if (address.address() == 0) return null;\n")
+            .append("            try {\n")
+            .append(
+                "                return java.util.Objects.requireNonNull(factory.adopt(address,"
+                    + " binding::")
+            .append(r.destroy())
+            .append(", ")
+            .append(r.shared() ? "null" : "Thread.currentThread()")
+            .append("));\n")
+            .append("            } catch (Throwable failure) {\n")
+            .append("                try { binding.")
+            .append(r.destroy())
+            .append("(address); }\n")
+            .append(
+                "                catch (Throwable cleanup) { if (cleanup != failure)"
+                    + " failure.addSuppressed(cleanup); }\n")
+            .append("                throw failure;\n            }\n        }\n");
+      }
+      out.append("    }\n");
     }
   }
 
