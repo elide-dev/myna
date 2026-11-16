@@ -245,6 +245,26 @@ public final class NativeResource implements TruffleObject {
     return held;
   }
 
+  /**
+   * Destroys a resource a create cell made when ending one of the call's borrows then failed (a
+   * writable copy that could not be written back), and returns {@code failure} for the cell to
+   * throw: the guest never receives the owner, so nothing else would release it. Closing releases
+   * its parent holds and anything it keeps, as a failed create leaves nothing held. A failure of
+   * the destroy itself is added to {@code failure} as suppressed. {@code created} is null when the
+   * call made nothing, or failed before it did.
+   */
+  @TruffleBoundary
+  public static RuntimeException closeAfterFailure(
+      NativeResource created, RuntimeException failure) {
+    if (created != null)
+      try {
+        created.close();
+      } catch (RuntimeException destroy) {
+        if (destroy != failure) failure.addSuppressed(destroy);
+      }
+    return failure;
+  }
+
   /** Gives up a {@link #hold} that no created resource took over. */
   @TruffleBoundary
   public static void release(Object hold) {

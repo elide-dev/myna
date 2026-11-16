@@ -364,7 +364,11 @@ refuses access from any thread other than its required thread when the resource 
 `destroy` import's cell takes that owner and closes it; a pointer or a foreign owner is rejected, and
 a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCleanup(Cleaner)`
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
-owners refuse it. These are the same rules as the existing Native Image ownership API.
+owners refuse it. These are the same rules as the existing Native Image ownership API. A create with a writable call buffer writes
+that buffer back after the call; if the write-back fails (the guest's buffer shrank, stopped
+accepting writes, or its arena closed during the call), the cell destroys the resource the call made,
+releasing any parent it held, and throws the write-back failure with any destroy failure attached as
+suppressed. The guest never receives an owner it would have to close.
 
 A create declared with a `handle` keeps its C shape for the guest: the guest passes a buffer for
 the struct the create writes through, and reads that struct's fields from it afterwards. The

@@ -134,6 +134,15 @@ Parsed *cells_analyze_text(const uint8_t *request, uint32_t length, uint8_t scal
   for (uint32_t i = 0; i < length; i++) sum += request[i];
   return parsed_new(sum * scale);
 }
+// Waits at its gate as cells_hold_fill does, fills its report, and makes a resource that holds the
+// report's length.
+Parsed *cells_fill_text(uint8_t *report, uint64_t capacity, int32_t *gate) {
+  struct timespec pause = {0, 1000000};
+  __atomic_store_n(&gate[0], 1, __ATOMIC_SEQ_CST);
+  while (!__atomic_load_n(&gate[1], __ATOMIC_SEQ_CST)) nanosleep(&pause, NULL);
+  for (uint64_t i = 0; i < capacity; i++) report[i] = 0x5a;
+  return parsed_new(capacity);
+}
 void cells_parsed_release(Parsed *parsed) {
   if (!parsed) return;
   free(parsed);

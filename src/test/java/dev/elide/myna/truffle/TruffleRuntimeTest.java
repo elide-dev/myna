@@ -560,6 +560,36 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void closeAfterFailureDestroysWhatACreateMadeAndKeepsItsFailure() {
+    var failure = NativeCellException.of(null, "write-back failed");
+    // Nothing made: the failure passes through untouched.
+    assertSame(failure, NativeResource.closeAfterFailure(null, failure));
+    assertEquals(0, failure.getSuppressed().length);
+    // A parent held by the new resource is released along with it.
+    var parent = new NativeResource("Ticket", 0x6000L, address -> {}, null);
+    var freed = new java.util.ArrayList<Long>();
+    var made = new NativeResource("Ticket", 0x6100L, freed::add, null, NativeResource.hold(parent));
+    assertSame(failure, NativeResource.closeAfterFailure(made, failure));
+    assertTrue(made.isClosed());
+    assertEquals(List.of(0x6100L), freed);
+    parent.close();
+    assertTrue(parent.isClosed());
+    // A destroy that fails is attached to the write-back failure, which stays the one thrown.
+    var destroy = NativeCellException.of(null, "destroy failed");
+    var failing =
+        new NativeResource(
+            "Ticket",
+            0x6200L,
+            address -> {
+              throw destroy;
+            },
+            null);
+    var second = NativeCellException.of(null, "write-back failed again");
+    assertSame(second, NativeResource.closeAfterFailure(failing, second));
+    assertArrayEquals(new Throwable[] {destroy}, second.getSuppressed());
+  }
+
+  @Test
   void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
     var resource = new NativeResource("Ticket", 0x5000L, address -> {}, null);
     var cell = new PointerCell(false, false, "Ticket");

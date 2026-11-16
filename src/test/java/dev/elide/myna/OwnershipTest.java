@@ -714,6 +714,60 @@ class OwnershipTest {
   }
 
   @Test
+  void createCellsDestroyWhatTheyMadeWhenAWriteBackFails() {
+    // A writable call buffer on a constructor: its write-back runs after the owner exists.
+    String writable =
+        CONSTRUCTORS
+            .replace("java_class=Api", "java_class=Api truffle_cells=true")
+            .replace(
+                "  param request type=ptr<u8> nullable=false ownership=borrowed access=read"
+                    + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
+                "  param request type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+                    + " nocapture=true@explicit_contract\n");
+    String cells = Generator.generate(Dsl.parse(writable), true).get("ApiTruffle.java");
+    String analyze =
+        cells.substring(
+            cells.indexOf("class analyze_Cell"),
+            cells.indexOf("public static final class", cells.indexOf("class analyze_Cell") + 1));
+    assertTrue(analyze.contains("NativeResource owner$ = null;\n"), analyze);
+    assertTrue(
+        analyze.contains("NativeResource resource = owner$ = new NativeResource(\"Parsed\""),
+        analyze);
+    assertTrue(
+        analyze.contains(
+            """
+                            try {
+                                borrow_request.release();
+                            } catch (RuntimeException failure) {
+                                throw NativeResource.closeAfterFailure(owner$, failure);
+                            }
+            """),
+        analyze);
+    // A read-only buffer cannot fail its release: that cell is unchanged.
+    String parse =
+        cells.substring(
+            cells.indexOf("class parse_Cell"),
+            cells.indexOf("public static final class", cells.indexOf("class parse_Cell") + 1));
+    assertFalse(parse.contains("owner$"), parse);
+    // The same for a create that reports a status through a handle.
+    String handles =
+        Generator.generate(
+                Dsl.parse(
+                    HANDLES.replace(
+                        "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+                            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
+                        "  param schema type=ptr<u8> nullable=false ownership=borrowed"
+                            + " access=read_write nocapture=true@explicit_contract\n")),
+                true)
+            .get("ApiTruffle.java");
+    assertTrue(
+        handles.contains("NativeResource resource = owner$ = new NativeResource(\"Layout\""),
+        handles);
+    assertTrue(
+        handles.contains("throw NativeResource.closeAfterFailure(owner$, failure);"), handles);
+  }
+
+  @Test
   void callBorrowsOnPointerResultsNeedADeclaredConstructor() {
     // Without the resource, nothing ties the returned pointer to a fresh allocation.
     String plain =
@@ -801,8 +855,13 @@ class OwnershipTest {
         Arguments.of(
             "create=streamCreate destroy",
             "create=streamCreate,streamCreate destroy",
-            "lifecycle functions must be distinct per resource: streamCreate is a lifecycle"
-                + " function of Stream and Stream"),
+            "lifecycle functions must be distinct per resource: streamCreate is listed twice in"
+                + " the constructors of Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,streamDestroy destroy",
+            "lifecycle functions must be distinct per resource: streamDestroy is both a"
+                + " constructor and the destroy of Stream"),
         Arguments.of(
             "create=sessionCreate destroy",
             "create=sessionCreate,streamCreate destroy",
@@ -1119,7 +1178,7 @@ class OwnershipTest {
             "create=sessionCreate destroy=sessionDestroy",
             "create=sessionCreate destroy=sessionDestroy success=0");
     assertEquals(
-        "success applies to a resource create with a handle",
+        "success applies to a resource create with a handle: Session",
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true))
             .getMessage());

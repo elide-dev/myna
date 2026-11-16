@@ -60,7 +60,11 @@ the same buffer wrappers as any other call borrow: `Parsed::parse(source: Option
 `Parsed.parse(binding, factory, MemorySegment)` in FFM; the Truffle cell lends the guest's buffer
 as any cell does. The import's own buffer wrapper (`ownership::parse`, `NativeApiOwnership.parse`,
 the `LibraryBinding` overload, the static JNI `parseBuffer`) is generated too and returns the raw
-pointer. A wrapper adds nothing to the create but the call borrow's own work: no allocation beyond
+pointer. That pointer is owned: it leaks unless the caller adopts it (`from_raw`, `adoptUnsafe`)
+or destroys it, so prefer the resource's constructor. The Rust wrapper is `#[must_use]`; Java has no
+equivalent check, so treat the Java and JNI wrappers' result the same way. As for any nullable
+buffer, a Native Image constructor whose buffers may all be absent must name the overload a literal
+`null` means: `Parsed.parse(factory, (byte[]) null)`. A wrapper adds nothing to the create but the call borrow's own work: no allocation beyond
 it and no change to leaf status or transitions. A call borrow on any other function that returns a
 pointer stays rejected. A create that keeps its buffer past the call declares a
 [held borrow](#borrows-held-by-a-resource-truffle-cells-only) instead.

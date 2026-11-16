@@ -108,9 +108,11 @@ final class OwnershipValidator {
             other == null,
             "lifecycle functions must be distinct per resource: "
                 + name
-                + " is a lifecycle function of "
-                + other
-                + " and "
+                + (r.name().equals(other)
+                    ? (name.equals(r.destroy())
+                        ? " is both a constructor and the destroy of "
+                        : " is listed twice in the constructors of ")
+                    : " is a lifecycle function of " + other + " and ")
                 + r.name());
         nativeCall(create);
         Type pointer = new Pointer(new Named(r.name()));
@@ -118,7 +120,9 @@ final class OwnershipValidator {
           require(
               create.returns().equals(pointer),
               "resource create must return ptr<resource>: " + name + " for " + r.name());
-          require(r.success().isEmpty(), "success applies to a resource create with a handle");
+          require(
+              r.success().isEmpty(),
+              "success applies to a resource create with a handle: " + r.name());
         } else {
           handle(m, r, create);
         }

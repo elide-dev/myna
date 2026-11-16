@@ -173,6 +173,12 @@ final class RustOwnership {
             "    /// # Safety\n"
                 + "    /// Every pointer other than a borrowed buffer must satisfy the raw"
                 + " function's requirements.\n");
+      // Only a constructor's buffer wrapper returns a pointer: an owned one, which leaks unless the
+      // caller adopts it (the resource's own constructor does).
+      if (f.returns() instanceof Pointer)
+        out.append(
+            "    #[must_use = \"the result is an owned resource; adopt it with from_raw or use the"
+                + " owner's constructor\"]\n");
       out.append(pointers ? "    pub unsafe fn " : "    pub fn ")
           .append(f.name())
           .append('(')

@@ -270,6 +270,50 @@ public final class CellChecks {
    * thread while another one is inside holdFill. Prints which arenas were checked: an image without
    * shared arena support says so, and the integration test records it.
    */
+  /**
+   * A constructor whose writable buffer cannot be written back after the call returned a resource:
+   * the cell destroys that resource, since the guest never receives its owner, and reports the
+   * write-back failure. A shared arena closed while the call runs makes the write-back fail, as in
+   * copyBackAfterClose; without shared arenas only the successful path is checked.
+   */
+  static void constructorWriteBack(Function<String, NativeFunction> cells) throws Exception {
+    MemorySegment gate = Arena.global().allocate(8, 4);
+    try (Arena open = Arena.ofConfined()) {
+      MemorySegment base = open.allocate(32, 16);
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      Object filled = call(cells, "fillText", NativeBytes.of(base.asSlice(3, 8), true), NativePointer.of(gate.address()));
+      check(filled instanceof NativeResource r && r.type().equals("Parsed"), "fillText owner");
+      check(call(cells, "parsedValue", filled).equals(8L), "fillText value");
+      for (int i = 0; i < 32; i++) check(base.get(ValueLayout.JAVA_BYTE, i) == (i >= 3 && i < 11 ? 0x5a : 0), "fillText wrote back byte " + i);
+      call(cells, "parsedRelease", filled);
+    }
+    check(call(cells, "counterLive").equals(0L), "fillText released");
+    Arena arena;
+    try {
+      arena = Arena.ofShared();
+    } catch (UnsupportedOperationException | Error unsupported) {
+      return;
+    }
+    MemorySegment backing = Arena.global().allocate(64, 64);
+    NativeBytes slice = NativeBytes.of(backing.reinterpret(64, arena, null).asSlice(3, 8), true);
+    gate.set(ValueLayout.JAVA_LONG, 0, 0L);
+    var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+    Thread caller = new Thread(() -> {
+      try { result.set(call(cells, "fillText", slice, NativePointer.of(gate.address()))); } catch (Throwable failure) { result.set(failure); }
+    });
+    caller.start();
+    while (gate.get(ValueLayout.JAVA_INT, 0) == 0 && caller.isAlive()) Thread.sleep(1);
+    check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "fillText never reached native code: " + result.get());
+    arena.close();
+    gate.set(ValueLayout.JAVA_INT, 4, 1);
+    caller.join();
+    check(result.get() instanceof NativeCellException failure && failure.getMessage().contains("closed before write-back"),
+        "fillText wrote back into a closed shared arena: " + result.get());
+    // The resource the call made was destroyed rather than lost with its owner.
+    check(call(cells, "counterLive").equals(0L), "fillText leaked its resource after a failed write-back");
+    System.out.println("constructor write-back failure destroyed its resource");
+  }
+
   static void copyBackAfterClose(Function<String, NativeFunction> cells) throws Exception {
     MemorySegment backing = Arena.global().allocate(64, 64);
     for (Object coercion : new Object[] {
@@ -779,6 +823,7 @@ public final class CellChecks {
       rejects(cells, "parsedRelease", NativeVoid.INSTANCE);
       check(call(cells, "counterLive").equals(0L), "parsed destroyed once each");
     }
+    constructorWriteBack(cells);
     // Creates that report a status and write the resource through a parameter. The guest passes
     // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
     // native side writes into memory the runtime owns and the buffer receives a copy.

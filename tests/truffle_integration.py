@@ -81,6 +81,8 @@ class TruffleIntegrationTests(unittest.TestCase):
         # Assertions on for the generated bindings only (Truffle's own interop assertions reject the
         # host nulls the checks pass): a non-cell wrapper asserts the caller's align contract.
         result = run(java, "-ea:fixture.cells...", "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
+        # A constructor whose buffer cannot be written back destroys the resource its call made.
+        self.assertIn("constructor write-back failure destroyed its resource", result.stdout)
         self.assertIn("wrapper assertions enabled: fired", result.stdout)
         self.assertIn("guest constants read and named", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)

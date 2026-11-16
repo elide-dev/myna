@@ -155,7 +155,7 @@ end
 # A resource with two constructors, each a cell with the owner semantics of a single create, each
 # lending its guest buffer for the call only. The release accepts null as a no-op.
 opaque Parsed
-resource Parsed representation=native threading=confined create=parseText,analyzeText destroy=parsedRelease
+resource Parsed representation=native threading=confined create=parseText,analyzeText,fillText destroy=parsedRelease
 borrow parseText source length=length lifetime=call
 borrow analyzeText request length=length lifetime=call
 import parseText symbol=cells_parse_text return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
@@ -166,6 +166,14 @@ import analyzeText symbol=cells_analyze_text return=ptr<Parsed> error=no_failure
   param request type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param length type=u32
   param scale type=u8
+end
+# A constructor with a writable call buffer: its cell writes a copy back after the call, and if
+# that fails, destroys the resource the call made instead of losing it.
+borrow fillText report length=capacity lifetime=call
+import fillText symbol=cells_fill_text return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param report type=ptr<u8> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract align=16@explicit_contract
+  param capacity type=u64
+  param gate type=ptr<i32> nullable=false ownership=borrowed access=read_write nocapture=true@explicit_contract
 end
 import parsedRelease symbol=cells_parsed_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param parsed type=ptr<Parsed> nullable=true ownership=transferred_to_callee access=read_write

@@ -376,6 +376,8 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The call borrows whose release writes a copy back, which can fail after the call returned.
+    var writableBorrows = new HashSet<String>();
     // The borrows a successful create hands to its resource, which ends them once destroyed.
     var held = new ArrayList<String>();
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
@@ -432,6 +434,7 @@ public final class TruffleCells implements Backend {
                 .append(";\n");
             String local = "borrow_" + p.name();
             borrows.add(local + " = " + field + ".execute(" + argument + ")");
+            if (writable && !cell.isHeld(p)) writableBorrows.add(local);
             arguments.add(address(ffm, imports, local + ".address()"));
             // Every borrow, held or not, lends the guest's own segment to the downcall: a held
             // borrow's create call checks and holds its scope as a call borrow's does, and the
@@ -977,24 +980,49 @@ public final class TruffleCells implements Backend {
       callBlock.append(inPlace(inPlace, guest, body));
     }
     String indent = "            ";
+    // A create whose call succeeded owns a fresh resource by the time its borrows end. Should a
+    // write-back then fail, the guest never receives the owner, so the cell destroys it: on the
+    // exception path only, through a boundary, while the compiled path just stores the owner.
+    boolean destroyOnRelease = cell.creates() != null && !writableBorrows.isEmpty();
+    String borrowed = result.toString();
+    if (destroyOnRelease) {
+      imports.add(RUNTIME + "NativeResource");
+      // Seam identifiers have no '$', so the local cannot collide with a parameter's.
+      callBlock.append(indent).append("NativeResource owner$ = null;\n");
+      borrowed =
+          borrowed
+              .replace("return new NativeResource(", "return owner$ = new NativeResource(")
+              .replace(
+                  "NativeResource resource = new NativeResource(",
+                  "NativeResource resource = owner$ = new NativeResource(");
+    }
     for (String borrow : borrows) {
       callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
     }
-    for (String line : result.toString().split("\n"))
+    for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');
     for (int i = borrows.size() - 1; i >= 0; i--) {
       indent = indent.substring(4);
-      callBlock
-          .append(indent)
-          .append("} finally {\n")
-          .append(indent)
-          .append("    ")
-          .append(borrows.get(i), 0, borrows.get(i).indexOf(' '))
-          .append(".release();\n")
-          .append(indent)
-          .append("}\n");
+      String local = borrows.get(i).substring(0, borrows.get(i).indexOf(' '));
+      callBlock.append(indent).append("} finally {\n");
+      if (destroyOnRelease && writableBorrows.contains(local))
+        callBlock
+            .append(indent)
+            .append("    try {\n")
+            .append(indent)
+            .append("        ")
+            .append(local)
+            .append(".release();\n")
+            .append(indent)
+            .append("    } catch (RuntimeException failure) {\n")
+            .append(indent)
+            .append("        throw NativeResource.closeAfterFailure(owner$, failure);\n")
+            .append(indent)
+            .append("    }\n");
+      else callBlock.append(indent).append("    ").append(local).append(".release();\n");
+      callBlock.append(indent).append("}\n");
     }
     if (!fields.isEmpty()) imports.add("com.oracle.truffle.api.nodes.Node");
     out.append("    /** ")
