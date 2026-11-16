@@ -119,3 +119,31 @@ unsafe fn fold_batch(hash: u64, sources: *const *mut u8, lengths: *const u64, wi
         .and_then(|hash| unsafe { fold_batch(hash, deps, dep_lengths as *const u64, false, u64::from(dep_count), true) })
         .unwrap_or(u64::MAX)
 }
+// The address lent for element 0 of a batch, or 0 for the empty batch.
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_batch_first_leaf(sources: *const *mut u8, _lengths: *const u32, count: u32) -> u64 {
+    if count == 0 { 0 } else { unsafe { sources.read() as u64 } }
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn buffer_batch_first_call(sources: *const *mut u8, lengths: *const u32, count: u32) -> u64 {
+    unsafe { buffer_batch_first_leaf(sources, lengths, count) }
+}
+// A resource made from a batch keeps the digest of the bytes it read during the call (i32 lengths).
+#[unsafe(no_mangle)] pub unsafe extern "C" fn bundle_create(parts: *const *mut u8, lengths: *const i32, count: i32) -> *mut u64 {
+    if count < 0 { return core::ptr::null_mut(); }
+    let mut hash = FNV_OFFSET;
+    if parts.is_null() { hash = mix(hash, ABSENT); } else {
+        hash = mix(hash, count as u64);
+        for i in 0..count as usize {
+            let (part, length) = unsafe { (parts.add(i).read(), lengths.add(i).read()) };
+            if part.is_null() || length < 0 { return core::ptr::null_mut(); }
+            hash = unsafe { fold_bytes(hash, part, length as u64) };
+        }
+    }
+    let p = unsafe { malloc(8) } as *mut u64;
+    if !p.is_null() { unsafe { p.write(hash); } LIVE.fetch_add(1, Ordering::SeqCst); }
+    p
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn bundle_release(p: *mut u64) {
+    unsafe { free(p as *mut u8); }
+    LIVE.fetch_sub(1, Ordering::SeqCst);
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn bundle_value(p: *const u64) -> u64 { unsafe { p.read() } }

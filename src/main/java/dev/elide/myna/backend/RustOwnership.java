@@ -114,6 +114,9 @@ final class RustOwnership {
       var counts = new StringBuilder();
       var lends = new StringBuilder();
       String close = "";
+      // A batch wrapper also has a _with_scratch form that takes, after each batch, the scratch
+      // its arrays use above the eight elements the stack holds.
+      var batchScratch = new LinkedHashMap<String, String>();
       for (Parameter p : f.parameters()) {
         BufferBorrow buffer = call.buffer(p);
         BufferBorrow length = call.length(p);
@@ -122,14 +125,19 @@ final class RustOwnership {
           params.add(
               p.name() + ": " + (buffer.elementsNullable() ? "&[Option<&[u8]>]" : "&[&[u8]]"));
           args.add(p.name());
+          batchScratch.put(
+              p.name() + ": ",
+              "super::BatchScratch<'_, " + Types.rust(call.lengthElement(buffer)) + ">");
           lends
-              .append("lend_batch::<_, ")
+              .append("batch::lend::<_, ")
               .append(Types.rust(call.lengthElement(buffer)))
               .append(", _>(")
               .append(p.name())
-              .append(", ")
+              .append(", batch::")
               .append(buffer.elementsNullable() ? "optional" : "present")
-              .append(", |")
+              .append(", \u0001")
+              .append(p.name())
+              .append("\u0001, |")
               .append(p.name())
               .append(", ")
               .append(buffer.length())
@@ -211,6 +219,7 @@ final class RustOwnership {
       // The slices vouch for the buffers. Nothing vouches for any other pointer, so a wrapper that
       // passes one through is as unsafe as the raw function is for that argument.
       boolean pointers = call.passesPointers();
+      int start = out.length();
       if (pointers)
         out.append(
             "    /// # Safety\n"
@@ -222,26 +231,57 @@ final class RustOwnership {
         out.append(
             "    #[must_use = \"the result is an owned resource; adopt it with from_raw or use the"
                 + " owner's constructor\"]\n");
-      out.append(pointers ? "    pub unsafe fn " : "    pub fn ")
-          .append(f.name())
-          .append('(')
-          .append(String.join(", ", params))
-          .append(')');
-      if (f.returns() != Scalar.VOID)
-        out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup(), "super::"));
-      out.append(" {\n")
-          .append(absent)
-          .append(alignments)
-          .append(counts)
-          .append("        ")
-          .append(lends)
-          .append("unsafe { super::")
-          .append(f.name())
-          .append('(')
-          .append(String.join(", ", args))
-          .append(") }")
-          .append(close)
-          .append("\n    }\n");
+      String header = out.substring(start);
+      for (boolean scratch : batchScratch.isEmpty() ? List.of(false) : List.of(false, true)) {
+        var signature = new ArrayList<String>();
+        for (String param : params) {
+          signature.add(param);
+          if (!scratch) continue;
+          for (var entry : batchScratch.entrySet())
+            if (param.startsWith(entry.getKey()))
+              signature.add(
+                  entry.getKey().substring(0, entry.getKey().length() - 2)
+                      + "_scratch: "
+                      + entry.getValue());
+        }
+        String lent = lends.toString();
+        for (String key : batchScratch.keySet()) {
+          String name = key.substring(0, key.length() - 2);
+          lent =
+              lent.replace(
+                  "\u0001" + name + "\u0001", scratch ? "Some(" + name + "_scratch)" : "None");
+        }
+        if (scratch)
+          out.append(header)
+              .append(
+                  "    /// As the wrapper without scratch, with each batch's pointer and length"
+                      + " arrays in the\n"
+                      + "    /// scratch after it, which must hold every element.\n");
+        else if (!batchScratch.isEmpty())
+          out.append(
+              "    /// # Panics\n    /// When a batch has more than eight buffers: pass scratch to"
+                  + " the `_with_scratch` form.\n");
+        out.append(pointers ? "    pub unsafe fn " : "    pub fn ")
+            .append(f.name())
+            .append(scratch ? "_with_scratch(" : "(")
+            .append(String.join(", ", signature))
+            .append(')');
+        if (f.returns() != Scalar.VOID)
+          out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup(), "super::"));
+        out.append(" {\n")
+            .append(absent)
+            .append(alignments)
+            .append(counts)
+            .append("        ")
+            .append(lent)
+            .append("unsafe { super::")
+            .append(f.name())
+            .append('(')
+            .append(String.join(", ", args))
+            .append(") }")
+            .append(close)
+            .append("\n    }\n");
+      }
     }
     return out.append("}\n").toString();
   }
@@ -312,9 +352,12 @@ final class RustOwnership {
    * The implementation side of a batch: a safe view of the raw arrays an import receives. Emitted
    * once, at the top level of {@code seam.rs}, when a module declares a batch.
    */
+  /**
+   * The implementation side of a batch, and the scratch a caller lends for a large one: emitted
+   * once, at the top level of {@code seam.rs}, when a module declares a batch.
+   */
   private static final String BATCH_ADAPTER =
 """
-
 /// A length or count of a borrowed batch, as its import declares it.
 pub trait BatchLength: Copy {
     /// The value as a byte length or element count. Negative and oversized values break the
@@ -328,35 +371,63 @@ impl BatchLength for i32 {
 }
 impl BatchLength for u64 {
     #[inline(always)]
-    fn to_usize(self) -> usize { debug_assert!(usize::try_from(self).is_ok(), "batch length exceeds usize"); self as usize }
+    fn to_usize(self) -> usize { debug_assert!(self <= isize::MAX as u64, "batch length exceeds isize::MAX"); self as usize }
 }
 impl BatchLength for i64 {
     #[inline(always)]
-    fn to_usize(self) -> usize { debug_assert!(self >= 0 && usize::try_from(self).is_ok(), "invalid batch length"); self as usize }
+    fn to_usize(self) -> usize { debug_assert!(self >= 0 && self as u64 <= isize::MAX as u64, "invalid batch length"); self as usize }
+}
+
+/// Caller-provided room for a batch's pointer and length arrays, for the `_with_scratch` wrappers
+/// of batches above the eight elements a wrapper keeps on its stack. Both slices must hold at
+/// least as many elements as the batch.
+pub struct BatchScratch<'s, L = u64> {
+    pointers: &'s mut [core::mem::MaybeUninit<*mut u8>],
+    lengths: &'s mut [core::mem::MaybeUninit<L>],
+}
+impl<'s, L> BatchScratch<'s, L> {
+    #[inline(always)]
+    pub fn new(pointers: &'s mut [core::mem::MaybeUninit<*mut u8>], lengths: &'s mut [core::mem::MaybeUninit<L>]) -> Self {
+        Self { pointers, lengths }
+    }
+    /// The most elements the scratch holds.
+    #[inline(always)]
+    pub fn capacity(&self) -> usize { core::cmp::min(self.pointers.len(), self.lengths.len()) }
 }
 
 /// The buffers of a borrowed batch, as an implementation receives them: `sources[i]` holds
-/// `lengths[i]` bytes for `i < count`. Iterating yields each buffer in order; `get(i)` indexes the
-/// buffers not yet yielded.
-#[derive(Clone)]
+/// `lengths[i]` bytes for `i < count`. A `Copy` view; `iter()` yields each buffer in order.
+#[derive(Clone, Copy)]
 pub struct BufferBatch<'a, L: BatchLength = u64> {
     sources: *const *mut u8,
     lengths: *const L,
     count: usize,
     _buffers: core::marker::PhantomData<&'a [u8]>,
 }
+// The view reads immutable bytes, as the `&[&[u8]]` it stands for may be read from any thread.
+unsafe impl<L: BatchLength> Send for BufferBatch<'_, L> {}
+unsafe impl<L: BatchLength> Sync for BufferBatch<'_, L> {}
 impl<'a, L: BatchLength> BufferBatch<'a, L> {
     /// # Safety
-    /// Unless `count` is zero, when either array may be null, `sources` and `lengths` are valid for
-    /// `count` reads, and each `sources[i]` is a non-null buffer valid for reads of `lengths[i]`
-    /// bytes (it may be null when its length is zero), unmutated for `'a`.
+    /// - Unless `count` is zero, `sources` and `lengths` are non-null and valid for `count` reads,
+    ///   and both arrays stay valid and unmodified for `'a`; with a zero count neither is read.
+    /// - Every length is non-negative and at most `isize::MAX`.
+    /// - Each `sources[i]` is valid for reads of `lengths[i]` bytes; it may be null only when its
+    ///   length is zero.
+    /// - The bytes are not mutated for `'a`.
     #[inline(always)]
     pub unsafe fn from_raw<C: BatchLength>(sources: *const *mut u8, lengths: *const L, count: C) -> Self {
         let count = count.to_usize();
         debug_assert!(count == 0 || (!sources.is_null() && !lengths.is_null()), "null batch arrays");
         Self { sources, lengths, count, _buffers: core::marker::PhantomData }
     }
-    /// The buffer at `index` among those not yet yielded, or `None` past the end.
+    /// The number of elements.
+    #[inline(always)]
+    pub fn len(&self) -> usize { self.count }
+    /// Whether the batch has no elements.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool { self.count == 0 }
+    /// The element at `index`, counted from the start, or `None` past the end.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&'a [u8]> {
         if index >= self.count { return None; }
@@ -364,42 +435,71 @@ impl<'a, L: BatchLength> BufferBatch<'a, L> {
         debug_assert!(!pointer.is_null() || length == 0, "null buffer with a nonzero length");
         Some(if length == 0 { &[] } else { unsafe { core::slice::from_raw_parts(pointer, length) } })
     }
+    /// The elements in order.
+    #[inline(always)]
+    pub fn iter(&self) -> BufferBatchIter<'a, L> { BufferBatchIter { batch: *self, next: 0 } }
 }
-impl<'a, L: BatchLength> Iterator for BufferBatch<'a, L> {
+impl<'a, L: BatchLength> IntoIterator for BufferBatch<'a, L> {
+    type Item = &'a [u8];
+    type IntoIter = BufferBatchIter<'a, L>;
+    #[inline(always)]
+    fn into_iter(self) -> BufferBatchIter<'a, L> { BufferBatchIter { batch: self, next: 0 } }
+}
+/// The elements of a [`BufferBatch`], in order.
+#[derive(Clone)]
+pub struct BufferBatchIter<'a, L: BatchLength = u64> { batch: BufferBatch<'a, L>, next: usize }
+impl<'a, L: BatchLength> Iterator for BufferBatchIter<'a, L> {
     type Item = &'a [u8];
     #[inline(always)]
     fn next(&mut self) -> Option<&'a [u8]> {
-        let item = self.get(0)?;
-        self.sources = unsafe { self.sources.add(1) };
-        self.lengths = unsafe { self.lengths.add(1) };
-        self.count -= 1;
+        let item = self.batch.get(self.next)?;
+        self.next += 1;
         Some(item)
     }
     #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) { (self.count, Some(self.count)) }
+    fn nth(&mut self, n: usize) -> Option<&'a [u8]> {
+        self.next = self.next.saturating_add(n).min(self.batch.count);
+        self.next()
+    }
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) { let left = self.batch.count - self.next; (left, Some(left)) }
 }
-impl<L: BatchLength> ExactSizeIterator for BufferBatch<'_, L> {}
-impl<L: BatchLength> core::iter::FusedIterator for BufferBatch<'_, L> {}
+impl<L: BatchLength> ExactSizeIterator for BufferBatchIter<'_, L> {}
+impl<L: BatchLength> core::iter::FusedIterator for BufferBatchIter<'_, L> {}
 
 /// The buffers of a borrowed batch whose elements may be absent (`elements_nullable=true`): a null
 /// element, which has length zero, is `None`.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct OptionalBufferBatch<'a, L: BatchLength = u64> {
     sources: *const *mut u8,
     lengths: *const L,
     count: usize,
     _buffers: core::marker::PhantomData<&'a [u8]>,
 }
+// The view reads immutable bytes, as the `&[&[u8]]` it stands for may be read from any thread.
+unsafe impl<L: BatchLength> Send for OptionalBufferBatch<'_, L> {}
+unsafe impl<L: BatchLength> Sync for OptionalBufferBatch<'_, L> {}
 impl<'a, L: BatchLength> OptionalBufferBatch<'a, L> {
     /// # Safety
-    /// As for [`BufferBatch::from_raw`], except that any element may be null with length zero.
+    /// - Unless `count` is zero, `sources` and `lengths` are non-null and valid for `count` reads,
+    ///   and both arrays stay valid and unmodified for `'a`; with a zero count neither is read.
+    /// - Every length is non-negative and at most `isize::MAX`.
+    /// - Each non-null `sources[i]` is valid for reads of `lengths[i]` bytes; a null one has length
+    ///   zero.
+    /// - The bytes are not mutated for `'a`.
     #[inline(always)]
     pub unsafe fn from_raw<C: BatchLength>(sources: *const *mut u8, lengths: *const L, count: C) -> Self {
         let count = count.to_usize();
         debug_assert!(count == 0 || (!sources.is_null() && !lengths.is_null()), "null batch arrays");
         Self { sources, lengths, count, _buffers: core::marker::PhantomData }
     }
-    /// The element at `index` among those not yet yielded, or `None` past the end.
+    /// The number of elements.
+    #[inline(always)]
+    pub fn len(&self) -> usize { self.count }
+    /// Whether the batch has no elements.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool { self.count == 0 }
+    /// The element at `index`, counted from the start, or `None` past the end.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<Option<&'a [u8]>> {
         if index >= self.count { return None; }
@@ -410,62 +510,82 @@ impl<'a, L: BatchLength> OptionalBufferBatch<'a, L> {
         }
         Some(Some(if length == 0 { &[] } else { unsafe { core::slice::from_raw_parts(pointer, length) } }))
     }
+    /// The elements in order.
+    #[inline(always)]
+    pub fn iter(&self) -> OptionalBufferBatchIter<'a, L> { OptionalBufferBatchIter { batch: *self, next: 0 } }
 }
-impl<'a, L: BatchLength> Iterator for OptionalBufferBatch<'a, L> {
+impl<'a, L: BatchLength> IntoIterator for OptionalBufferBatch<'a, L> {
+    type Item = Option<&'a [u8]>;
+    type IntoIter = OptionalBufferBatchIter<'a, L>;
+    #[inline(always)]
+    fn into_iter(self) -> OptionalBufferBatchIter<'a, L> { OptionalBufferBatchIter { batch: self, next: 0 } }
+}
+/// The elements of a [`OptionalBufferBatch`], in order.
+#[derive(Clone)]
+pub struct OptionalBufferBatchIter<'a, L: BatchLength = u64> { batch: OptionalBufferBatch<'a, L>, next: usize }
+impl<'a, L: BatchLength> Iterator for OptionalBufferBatchIter<'a, L> {
     type Item = Option<&'a [u8]>;
     #[inline(always)]
     fn next(&mut self) -> Option<Option<&'a [u8]>> {
-        let item = self.get(0)?;
-        self.sources = unsafe { self.sources.add(1) };
-        self.lengths = unsafe { self.lengths.add(1) };
-        self.count -= 1;
+        let item = self.batch.get(self.next)?;
+        self.next += 1;
         Some(item)
     }
     #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) { (self.count, Some(self.count)) }
+    fn nth(&mut self, n: usize) -> Option<Option<&'a [u8]>> {
+        self.next = self.next.saturating_add(n).min(self.batch.count);
+        self.next()
+    }
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) { let left = self.batch.count - self.next; (left, Some(left)) }
 }
-impl<L: BatchLength> ExactSizeIterator for OptionalBufferBatch<'_, L> {}
-impl<L: BatchLength> core::iter::FusedIterator for OptionalBufferBatch<'_, L> {}
+impl<L: BatchLength> ExactSizeIterator for OptionalBufferBatchIter<'_, L> {}
+impl<L: BatchLength> core::iter::FusedIterator for OptionalBufferBatchIter<'_, L> {}
 """;
 
   /**
-   * The caller side of a batch: the pointer and length arrays a call reads, on the stack for up to
-   * eight buffers and in two vectors otherwise, alive for exactly the closure that makes the call.
-   * An empty batch passes null arrays.
+   * The caller side of a batch, in a hidden submodule so that no declared name collides with its
+   * helpers. It allocates nothing, so {@code seam.rs} stays usable without an allocator.
    */
   private static final String LEND_BATCH =
 """
-    extern crate alloc;
-    #[inline(always)]
-    fn present(buffer: &&[u8]) -> (*mut u8, usize) { (buffer.as_ptr().cast_mut(), buffer.len()) }
-    #[inline(always)]
-    fn optional(buffer: &Option<&[u8]>) -> (*mut u8, usize) {
-        buffer.map_or((core::ptr::null_mut(), 0), |buffer| (buffer.as_ptr().cast_mut(), buffer.len()))
-    }
-    #[inline(always)]
-    fn lend_batch<B, L: Copy + Default + TryFrom<usize>, R>(
-        buffers: &[B],
-        lend: fn(&B) -> (*mut u8, usize),
-        call: impl FnOnce(*const *mut u8, *const L) -> R,
-    ) -> R {
-        if buffers.is_empty() { return call(core::ptr::null(), core::ptr::null()); }
-        let length = |bytes: usize| L::try_from(bytes).ok().expect("buffer length exceeds ABI range");
-        if buffers.len() <= 8 {
+    /// Lends batches to the calls above; not part of the API.
+    #[doc(hidden)]
+    pub mod batch {
+        #[inline(always)]
+        pub fn present(buffer: &&[u8]) -> (*mut u8, usize) { (buffer.as_ptr().cast_mut(), buffer.len()) }
+        #[inline(always)]
+        pub fn optional(buffer: &Option<&[u8]>) -> (*mut u8, usize) {
+            buffer.map_or((core::ptr::null_mut(), 0), |buffer| (buffer.as_ptr().cast_mut(), buffer.len()))
+        }
+        /// The pointer and length arrays of one batch, alive for exactly the closure that makes the
+        /// call: on the stack for up to eight buffers, otherwise in the caller's scratch. An empty
+        /// batch passes null arrays. Nothing is allocated.
+        #[inline(always)]
+        pub fn lend<B, L: Copy + Default + TryFrom<usize>, R>(
+            buffers: &[B],
+            lend: fn(&B) -> (*mut u8, usize),
+            scratch: Option<super::super::BatchScratch<'_, L>>,
+            call: impl FnOnce(*const *mut u8, *const L) -> R,
+        ) -> R {
+            if buffers.is_empty() { return call(core::ptr::null(), core::ptr::null()); }
+            let length = |bytes: usize| L::try_from(bytes).ok().expect("buffer length exceeds ABI range");
+            if let Some(scratch) = scratch {
+                assert!(scratch.capacity() >= buffers.len(), "batch scratch holds fewer elements than the batch");
+                for (i, buffer) in buffers.iter().enumerate() {
+                    let (pointer, bytes) = lend(buffer);
+                    scratch.pointers[i].write(pointer);
+                    scratch.lengths[i].write(length(bytes));
+                }
+                return call(scratch.pointers.as_ptr().cast(), scratch.lengths.as_ptr().cast());
+            }
+            assert!(buffers.len() <= 8, "a batch of more than eight buffers needs scratch: use the _with_scratch wrapper");
             let mut pointers = [core::ptr::null_mut::<u8>(); 8];
             let mut lengths = [L::default(); 8];
             for (i, buffer) in buffers.iter().enumerate() {
                 let (pointer, bytes) = lend(buffer);
                 pointers[i] = pointer;
                 lengths[i] = length(bytes);
-            }
-            call(pointers.as_ptr(), lengths.as_ptr())
-        } else {
-            let mut pointers = alloc::vec::Vec::with_capacity(buffers.len());
-            let mut lengths = alloc::vec::Vec::with_capacity(buffers.len());
-            for buffer in buffers {
-                let (pointer, bytes) = lend(buffer);
-                pointers.push(pointer);
-                lengths.push(length(bytes));
             }
             call(pointers.as_ptr(), lengths.as_ptr())
         }

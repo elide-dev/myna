@@ -593,25 +593,37 @@ public final class JavaFfm implements Backend {
         args.add("arrays" + s);
         Scalar element = call.lengthElement(buffer);
         boolean wide = element.bytes == 8;
+        // Lent and kept reachable from one snapshot of the caller's array.
         temporary
-            .append("                int count")
+            .append("                MemorySegment[] held")
             .append(s)
             .append(" = ")
             .append(arg)
+            .append(".length == 0 ? ")
+            .append(arg)
+            .append(" : ")
+            .append(arg)
+            .append(".clone();\n")
+            .append("                int count")
+            .append(s)
+            .append(" = held")
+            .append(s)
             .append(".length;\n")
             .append(NativeOwnership.countCheck(call, buffer, "count" + s, "                "))
             .append("                MemorySegment arrays")
             .append(s)
             .append(" = count")
             .append(s)
-            .append(" == 0 ? MemorySegment.NULL : lendBatch(")
-            .append(arg)
+            .append(" == 0 ? MemorySegment.NULL : lendBatch(held")
+            .append(s)
             .append(", empty, ")
             .append(wide)
             .append(", ")
             .append(wide ? "Long.MAX_VALUE" : CallBorrows.max32(element))
             .append(", ")
             .append(buffer.elementsNullable())
+            .append(", ")
+            .append(Seam.nativeLeaf(f))
             .append(");\n");
         continue;
       }
@@ -749,8 +761,8 @@ public final class JavaFfm implements Backend {
         BufferBorrow b = call.buffer(f.parameters().get(i));
         if (b != null && b.batch())
           fences
-              .append("                java.lang.ref.Reference.reachabilityFence(arg")
-              .append(i)
+              .append("                java.lang.ref.Reference.reachabilityFence(held")
+              .append(call.suffix(b))
               .append(");\n");
       }
       invoke =
@@ -764,11 +776,21 @@ public final class JavaFfm implements Backend {
               + (f.returns() == Scalar.VOID ? "" : "                return result;\n");
     }
     out.append(
-            several
-                ? "        /** Borrows each entire native segment for this call; lengths are in"
-                    + " bytes. */\n"
-                : "        /** Borrows the entire native segment for this call; length is in bytes."
-                    + " */\n")
+            batched
+                ? "        /**\n"
+                    + "         * Lends each buffer and each element of each batch for this call;"
+                    + " lengths are in bytes.\n"
+                    + "         * A batch element is lent in place only when nothing can close it"
+                    + " during the call\n"
+                    + "         * (the global scope, or confined to this thread when the import"
+                    + " is a native leaf);\n"
+                    + "         * any other is copied into memory that lives for the call.\n"
+                    + "         */\n"
+                : several
+                    ? "        /** Borrows each entire native segment for this call; lengths are in"
+                        + " bytes. */\n"
+                    : "        /** Borrows the entire native segment for this call; length is in"
+                        + " bytes. */\n")
         .append("        public ")
         .append(Types.ffmCarrier(f.returns()))
         .append(' ')
@@ -804,7 +826,7 @@ public final class JavaFfm implements Backend {
    */
   private static final String LEND_BATCH =
 """
-        private static MemorySegment lendBatch(MemorySegment[] buffers, Arena arena, boolean wide, long maxLength, boolean elementsNullable) {
+        private static MemorySegment lendBatch(MemorySegment[] buffers, Arena arena, boolean wide, long maxLength, boolean elementsNullable, boolean leaf) {
             int count = buffers.length;
             MemorySegment arrays = arena.allocate(16L * count, 8);
             for (int i = 0; i < count; i++) {
@@ -821,13 +843,35 @@ public final class JavaFfm implements Backend {
                     length = buffer.byteSize();
                     if (length != 0 && buffer.address() == 0) throw new IllegalArgumentException("null buffer address");
                     if (length > maxLength) throw new IllegalArgumentException("buffer length exceeds ABI range");
-                    address = length == 0 ? arrays.address() : buffer.address();
+                    if (length == 0) address = arrays.address();
+                    else if (lentInPlace(buffer, leaf)) address = buffer.address();
+                    else {
+                        MemorySegment copy = arena.allocate(length, 1);
+                        MemorySegment.copy(buffer, 0, copy, 0, length);
+                        address = copy.address();
+                    }
                 }
                 arrays.setAtIndex(ValueLayout.JAVA_LONG, i, address);
                 if (wide) arrays.setAtIndex(ValueLayout.JAVA_LONG, (long) count + i, length);
                 else arrays.setAtIndex(ValueLayout.JAVA_INT, 2L * count + i, (int) length);
             }
             return arrays;
+        }
+
+        /**
+         * Whether nothing can close the segment's scope while the call runs: the linker does not
+         * hold the scope of an address passed in memory. The global scope never closes. A segment
+         * confined to this thread (accessible from it, which the caller checked, but not from a
+         * thread that never runs) closes only on this thread, which a native leaf cannot reenter.
+         */
+        private static boolean lentInPlace(MemorySegment buffer, boolean leaf) {
+            if (buffer.scope().equals(Arena.global().scope())) return true;
+            return leaf && !buffer.isAccessibleBy(BatchSentinel.THREAD);
+        }
+
+        /** A thread that never starts, against which a confined segment is not accessible. */
+        private static final class BatchSentinel {
+            static final Thread THREAD = Thread.ofPlatform().unstarted(() -> {});
         }
 """;
 

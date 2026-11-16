@@ -101,14 +101,14 @@ class BatchBorrowTest {
   @Test
   void wrappersTakeArraysOfBuffers() {
     var output = Generator.generate(Dsl.parse(BATCH), true);
-    // Rust: slices of slices, lent through lend_batch, and the implementation side's views.
+    // Rust: slices of slices, lent through batch::lend, and the implementation side's views.
     String rust = output.get("seam.rs");
     assertTrue(
         rust.contains(
             """
                 pub fn digest(sources: &[&[u8]]) -> u64 {
                     let count: u64 = sources.len().try_into().expect("batch count exceeds ABI range");
-                    lend_batch::<_, u64, _>(sources, present, |sources, lengths| unsafe { super::digest(sources, lengths, count) })
+                    batch::lend::<_, u64, _>(sources, batch::present, None, |sources, lengths| unsafe { super::digest(sources, lengths, count) })
                 }
             """),
         rust);
@@ -116,11 +116,25 @@ class BatchBorrowTest {
         rust.contains(
             "    pub fn merge(key: &[u8], inputs: &[&[u8]], deps: &[Option<&[u8]>]) -> u64 {\n"),
         rust);
-    assertTrue(rust.contains("lend_batch::<_, u32, _>(deps, optional, |deps, depLengths|"), rust);
+    assertTrue(
+        rust.contains(
+            "batch::lend::<_, u32, _>(deps, batch::optional, Some(deps_scratch), |deps,"
+                + " depLengths|"),
+        rust);
     assertTrue(rust.contains("let depCount: i32 = deps.len().try_into()"), rust);
     assertTrue(rust.contains("pub struct BufferBatch<'a, L: BatchLength = u64> {"), rust);
     assertTrue(rust.contains("pub struct OptionalBufferBatch<'a, L: BatchLength = u64> {"), rust);
-    assertTrue(rust.contains("extern crate alloc;"), rust);
+    // No allocation: above eight elements the _with_scratch form takes the caller's scratch.
+    assertFalse(rust.contains("extern crate alloc") || rust.contains("alloc::"), rust);
+    assertTrue(
+        rust.contains(
+            "    pub fn merge_with_scratch(key: &[u8], inputs: &[&[u8]], inputs_scratch:"
+                + " super::BatchScratch<'_, u64>, deps: &[Option<&[u8]>], deps_scratch:"
+                + " super::BatchScratch<'_, u32>) -> u64 {\n"),
+        rust);
+    assertTrue(rust.contains("pub struct BatchScratch<'s, L = u64> {"), rust);
+    assertTrue(rust.contains("pub struct BufferBatchIter<'a, L: BatchLength = u64> {"), rust);
+    assertTrue(rust.contains("    pub mod batch {\n"), rust);
     // Native Image: NativeBuffer[] and byte[][] overloads over the shared lending helpers.
     String java = output.get("ApiOwnership.java");
     assertTrue(java.contains("public static long digest(NativeBuffer[] arg0) {"), java);
@@ -130,8 +144,16 @@ class BatchBorrowTest {
             "public static long merge(NativeBuffer arg0, NativeBuffer[] arg2, NativeBuffer[]"
                 + " arg5)"),
         java);
-    assertTrue(java.contains("lendBatch(arg5, arrays5, count5, false, 4294967295L, true);"), java);
+    assertTrue(java.contains("lendBatch(held5, arrays5, count5, false, 4294967295L, true);"), java);
     assertTrue(java.contains("pinBatch(arg2, pins2, arrays2, count2, true, false);"), java);
+    assertTrue(
+        java.contains("NativeBuffer[] held2 = arg2.length == 0 ? arg2 : arg2.clone();"), java);
+    assertTrue(java.contains("releaseBatch(held2, count2);"), java);
+    // The pins array is allocated before the region it would otherwise leak.
+    assertTrue(
+        java.indexOf("PinnedObject[] pins2 =")
+            < java.indexOf("Pointer arrays2 =", java.indexOf("byte[][] arg2")),
+        java);
     assertTrue(java.contains("private static void releaseBatch("), java);
     // Offsets and sizes are long arithmetic; a count its type cannot carry is rejected first.
     assertFalse(java.contains("8 * "), java);
@@ -148,10 +170,10 @@ class BatchBorrowTest {
     assertTrue(ffm.contains("public long digest(MemorySegment[] arg0) throws Throwable {"), ffm);
     assertTrue(
         ffm.contains(
-            "MemorySegment arrays5 = count5 == 0 ? MemorySegment.NULL : lendBatch(arg5, empty,"
-                + " false, 4294967295L, true);"),
+            "MemorySegment arrays5 = count5 == 0 ? MemorySegment.NULL : lendBatch(held5, empty,"
+                + " false, 4294967295L, true, false);"),
         ffm);
-    assertTrue(ffm.contains("java.lang.ref.Reference.reachabilityFence(arg2);"), ffm);
+    assertTrue(ffm.contains("java.lang.ref.Reference.reachabilityFence(held2);"), ffm);
     assertTrue(ffm.contains("private static MemorySegment lendBatch("), ffm);
     assertTrue(
         ffm.contains("arrays.setAtIndex(ValueLayout.JAVA_LONG, (long) count + i, length);"), ffm);
@@ -204,7 +226,8 @@ class BatchBorrowTest {
         Arguments.of(
             "count=count lifetime=call",
             "count=lengths lifetime=call",
-            "a batch borrow's sources, lengths and count belong to it alone: digest lengths"),
+            "a batch borrow's sources, lengths and count belong to it alone: digest lengths is used"
+                + " by the batches of digest sources and digest sources"),
         Arguments.of(
             "borrow merge key length=keyLength",
             "borrow merge key length=inputCount",
@@ -213,7 +236,24 @@ class BatchBorrowTest {
         Arguments.of(
             "borrow merge deps lengths=depLengths count=depCount",
             "borrow merge deps lengths=inputLengths count=depCount",
-            "a batch borrow's sources, lengths and count belong to it alone: merge inputLengths"),
+            "a batch borrow's sources, lengths and count belong to it alone: merge inputLengths is"
+                + " used by the batches of merge deps and merge inputs"),
+        Arguments.of(
+            "borrow digest sources",
+            "enum BatchScratch type=i32\n  value a = 1\nend\nborrow digest sources",
+            "BatchScratch is reserved for the views of a batch borrow: digest sources"
+                + " lengths=lengths count=count"),
+        Arguments.of(
+            "param count type=u64\n",
+            "param count type=u64\n  param sources_scratch type=u8\n",
+            "sources_scratch is reserved for the scratch of the batch: digest sources"
+                + " lengths=lengths count=count"),
+        Arguments.of(
+            "import digest symbol=api_digest",
+            "import digest_with_scratch symbol=api_other return=void error=no_failure\nend\n"
+                + "import digest symbol=api_digest",
+            "digest_with_scratch is reserved for the scratch form of digest's wrapper: digest"
+                + " sources lengths=lengths count=count"),
         Arguments.of(
             "param sources type=ptr<ptr<u8>> nullable=true",
             "param sources type=ptr<ptr<u8>> nullable=false",

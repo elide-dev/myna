@@ -657,14 +657,38 @@ public final class NativeOwnership implements Backend {
     boolean wide = call.lengthElement(b.borrow()).bytes == 8;
     Scalar element = call.lengthElement(b.borrow());
     String max = wide ? "Long.MAX_VALUE" : CallBorrows.max32(element);
+    // Off-heap elements are lent, released and kept reachable from one snapshot of the caller's
+    // array, so a concurrent store into it cannot make the call release a buffer it never acquired.
+    String source = arrays ? b.name() : "held" + s;
+    if (!arrays)
+      out.append(pad)
+          .append("NativeBuffer[] held")
+          .append(s)
+          .append(" = ")
+          .append(b.name())
+          .append(".length == 0 ? ")
+          .append(b.name())
+          .append(" : ")
+          .append(b.name())
+          .append(".clone();\n");
     out.append(pad)
         .append("int count")
         .append(s)
         .append(" = ")
-        .append(b.name())
+        .append(source)
         .append(".length;\n")
-        .append(countCheck(call, b.borrow(), "count" + s, pad))
-        .append(pad)
+        .append(countCheck(call, b.borrow(), "count" + s, pad));
+    // The pins array comes first: nothing is left to free if its allocation fails.
+    if (arrays)
+      out.append(pad)
+          .append("org.graalvm.nativeimage.PinnedObject[] pins")
+          .append(s)
+          .append(" = count")
+          .append(s)
+          .append(" == 0 ? null : new org.graalvm.nativeimage.PinnedObject[count")
+          .append(s)
+          .append("];\n");
+    out.append(pad)
         .append("org.graalvm.word.Pointer arrays")
         .append(s)
         .append(" = count")
@@ -679,15 +703,6 @@ public final class NativeOwnership implements Backend {
         .append("))\n")
         .append(pad)
         .append("    : org.graalvm.nativeimage.StackValue.get(128);\n");
-    if (arrays)
-      out.append(pad)
-          .append("org.graalvm.nativeimage.PinnedObject[] pins")
-          .append(s)
-          .append(" = count")
-          .append(s)
-          .append(" == 0 ? null : new org.graalvm.nativeimage.PinnedObject[count")
-          .append(s)
-          .append("];\n");
     out.append(pad).append("try {\n").append(pad).append("    ");
     if (arrays)
       out.append("pinBatch(")
@@ -705,7 +720,7 @@ public final class NativeOwnership implements Backend {
           .append(");\n");
     else
       out.append("lendBatch(")
-          .append(b.name())
+          .append(source)
           .append(", arrays")
           .append(s)
           .append(", count")
@@ -751,7 +766,7 @@ public final class NativeOwnership implements Backend {
         .append(
             arrays
                 ? "if (pins" + s + " != null) unpinBatch(pins" + s + ", count" + s + ");\n"
-                : "releaseBatch(" + b.name() + ", count" + s + ");\n")
+                : "releaseBatch(held" + s + ", count" + s + ");\n")
         .append(pad)
         .append("    }\n")
         .append(pad)
@@ -764,7 +779,7 @@ public final class NativeOwnership implements Backend {
         .append(");\n")
         .append(pad)
         .append("    java.lang.ref.Reference.reachabilityFence(")
-        .append(b.name())
+        .append(arrays ? b.name() : "held" + s)
         .append(");\n")
         .append(pad)
         .append("}\n");

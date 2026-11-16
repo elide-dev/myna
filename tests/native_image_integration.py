@@ -321,6 +321,9 @@ class NativeImageIntegrationTests(unittest.TestCase):
         driver = work / "driver"
         run("rustc", "--edition=2024", ROOT / "tests/ownership/driver.rs", "-C", f"link-arg={fixture}", "-o", driver)
         self.assertIn("Rust ownership passed", run(driver).stdout)
+        # seam.rs of a module with batches builds in a no_std staticlib without an allocator.
+        run("rustc", "--edition=2024", "--crate-type=staticlib", "-Cpanic=abort", "-Copt-level=2",
+            ROOT / "tests/ownership/batch_view.rs", "-o", work / "libbatchview.a")
         # A borrowed resource must prevent moving/dropping its owner while the borrow is used.
         invalid = work / "borrow_escape.rs"
         invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'

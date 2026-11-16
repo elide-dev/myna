@@ -472,6 +472,43 @@ public final class OwnershipMain {
     third.dispose();
     long nothing = foldBatch(foldBatch(fold(FNV_OFFSET, key)));
     check(NativeApiOwnership.merge(key, new byte[0][], new byte[0][]) == nothing);
+    // A constructor that takes a batch keeps what it read, never the buffers.
+    check(NativeApi.liveCount() == 0);
+    Buffer.EVENTS.setLength(0);
+    Owner bundle = NativeApiOwnership.Bundle.create(Owner::new, new NativeApiOwnership.NativeBuffer[] {first, second});
+    check(Buffer.EVENTS.toString().equals("+ar +br -br -ar "));
+    check(NativeApi.bundleValue(WordFactory.pointer(bundle.address())) == foldBatch(FNV_OFFSET, a, b));
+    Owner fromArrays = NativeApiOwnership.Bundle.create(Owner::new, new byte[][] {a, none, b});
+    check(NativeApi.bundleValue(WordFactory.pointer(fromArrays.address())) == foldBatch(FNV_OFFSET, a, none, b));
+    Owner empty0 = NativeApiOwnership.Bundle.create(Owner::new, new byte[0][]);
+    check(NativeApi.bundleValue(WordFactory.pointer(empty0.address())) == foldBatch(FNV_OFFSET));
+    check(NativeApi.liveCount() == 3);
+    for (Owner owner : new Owner[] {bundle, fromArrays, empty0}) owner.registration.clean();
+    check(NativeApi.liveCount() == 0);
+    // The caller's array is read once: replacing an element during the call cannot make the
+    // wrapper release a buffer it never acquired (second's release would fail its lease check).
+    var batch = new NativeApiOwnership.NativeBuffer[1];
+    batch[0] =
+        new NativeApiOwnership.NativeBuffer() {
+          public void acquire(boolean writable) {
+            first.acquire(writable);
+            batch[0] = second;
+          }
+
+          public long address() {
+            return first.address();
+          }
+
+          public long byteSize() {
+            return first.byteSize();
+          }
+
+          public void release(boolean writable) {
+            first.release(writable);
+          }
+        };
+    check(NativeApiOwnership.digest(batch) == foldBatch(FNV_OFFSET, a));
+    check(first.leases == 0 && second.leases == 0 && batch[0] == second);
     first.dispose();
     second.dispose();
     keys.dispose();

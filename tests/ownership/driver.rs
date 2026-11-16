@@ -97,11 +97,25 @@ fn batches() {
     assert_eq!(digest(&three), fold_batch(FNV_OFFSET, &[Some(&a), Some(&[]), Some(&b)]));
     // The empty batch passes null arrays with count zero.
     assert_eq!(digest(&[]), fold_batch(FNV_OFFSET, &[]));
-    // More than eight buffers take the heap path.
+    // More than eight buffers need the caller's scratch; without it the wrapper panics.
     let many: Vec<Vec<u8>> = (0..20u8).map(|i| (0..i).collect()).collect();
     let slices: Vec<&[u8]> = many.iter().map(Vec::as_slice).collect();
     let expected: Vec<Option<&[u8]>> = slices.iter().copied().map(Some).collect();
-    assert_eq!(digest(&slices), fold_batch(FNV_OFFSET, &expected));
+    let mut pointers = vec![core::mem::MaybeUninit::uninit(); 20];
+    let mut lengths = vec![core::mem::MaybeUninit::uninit(); 20];
+    let scratch = seam::BatchScratch::new(&mut pointers, &mut lengths);
+    assert_eq!(digest_with_scratch(&slices, scratch), fold_batch(FNV_OFFSET, &expected));
+    assert!(std::panic::catch_unwind(|| digest(&slices)).is_err());
+    let mut small = [core::mem::MaybeUninit::uninit(); 2];
+    let mut small_lengths = [core::mem::MaybeUninit::uninit(); 2];
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| digest_with_scratch(&three, seam::BatchScratch::new(&mut small, &mut small_lengths)))).is_err());
+    // A constructor that takes a batch keeps what it read, never the buffers.
+    let bundle = Bundle::create(&[&a, &b]).unwrap();
+    assert_eq!(unsafe { seam::bundleValue(bundle.borrow().as_ptr()) }, fold_batch(FNV_OFFSET, &[Some(&a), Some(&b)]));
+    let empty = Bundle::create(&[]).unwrap();
+    assert_eq!(unsafe { seam::bundleValue(empty.borrow().as_ptr()) }, fold_batch(FNV_OFFSET, &[]));
+    drop((bundle, empty));
+    assert_eq!(unsafe { seam::liveCount() }, 0);
     // Two batches beside a single buffer; an absent element of deps is a null with length zero.
     let key = [7u8, 8];
     let deps: [Option<&[u8]>; 3] = [Some(&b), None, Some(&[])];
@@ -116,9 +130,17 @@ fn batches() {
     assert_eq!(view.len(), 3);
     assert_eq!(view.get(2), Some(&b[..]));
     assert_eq!(view.get(3), None);
-    assert_eq!(view.collect::<Vec<_>>(), [&a[..], &[], &b[..]]);
+    // get counts from the start, whatever an iterator has yielded.
+    let mut iter = view.iter();
+    assert_eq!(iter.next(), Some(&a[..]));
+    assert_eq!((iter.len(), view.get(0)), (2, Some(&a[..])));
+    assert_eq!(view.iter().nth(2), Some(&b[..]));
+    assert_eq!(view.iter().nth(3), None);
+    assert_eq!(view.into_iter().collect::<Vec<_>>(), [&a[..], &[], &b[..]]);
     let view = unsafe { seam::OptionalBufferBatch::from_raw(pointers.as_ptr(), lengths.as_ptr(), 3u32) };
-    assert_eq!(view.collect::<Vec<_>>(), [Some(&a[..]), None, Some(&b[..])]);
-    let mut view = unsafe { seam::BufferBatch::<u64>::from_raw(core::ptr::null(), core::ptr::null(), 0i32) };
-    assert_eq!((view.len(), view.next()), (0, None));
+    assert_eq!(view.iter().collect::<Vec<_>>(), [Some(&a[..]), None, Some(&b[..])]);
+    // A view may be read from another thread, as the slices it stands for may.
+    std::thread::scope(|scope| { scope.spawn(|| assert_eq!(view.get(1), Some(None))); });
+    let view = unsafe { seam::BufferBatch::<u64>::from_raw(core::ptr::null(), core::ptr::null(), 0i32) };
+    assert_eq!((view.len(), view.is_empty(), view.iter().next()), (0, true, None));
 }

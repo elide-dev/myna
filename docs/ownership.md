@@ -236,21 +236,45 @@ none of it past the call.
 | Native Image, arrays | `byte[][]` | `null` |
 | FFM | `MemorySegment[]` | `null`, or a native segment of length zero at address zero |
 
-- **Rust** builds both arrays on the stack for up to eight buffers and in two `Vec`s otherwise
-  (`extern crate alloc` in the `ownership` module), with no other allocation. A length or count
-  that does not fit its type panics before the foreign call.
-- **Native Image** acquires each `NativeBuffer` (or pins each non-empty `byte[]`) in order, after
-  the function's single buffers, and releases or unpins them in reverse after the call. Each is
+- **Rust** builds both arrays on the stack for up to eight buffers and allocates nothing, so
+  `seam.rs` builds in a `no_std` crate without an allocator. Above eight, the plain wrapper panics
+  with a message naming the `_with_scratch` form, which takes a `BatchScratch` after each batch:
+  caller-provided `MaybeUninit` slices for the pointers and the lengths, at least as long as the
+  batch (it panics otherwise).
+
+  ```rust
+  let mut pointers = vec![MaybeUninit::uninit(); parts.len()];
+  let mut lengths = vec![MaybeUninit::uninit(); parts.len()];
+  digest_with_scratch(&parts, seam::BatchScratch::new(&mut pointers, &mut lengths));
+  ```
+
+  A length or count that does not fit its type panics before the foreign call. The lending
+  helpers live in a hidden `ownership::batch` module; the names `BufferBatch`, `BufferBatchIter`,
+  `OptionalBufferBatch`, `OptionalBufferBatchIter`, `BatchLength`, `BatchScratch` and `batch`, an
+  import named `F_with_scratch` beside a batch import `F`, and a parameter named `P_scratch` beside
+  a batch `P` are rejected.
+- **Native Image** takes one snapshot of a `NativeBuffer[]` (one array copy), then acquires each
+  element in order, after the function's single buffers, and releases them in reverse after the
+  call; a store into the caller's array during the call cannot change what is released. A
+  `byte[][]` pins each non-empty element and keeps the pins in its own array. Each element is
   validated as a single buffer is; a failure releases exactly the elements already held, and the
   call never reaches native code. Both arrays share one region: 128 bytes of stack for up to eight
-  elements, unmanaged memory (freed after the call) otherwise. `byte[][]` allocates the
-  `PinnedObject[]` its pins need. A `null` batch array is rejected; pass an empty one.
-  The caller must not change the batch array during the call.
-- **FFM** validates each segment as a single buffer is (native, alive, accessible from the calling
-  thread, within the length type), writes the arrays into a confined arena that lives for the call,
-  and keeps the segment array reachable until the call returns. The linker does not keep an
-  element's scope alive as it does for a segment argument, so a segment of a shared arena must not
-  be closed by another thread during the call.
+  elements, unmanaged memory (freed after the call) otherwise. A count its type cannot carry is
+  rejected first. A `null` batch array is rejected; pass an empty one.
+- **FFM** snapshots the `MemorySegment[]` and validates each segment as a single buffer is (native,
+  alive, accessible from the calling thread, within the length type). The linker holds the scope
+  of a segment argument for the call, but not of an address the callee finds in memory, so an
+  element is lent in place only when nothing can close it during the call:
+  - the global scope (`scope().equals(Arena.global().scope())`, which holds for
+    `MemorySegment.ofAddress(..).reinterpret(..)`), or
+  - a segment confined to the calling thread, when the import is a native leaf: a leaf cannot call
+    back into Java, which is the only way the owner thread could close it. Confinement is detected
+    with public API: the segment is accessible from the calling thread but not from a thread that
+    never starts (`isAccessibleBy`).
+
+  Every other element (a shared or automatic arena, or a confined one under a non-leaf import) is
+  copied into the call's confined arena, as a single buffer's temporary storage is, and the copy
+  is lent. The arrays live in the same arena.
 - **Static JNI** generates no buffer adapter for an import with a batch; its raw binding remains.
 - **Truffle cells** do not lend batches yet: an import with one must declare
   `truffle_cell=false@explicit_contract`.
@@ -262,13 +286,18 @@ declares one:
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn buffer_batch_digest(sources: *const *mut u8, lengths: *const u64, count: u64) -> u64 {
     let batch = unsafe { seam::BufferBatch::from_raw(sources, lengths, count) };
-    batch.map(|bytes| bytes.len() as u64).sum()
+    batch.iter().map(|bytes| bytes.len() as u64).sum()
 }
 ```
 
 `BufferBatch<'a, L>` yields `&'a [u8]` and `OptionalBufferBatch<'a, L>` yields `Option<&'a [u8]>`,
-where `L` is the length type (`u64` by default). Both are `Iterator`, `ExactSizeIterator` and
-`FusedIterator`, and `get(i)` indexes the elements not yet yielded.
+where `L` is the length type (`u64` by default). Each is a `Copy`, `Send` and `Sync` view with
+`len()`, `is_empty()`, `get(i)` (counted from the start) and `iter()`, and is `IntoIterator`; the
+iterators are `ExactSizeIterator` and `FusedIterator`. `from_raw` requires that, unless the count
+is zero, both arrays are non-null, valid for `count` reads, and stay valid and unmodified for
+`'a`; that every length is non-negative and at most `isize::MAX`; and that each element is valid
+for reads of its length (null only with length zero, which `OptionalBufferBatch` yields as `None`)
+and unmutated for `'a`.
 
 ## Creates that report a status (Truffle cells only)
 

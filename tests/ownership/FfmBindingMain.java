@@ -220,6 +220,36 @@ public final class FfmBindingMain {
     expected = foldBatch(foldBatch(fold(FNV_OFFSET, new byte[] {7, 8}), a), null, null);
     if (binding.merge(key, new MemorySegment[] {sa}, new MemorySegment[] {MemorySegment.NULL, null}) != expected)
       throw new AssertionError("absent elements");
+    // An element is lent in place only when nothing can close it during the call: confined to
+    // this thread under a native leaf, or the global scope. Anything else is lent as a copy.
+    MemorySegment[] confined = {sa};
+    if (binding.firstLeaf(confined) != sa.address()) throw new AssertionError("confined element of a leaf lent in place");
+    if (binding.firstCall(confined) == sa.address()) throw new AssertionError("confined element of a non-leaf copied");
+    var global = MemorySegment.ofAddress(sa.address()).reinterpret(3);
+    if (binding.firstLeaf(new MemorySegment[] {global}) != sa.address()
+        || binding.firstCall(new MemorySegment[] {global}) != sa.address())
+      throw new AssertionError("global element lent in place");
+    try (var shared = Arena.ofShared()) {
+      var copy = shared.allocateFrom(ValueLayout.JAVA_BYTE, a);
+      if (binding.firstLeaf(new MemorySegment[] {copy}) == copy.address()) throw new AssertionError("shared element copied");
+      if (binding.digest(new MemorySegment[] {copy, sb}) != foldBatch(FNV_OFFSET, a, b)) throw new AssertionError("shared element bytes");
+    }
+    var automatic = Arena.ofAuto().allocateFrom(ValueLayout.JAVA_BYTE, b);
+    if (binding.firstLeaf(new MemorySegment[] {automatic}) == automatic.address()) throw new AssertionError("auto element copied");
+    if (binding.firstLeaf(new MemorySegment[0]) != 0) throw new AssertionError("empty first");
+    // A constructor that takes a batch keeps what it read, never the buffers.
+    var bundles = new java.util.ArrayList<MemorySegment>();
+    NativeApiFFM.ResourceFactory<Action> keep = (address, destructor, threadConstraint) -> {
+      bundles.add(address);
+      return () -> destructor.destroy(address);
+    };
+    var bundle = NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[] {sa, sb});
+    var none = NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[0]);
+    if (binding.bundleValue(bundles.get(0)) != foldBatch(FNV_OFFSET, a, b)
+        || binding.bundleValue(bundles.get(1)) != foldBatch(FNV_OFFSET))
+      throw new AssertionError("batch constructor");
+    rejects(IllegalStateException.class, () -> NativeApiFFM.Bundle.create(binding, keep, new MemorySegment[] {closed}));
+    bundle.run(); none.run();
     // Each element is validated exactly as a single buffer is, before the call.
     rejects(NullPointerException.class, () -> binding.digest(new MemorySegment[] {sa, null}));
     rejects(NullPointerException.class, () -> binding.digest(null));

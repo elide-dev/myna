@@ -102,3 +102,32 @@ import merge symbol=buffer_batch_merge return=u64 error=no_failure nounwind=true
   param depLengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
   param depCount type=u32
 end
+# The address each lends for element 0, so the FFM tests can tell a segment lent in place from a
+# copy: firstLeaf is a native leaf (the default), firstCall is not.
+borrow firstLeaf sources lengths=lengths count=count lifetime=call
+import firstLeaf symbol=buffer_batch_first_leaf return=u64 error=no_failure nounwind=true@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u32
+end
+borrow firstCall sources lengths=lengths count=count lifetime=call
+import firstCall symbol=buffer_batch_first_call return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u32
+end
+# A constructor that takes a batch: the resource keeps the digest of what it read during the call.
+opaque Bundle
+resource Bundle representation=native threading=shared create=bundleCreate destroy=bundleRelease
+borrow bundleCreate parts lengths=lengths count=count lifetime=call
+import bundleCreate symbol=bundle_create return=ptr<Bundle> error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param parts type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<i32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=i32
+end
+import bundleRelease symbol=bundle_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param bundle type=ptr<Bundle> nullable=false ownership=transferred_to_callee access=read_write
+end
+import bundleValue symbol=bundle_value return=u64 error=no_failure nounwind=true@explicit_contract
+  param bundle type=ptr<Bundle> nullable=false ownership=borrowed access=read
+end

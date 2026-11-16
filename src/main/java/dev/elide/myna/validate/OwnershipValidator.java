@@ -174,12 +174,20 @@ final class OwnershipValidator {
     for (BufferBorrow b : m.borrows())
       if (b.batch())
         for (String name : List.of(b.parameter(), b.length(), b.count()))
-          require(
-              batched.putIfAbsent(b.function() + " " + name, b) == null,
-              "a batch borrow's sources, lengths and count belong to it alone: "
-                  + b.function()
-                  + " "
-                  + name);
+          if (batched.putIfAbsent(b.function() + " " + name, b) instanceof BufferBorrow other)
+            throw new IllegalArgumentException(
+                "a batch borrow's sources, lengths and count belong to it alone: "
+                    + b.function()
+                    + " "
+                    + name
+                    + " is used by the batches of "
+                    + other.function()
+                    + " "
+                    + other.parameter()
+                    + " and "
+                    + b.function()
+                    + " "
+                    + b.parameter());
     for (BufferBorrow b : m.borrows())
       if (!b.batch())
         for (String name : List.of(b.parameter(), b.length()))
@@ -286,12 +294,34 @@ final class OwnershipValidator {
         b.function() + " " + b.parameter() + " lengths=" + b.length() + " count=" + b.count();
     require(!b.held(), "a batch borrow has lifetime=call: " + form);
     // seam.rs defines the implementation side's views of a batch beside the declared types.
-    for (String name : List.of("BufferBatch", "OptionalBufferBatch", "BatchLength"))
+    // So does the ownership module its hidden lending helpers (module batch).
+    for (String name :
+        List.of(
+            "BufferBatch",
+            "BufferBatchIter",
+            "OptionalBufferBatch",
+            "OptionalBufferBatchIter",
+            "BatchLength",
+            "BatchScratch",
+            "batch"))
       require(
           !m.opaqueTypes().contains(name)
               && m.structs().stream().noneMatch(x -> x.name().equals(name))
-              && m.callbacks().stream().noneMatch(x -> x.name().equals(name)),
+              && m.callbacks().stream().noneMatch(x -> x.name().equals(name))
+              && m.enums().stream().noneMatch(x -> x.name().equals(name))
+              && m.flagSets().stream().noneMatch(x -> x.name().equals(name)),
           name + " is reserved for the views of a batch borrow: " + form);
+    // The Rust wrapper's _with_scratch form takes a scratch after each batch.
+    require(
+        m.functions().stream().noneMatch(x -> x.name().equals(f.name() + "_with_scratch")),
+        f.name()
+            + "_with_scratch is reserved for the scratch form of "
+            + f.name()
+            + "'s wrapper: "
+            + form);
+    require(
+        f.parameters().stream().noneMatch(x -> x.name().equals(b.parameter() + "_scratch")),
+        b.parameter() + "_scratch is reserved for the scratch of the batch: " + form);
     Parameter sources = params.get(b.parameter());
     Parameter lengths = params.get(b.length());
     Parameter count = params.get(b.count());
