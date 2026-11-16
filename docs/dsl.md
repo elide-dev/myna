@@ -270,14 +270,17 @@ end
 - Nothing changes in the layout or the ABI, and nothing checks the tag: an accessor reads the field as the
   named group whatever the tag holds. The caller reads the case the tag selects.
 - Rust: `<field>_as_<group>()` on the record (`operand_as_binary_op()`), one per field and group, returning
-  the group's newtype. Native Image: a static `<field>As<Group>(record)` on the class for each enum case
+  the group's newtype, or `Option<Enum>` for an enum narrower than the field (`None` when the raw value does
+  not fit the enum's carrier). Native Image: a static `<field>As<Group>(record)` on the class for each enum case
   (`operandAsBinaryOp(node)`), returning the `@CEnum` or `null` for an unlisted value, like `<name>Enum`.
   Flag cases keep the raw `@CField`, tested with `<Class>Constants`. The `@CField` and the FFM offset name
   each case in a comment. C and Truffle cells are unchanged.
 - The `@CEnum` accessor is a convenience with the cost of `<name>Enum`: an `==` against a constant folds
   once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
   paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
-  which compiles to immediate compares.
+  which compiles to immediate compares, when the field and the enum share a carrier. For a 64-bit or narrowed
+  enum, switch on `<Enum>.key(raw)` with the `_KEY` labels instead (below): casting the raw field to `int`
+  aliases a wide value onto a declared code.
 - **Switch keys.** Java cannot `switch` on a `long`, and a narrowed field's value is wider than its enum. One
   rule covers both: an enum gets `int` switch keys in `<Class>Constants.<Enum>` when its carrier is 64 bits
   wide (`i64`, `u64`, `isize`, `usize`) or a struct field references it narrowed, and every declared value is
