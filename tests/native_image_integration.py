@@ -224,6 +224,11 @@ class NativeImageIntegrationTests(unittest.TestCase):
                     self.assertLess(len(field), len(raw), field)
                     self.assertTrue(set(field) - set(raw) == {at[0]}, field)
                     continue
+                if name == "readBool":
+                    # AArch64 loads the @CField boolean byte zero-extending (ldrb) and the raw
+                    # signed-byte read sign-extending (ldrsb); either feeds the same != 0 test.
+                    field = [i.replace("ldrsb ", "ldrb ") for i in field]
+                    raw = [i.replace("ldrsb ", "ldrb ") for i in raw]
                 self.assertEqual(field, raw, f"@CField {name} must compile to the raw offset access's code")
 
     def test_counted_views(self):
