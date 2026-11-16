@@ -16,6 +16,7 @@ public final class Dsl {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
     boolean abiDeclared = false;
+    boolean rustImplementation = false;
     NativeConfig nativeConfig = null;
     TruffleConfig truffleConfig = null;
     var opaque = new ArrayList<String>();
@@ -69,6 +70,11 @@ public final class Dsl {
             if (context != null || library != null)
               nativeConfig =
                   new NativeConfig(context, library, requireStatic != null && bool(requireStatic));
+            String implementation = take(opts, "rust_implementation", null);
+            require(
+                implementation == null || implementation.equals("trait"),
+                "rust_implementation is trait: " + implementation);
+            rustImplementation = implementation != null;
             String cells = take(opts, "truffle_cells", null);
             String backend = take(opts, "truffle_backend", "native");
             String coercion = take(opts, "truffle_coercion", "strict");
@@ -116,7 +122,13 @@ public final class Dsl {
               }
             resources.add(
                 new Resource(
-                    words[1], create, destroy, threading.equals("shared"), handle, success));
+                    words[1],
+                    // Several constructors are a comma-separated list, each an import's name.
+                    List.of(create.split(",", -1)),
+                    destroy,
+                    threading.equals("shared"),
+                    handle,
+                    success));
             empty(opts);
           }
           case "borrow" -> {
@@ -132,7 +144,24 @@ public final class Dsl {
             require(
                 lifetime.equals("call") || (holder != null && !holder.isEmpty()),
                 "lifetime is call or resource:RESOURCE: " + lifetime);
-            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
+            // A batch names an array of lengths and a count; a single buffer names its length.
+            if (opts.containsKey("lengths") || opts.containsKey("count")) {
+              String elements = opts.remove("elements_nullable");
+              require(
+                  elements == null || elements.equals("true") || elements.equals("false"),
+                  "elements_nullable is true or false: " + elements);
+              require(
+                  holder == null, "a batch borrow has lifetime=call: " + words[1] + " " + words[2]);
+              borrows.add(
+                  BufferBorrow.batch(
+                      words[1],
+                      words[2],
+                      takeRequired(opts, "lengths"),
+                      takeRequired(opts, "count"),
+                      "true".equals(elements)));
+            } else
+              borrows.add(
+                  new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
             empty(opts);
           }
           case "opaque" -> {
@@ -326,7 +355,8 @@ public final class Dsl {
         constants,
         enums,
         flagSets,
-        abiDeclared);
+        abiDeclared,
+        rustImplementation);
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */

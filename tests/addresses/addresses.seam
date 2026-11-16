@@ -1,0 +1,20 @@
+# Import addresses for symbols handed to native code: a by-value import's address is its declared
+# symbol, which a C caller invokes with the declared signature, whether the import is a native leaf
+# (called through its reference shim) or transitions.
+module addresses target=aarch64-apple-darwin java_package=fixture.addresses java_class=AddressApi
+struct Pair size=16 align=8
+  field a type=i64 offset=0
+  field b type=i64 offset=8
+end
+import swapPair symbol=addr_swap_pair return=Pair error=no_failure nounwind=true@explicit_contract
+  param value type=Pair
+end
+import swapPairSlow symbol=addr_swap_pair_slow return=Pair error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param value type=Pair
+end
+# Calls the function at target as struct Pair (*)(struct Pair) and folds the result.
+import callPair symbol=addr_call_pair return=i64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param target type=u64
+  param a type=i64
+  param b type=i64
+end

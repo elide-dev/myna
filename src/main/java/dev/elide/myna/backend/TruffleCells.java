@@ -5,6 +5,7 @@ package dev.elide.myna.backend;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import java.math.BigInteger;
 import java.util.*;
@@ -64,7 +65,8 @@ public final class TruffleCells implements Backend {
    */
   private record Cell(Function function, CallBorrows borrows, Resource creates, Resource destroys) {
     boolean isLength(Parameter p) {
-      return borrows.length(p) != null;
+      // A batch's lengths array and count drop out too: the cell derives both from its elements.
+      return borrows.derived(p);
     }
 
     boolean isBuffer(Parameter p) {
@@ -87,11 +89,16 @@ public final class TruffleCells implements Backend {
     return new Cell(
         f,
         CallBorrows.of(m, f),
-        m.resources().stream().filter(r -> r.create().equals(f.name())).findFirst().orElse(null),
+        m.resources().stream().filter(r -> r.createdBy(f.name())).findFirst().orElse(null),
         m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null));
   }
 
   public String generate(Module m) {
+    return generate(m, new Fingerprint(m));
+  }
+
+  public String generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     TruffleConfig config = m.truffleConfig();
     boolean ffm = config.backend() == TruffleBackend.FFM;
     String bindings = ffm ? m.ffmClass() : m.nativeClass();
@@ -123,7 +130,7 @@ public final class TruffleCells implements Backend {
         .append(m.truffleClass())
         .append("() {}\n")
         .append("    public static final String ABI_FINGERPRINT = ")
-        .append(SeamJson.quote(SeamJson.fingerprint(m)))
+        .append(SeamJson.quote(fingerprint))
         .append(";\n")
         .append("    /** Logical names of every generated cell, in symbol order. */\n")
         .append("    public static final String[] CELLS = {")
@@ -376,6 +383,12 @@ public final class TruffleCells implements Backend {
     var locals = new StringBuilder();
     var arguments = new ArrayList<String>();
     var borrows = new ArrayList<String>();
+    // The borrows that are batches, whose locals are a Batch rather than a Borrow.
+    var batchLocals = new HashSet<String>();
+    // The call borrows whose release writes a copy back, which can fail after the call returned.
+    var writableBorrows = new HashSet<String>();
+    // The NUL check of each C string's borrow, by borrow local.
+    var stringChecks = new HashMap<String, String>();
     // The borrows a successful create hands to its resource, which ends them once destroyed.
     var held = new ArrayList<String>();
     // The guest argument each parameter is coerced from, by parameter name. A borrowed length
@@ -409,10 +422,43 @@ public final class TruffleCells implements Backend {
         }
         String declared = SeamJson.quote(p.name());
         Type t = p.type();
+        BufferBorrow batch = cell.borrows().buffer(p);
+        if (batch != null && batch.batch()) {
+          // A guest array of buffers or strings, each lent by the single-buffer coercion; the
+          // borrow's address is the pointer array, the lengths follow it, and its length is the
+          // count.
+          imports.add(RUNTIME + "BatchCoercion");
+          imports.add(RUNTIME + "Batch");
+          fields.append("        @Node.Child private BatchCoercion ").append(field).append(";\n");
+          Scalar element = cell.borrows().lengthElement(batch);
+          boolean wide = element.bytes == 8;
+          init.append("            this.")
+              .append(field)
+              .append(" = new BatchCoercion(")
+              .append(quotedName)
+              .append(", ")
+              .append(declared)
+              .append(", ")
+              .append(batch.elementsNullable())
+              .append(", ")
+              .append(wide)
+              .append(", ")
+              .append(wide ? "Long.MAX_VALUE" : CallBorrows.max32(element))
+              .append(", ")
+              .append(ffm)
+              .append(", ")
+              .append(Seam.nativeLeaf(f))
+              .append(");\n");
+          String local = "borrow_" + p.name();
+          batchLocals.add(local);
+          borrows.add(local + " = " + field + ".execute(" + argument + ")");
+          arguments.add(address(ffm, imports, local + ".address()"));
+          continue;
+        }
         if (t instanceof Pointer || t instanceof FunctionPointer) {
           boolean bytes = cell.isBuffer(p) || Seam.lendsBytes(p);
           if (bytes) {
-            boolean writable = p.access() != Access.READ;
+            boolean writable = p.access() != Access.READ && p.access() != Access.CSTRING;
             // A parameter with an align fact takes the coercion that honors it, one that costs more
             // above 16, where no scratch copy satisfies it. The others keep the smaller one, which
             // a compiled call inlines to keep its borrow out of the heap.
@@ -431,7 +477,35 @@ public final class TruffleCells implements Backend {
                 .append(field)
                 .append(";\n");
             String local = "borrow_" + p.name();
-            borrows.add(local + " = " + field + ".execute(" + argument + ")");
+            // An access=cstring parameter refuses a string with an embedded NUL before lending it.
+            String lentArgument = argument;
+            if (p.access() == Access.CSTRING) {
+              // Strings only; the lent bytes are then scanned for an embedded NUL.
+              imports.add(RUNTIME + "CStrings");
+              lentArgument =
+                  "CStrings.strings("
+                      + argument
+                      + ", "
+                      + p.nullable()
+                      + ", "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this)";
+              stringChecks.put(
+                  local,
+                  "CStrings.checkLent("
+                      + local
+                      + ".address(), "
+                      + local
+                      + ".length(), "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this);");
+            }
+            borrows.add(local + " = " + field + ".execute(" + lentArgument + ")");
+            if (writable && !cell.isHeld(p)) writableBorrows.add(local);
             arguments.add(address(ffm, imports, local + ".address()"));
             // Every borrow, held or not, lends the guest's own segment to the downcall: a held
             // borrow's create call checks and holds its scope as a call borrow's does, and the
@@ -599,8 +673,21 @@ public final class TruffleCells implements Backend {
       // buffer once every borrow is held.
       for (int n = 0; n < f.parameters().size(); n++) {
         Parameter p = f.parameters().get(n);
+        BufferBorrow count = cell.borrows().count(p);
+        if (count != null) {
+          // A batch's count is its borrow's length, at most BatchCoercion.MAX_COUNT.
+          String elements = "borrow_" + count.parameter() + ".length()";
+          arguments.set(
+              n, cell.borrows().countType(count).bytes == 8 ? elements : "(int) " + elements);
+          continue;
+        }
         BufferBorrow borrow = cell.borrows().length(p);
         if (borrow == null) continue;
+        if (borrow.batch()) {
+          String local = "borrow_" + borrow.parameter();
+          arguments.set(n, address(ffm, imports, local + ".lengths()"));
+          continue;
+        }
         String length = "borrow_" + borrow.parameter() + ".length()";
         String unborrowed = "lent_" + borrow.parameter() + ".size()";
         if (cell.borrows().narrow(borrow)) {
@@ -753,7 +840,13 @@ public final class TruffleCells implements Backend {
         // borrow outlives the call, so the resource must keep a borrow of it and the call cannot
         // go without one: skip the fast path whenever the create has any. Its segment still
         // reaches the downcall through scoped.
-        if (held.isEmpty() && segments.size() > 1 && segments.size() <= MAX_PATTERN_BUFFERS)
+        // A C string is checked on the borrowed path only: no fast path skips it.
+        // A batch is always borrowed: its elements' addresses are in memory, not segments.
+        if (held.isEmpty()
+            && !cell.borrows().batched()
+            && f.parameters().stream().noneMatch(x -> x.access() == Access.CSTRING)
+            && segments.size() > 1
+            && segments.size() <= MAX_PATTERN_BUFFERS)
           unborrowedCall =
               "scoped$" + "1".repeat(segments.size()) + "(" + String.join(", ", unborrowed) + ")";
       }
@@ -817,20 +910,25 @@ public final class TruffleCells implements Backend {
                 .filter(p -> p.name().equals(cell.creates().handleParameter()))
                 .findFirst()
                 .orElseThrow();
+        // A ptr<ptr<R>> out-parameter is a one-word struct with the handle at offset 0.
+        boolean outPointer = m.outPointer(cell.creates());
         Struct struct =
-            m.structs().stream()
-                .filter(
-                    x -> x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
-                .findFirst()
-                .orElseThrow();
+            outPointer
+                ? null
+                : m.structs().stream()
+                    .filter(x ->
+                        x.name().equals(((Named) ((Pointer) parameter.type()).pointee()).name()))
+                    .findFirst()
+                    .orElseThrow();
+        boolean inPlaceStruct = cell.creates().handleField() == null && !outPointer;
         String guestArgument = guest.get(parameter.name());
         String copy = "out.copyTo(" + guestArgument;
         // A struct the resource lives in is freed by the resource; any other struct, once the
         // cell is done with it.
         before
             .append("NativeStruct out = NativeStruct.")
-            .append(cell.creates().handleField() == null ? "allocateInPlace(" : "allocate(")
-            .append(struct.size())
+            .append(inPlaceStruct ? "allocateInPlace(" : "allocate(")
+            .append(outPointer ? 8 : struct.size())
             .append("L, ")
             .append(guest.get(parameter.name()))
             .append(", ")
@@ -857,17 +955,19 @@ public final class TruffleCells implements Backend {
               .append(", status, this));\n}\n");
         }
         String field = cell.creates().handleField();
-        if (field == null) {
+        if (inPlaceStruct) {
           // The struct is the resource: it lives in the runtime's memory until its destroy.
           body.append("long created = out.address();\n");
           hold = (retained.isEmpty() ? ", null" : ", hold") + ", out";
         } else {
           long offset =
-              struct.fields().stream()
-                  .filter(x -> x.name().equals(field))
-                  .findFirst()
-                  .orElseThrow()
-                  .offset();
+              outPointer
+                  ? 0
+                  : struct.fields().stream()
+                      .filter(x -> x.name().equals(field))
+                      .findFirst()
+                      .orElseThrow()
+                      .offset();
           body.append("long created = out.pointerAt(")
               .append(offset)
               .append("L);\n")
@@ -884,7 +984,8 @@ public final class TruffleCells implements Backend {
         // Spelled out in full: the parents held open, what must stay reachable, and the borrows.
         String parents = retained.isEmpty() ? "null" : "hold";
         // A held borrow needs handle= (OwnershipValidator), so the runtime's struct exists.
-        String kept = cell.creates().handleField() == null ? "out" : "null";
+        String kept =
+            cell.creates().handleField() == null && !m.outPointer(cell.creates()) ? "out" : "null";
         hold =
             ", "
                 + parents
@@ -899,7 +1000,8 @@ public final class TruffleCells implements Backend {
         // The runtime's struct is freed explicitly: after the call for a handle field, on failure
         // or by the resource's destroy for a resource initialized in place. Parents are held
         // inside the try, so a closed parent frees the struct too.
-        boolean resourceInPlace = cell.creates().handleField() == null;
+        boolean resourceInPlace =
+            cell.creates().handleField() == null && !m.outPointer(cell.creates());
         String inner = "                ";
         if (!retained.isEmpty()) result.append("            Object hold = null;\n");
         result.append("            boolean adopted = false;\n").append("            try {\n");
@@ -977,24 +1079,64 @@ public final class TruffleCells implements Backend {
       callBlock.append(inPlace(inPlace, guest, body));
     }
     String indent = "            ";
+    // A create whose call succeeded owns a fresh resource by the time its borrows end. Should a
+    // write-back then fail, the guest never receives the owner, so the cell destroys it: on the
+    // exception path only, through a boundary, while the compiled path just stores the owner.
+    boolean destroyOnRelease = cell.creates() != null && !writableBorrows.isEmpty();
+    String borrowed = result.toString();
+    if (destroyOnRelease) {
+      imports.add(RUNTIME + "NativeResource");
+      // Seam identifiers have no '$', so the local cannot collide with a parameter's.
+      callBlock.append(indent).append("NativeResource owner$ = null;\n");
+      borrowed =
+          borrowed
+              .replace("return new NativeResource(", "return owner$ = new NativeResource(")
+              .replace(
+                  "NativeResource resource = new NativeResource(",
+                  "NativeResource resource = owner$ = new NativeResource(");
+    }
     for (String borrow : borrows) {
-      callBlock.append(indent).append("Borrow ").append(borrow).append(";\n");
+      String declared = borrow.substring(0, borrow.indexOf(' '));
+      callBlock
+          .append(indent)
+          .append(batchLocals.contains(declared) ? "Batch " : "Borrow ")
+          .append(borrow)
+          .append(";\n");
       callBlock.append(indent).append("try {\n");
       indent += "    ";
+      String check = stringChecks.get(borrow.substring(0, borrow.indexOf(' ')));
+      if (check != null) callBlock.append(indent).append(check).append('\n');
     }
-    for (String line : result.toString().split("\n"))
+    // Once every argument is coerced, and so no guest code can run before the call, each batch
+    // validates the scopes of the elements it lent in place (FFM cells under a native leaf).
+    if (ffm && Seam.nativeLeaf(f))
+      for (String borrow : borrows) {
+        String declared = borrow.substring(0, borrow.indexOf(' '));
+        if (batchLocals.contains(declared))
+          callBlock.append(indent).append(declared).append(".recheck(this);\n");
+      }
+    for (String line : borrowed.split("\n"))
       callBlock.append(indent, 12, indent.length()).append(line).append('\n');
     for (int i = borrows.size() - 1; i >= 0; i--) {
       indent = indent.substring(4);
-      callBlock
-          .append(indent)
-          .append("} finally {\n")
-          .append(indent)
-          .append("    ")
-          .append(borrows.get(i), 0, borrows.get(i).indexOf(' '))
-          .append(".release();\n")
-          .append(indent)
-          .append("}\n");
+      String local = borrows.get(i).substring(0, borrows.get(i).indexOf(' '));
+      callBlock.append(indent).append("} finally {\n");
+      if (destroyOnRelease && writableBorrows.contains(local))
+        callBlock
+            .append(indent)
+            .append("    try {\n")
+            .append(indent)
+            .append("        ")
+            .append(local)
+            .append(".release();\n")
+            .append(indent)
+            .append("    } catch (RuntimeException failure) {\n")
+            .append(indent)
+            .append("        throw NativeResource.closeAfterFailure(owner$, failure);\n")
+            .append(indent)
+            .append("    }\n");
+      else callBlock.append(indent).append("    ").append(local).append(".release();\n");
+      callBlock.append(indent).append("}\n");
     }
     if (!fields.isEmpty()) imports.add("com.oracle.truffle.api.nodes.Node");
     out.append("    /** ")

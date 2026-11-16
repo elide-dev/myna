@@ -6,7 +6,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
-import dev.elide.myna.serialize.SeamJson;
+import dev.elide.myna.serialize.Fingerprint;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -21,7 +21,17 @@ final class ConstantsValidator {
   private static final Pattern MEMBER = Pattern.compile("[a-z][a-z0-9_]*");
   private static final Set<String> RESERVED_BITS = Set.of("all", "none");
 
-  static void validate(Module m) {
+  /**
+   * Runs only from {@link Validator#validate(Module, boolean, Fingerprint)}, as its last checks but
+   * ownership and views, and relies on what that method has established by then: type names
+   * (opaque, struct, group and callback) are unique, function logical names and linker symbols are
+   * unique, and no function symbol is a callback's name. Several checks here are skipped when the
+   * module declares nothing that could break them given those facts (see {@code declaresValues});
+   * called earlier or on its own, they would miss collisions such as a callback and a symbol of the
+   * same name. The class and this method are package-private so that only {@link Validator} calls
+   * them.
+   */
+  static void validate(Module m, Fingerprint fingerprint) {
     TargetAbi abi = Seam.targetAbi(m.targetTriple());
     for (Constant c : m.constants()) carrier("const " + c.name(), c.type());
     for (EnumGroup e : m.enums()) carrier("enum " + e.name(), e.type());
@@ -76,15 +86,36 @@ final class ConstantsValidator {
                 + f.name()
                 + " in Truffle constants()");
     }
-    rustValues(m);
+    // Checks that only a const, enum or flag set can fail are skipped for modules without one; the
+    // rest run unchanged, in the same order, so every module gets the same first error as before.
+    // rustValues relies on unique logical names (Validator) and the ABI_VERSION check above.
+    if (declaresValues(m)) rustValues(m);
     accessors(m);
-    for (EnumGroup e : m.enums()) enumValues(e, abi);
+    for (EnumGroup e : m.enums()) enumValues(m, e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
     for (FlagSet f : m.flagSets()) flagRanges(m, f);
 
     references(m);
     bitfieldAccessors(m);
-    cNames(m, functionSymbols);
+    cNames(m, functionSymbols, fingerprint);
+  }
+
+  /**
+   * Whether the module declares a const, enum or flag set. Without one, the C, Rust and Native
+   * Image names derived from them do not exist, and the checks of those names cannot fail: function
+   * logical names, symbols and declared types are already unique, and {@code abi=}'s own names are
+   * checked where they are claimed.
+   */
+  private static boolean declaresValues(Module m) {
+    return !m.constants().isEmpty() || !m.enums().isEmpty() || !m.flagSets().isEmpty();
+  }
+
+  /** Whether a {@code when} line of any record names an enum, which gives it a case accessor. */
+  private static boolean enumCases(Module m) {
+    for (Struct s : m.structs())
+      for (Field f : s.fields())
+        for (FieldCase c : f.cases()) if (c.group().kind() == GroupKind.ENUM) return true;
+    return false;
   }
 
   /**
@@ -183,12 +214,15 @@ final class ConstantsValidator {
    * lowerCamel(NAME)}: it must be a legal method name and the class's only method of that name.
    */
   private static void accessors(Module m) {
-    var methods = new HashMap<String, String>();
-    for (Function f : m.functions()) {
+    for (Function f : m.functions())
       require(
           !f.name().equals("seamHeaderCheck"),
           "function seamHeaderCheck: name collides with the generated seam.h check of the Native"
               + " Image class");
+    // Only a const or an enum case accessor can collide with the class's other methods.
+    if (m.constants().isEmpty() && !enumCases(m)) return;
+    var methods = new HashMap<String, String>();
+    for (Function f : m.functions()) {
       methods.putIfAbsent(f.name(), "function " + f.name());
       methods.putIfAbsent(f.name() + "Native", "function " + f.name());
       if (Seam.nativeLeaf(f)) methods.putIfAbsent(f.name() + "LeafPointer", "function " + f.name());
@@ -228,7 +262,7 @@ final class ConstantsValidator {
     }
   }
 
-  private static void enumValues(EnumGroup e, TargetAbi abi) {
+  private static void enumValues(Module m, EnumGroup e, TargetAbi abi) {
     String where = "enum " + e.name() + ": ";
     var names = new HashSet<String>();
     var byValue = new HashMap<BigInteger, String>();
@@ -243,7 +277,7 @@ final class ConstantsValidator {
           other == null, where + "values " + other + " and " + v.name() + " are both " + v.value());
     }
     // A 64-bit enum whose values fit an int also gets <VALUE>_KEY fields and key(long) in Java.
-    if (e.intKeys())
+    if (m.intKeys(e))
       for (EnumValue v : e.values()) {
         require(
             !v.name().equals("key"),
@@ -455,22 +489,34 @@ final class ConstantsValidator {
   // ---- references ----
 
   private static void references(Module m) {
+    // Each reference check returns at once without a reference; skipping those spares the names.
     for (Struct s : m.structs())
       for (Field f : s.fields()) {
-        reference(m, "field " + s.name() + "." + f.name(), f.group(), f.type(), "field's type");
+        if (f.group() != null)
+          fieldReference(m, "field " + s.name() + "." + f.name(), f.group(), f.type());
         cases(m, s, f);
       }
     caseAccessors(m);
     for (Function f : m.functions()) {
-      String owner = f.direction().name().toLowerCase(Locale.ROOT) + " " + f.name();
-      reference(m, owner, f.returnsGroup(), f.returns(), "return type");
+      if (f.returnsGroup() != null)
+        reference(
+            m,
+            f.direction().name().toLowerCase(Locale.ROOT) + " " + f.name(),
+            f.returnsGroup(),
+            f.returns(),
+            "return type");
       for (Parameter p : f.parameters())
-        reference(m, "param " + f.name() + "." + p.name(), p.group(), p.type(), "parameter's type");
+        if (p.group() != null)
+          reference(
+              m, "param " + f.name() + "." + p.name(), p.group(), p.type(), "parameter's type");
     }
     for (Signature s : m.callbacks()) {
-      reference(m, "callback " + s.name(), s.returnsGroup(), s.returns(), "return type");
+      if (s.returnsGroup() != null)
+        reference(m, "callback " + s.name(), s.returnsGroup(), s.returns(), "return type");
       for (Parameter p : s.parameters())
-        reference(m, "param " + s.name() + "." + p.name(), p.group(), p.type(), "parameter's type");
+        if (p.group() != null)
+          reference(
+              m, "param " + s.name() + "." + p.name(), p.group(), p.type(), "parameter's type");
     }
     var typedEnum = new HashSet<String>();
     for (Function f : m.functions())
@@ -516,7 +562,7 @@ final class ConstantsValidator {
           e.values().stream().anyMatch(v -> v.name().equals(c.value())),
           when + ": enum " + e.name() + " declares no value " + c.value());
       require(values.add(c.value()), where + ": two when lines for " + tagName + "=" + c.value());
-      reference(m, when, c.group(), f.type(), "field's type");
+      fieldReference(m, when, c.group(), f.type());
     }
   }
 
@@ -527,10 +573,29 @@ final class ConstantsValidator {
    */
   private static void caseAccessors(Module m) {
     for (Struct s : m.structs()) {
+      // Counted fields alone never collide (field names are unique); only a group can.
+      if (!grouped(s)) continue;
       var rust = new HashMap<String, String>();
       // A counted pointer's Rust view is an inherent method named after the field.
       for (Field f : s.fields())
         if (f.count() != null) rust.put(f.name(), "counted field " + f.name());
+      for (Field f : s.fields())
+        if (m.narrowed(f.group(), f.type()) != null) {
+          // A narrowed field keeps its raw integer and gains <field>_as_<enum>() -> Option<Enum>.
+          String owner = "field " + f.name() + " group " + f.group().name();
+          String other =
+              rust.putIfAbsent(Names.rustCaseAccessor(f.name(), f.group().name()), owner);
+          require(
+              other == null,
+              "struct "
+                  + s.name()
+                  + ": Rust accessor "
+                  + Names.rustCaseAccessor(f.name(), f.group().name())
+                  + " of "
+                  + owner
+                  + " collides with the accessor of "
+                  + other);
+        }
       for (Field f : s.fields())
         for (FieldCase c : f.cases()) {
           String owner = "field " + f.name() + " group " + c.group().name();
@@ -548,6 +613,35 @@ final class ConstantsValidator {
                   + other);
         }
     }
+  }
+
+  /**
+   * A struct field's {@code enum=} (plain or in a {@code when} case) may name an enum whose carrier
+   * is narrower than the field's integer type when the field's type represents every declared
+   * value; the field stays its raw integer. Everything else needs the exact carrier.
+   */
+  private static void fieldReference(Module m, String where, GroupRef ref, Type type) {
+    EnumGroup e = ref == null || ref.kind() != GroupKind.ENUM ? null : m.enumGroup(ref.name());
+    if (e != null
+        && type instanceof Scalar field
+        && integer(field)
+        && e.type().bytes < field.bytes) {
+      TargetAbi abi = Seam.targetAbi(m.targetTriple());
+      for (EnumValue v : e.values())
+        require(
+            Ranges.fits(field, v.value(), abi),
+            where
+                + ": enum="
+                + e.name()
+                + " value "
+                + v.name()
+                + " = "
+                + v.value()
+                + " does not fit the field's type "
+                + field.text());
+      return;
+    }
+    reference(m, where, ref, type, "field's type");
   }
 
   private static void reference(Module m, String where, GroupRef ref, Type type, String what) {
@@ -590,6 +684,9 @@ final class ConstantsValidator {
 
   /** Accessor names of {@code @CBitfield} structs may not collide with the struct's other names. */
   private static void bitfieldAccessors(Module m) {
+    boolean bitfields = false;
+    for (FlagSet set : m.flagSets()) bitfields |= set.cBitfields();
+    if (!bitfields) return;
     for (Struct s : m.structs()) {
       var accessors = new HashMap<String, String>();
       for (Field f : s.fields()) {
@@ -629,16 +726,30 @@ final class ConstantsValidator {
     }
   }
 
+  /** Whether a field of {@code s} references a group or has {@code when} lines. */
+  private static boolean grouped(Struct s) {
+    for (Field f : s.fields()) if (f.group() != null || !f.cases().isEmpty()) return true;
+    return false;
+  }
+
   // ---- generated C names ----
 
-  private static void cNames(Module m, Set<String> functionSymbols) {
+  private static void cNames(Module m, Set<String> functionSymbols, Fingerprint fingerprint) {
+    // Without consts, groups or abi=, the claims are function symbols, callbacks and declared
+    // types, which Validator has already made distinct (unique types, unique symbols, no symbol
+    // named like a callback); see validate's precondition.
+    if (!m.declaresConstants()) return;
     String upper = m.name().toUpperCase(Locale.ROOT);
-    var reserved =
-        Set.of(
-            upper + "_SEAM_ABI",
-            Names.seamAbiCheck(m, SeamJson.fingerprint(m)),
-            upper + "_BINDING_ABI_VERSION",
-            upper + "_SEAM_H");
+    // Only const, enum and flag names are checked against the header's own macros, and only they
+    // need the fingerprint in the header-check macro's name.
+    Set<String> reserved =
+        declaresValues(m)
+            ? Set.of(
+                upper + "_SEAM_ABI",
+                Names.seamAbiCheck(m, fingerprint.value()),
+                upper + "_BINDING_ABI_VERSION",
+                upper + "_SEAM_H")
+            : Set.of();
     var claimed = new HashMap<String, String>();
     for (String symbol : new TreeSet<>(functionSymbols))
       claimed.put(symbol, "function symbol " + symbol);

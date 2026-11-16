@@ -102,6 +102,14 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
                       run(work / "binding-app", library).stdout)
 
+    def test_ffm_struct_pointers_are_sized(self):
+        from ffm_pointers import build_pointers_fixture
+        work, generated, classes, library = build_pointers_fixture()
+        self.assertIn("public static final AddressLayout Node_POINTER", (generated / "PointersFFM.java").read_text())
+        native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                     "--features=fixture.pointers.PointersForeignFeature", "PointersMain", "-o", work / "pointers-app")
+        self.assertIn("FFM struct pointers passed", run(work / "pointers-app", library).stdout)
+
     def test_binding_abi2_default_leaf_static_linkage_and_gc(self):
         work = ROOT / "build/fast-test"
         fixture = ROOT / "tests/fast"
@@ -169,6 +177,24 @@ class NativeImageIntegrationTests(unittest.TestCase):
             "fixture.values.TruffleValuesMain", "-o", truffle_app)
         self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
 
+
+    def test_import_addresses_are_declared_symbols(self):
+        """NAME_address() of a by-value import is its declared symbol, leaf or not, called from C."""
+        work = ROOT / "build/addresses-test"
+        fixture = ROOT / "tests/addresses"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", fixture / "addresses.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-I", generated, "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "AddressApi.java", generated / "AddressApiDirectives.java",
+                       fixture / "AddressesMain.java")
+        shutil.copytree(generated / "META-INF", classes / "META-INF", dirs_exist_ok=True)
+        app = work / "addresses-app"
+        native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={work / 'native.o'}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.addresses.AddressesMain", "-o", app)
+        self.assertIn("Native Image import addresses passed", run(app).stdout)
 
     def test_records_are_cstructs(self):
         """Records are @CStruct interfaces: StackValue and SizeOf agree with SIZE, every carrier keeps
@@ -325,6 +351,19 @@ class NativeImageIntegrationTests(unittest.TestCase):
         driver = work / "driver"
         run("rustc", "--edition=2024", ROOT / "tests/ownership/driver.rs", "-C", f"link-arg={fixture}", "-o", driver)
         self.assertIn("Rust ownership passed", run(driver).stdout)
+        # BatchLength is sealed: a length type of the consumer's own cannot implement it, so a
+        # batch view's to_usize is never code that could race when the view crosses threads.
+        invalid = work / "sealed_length.rs"
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            '#[derive(Clone, Copy)] struct Racy;\n'
+            'impl seam::BatchLength for Racy { fn to_usize(self) -> usize { 0 } }\n'
+            'fn main() {}\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("Sealed", rejected.stderr)
+        # seam.rs of a module with batches builds in a no_std staticlib without an allocator.
+        run("rustc", "--edition=2024", "--crate-type=staticlib", "-Cpanic=abort", "-Copt-level=2",
+            ROOT / "tests/ownership/batch_view.rs", "-o", work / "libbatchview.a")
         # A borrowed resource must prevent moving/dropping its owner while the borrow is used.
         invalid = work / "borrow_escape.rs"
         invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
@@ -333,6 +372,39 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot move out of `owner` because it is borrowed", rejected.stderr)
+        # A resource whose create keeps its buffer cannot outlive that buffer, nor let it change.
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let doc = { let bytes = vec![1u8, 2]; unsafe { seam::ownership::Doc::create(&bytes) }.unwrap() }; '
+            'drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("`bytes` does not live long enough", rejected.stderr)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let mut bytes = vec![1u8, 2]; let doc = unsafe { seam::ownership::Doc::create(&bytes) }.unwrap(); '
+            'bytes[0] = 9; drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("cannot borrow `bytes` as mutable because it is also borrowed as immutable", rejected.stderr)
+        # Safe code cannot leak a held owner: the owner form is unsafe, and the closure of the safe
+        # form sees the resource only by reference, so it can neither forget nor move it out.
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let bytes = vec![1u8]; core::mem::forget(seam::ownership::Doc::create(&bytes)); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("error[E0133]", rejected.stderr)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let bytes = vec![1u8]; let _ = seam::ownership::Doc::with_create(&bytes, |doc| core::mem::forget(*doc)); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("cannot move out of `*doc`", rejected.stderr)
+        # Held buffers in every constructor shape compile, align facts included.
+        shapes = work / "held_shapes"
+        run(BINARY, "generate", ROOT / "tests/ownership/held_shapes.seam", "--out", shapes, "--target", TARGET)
+        check = work / "held_shapes.rs"
+        check.write_text('#[allow(dead_code, non_snake_case)] mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n')
+        os.environ["SEAM_GENERATED"] = str(shapes)
+        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=metadata", "-Dwarnings", check, "-o", work / "shapes.rmeta")
+        os.environ["SEAM_GENERATED"] = str(generated)
         # Confined resources must not accidentally implement Send.
         confined = work / "confined.seam"
         confined.write_text((ROOT / "tests/ownership/ownership.seam").read_text()
@@ -614,17 +686,18 @@ class ConstantsTests(unittest.TestCase):
             self.assertEqual(calls, [], code)
             self.assertFalse([i for i in code if "CEnumRuntimeData" in i or allocation.search(i)], code)
         # The constants have nothing to initialize and nothing reaches them: javac inlined every
-        # field. At most the flag sets whose static predicates and range accessors the fixture calls
-        # are reached classes; the builder usually inlines those methods too, so none is reached.
+        # field. At most the groups whose static predicates, range accessors and key() switch helpers
+        # the fixture calls are reached classes; the builder often inlines those methods too.
         reports = sorted(work.rglob("used_classes_*.txt"))
         self.assertEqual(len(reports), 1, reports)
         used = [line.rsplit(":", 1)[-1] for line in reports[0].read_text().splitlines()]
         self.assertIn("fixture.constants.ConstantsMain", used)
         reached = {c for c in used if c.startswith("fixture.constants.ConstsConstants")}
-        # Wide and Packed hold folded constants; BinaryOp is reached for its key() switch helper.
+        # Wide and Packed hold folded constants; BinaryOp and UnaryOp are reached for their key() switch helpers.
         self.assertLessEqual(reached, {"fixture.constants.ConstsConstants$Wide",
                                      "fixture.constants.ConstsConstants$Packed",
-                                     "fixture.constants.ConstsConstants$BinaryOp"}, reached)
+                                     "fixture.constants.ConstsConstants$BinaryOp",
+                                     "fixture.constants.ConstsConstants$UnaryOp"}, reached)
 
 
 if __name__ == "__main__": main(sys.modules[__name__], "native-image-integration")

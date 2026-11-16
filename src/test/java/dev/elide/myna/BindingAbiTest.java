@@ -42,13 +42,18 @@ class BindingAbiTest {
     assertFalse(normal.get("MynaNative.java").contains("NO_TRANSITION"));
     assertTrue(normal.get("seam.json").contains("\"nativeCallPolicy\":\"TRANSITION\""));
     assertNotEquals(fast.get("seam.abi"), normal.get("seam.abi"));
-    assertFalse(
+    // Without leaves only the linker metadata (each import's address symbol) initializes at build
+    // time; no runtime address class exists.
+    String normalConfig =
         normal.entrySet().stream()
             .filter(e -> e.getKey().endsWith(".properties"))
             .findFirst()
             .orElseThrow()
-            .getValue()
-            .contains("Args ="));
+            .getValue();
+    assertTrue(normalConfig.contains("$MynaSymbols"), normalConfig);
+    assertFalse(normalConfig.contains("_Binding"), normalConfig);
+    assertTrue(
+        normal.get("MynaNative.java").contains("public static CFunctionPointer read_address() {"));
   }
 
   @Test
@@ -126,7 +131,8 @@ class BindingAbiTest {
     var output = Generator.generate(Dsl.parse(source), true);
     String ni = output.get("MynaNative.java");
     assertTrue(ni.contains("class Literals"), ni);
-    assertFalse(ni.contains("MynaSymbols"), ni);
+    // The import's address symbol is linker metadata too; still no runtime address class.
+    assertTrue(ni.contains("static final CGlobalData<CFunctionPointer> slow"), ni);
     String config =
         output.entrySet().stream()
             .filter(e -> e.getKey().endsWith(".properties"))
@@ -134,11 +140,9 @@ class BindingAbiTest {
             .orElseThrow()
             .getValue();
     assertTrue(
-        config.contains("--initialize-at-build-time=dev.elide.myna.generated.MynaNative$Literals"),
-        config);
-    assertFalse(config.contains("$MynaSymbols"), config);
+        config.contains("$MynaSymbols,dev.elide.myna.generated.MynaNative$Literals"), config);
     assertFalse(config.contains("_Binding"), config);
-    assertFalse(config.contains("JavaArgs"), config);
+    assertFalse(config.contains("--initialize-at-run-time"), config);
   }
 
   @Test

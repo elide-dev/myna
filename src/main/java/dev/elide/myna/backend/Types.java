@@ -38,7 +38,8 @@ final class Types {
   }
 
   static String c(Parameter p) {
-    if (p.type() instanceof Pointer ptr && p.access() == Access.READ)
+    if (p.type() instanceof Pointer ptr
+        && (p.access() == Access.READ || p.access() == Access.CSTRING))
       return c(ptr.pointee()) + " const *";
     return c(p.type());
   }
@@ -73,14 +74,16 @@ final class Types {
   static String rust(Parameter p, String q) {
     if (p.group() != null) return q + p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee(), q);
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee(), q);
     return rust(p.type(), q);
   }
 
   static String rust(Parameter p) {
     if (p.group() != null) return p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee());
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee());
     return rust(p.type());
   }
 
@@ -125,6 +128,29 @@ final class Types {
       case F32 -> "float";
       case F64 -> "double";
     };
+  }
+
+  /**
+   * A status in its Java carrier compared against a declared {@code success=} value: unsigned
+   * results widen unsigned (a {@code u8} status of 200 is 200, not -56), in the carrier the literal
+   * then takes ({@code L} when the comparison is on longs).
+   */
+  static String statusMatches(Scalar type, boolean charUnsigned, String status, long value) {
+    String widened =
+        switch (type) {
+          case U8 -> "Byte.toUnsignedInt(" + status + ")";
+          case CHAR -> charUnsigned ? "Byte.toUnsignedInt(" + status + ")" : status;
+          case U16 -> "Short.toUnsignedInt(" + status + ")";
+          case U32 -> "Integer.toUnsignedLong(" + status + ")";
+          default -> status;
+        };
+    boolean longs =
+        type == Scalar.U32
+            || type == Scalar.I64
+            || type == Scalar.U64
+            || type == Scalar.USIZE
+            || type == Scalar.ISIZE;
+    return widened + " == " + value + (longs ? "L" : "");
   }
 
   static String ffmCarrier(Type type) {

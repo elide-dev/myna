@@ -66,7 +66,10 @@ FFM_SLAB = ['direct-ffm-slab', 'direct-ffm-slab-shared', 'direct-ffm-slab-mixed'
 # calls pass raw addresses; the cells lend native memory in place or copy a heap array.
 CREATES = [f'{kind}-{PIN_SIZE}' for kind in ('direct-create-adopt', 'glue-create-adopt-native', 'glue-create-adopt-copy',
                                              'direct-create-scan', 'glue-create-scan-native', 'glue-create-scan-copy')]
-CASES = SCALAR + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB + CREATES
+# NativeBytes' scalar buffer messages (a write and a read per step of the recurrence) over a global,
+# a shared and a confined segment: the cost of the scope check the messages make before raw access.
+BUFFERS = ['buffer-native', 'buffer-shared', 'buffer-confined']
+CASES = SCALAR + BUFFERS + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB + CREATES
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',
            'jniutils', 'nativebridge', 'truffle-nfi', 'truffle-nfi-libffi')
 

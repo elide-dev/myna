@@ -1,0 +1,45 @@
+{
+  "version": "0.1.1",
+  "repository": "elide-dev/trufflecheck",
+  "attestation": {
+    "signer_workflow": "elide-dev/trufflecheck/.github/workflows/release.yml",
+    "predicate_type": "https://slsa.dev/provenance/v1"
+  },
+  "profiles": {
+    "url": "https://github.com/elide-dev/trufflecheck/releases/download/v0.1.1/trufflecheck-profiles-0.1.1.tar.gz",
+    "sha256": "c815ce50b4930e97a6e5678387d62aa6f6705032222b923489a907f5519a3882",
+    "attested": true
+  },
+  "analyzers": {
+    "trufflecheck-errorprone": {
+      "url": "https://maven.elide.dev/dev/elide/trufflecheck-errorprone/0.1.1/trufflecheck-errorprone-0.1.1.jar",
+      "sha256": "d2c57d8ba701f81ff07383ce4bbeed0905b653f256a6f860da10ecb608d21dde",
+      "attested": true
+    },
+    "error_prone_core": {
+      "url": "https://repo1.maven.org/maven2/com/google/errorprone/error_prone_core/2.51.0/error_prone_core-2.51.0-with-dependencies.jar",
+      "sha256": "9a6aee2aa413500ac9314bfb22a30b6a4992aeb1156ddfd5f8d5c3dc280f1af1",
+      "attested": false
+    },
+    "dataflow-errorprone": {
+      "url": "https://repo1.maven.org/maven2/io/github/eisop/dataflow-errorprone/3.41.0-eisop1/dataflow-errorprone-3.41.0-eisop1.jar",
+      "sha256": "10434fba4e53f55fa9c76904cde414b918932548c9dfc4e2d634ac05ff7a7d10",
+      "attested": false
+    },
+    "nullaway": {
+      "url": "https://repo1.maven.org/maven2/com/uber/nullaway/nullaway/0.14.3/nullaway-0.14.3.jar",
+      "sha256": "440d3217f6a74d3b8dab766b0c63dbfbb87bea36d798879865218249dc3f1604",
+      "attested": false
+    },
+    "dataflow-nullaway": {
+      "url": "https://repo1.maven.org/maven2/org/checkerframework/dataflow-nullaway/4.3.1/dataflow-nullaway-4.3.1.jar",
+      "sha256": "dc7b9ceddc9a68a1ffa9d66b5d62967ca3843712a671127c5a6c184f23a4f940",
+      "attested": false
+    },
+    "jspecify": {
+      "url": "https://repo1.maven.org/maven2/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar",
+      "sha256": "070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66",
+      "attested": false
+    }
+  }
+}

@@ -1,0 +1,58 @@
+# Typed struct pointers in Java FFM: a ptr<S> to a declared struct, returned, passed to a callback or
+# read from a field, is a segment sized to S. Leaf and Node point to each other and Node to itself, so
+# those three fields are in one cycle and target padding layouts; Anchor's pointer to Node is outside it
+# and targets Node_LAYOUT. The opaque and scalar pointers stay unsized, and Pair, passed only by
+# value, gets no Pair_POINTER.
+module pointers target=x86_64-unknown-linux-gnu java_package=fixture.pointers java_class=Pointers
+opaque Handle
+struct Anchor size=8 align=8
+  field first type=ptr<Node> offset=0
+end
+struct Leaf size=16 align=8
+  field weight type=f64 offset=0
+  field owner type=ptr<Node> offset=8
+end
+struct Node size=40 align=8
+  field value type=i64 offset=0
+  field next type=ptr<Node> offset=8
+  field leaf type=ptr<Leaf> offset=16
+  field handle type=ptr<Handle> offset=24
+  field name type=ptr<char> offset=32
+end
+# The first of two nodes in static storage.
+import head symbol=pointers_head return=ptr<Node> error=no_failure
+end
+# The null node pointer.
+import none symbol=pointers_none return=ptr<Node> error=no_failure
+end
+struct Pair size=16 align=8
+  field left type=i64 offset=0
+  field right type=i64 offset=8
+end
+callback Visit return=i64
+  param node type=ptr<Node>
+end
+import anchor symbol=pointers_anchor return=ptr<Anchor> error=no_failure
+end
+import visit symbol=pointers_visit return=i64 error=no_failure native_leaf=false@explicit_contract
+  param callback type=fn<Visit>
+end
+import sum symbol=pointers_sum return=i64 error=no_failure
+  param pair type=Pair
+end
+import weigh symbol=pointers_weigh return=f64 error=no_failure
+  param leaf type=ptr<Leaf> nullable=false ownership=borrowed access=read
+end
+# A struct resource written through an out-pointer. A failed open leaves a misaligned junk address
+# in the slot, which the FFM constructor must not read: the status reaches onFailure instead.
+struct Box size=8 align=8
+  field width type=i64 offset=0
+end
+resource Box representation=native threading=shared create=boxOpen destroy=boxClose handle=out success=0
+import boxOpen symbol=pointers_box_open return=i32 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i64
+  param out type=ptr<ptr<Box>> nullable=true ownership=borrowed access=write
+end
+import boxClose symbol=pointers_box_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param target type=ptr<Box> nullable=false ownership=transferred_to_callee access=read_write
+end

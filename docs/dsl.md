@@ -62,6 +62,16 @@ end
 
 Fields are scalar/pointer values in ascending, non-overlapping, naturally aligned offsets. All padding and final size are explicit. C/Rust emit compile-time size/alignment/offset assertions; FFM uses explicit padding layouts. Rust records derive `Clone, Copy`; the Native Image class gets a `@CStruct` interface per record (`SIZE` and `ALIGNMENT` constants, `@CField` get/set per field, `addressOf<Field>()`), used with `StackValue.get(R.class)` and `SizeOf.get(R.class)` for records in the stack or unmanaged memory. Inline arrays, nested by-value fields and custom packing are not implemented; a pointer field can name its element count (below).
 
+FFM declares `<Struct>_LAYOUT` and a `<Struct>_<field>_OFFSET` per field. A struct that some `ptr<Struct>` targets (an import's or a callback's parameter or return, a struct field, or the out slot of a struct [resource](ownership.md#status-plus-out-pointer)) also gets `<Struct>_POINTER`, which is `ValueLayout.ADDRESS.withTargetLayout(<Struct>_LAYOUT)`. Those imports, callbacks and fields use it. An import's result, a callback's argument, the address an out-pointer constructor hands its factory and `record.get(<Struct>_POINTER, <Owner>_<field>_OFFSET)` are therefore segments of the struct's size in the global scope, with no `reinterpret`. Truffle FFM cells keep their own `NativePointer` handling.
+
+**A null pointer is a sized segment too**, at address 0. It equals `MemorySegment.NULL`, but its `byteSize()` is the struct's, so a read through it is not bounds-checked: it is an unchecked native read of address 0, which crashes the process rather than throwing. The same holds for a dangling pointer to freed memory. Test `address() == 0` (or `equals(MemorySegment.NULL)`) before any read, not `byteSize() == 0`. Keeping the pointee alive is the caller's contract, as it is for the record.
+
+A pointer misaligned for the struct is an `IllegalArgumentException` when it is read or returned, after the native call has completed. This includes sentinel and tagged values such as `(T *)-1`, so declare such a field or return as `ptr<void>`, or as an integer, and compare the raw value. Pointers to opaque types, scalars and pointers stay zero-length. So does a counted view's pointer, which its accessors size by the count, and so does a pointer array's element (below).
+
+A struct passed only by value gets no `<Struct>_POINTER`, so its module initializes as before. A layout is complete when it is created and cannot contain itself. A pointer field whose target can reach the field's own struct through pointer fields therefore targets a padding layout of the target's size and alignment. Such a target is in the same cycle: a self-reference such as `next: ptr<Node>`, or every edge of a mutual cycle. The segment is sized the same, but the target carries no field names. Which fields are shells depends only on the pointer graph, never on names. Every other pointer field targets the full layout, so the layouts are declared pointees first, depth first in name order. This can move a layout's declaration in the class. `<Struct>_POINTER` always targets the full layout.
+
+`withTargetLayout` is a restricted method, which the FFM class calls when it is initialized. The module that holds the class needs native access (`--enable-native-access=ALL-UNNAMED`, or its module name), as its downcalls already do. Without it, HotSpot warns by default and fails with `--illegal-native-access=deny`. Native Image builds pass the same flag.
+
 ### Counted element views
 
 A `ptr<T>` field may name the integer field of the same record that counts the elements it points to:
@@ -85,11 +95,11 @@ The pair is a contract on the record: a non-null pointer addresses `count` conse
   - `long <Struct>_<field>_count(record)`: the count widened unsigned. A `u64` above `Long.MAX_VALUE` reads negative, which every view rejects, so take the view before looping on a `u64` count: a loop bounded by a negative count silently runs zero times.
   - `<Struct>_<field>(record)`: the elements as one segment of `count * sizeof(T)` bytes (`count * ADDRESS.byteSize()` for a pointer array) in the global scope, for callers that manage the lifetime themselves.
   - `<Struct>_<field>(record, Arena owner)`: the same view bound to `owner`, so a read after the owner closes throws `IllegalStateException` instead of reading freed memory. A confined owner makes the view confined to its thread (`WrongThreadException` elsewhere).
-  - `<Struct>_<field>_at(view, i)`: element `i` of a view taken once, the loop shape. A struct element is `view.asSlice(i * size, size)`, a scalar `view.getAtIndex(layout, i)`, and a pointer array's element the address at `i` as a read-only, zero-length segment in the global scope, like other pointer reads. No call is restricted, and there is no `reinterpret` per element. The bound is the view's own size (`view.byteSize() / size`), which is the count for a view from the generated accessor; any other segment gets its own size as the bound.
+  - `<Struct>_<field>_at(view, i)`: element `i` of a view taken once, the loop shape. A struct element is `view.asSlice(i * size, size)`, a scalar `view.getAtIndex(layout, i)`, and a pointer array's element the address at `i` as a read-only, zero-length segment in the global scope. It is deliberately unsized, unlike a `ptr<Struct>` field, so a null element cannot be read by mistake. The owner form sizes it. No call is restricted, and there is no `reinterpret` per element. The bound is the view's own size (`view.byteSize() / size`), which is the count for a view from the generated accessor; any other segment gets its own size as the bound.
   - `<Struct>_<field>_at(view, i, Arena owner)`, pointer arrays only: the element's pointee as a read-only segment of `T`'s size (0 for an opaque `T`) bound to `owner`. It asserts the pointee lives as long as the owner does, as when one arena owns a whole result, pointees included. A null element stays a null segment. Scoping costs one restricted call per element.
   - `<Struct>_<field>(record, i)`: element `i` through one view (one `reinterpret`). Struct and pointer elements also have `(record, i, owner)`, scoped to `owner` (a pointer array's goes through the owner form of `_at`). Every returned segment is read-only, elements included.
 
-  There is one failure mode, checked unconditionally: `IndexOutOfBoundsException`, whose message names the struct, the field and the count field. It covers an index outside `0 <= i < count`, a null pointer with a nonzero count, a `u64` count above `Long.MAX_VALUE`, a count whose byte size overflows a `long`, and a non-null pointer misaligned for the element. A null pointer with a zero count is an empty view. Every accessor reads the record through its segment's bounds: a record an import returns is a zero-length segment, so reinterpret it to `<Struct>_LAYOUT.byteSize()` first. The record's own lifetime stays the caller's contract; the owner overloads bind the view, not the record.
+  There is one failure mode, checked unconditionally: `IndexOutOfBoundsException`, whose message names the struct, the field and the count field. It covers an index outside `0 <= i < count`, a null pointer with a nonzero count, a `u64` count above `Long.MAX_VALUE`, a count whose byte size overflows a `long`, and a non-null pointer misaligned for the element. A null pointer with a zero count is an empty view. Every accessor reads the record through its segment's bounds. A record an import returns, or one read through `<Struct>_POINTER`, is already sized; reinterpret any other zero-length pointer to `<Struct>_LAYOUT.byteSize()` first. The record's own lifetime stays the caller's contract; the owner overloads bind the view, not the record.
 - **Native Image**: the record's getter keeps returning the typed pointer, and an element struct's interface gains `T addressOf(long index)`. SVM accepts only C-interface methods in a `@CStruct` interface, so the bounded accessor is an `@AlwaysInline` static method of the class: `<Struct>_<field>At(record, i)` returns the element record (`addressOf(i)`), the scalar (`read(WordFactory.signed(i))`), or for a pointer array the element's struct or opaque interface (`((WordPointer) record.field()).read(WordFactory.signed(i))`: one load of the field and one scaled load) after an `assert` of `0 <= i < count`, which compiles out unless the image is built with `-ea`; the image then holds one load of the pointer field and the scaled access. The helpers are not for `@Uninterruptible` code (an enabled assert would allocate there); use `record.field().read(...)` or `record.field().addressOf(i)` directly. A struct used as an element may not have a field named `addressOf`.
 - **Truffle**: records are not guest-visible objects (cells take and copy buffers), so cells generate nothing for views.
 
@@ -117,7 +127,7 @@ export sum symbol=seam_sum return=i64 java=fixture.BufferOps.sum isolate=thread 
 end
 ```
 
-`import` means Java calls an external native implementation. For imports, `seam.rs` also defines `assert_implementations!()`: invoked where the Rust implementations are in scope under their symbol names, it fails compilation if any implementation's signature differs from the descriptor's lowered ABI (including `*const`/`*mut` from `access`). `export` means Native Image exposes a Java method. Rust declarations may call either symbol; downstream implementations define imports separately. Logical names and linker symbols are independent; `symbol` defaults to the logical name. Symbols and logical names are unique within a module.
+`import` means Java calls an external native implementation. For imports, `seam.rs` also defines `assert_implementations!()`: invoked where the Rust implementations are in scope under their symbol names, it fails compilation if any implementation's signature differs from the descriptor's lowered ABI (including `*const`/`*mut` from `access`). With `rust_implementation=trait` on the module, `seam.rs` also generates a safe trait for implementing the imports over their declared contracts and `define_implementations!`, which defines every import's entry point from a type implementing it; see [implementing imports in Rust](ownership.md#implementing-imports-in-rust). `export` means Native Image exposes a Java method. Rust declarations may call either symbol; downstream implementations define imports separately. Logical names and linker symbols are independent; `symbol` defaults to the logical name. Symbols and logical names are unique within a module.
 
 Binding ABI 2 imports default to inlineable no-transition leaf calls and require `error=no_failure`, describing an ABI where language exceptions do not cross the boundary. This does **not** infer `nounwind` or mean an operation cannot return an application error code.
 
@@ -184,6 +194,15 @@ end
 - A struct `field`, an import or export `param`, a return (`enum=`/`flags=` on the header) and a callback
   parameter or return may carry `enum=GROUP` or `flags=GROUP` (at most one) when its type is the group's carrier.
   Parameters write the options before any fact.
+- **Narrowed field references.** A struct field's `enum=`, and a `when ... enum=` case, may also name an enum
+  whose integer carrier is narrower than the field's integer type, when the field's type represents every
+  declared value (always, when both are unsigned or both signed; a signed enum with a negative value on an
+  unsigned field is rejected). One code table then serves a `u32` field and a `u64` operand alike. The field
+  keeps its raw integer type in C, Rust and Java, and readers check that the raw value fits the enum's
+  carrier, so upper bits never alias a declared code: Rust gets `<field>_as_<enum>()` returning
+  `Option<Enum>` (`None` when the carrier cannot hold the value; casts and a compare, no panic), the Native
+  Image `<field>As<Enum>(record)` case accessor returns `null` for such a value as for an unlisted one, and the
+  enum gets `int` switch keys (below). Flag sets, parameters and returns keep the exact carrier.
 - **Enums are open sets.** A value outside the list is legal: the name functions return `NULL`/`None`/`null`,
   the Java `<Enum>.of(v)` returns `null`, and flag sets expose the unknown bits (`hasUnknown`). Nothing checks a
   returned value against the list, and a reference adds no optimizer fact (`range` would let LLVM delete a
@@ -257,26 +276,33 @@ end
 - `when TAG=VALUE enum=ENUM` or `flags=FLAGS` lines directly follow the `field` line they annotate. `TAG` is
   another field of the same struct that carries `enum=`, and `VALUE` one of that enum's values. A field's
   `when` lines all name the same tag field, name each value at most once, and reference groups whose carrier is
-  the field's type. A field with `when` lines carries no `enum=`/`flags=` of its own.
+  the field's type (or, for an enum, [narrower](#constants-enums-and-flag-sets) than it). A field with `when` lines carries no `enum=`/`flags=` of its own.
 - Nothing changes in the layout or the ABI, and nothing checks the tag: an accessor reads the field as the
   named group whatever the tag holds. The caller reads the case the tag selects.
 - Rust: `<field>_as_<group>()` on the record (`operand_as_binary_op()`), one per field and group, returning
-  the group's newtype. Native Image: a static `<field>As<Group>(record)` on the class for each enum case
+  the group's newtype, or `Option<Enum>` for an enum narrower than the field (`None` when the raw value does
+  not fit the enum's carrier). Native Image: a static `<field>As<Group>(record)` on the class for each enum case
   (`operandAsBinaryOp(node)`), returning the `@CEnum` or `null` for an unlisted value, like `<name>Enum`.
   Flag cases keep the raw `@CField`, tested with `<Class>Constants`. The `@CField` and the FFM offset name
   each case in a comment. C and Truffle cells are unchanged.
 - The `@CEnum` accessor is a convenience with the cost of `<name>Enum`: an `==` against a constant folds
   once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
   paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
-  which compiles to immediate compares.
-- Java cannot `switch` on a `long`, so an enum with a 64-bit carrier (`i64`, `u64`, `isize`, `usize`) whose
-  every declared value an `int` holds (`0..Integer.MAX_VALUE` unsigned; the `int` range without
-  `Integer.MIN_VALUE` signed) also gets `int` switch keys in `<Class>Constants.<Enum>`: a
-  `public static final int <VALUE>_KEY` per value, and `public static int key(long value)`, which returns
-  `(int) value` when an `int` holds the value and `Integer.MIN_VALUE` otherwise, so a wide value whose low bits
-  equal a code cannot alias its label. It is branch-free in source and allocates nothing:
-  `switch (UnaryOp.key(record.operand())) { case UnaryOp.NEGATE_KEY -> …; default -> … }`. Other enums get
-  nothing new. In a keyed enum a value may not be named `key`, nor `<value>_key` beside `<value>`.
+  which compiles to immediate compares, when the field and the enum share a carrier. For a 64-bit or narrowed
+  enum, switch on `<Enum>.key(raw)` with the `_KEY` labels instead (below): casting the raw field to `int`
+  aliases a wide value onto a declared code.
+- **Switch keys.** Java cannot `switch` on a `long`, and a narrowed field's value is wider than its enum. One
+  rule covers both: an enum gets `int` switch keys in `<Class>Constants.<Enum>` when its carrier is 64 bits
+  wide (`i64`, `u64`, `isize`, `usize`) or a struct field references it narrowed, and every declared value is
+  an `int` other than `Integer.MIN_VALUE` (`0..Integer.MAX_VALUE` unsigned, so a `u32` enum with a larger value
+  gets none). Keys are a `public static final int <VALUE>_KEY` per value, holding the value's number (`u8`
+  255 is `255`, though the enum's own constant is `(byte) 255`), and `public static int key(long value)`, which
+  returns `(int) value` when the enum's carrier holds `value` and an `int` label can name it, and
+  `Integer.MIN_VALUE`, which no label equals, otherwise. A raw value whose low bits equal a code therefore
+  cannot alias its label, from any field width: `switch (UnaryOp.key(record.operand())) { case
+  UnaryOp.NEGATE_KEY -> …; default -> … }` compiles the same over a `u32` field and a `u64` operand. It is
+  branch-free in source and allocates nothing. Other enums get nothing new. In a keyed enum a value may not be
+  named `key`, nor `<value>_key` beside `<value>`.
 - The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
   so they are part of the fingerprint.
 
@@ -299,7 +325,7 @@ Imports default to the binding ABI 2 leaf contract: short, bounded, nonblocking 
 
 ## Resource lifecycles and call borrows
 
-`resource NAME representation=native threading=confined|shared create=FUNCTION destroy=FUNCTION` declares a unique native resource lifecycle. `NAME` must already be an opaque type. With `handle=PARAMETER.FIELD` or `handle=PARAMETER` and `success=N[,N…]`, the create reports a status and writes the resource through that parameter instead of returning it (a field of the struct it points to, or that struct itself, which `NAME` then names); only Truffle cells generate an owner for those forms. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract; `lifetime=resource:NAME` instead declares a read-only buffer that the create of resource `NAME` keeps until that resource is destroyed (a create with a `handle`, Truffle cells only; see [borrows held by a resource](ownership.md#borrows-held-by-a-resource-truffle-cells-only)). A function may carry several `borrow` lines, each naming a buffer and a length of its own; its other parameters may be scalars or pointers, and its result a scalar or void. A buffer that is `nullable=true` (the default for a pointer) may be absent, and then reaches the function as the null pointer with length zero; `nullable=false` declares one that is always present. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.
+`resource NAME representation=native threading=confined|shared create=FUNCTION[,FUNCTION…] destroy=FUNCTION` declares a unique native resource lifecycle, with one constructor or [several](ownership.md#several-constructors). `NAME` must already be an opaque type. With `handle=PARAMETER.FIELD` or `handle=PARAMETER` and `success=N[,N…]`, the create reports a status and writes the resource through that parameter instead of returning it (a field of the struct it points to, or that struct itself, which `NAME` then names); only Truffle cells generate an owner for those forms. `borrow FUNCTION PARAMETER length=PARAMETER lifetime=call` declares a complete non-escaping byte-buffer contract; `lifetime=resource:NAME` instead declares a read-only buffer that the create of resource `NAME` keeps until that resource is destroyed (Rust, FFM and Native Image owners, or a Truffle cell for a `handle=` create; see [borrows held by a resource](ownership.md#borrows-held-by-a-resource)). `borrow FUNCTION SOURCES lengths=LENGTHS count=COUNT lifetime=call [elements_nullable=true]` declares a [batch](ownership.md#batches-of-buffers): an array of read buffers with a parallel array of lengths. A function may carry several `borrow` lines, each naming a buffer and a length of its own; its other parameters may be scalars or pointers, and its result a scalar or void, or the resource pointer of a [constructor](ownership.md#constructors-with-call-scoped-buffers). A buffer that is `nullable=true` (the default for a pointer) may be absent, and then reaches the function as the null pointer with length zero; `nullable=false` declares one that is always present. These opt into generated ownership APIs and stronger validation; metadata-only `ownership=` on a pointer does not do so by itself. See [ownership.md](ownership.md) for exact obligations, supported signatures, and the consumer-implemented Native Image API.
 
 ## Native Image C context, library linkage, and handwritten callbacks
 

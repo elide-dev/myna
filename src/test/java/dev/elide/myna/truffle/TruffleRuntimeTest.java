@@ -560,6 +560,91 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void cStringsTakeStringsOnlyAndRefuseAnEmbeddedNul() {
+    assertEquals("ok", CStrings.strings("ok", false, "f", "text", null));
+    var guest =
+        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+            "fine", com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_8);
+    assertSame(guest, CStrings.strings(guest, false, "f", "text", null));
+    // Any other interop string is converted; anything else is refused, bytes included.
+    Object foreign =
+        CStrings.strings(new GuestLanguageString("evil.so\0.txt"), false, "f", "text", null);
+    assertTrue(foreign instanceof com.oracle.truffle.api.strings.TruffleString);
+    assertNull(CStrings.strings(null, true, "f", "text", null));
+    assertThrows(NativeCellException.class, () -> CStrings.strings(null, false, "f", "text", null));
+    assertTrue(
+        assertThrows(
+                NativeCellException.class,
+                () ->
+                    CStrings.strings(
+                        new HeapBytes(new byte[] {1}, false), false, "f", "text", null))
+            .getMessage()
+            .contains("text"));
+    // The lent bytes are scanned: an embedded NUL is refused, the terminator is not.
+    Borrow fine = Borrow.ofString("fine", true);
+    CStrings.checkLent(fine.address(), fine.length(), "f", "text", null);
+    fine.release();
+    Borrow evil = Borrow.ofString("evil.so\0.txt", true);
+    assertTrue(
+        assertThrows(
+                NativeCellException.class,
+                () -> CStrings.checkLent(evil.address(), evil.length(), "f", "text", null))
+            .getMessage()
+            .equals("f text: embedded NUL in a C string"));
+    evil.release();
+  }
+
+  /** An interop string that is not a TruffleString, as a guest language's own string type is. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class GuestLanguageString implements TruffleObject {
+    final String text;
+
+    GuestLanguageString(String text) {
+      this.text = text;
+    }
+
+    @ExportMessage
+    boolean isString() {
+      return true;
+    }
+
+    @ExportMessage
+    String asString() {
+      return text;
+    }
+  }
+
+  @Test
+  void closeAfterFailureDestroysWhatACreateMadeAndKeepsItsFailure() {
+    var failure = NativeCellException.of(null, "write-back failed");
+    // Nothing made: the failure passes through untouched.
+    assertSame(failure, NativeResource.closeAfterFailure(null, failure));
+    assertEquals(0, failure.getSuppressed().length);
+    // A parent held by the new resource is released along with it.
+    var parent = new NativeResource("Ticket", 0x6000L, address -> {}, null);
+    var freed = new java.util.ArrayList<Long>();
+    var made = new NativeResource("Ticket", 0x6100L, freed::add, null, NativeResource.hold(parent));
+    assertSame(failure, NativeResource.closeAfterFailure(made, failure));
+    assertTrue(made.isClosed());
+    assertEquals(List.of(0x6100L), freed);
+    parent.close();
+    assertTrue(parent.isClosed());
+    // A destroy that fails is attached to the write-back failure, which stays the one thrown.
+    var destroy = NativeCellException.of(null, "destroy failed");
+    var failing =
+        new NativeResource(
+            "Ticket",
+            0x6200L,
+            address -> {
+              throw destroy;
+            },
+            null);
+    var second = NativeCellException.of(null, "write-back failed again");
+    assertSame(second, NativeResource.closeAfterFailure(failing, second));
+    assertArrayEquals(new Throwable[] {destroy}, second.getSuppressed());
+  }
+
+  @Test
   void pointerCoercionSurvivesConcurrentCloseOfSharedResource() throws Exception {
     var resource = new NativeResource("Ticket", 0x5000L, address -> {}, null);
     var cell = new PointerCell(false, false, "Ticket");
@@ -723,6 +808,162 @@ class TruffleRuntimeTest {
         () -> NativeBytes.of(MemorySegment.ofArray(new byte[4]), true));
     assertEquals(0, NativeBytes.of(0, 0, false).size());
   }
+
+  /** A buffer message that may fail with the segment accessors' runtime exceptions. */
+  interface BufferMessage {
+    void run(NativeBytes bytes) throws Exception;
+  }
+
+  /** Every scalar read and write message, plus the bulk read, over a 16-byte buffer. */
+  private static final List<BufferMessage> BUFFER_MESSAGES =
+      List.of(
+          b -> INTEROP.readBufferByte(b, 0),
+          b -> INTEROP.writeBufferByte(b, 0, (byte) 1),
+          b -> INTEROP.readBufferShort(b, ByteOrder.LITTLE_ENDIAN, 2),
+          b -> INTEROP.writeBufferShort(b, ByteOrder.BIG_ENDIAN, 2, (short) 1),
+          b -> INTEROP.readBufferInt(b, ByteOrder.BIG_ENDIAN, 4),
+          b -> INTEROP.writeBufferInt(b, ByteOrder.LITTLE_ENDIAN, 4, 1),
+          b -> INTEROP.readBufferLong(b, ByteOrder.LITTLE_ENDIAN, 8),
+          b -> INTEROP.writeBufferLong(b, ByteOrder.BIG_ENDIAN, 8, 1),
+          b -> INTEROP.readBufferFloat(b, ByteOrder.LITTLE_ENDIAN, 0),
+          b -> INTEROP.writeBufferFloat(b, ByteOrder.BIG_ENDIAN, 0, 1f),
+          b -> INTEROP.readBufferDouble(b, ByteOrder.BIG_ENDIAN, 8),
+          b -> INTEROP.writeBufferDouble(b, ByteOrder.LITTLE_ENDIAN, 8, 1d),
+          b -> INTEROP.readBuffer(b, 0, new byte[4], 0, 4));
+
+  /** Asserts that every message fails as the segment's own accessor does, with its message. */
+  /**
+   * Asserts that every message fails with a guest error whose cause is what the segment's own
+   * accessor throws for the same access, class and message.
+   */
+  private static void assertMessagesFailLikeSegment(NativeBytes bytes) {
+    RuntimeException expected =
+        assertThrows(RuntimeException.class, () -> bytes.segment().get(ValueLayout.JAVA_BYTE, 0));
+    for (BufferMessage message : BUFFER_MESSAGES) {
+      NativeCellException thrown =
+          assertThrows(NativeCellException.class, () -> message.run(bytes));
+      assertTrue(INTEROP.isException(thrown));
+      assertSame(expected.getClass(), thrown.getCause().getClass());
+      assertEquals(expected.getMessage(), thrown.getCause().getMessage());
+      assertEquals(
+          expected instanceof WrongThreadException
+              ? "native buffer is confined to another thread"
+              : "native buffer's arena is closed",
+          thrown.getMessage());
+    }
+  }
+
+  /**
+   * The thread NativeBytes uses to tell confined scopes apart never starts and must not keep the
+   * inheritable thread-locals of the thread that first made a confined buffer.
+   */
+  @Test
+  void nativeBytesSentinelThreadInheritsNoThreadLocals() throws Exception {
+    AtomicLong inherited = new AtomicLong();
+    InheritableThreadLocal<Object> local =
+        new InheritableThreadLocal<>() {
+          @Override
+          protected Object childValue(Object parent) {
+            inherited.incrementAndGet();
+            return parent;
+          }
+        };
+    local.set(new Object());
+    try {
+      Thread sentinel = NativeBytes.newUnowned();
+      assertEquals(Thread.State.NEW, sentinel.getState());
+      assertNull(sentinel.getContextClassLoader());
+      try (Arena arena = Arena.ofConfined()) {
+        // Making a confined buffer creates the shared sentinel if no test has yet.
+        assertFalse(NativeBytes.of(arena.allocate(16), true).segment().isAccessibleBy(sentinel));
+      }
+      assertEquals(0, inherited.get());
+    } finally {
+      local.remove();
+    }
+  }
+
+  @Test
+  void nativeBytesMessagesCheckTheArenaScope() throws Exception {
+    // A closed confined arena: every message fails, before any access, as the segment does.
+    Arena confined = Arena.ofConfined();
+    NativeBytes bytes = NativeBytes.of(confined.allocate(16, 8), true);
+    for (BufferMessage message : BUFFER_MESSAGES) message.run(bytes);
+    AtomicReference<Throwable> failure = new AtomicReference<>();
+    AtomicReference<NativeBytes> madeElsewhere = new AtomicReference<>();
+    Thread other =
+        new Thread(() -> {
+          try {
+            assertMessagesFailLikeSegment(bytes);
+            // Made off the owner thread: the owner is not known, so messages ask the segment.
+            madeElsewhere.set(NativeBytes.of(bytes.segment(), true));
+            assertMessagesFailLikeSegment(madeElsewhere.get());
+            assertInstanceOf(
+                WrongThreadException.class,
+                assertThrows(NativeCellException.class, () -> INTEROP.readBufferByte(bytes, 0))
+                    .getCause());
+          } catch (Throwable t) {
+            failure.set(t);
+          }
+        });
+    other.start();
+    other.join();
+    assertNull(failure.get());
+    for (BufferMessage message : BUFFER_MESSAGES) message.run(madeElsewhere.get());
+    confined.close();
+    assertMessagesFailLikeSegment(madeElsewhere.get());
+    assertMessagesFailLikeSegment(bytes);
+    assertInstanceOf(
+        IllegalStateException.class,
+        assertThrows(NativeCellException.class, () -> INTEROP.readBufferLong(bytes, LE, 8))
+            .getCause());
+    // Bounds come first, as for any buffer: an offset outside it is still an offset error.
+    assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, 16));
+
+    // A closed shared arena: any thread sees it closed.
+    Arena shared = Arena.ofShared();
+    NativeBytes sharedBytes = NativeBytes.of(shared.allocate(16, 8), true);
+    INTEROP.writeBufferLong(sharedBytes, LE, 8, 7);
+    Thread reader =
+        new Thread(() -> {
+          try {
+            assertEquals(7, INTEROP.readBufferLong(sharedBytes, LE, 8));
+          } catch (Throwable t) {
+            failure.set(t);
+          }
+        });
+    reader.start();
+    reader.join();
+    assertNull(failure.get());
+    shared.close();
+    assertMessagesFailLikeSegment(sharedBytes);
+    assertInstanceOf(
+        IllegalStateException.class,
+        assertThrows(NativeCellException.class, () -> INTEROP.readBufferByte(sharedBytes, 0))
+            .getCause());
+
+    // The global arena and address views have no scope to check, on any thread.
+    NativeBytes global = NativeBytes.of(Arena.global().allocate(16, 8), true);
+    try (Arena arena = Arena.ofConfined()) {
+      NativeBytes view = NativeBytes.of(arena.allocate(16, 8).address(), 16, true);
+      Thread anywhere =
+          new Thread(() -> {
+            try {
+              for (BufferMessage message : BUFFER_MESSAGES) {
+                message.run(global);
+                message.run(view);
+              }
+            } catch (Throwable t) {
+              failure.set(t);
+            }
+          });
+      anywhere.start();
+      anywhere.join();
+      assertNull(failure.get());
+    }
+  }
+
+  private static final ByteOrder LE = ByteOrder.LITTLE_ENDIAN;
 
   @Test
   void heapBytesReadAndWriteThroughInteropWithBounds() throws Exception {

@@ -34,6 +34,7 @@ public final class SeamJson {
         + java(m)
         + nativeConfig(m)
         + truffle(m)
+        + rustImplementation(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -117,6 +118,11 @@ public final class SeamJson {
         + "}";
   }
 
+  /** The opt-in Rust implementer trait; omitted unless requested, as cells are. */
+  private static String rustImplementation(Module m) {
+    return m.rustImplementation() ? ",\n  \"rustImplementation\": \"trait\"" : "";
+  }
+
   private static String ownership(Module m) {
     String result = "";
     if (!m.resources().isEmpty())
@@ -129,8 +135,14 @@ public final class SeamJson {
                               + quote(r.name())
                               + ",\"representation\":\"native\",\"threading\":"
                               + quote(r.shared() ? "shared" : "confined")
+                              // One constructor keeps its string form; several are a list.
                               + ",\"create\":"
-                              + quote(r.create())
+                              + (r.creates().size() == 1
+                                  ? quote(r.creates().getFirst())
+                                  : "["
+                                      + String.join(
+                                          ",", r.creates().stream().map(SeamJson::quote).toList())
+                                      + "]")
                               + ",\"destroy\":"
                               + quote(r.destroy())
                               + (r.handle() == null
@@ -153,8 +165,16 @@ public final class SeamJson {
                               + quote(b.function())
                               + ",\"parameter\":"
                               + quote(b.parameter())
-                              + ",\"length\":"
-                              + quote(b.length())
+                              // A batch names its arrays and count; single buffers keep their
+                              // form.
+                              + (b.batch()
+                                  ? ",\"lengths\":"
+                                      + quote(b.length())
+                                      + ",\"count\":"
+                                      + quote(b.count())
+                                      + ",\"elementsNullable\":"
+                                      + b.elementsNullable()
+                                  : ",\"length\":" + quote(b.length()))
                               // A held borrow names its resource; call borrows keep their form.
                               + (b.held()
                                   ? ",\"lifetime\":\"resource\",\"resource\":" + quote(b.resource())
@@ -347,11 +367,16 @@ public final class SeamJson {
   }
 
   public static String fingerprint(Module module) {
+    return fingerprintOf(canonical(module));
+  }
+
+  /** The fingerprint of an already serialized {@link #canonical(Module) canonical} descriptor. */
+  static String fingerprintOf(String canonical) {
     try {
       return HexFormat.of()
           .formatHex(
               MessageDigest.getInstance("SHA-256")
-                  .digest(canonical(module).getBytes(StandardCharsets.UTF_8)));
+                  .digest(canonical.getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException e) {
       throw new AssertionError(e);
     }

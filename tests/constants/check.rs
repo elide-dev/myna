@@ -124,7 +124,7 @@ fn ranges_read_and_write_their_bits() {
 fn describe(n: &Node) -> String {
     match n.tag {
         NodeTag::BINARY => format!("binary {:?}", n.operand_as_binary_op().name()),
-        NodeTag::UNARY => format!("unary {:?}", n.operand_as_unary_op().name()),
+        NodeTag::UNARY => format!("unary {:?}", n.operand_as_unary_op().and_then(UnaryOp::name)),
         NodeTag::WRITE => format!("write {}", n.operand_as_write_flags().contains(WriteFlags::RELEASE)),
         _ => format!("other {}", n.operand),
     }
@@ -136,7 +136,7 @@ fn tagged_fields_read_through_the_case_group() {
     assert_eq!(n.operand_as_binary_op(), BinaryOp::SUB);
     assert_eq!(describe(&n), "binary Some(\"sub\")");
     n.tag = NodeTag::UNARY;
-    assert_eq!(n.operand_as_unary_op(), UnaryOp::INVERT);
+    assert_eq!(n.operand_as_unary_op(), Some(UnaryOp::INVERT));
     assert_eq!(describe(&n), "unary Some(\"invert\")");
     n.tag = NodeTag::WRITE;
     n.operand = (WriteFlags::RELEASE | WriteFlags::VOLATILE_STORE).0;
@@ -145,4 +145,29 @@ fn tagged_fields_read_through_the_case_group() {
     assert_eq!(n.operand_as_binary_op(), BinaryOp(3));
     n.tag = NodeTag(9);
     assert_eq!(describe(&n), "other 3");
+}
+
+#[test]
+fn narrowed_enums_read_as_option() {
+    // UnaryOp is u32: the u64 operand reads it only when no upper bit is set.
+    let mut n = Node { tag: NodeTag::UNARY, packed: Packed::NONE, operand: UnaryOp::INVERT.0 as u64 };
+    assert_eq!(n.operand_as_unary_op(), Some(UnaryOp::INVERT));
+    n.operand = (1 << 32) | UnaryOp::INVERT.0 as u64;
+    assert_eq!(n.operand_as_unary_op(), None);
+    n.operand = u64::MAX;
+    assert_eq!(n.operand_as_unary_op(), None);
+    n.operand = 0xffff_ffff;
+    assert_eq!(n.operand_as_unary_op(), Some(UnaryOp(0xffff_ffff)));
+    assert_eq!(n.operand_as_unary_op().and_then(UnaryOp::name), None);
+    // The same enum on a field of its own carrier is the newtype itself.
+    let u = seam::Unary { op: UnaryOp::NEGATE };
+    assert_eq!(u.op, UnaryOp::NEGATE);
+    assert_eq!(Some(u.op), Node { operand: 0, ..n }.operand_as_unary_op());
+    // A plain enum= narrowed into a raw u64 field: Level is u8.
+    let mut r = Record { status: Status::OK, perms: Perms::READ, wide: Wide::FIRST, raw: 255 };
+    assert_eq!(r.raw_as_level(), Some(Level::HIGH));
+    r.raw = 0x1_00;
+    assert_eq!(r.raw_as_level(), None);
+    r.raw = 0x1_00 | 255;
+    assert_eq!(r.raw_as_level(), None);
 }
