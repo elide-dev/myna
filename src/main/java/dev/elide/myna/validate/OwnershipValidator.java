@@ -57,6 +57,7 @@ final class OwnershipValidator {
           "ownership is reserved when wrappers are generated");
       require(!RESERVED.contains(m.nativeClass()), "reserved native/ownership class name");
     }
+    if (m.rustImplementation()) rustImplementation(m);
     var functions = new HashMap<String, Function>();
     m.functions().forEach(f -> functions.put(f.name(), f));
     var names = new HashSet<String>();
@@ -353,6 +354,23 @@ final class OwnershipValidator {
             "a resource create's success status is outside its return scalar's carrier range: "
                 + form);
     }
+  }
+
+  /**
+   * The Rust implementer trait and its support module are items of the module {@code seam.rs} is
+   * included in, beside the declared types and the raw functions.
+   */
+  private static void rustImplementation(Module m) {
+    var names = new HashSet<String>(m.opaqueTypes());
+    m.structs().forEach(s -> names.add(s.name()));
+    m.callbacks().forEach(c -> names.add(c.name()));
+    m.enums().forEach(e -> names.add(e.name()));
+    m.flagSets().forEach(f -> names.add(f.name()));
+    m.functions().forEach(f -> names.add(f.name()));
+    for (String generated : List.of(m.rustImplementationTrait(), "myna_implementation"))
+      require(
+          !names.contains(generated),
+          "rust_implementation=trait generates " + generated + ", which a declaration shadows");
   }
 
   /** Whether {@code f} is the constructor of a resource it returns a pointer to. */

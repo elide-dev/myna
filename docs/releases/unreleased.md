@@ -58,6 +58,12 @@ the same output as before.
   pointer-returning function stay rejected.
 - A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
 - Ownership and call-buffer validation errors name the function and parameter they concern.
+- `rust_implementation=trait` on the module generates, for Rust code that *implements* the imports,
+  a safe `<Module>Implementation` trait and `define_implementations!`, which defines every
+  `extern "C"` entry point from an implementing type. Call borrows arrive as slices, returned
+  resources as associated types owned through `Box`, and everything else as declared. Modules
+  without the option generate the same output (see
+  [implementing imports in Rust](../ownership.md#implementing-imports-in-rust)).
 
 ## Breaking changes
 

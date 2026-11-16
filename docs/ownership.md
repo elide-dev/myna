@@ -83,6 +83,43 @@ pointer stays rejected. A create that keeps its buffer past the call declares a
 
 Confined owners are neither `Send` nor `Sync`; shared owners explicitly implement both under the descriptor's contract. Borrowed views do not create Rust references into opaque native objects or imply `noalias`. Their raw-pointer escape hatch remains subject to unsafe FFI obligations. They are not lifetime-checked after conversion to a raw pointer.
 
+### Implementing imports in Rust
+
+`ownership` above is for a Rust *caller*. Where Rust *implements* the imports, `rust_implementation=trait` on the module line generates, in `seam.rs`, a safe trait named after the module (`ownership_demo` gives `OwnershipDemoImplementation`) and a macro that defines every import's `extern "C"` entry point from a type implementing it:
+
+```rust
+mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }
+struct Demo;
+impl seam::OwnershipDemoImplementation for Demo {
+    type Parsed = Parsed; // the implementation's own type behind each `Parsed` handle
+    type Ticket = Ticket;
+    fn parse(source: Option<&[u8]>) -> Option<Box<Parsed>> { /* ... */ }
+    fn release(parsed: Option<Box<Parsed>>) { drop(parsed) }
+    fn parsedValue(parsed: &Parsed) -> u64 { parsed.value }
+    fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64 { /* ... */ }
+    // ... one method per import
+}
+seam::define_implementations!(Demo, seam);
+```
+
+The trait has one method per import, so one `impl` covers the module:
+
+- A [call-scoped buffer](#call-scoped-buffers-including-off-heap-storage) is a slice, and its length parameter drops out: `&[u8]` for read access, `&mut [u8]` for write or read/write, wrapped in `Option` when it is nullable. There is no `&str` form: no borrow declares validated UTF-8 text yet.
+- Each resource whose constructor returns its pointer is an associated type. Its constructors return `Option<Box<Self::R>>` (`None` is a null result), its destroy takes `Box<Self::R>` (`Option<Box<Self::R>>` when the destroy is `nullable=true`), and any other borrowed `ptr<R>` parameter is `&Self::R` (`Option<&Self::R>` when nullable). Shared access stays shared: a `read_write` borrow of a resource is still `&Self::R`, so mutation goes through interior mutability, as the `threading` contract requires anyway.
+- Every other parameter and result, of every other import, is exactly as the raw binding declares it, raw pointers included.
+
+`define_implementations!(Type)` expects the module's items in scope; `define_implementations!(Type, path)` takes the path of the module that includes `seam.rs`. Each entry point converts its arguments once and calls the implementation statically. It allocates nothing; `Box::into_raw` and `Box::from_raw` move the implementation's own allocation across the ABI. The slice conversions are `#[inline(always)]`. Rust ignores `#[inline]` on an exported function, so the entry point itself carries none. The entry points are `extern "C"`: as with any such function, a panic in the implementation aborts instead of unwinding across the ABI, so a `nounwind` import keeps its contract.
+
+The caller's contract is checked where it can be, without changing release behavior beyond avoiding undefined behavior. With debug assertions on, the entry points assert:
+
+- that no buffer is null with a nonzero length;
+- that no length is negative or past `isize::MAX`;
+- that a non-nullable resource pointer is not null.
+
+A release build reads an empty slice where the pointer is null or the length is negative, and returns from a non-nullable destroy given null, rather than building a slice or a `Box` from null.
+
+`Box` is named unqualified in the trait and the macro: in a `no_std` crate with `alloc`, bring `alloc::boxed::Box` into scope where `seam.rs` is included and where the macro is invoked. Held borrows and resources with a `handle=` keep their raw form. A follow-up will map [batch borrows](https://github.com/elide-dev/myna/issues/132) once they exist. The generated items are named after the module and `myna_implementation`, which no declaration may shadow. The option is serialized as `"rustImplementation": "trait"` and fingerprinted; modules without it generate exactly what they did. The [implementation fixture](../tests/ownership/implementation.rs) implements the ownership fixture's imports this way and runs under a [C caller](../tests/ownership/implemented.c).
+
 ### Native Image: consumer-implemented lifecycle
 
 A module with ownership declarations also generates `<NativeClass>Ownership.java` (`MynaOwnership.java` with default naming). Its API includes:

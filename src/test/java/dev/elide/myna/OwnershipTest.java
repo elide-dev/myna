@@ -800,6 +800,105 @@ class OwnershipTest {
             .getMessage());
   }
 
+  @Test
+  void rustImplementationTraitIsOptIn() throws Exception {
+    String plain = Files.readString(Path.of("tests/ownership/ownership.seam"));
+    String opted =
+        plain.replace("java_class=NativeApi", "java_class=NativeApi rust_implementation=trait");
+    var before = Generator.generate(Dsl.parse(plain), true);
+    var after = Generator.generate(Dsl.parse(opted), true);
+    assertFalse(before.get("seam.rs").contains("Implementation"));
+    assertFalse(before.get("seam.json").contains("rustImplementation"));
+    assertTrue(after.get("seam.json").contains("\"rustImplementation\": \"trait\""));
+    assertNotEquals(before.get("seam.abi"), after.get("seam.abi"));
+    // Only seam.rs and the fingerprint it carries change.
+    for (var entry : before.entrySet())
+      if (!entry.getKey().equals("seam.rs")
+          && !entry.getKey().equals("seam.json")
+          && !entry.getKey().equals("seam.abi"))
+        assertEquals(
+            entry.getValue().replace(SeamJson.fingerprint(Dsl.parse(plain)), ""),
+            after.get(entry.getKey()).replace(SeamJson.fingerprint(Dsl.parse(opted)), ""),
+            entry.getKey());
+    String rust = after.get("seam.rs");
+    String trait = rust.substring(rust.indexOf("pub trait OwnershipDemoImplementation {"));
+    trait = trait.substring(0, trait.indexOf("\n}\n") + 1);
+    for (String line :
+        List.of(
+            "    type Parsed;",
+            "    type Ticket;",
+            "    fn checksum(bytes: &[u8]) -> u64;",
+            "    fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64;",
+            "    fn increment(bytes: &mut [u8]);",
+            "    fn tally(bytes: Option<&[u8]>) -> u64;",
+            "    fn transfer(input: &[u8], output: &mut [u8], copied: *mut u64) -> u64;",
+            "    fn analyze(request: &[u8], scale: u8) -> Option<Box<Self::Parsed>>;",
+            "    fn parse(source: Option<&[u8]>) -> Option<Box<Self::Parsed>>;",
+            "    fn release(parsed: Option<Box<Self::Parsed>>);",
+            "    fn parsedValue(parsed: &Self::Parsed) -> u64;",
+            "    fn ticketCreate() -> Option<Box<Self::Ticket>>;",
+            "    fn ticketDestroy(ticket: Box<Self::Ticket>);",
+            "    fn liveCount() -> i64;"))
+      assertTrue(trait.contains(line + "\n"), line + "\n" + trait);
+    assertTrue(
+        rust.contains(
+            """
+                    pub unsafe extern "C" fn buffer_decode(data: *const u8, length: u64, text: *mut u8, capacity: u32) -> u64 {
+                        let data = unsafe { myna_implementation::slice(data, length as usize) };
+                        let text = unsafe { myna_implementation::optional_mut(text, capacity as usize) };
+                        <$implementation as OwnershipDemoImplementation>::decode(data, text)
+                    }
+            """),
+        rust);
+    assertTrue(
+        rust.contains(
+            """
+                    pub unsafe extern "C" fn ticket_destroy(ticket: *mut $($seam)::+::Ticket) {
+                        if ticket.is_null() {
+                            debug_assert!(false, "ticketDestroy: null Ticket");
+                            return;
+                        }
+            """),
+        rust);
+    // A signed length is checked before it becomes a slice's.
+    String signed =
+        Generator.generate(
+                Dsl.parse(
+                    opted.replace(
+                        "param count type=u64\nend\nborrow increment",
+                        "param count type=i64\nend\nborrow increment")),
+                true)
+            .get("seam.rs");
+    assertTrue(signed.contains("myna_implementation::signed(count as i64)"), signed);
+    // The generated items cannot be shadowed, and the option takes one value.
+    assertEquals(
+        "rust_implementation=trait generates OwnershipDemoImplementation, which a declaration"
+            + " shadows",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Generator.generate(
+                        Dsl.parse(
+                            opted.replace(
+                                "opaque Ticket\n",
+                                "opaque Ticket\nopaque OwnershipDemoImplementation\n")),
+                        true))
+            .getMessage());
+    assertTrue(
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Dsl.parse(
+                        plain.replace(
+                            "java_class=NativeApi",
+                            "java_class=NativeApi rust_implementation=yes")))
+            .getMessage()
+            .endsWith("rust_implementation is trait: yes"));
+    assertEquals(
+        Dsl.parse(opted).rustImplementation(),
+        Dsl.parse(opted).withTarget("x86_64-unknown-linux-gnu").rustImplementation());
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";

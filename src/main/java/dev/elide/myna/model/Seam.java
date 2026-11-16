@@ -586,7 +586,48 @@ public final class Seam {
       List<Constant> constants,
       List<EnumGroup> enums,
       List<FlagSet> flagSets,
-      boolean abiDeclared) {
+      boolean abiDeclared,
+      boolean rustImplementation) {
+    /** A module without the opt-in Rust implementer trait ({@code rust_implementation=trait}). */
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets,
+        boolean abiDeclared) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          abiDeclared,
+          false);
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -832,7 +873,20 @@ public final class Seam {
           constants,
           enums,
           flagSets,
-          abiDeclared);
+          abiDeclared,
+          rustImplementation);
+    }
+
+    /**
+     * The Rust trait an implementation of this module's imports implements, with {@code
+     * rust_implementation=trait}: the module name in upper camel case, then {@code Implementation}.
+     */
+    public String rustImplementationTrait() {
+      var out = new StringBuilder();
+      for (String part : name.split("[^A-Za-z0-9]+"))
+        if (!part.isEmpty())
+          out.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+      return out.append("Implementation").toString();
     }
 
     /** Whether the module emits named constants: consts, groups, or the declared ABI version. */

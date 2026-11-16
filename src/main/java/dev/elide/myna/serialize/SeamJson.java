@@ -34,6 +34,7 @@ public final class SeamJson {
         + java(m)
         + nativeConfig(m)
         + truffle(m)
+        + rustImplementation(m)
         + ",\n  \"opaqueTypes\": "
         + array(m.opaqueTypes().stream().map(SeamJson::quote).toList())
         + ",\n  \"structs\": "
@@ -115,6 +116,11 @@ public final class SeamJson {
         + ",\"transitions\":"
         + quote(c.transitions().name())
         + "}";
+  }
+
+  /** The opt-in Rust implementer trait; omitted unless requested, as cells are. */
+  private static String rustImplementation(Module m) {
+    return m.rustImplementation() ? ",\n  \"rustImplementation\": \"trait\"" : "";
   }
 
   private static String ownership(Module m) {

@@ -16,6 +16,7 @@ public final class Dsl {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
     boolean abiDeclared = false;
+    boolean rustImplementation = false;
     NativeConfig nativeConfig = null;
     TruffleConfig truffleConfig = null;
     var opaque = new ArrayList<String>();
@@ -69,6 +70,11 @@ public final class Dsl {
             if (context != null || library != null)
               nativeConfig =
                   new NativeConfig(context, library, requireStatic != null && bool(requireStatic));
+            String implementation = take(opts, "rust_implementation", null);
+            require(
+                implementation == null || implementation.equals("trait"),
+                "rust_implementation is trait: " + implementation);
+            rustImplementation = implementation != null;
             String cells = take(opts, "truffle_cells", null);
             String backend = take(opts, "truffle_backend", "native");
             String coercion = take(opts, "truffle_coercion", "strict");
@@ -332,7 +338,8 @@ public final class Dsl {
         constants,
         enums,
         flagSets,
-        abiDeclared);
+        abiDeclared,
+        rustImplementation);
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */
