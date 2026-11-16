@@ -367,10 +367,11 @@ final class OwnershipValidator {
     m.enums().forEach(e -> names.add(e.name()));
     m.flagSets().forEach(f -> names.add(f.name()));
     m.functions().forEach(f -> names.add(f.name()));
-    for (String generated : List.of(m.rustImplementationTrait(), "myna_implementation"))
+    // Box is named unqualified, so that a no_std crate can bring alloc's into scope.
+    for (String generated : List.of(m.rustImplementationTrait(), "myna_implementation", "Box"))
       require(
           !names.contains(generated),
-          "rust_implementation=trait generates " + generated + ", which a declaration shadows");
+          "rust_implementation=trait names " + generated + ", which a declaration shadows");
   }
 
   /** Whether {@code f} is the constructor of a resource it returns a pointer to. */

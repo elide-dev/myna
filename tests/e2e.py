@@ -146,6 +146,28 @@ end
                 run("cc", "-std=c11", "-Wall", "-Werror", f"-I{generated}", ROOT / "tests/ownership/implemented.c",
                     library, "-lpthread", "-ldl", "-lm", "-o", app)
                 self.assertIn("Rust implementation trait passed", run(app).stdout)
+                # Contract violations: debug builds abort on each; release builds avoid undefined
+                # behavior, and abort only where no result is safe to make up.
+                for violation, released in (("length", "checksum 0"), ("null-buffer", "checksum 0"),
+                                            ("destroy", "destroy returned"), ("query", None)):
+                    result = run(app, violation, ok=False)
+                    if name == "release" and released is not None:
+                        self.assertEqual(result.returncode, 0, (violation, result.stderr))
+                        self.assertIn(released, result.stdout)
+                    else:
+                        self.assertNotEqual(result.returncode, 0, (name, violation, result.stdout))
+                        self.assertIn("panic in a function that cannot unwind", result.stderr)
+            # A shared resource is used and destroyed from any thread, so its type must be Send + Sync.
+            local = work / "local.rs"
+            local.write_text((ROOT / "tests/ownership/implementation.rs").read_text()
+                .replace("pub struct Ticket {\n    _live: Live,\n}",
+                         "pub struct Ticket {\n    _live: Live,\n    _local: std::marker::PhantomData<std::rc::Rc<()>>,\n}")
+                .replace("Ticket { _live: live()? }", "Ticket { _live: live()?, _local: std::marker::PhantomData }"))
+            self.assertIn("_local: std::marker::PhantomData }", local.read_text())
+            rejected = run("rustc", "--edition=2024", "--crate-type=lib", "--emit=metadata", local,
+                           "-o", work / "local.rmeta", ok=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("cannot be sent between threads safely", rejected.stderr)
 
     def test_explicit_ffm_library_binding(self):
         from ffm_binding import build_binding_fixture

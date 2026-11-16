@@ -17,7 +17,33 @@
     }                                                        \
   } while (0)
 
-int main(void) {
+#include <string.h>
+
+/*
+ * Contract violations, one per run: a debug build of the implementation asserts (and aborts, since
+ * a panic cannot leave an extern "C" function); a release build avoids undefined behavior instead,
+ * by reading an empty slice or ignoring a null destroy. A null query aborts in both.
+ */
+static int violate(const char *which) {
+  uint8_t bytes[3] = {1, 2, 3};
+  if (strcmp(which, "length") == 0) {
+    // A u64 length past isize::MAX, as a raw Java caller's -1 would be.
+    printf("checksum %llu\n", (unsigned long long)buffer_checksum(bytes, UINT64_MAX));
+  } else if (strcmp(which, "null-buffer") == 0) {
+    printf("checksum %llu\n", (unsigned long long)buffer_checksum(NULL, 0));
+  } else if (strcmp(which, "destroy") == 0) {
+    ticket_destroy(NULL);
+    puts("destroy returned");
+  } else if (strcmp(which, "query") == 0) {
+    printf("value %llu\n", (unsigned long long)parsed_value(NULL));
+  } else {
+    return 2;
+  }
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  if (argc > 1) return violate(argv[1]);
   CHECK(ticket_live() == 0);
   struct Ticket *ticket = ticket_create();
   CHECK(ticket != NULL && ticket_live() == 1);
@@ -30,9 +56,8 @@ int main(void) {
   CHECK(buffer_checksum(bytes, 3) == 258);
   buffer_increment(bytes, 3);
   CHECK(bytes[0] == 2 && bytes[1] == 3 && bytes[2] == 0);
-  // A null buffer with length zero is an empty slice, not undefined behavior.
-  CHECK(buffer_checksum(NULL, 0) == 0);
-  buffer_increment(NULL, 0);
+  CHECK(buffer_checksum(bytes, 0) == 0);
+  buffer_increment(bytes, 0);
   uint8_t output[2] = {0, 0};
   uint64_t copied = UINT64_MAX;
   CHECK(buffer_transfer(bytes, 3, output, 2, &copied) == 5 && copied == 2);

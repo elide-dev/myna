@@ -825,8 +825,8 @@ class OwnershipTest {
     trait = trait.substring(0, trait.indexOf("\n}\n") + 1);
     for (String line :
         List.of(
-            "    type Parsed;",
-            "    type Ticket;",
+            "    type Parsed: Send + Sync;",
+            "    type Ticket: Send + Sync;",
             "    fn checksum(bytes: &[u8]) -> u64;",
             "    fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64;",
             "    fn increment(bytes: &mut [u8]);",
@@ -844,7 +844,7 @@ class OwnershipTest {
         rust.contains(
             """
                     pub unsafe extern "C" fn buffer_decode(data: *const u8, length: u64, text: *mut u8, capacity: u32) -> u64 {
-                        let data = unsafe { myna_implementation::slice(data, length as usize) };
+                        let data = unsafe { myna_implementation::slice(data, myna_implementation::signed(length as i64)) };
                         let text = unsafe { myna_implementation::optional_mut(text, capacity as usize) };
                         <$implementation as OwnershipDemoImplementation>::decode(data, text)
                     }
@@ -855,7 +855,7 @@ class OwnershipTest {
             """
                     pub unsafe extern "C" fn ticket_destroy(ticket: *mut $($seam)::+::Ticket) {
                         if ticket.is_null() {
-                            debug_assert!(false, "ticketDestroy: null Ticket");
+                            ::core::debug_assert!(false, "ticketDestroy: null Ticket");
                             return;
                         }
             """),
@@ -872,7 +872,7 @@ class OwnershipTest {
     assertTrue(signed.contains("myna_implementation::signed(count as i64)"), signed);
     // The generated items cannot be shadowed, and the option takes one value.
     assertEquals(
-        "rust_implementation=trait generates OwnershipDemoImplementation, which a declaration"
+        "rust_implementation=trait names OwnershipDemoImplementation, which a declaration"
             + " shadows",
         assertThrows(
                 IllegalArgumentException.class,
@@ -884,6 +884,29 @@ class OwnershipTest {
                                 "opaque Ticket\nopaque OwnershipDemoImplementation\n")),
                         true))
             .getMessage());
+    assertEquals(
+        "rust_implementation=trait names Box, which a declaration shadows",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Generator.generate(
+                        Dsl.parse(opted.replace("opaque Ticket\n", "opaque Ticket\nopaque Box\n")),
+                        true))
+            .getMessage());
+    // Shared resources must be Send + Sync; a confined one has no bound.
+    assertTrue(trait.contains("    type Parsed: Send + Sync;\n"), trait);
+    assertTrue(
+        Generator.generate(Dsl.parse(opted.replace("threading=shared", "threading=confined")), true)
+            .get("seam.rs")
+            .contains("    type Parsed;\n"));
+    // A 64-bit length is guarded, and a null resource argument aborts rather than dereferenced.
+    assertTrue(
+        rust.contains(
+            "myna_implementation::slice(bytes, myna_implementation::signed(count as i64))"),
+        rust);
+    assertTrue(
+        rust.contains("if parsed.is_null() { ::core::panic!(\"parsedValue: null Parsed\") }\n"),
+        rust);
     assertTrue(
         assertThrows(
                 IllegalArgumentException.class,

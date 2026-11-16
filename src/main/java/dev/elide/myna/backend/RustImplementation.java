@@ -91,12 +91,15 @@ final class RustImplementation {
                 + "pub trait ")
         .append(trait)
         .append(" {\n");
+    // A shared resource may be used and destroyed from any thread (threading=shared), which only
+    // a Send + Sync type survives; a confined one stays on its creating thread.
     for (Resource r : m.returnedResources())
       out.append("    /// What a `")
           .append(r.name())
           .append("` handle points to: the implementation's own type, never read by callers.\n")
           .append("    type ")
           .append(r.name())
+          .append(r.shared() ? ": Send + Sync" : "")
           .append(";\n");
     for (Function f : imports) {
       Shape shape = shape(m, f);
@@ -152,9 +155,10 @@ final class RustImplementation {
   }
 
   /**
-   * Slices from pointer and length, each checked once. A null pointer with a nonzero length, a
-   * negative length or one past {@code isize::MAX} breaks the caller's contract: debug builds
-   * assert, and release builds read an empty slice rather than build one from null.
+   * Slices from pointer and length, each checked once. A null pointer for a buffer declared {@code
+   * nullable=false}, an absent buffer with a nonzero length, and a 64-bit length that is negative
+   * or past {@code isize::MAX} break the caller's contract: debug builds assert, and release builds
+   * read an empty slice rather than build one from null or past the address space.
    */
   private static void support(StringBuilder out) {
     out.append("\n#[doc(hidden)]\n#[allow(dead_code)]\npub mod ")
@@ -164,28 +168,29 @@ final class RustImplementation {
              {
                 #[inline(always)]
                 pub fn signed(length: i64) -> usize {
-                    debug_assert!(length >= 0, "negative buffer length");
+                    // A u64 length past isize::MAX arrives here negative: both read as empty.
+                    debug_assert!(length >= 0, "buffer length negative or past isize::MAX");
                     if length < 0 { 0 } else { length as usize }
                 }
                 #[inline(always)]
                 pub unsafe fn slice<'a>(pointer: *const u8, length: usize) -> &'a [u8] {
                     if pointer.is_null() {
-                        debug_assert!(length == 0, "null buffer with a nonzero length");
+                        debug_assert!(false, "null buffer declared nullable=false");
                         return &[];
                     }
                     debug_assert!(length <= isize::MAX as usize, "buffer length overflows isize");
                     // SAFETY: the caller lends `length` readable bytes at `pointer` for the call.
-                    unsafe { core::slice::from_raw_parts(pointer, length) }
+                    unsafe { ::core::slice::from_raw_parts(pointer, length) }
                 }
                 #[inline(always)]
                 pub unsafe fn slice_mut<'a>(pointer: *mut u8, length: usize) -> &'a mut [u8] {
                     if pointer.is_null() {
-                        debug_assert!(length == 0, "null buffer with a nonzero length");
+                        debug_assert!(false, "null buffer declared nullable=false");
                         return &mut [];
                     }
                     debug_assert!(length <= isize::MAX as usize, "buffer length overflows isize");
                     // SAFETY: the caller lends `length` exclusive bytes at `pointer` for the call.
-                    unsafe { core::slice::from_raw_parts_mut(pointer, length) }
+                    unsafe { ::core::slice::from_raw_parts_mut(pointer, length) }
                 }
                 #[inline(always)]
                 pub unsafe fn optional<'a>(pointer: *const u8, length: usize) -> Option<&'a [u8]> {
@@ -230,10 +235,12 @@ final class RustImplementation {
                   .filter(x -> x.name().equals(b.length()))
                   .findFirst()
                   .orElseThrow();
+          // A 64-bit length past isize::MAX would be undefined in a slice: it is negative as an
+          // i64, and reads as empty as a negative one does. A u32 always fits.
           String count =
-              length.type() == Scalar.I32 || length.type() == Scalar.I64
-                  ? q + SUPPORT + "::signed(" + length.name() + " as i64)"
-                  : length.name() + " as usize";
+              length.type() == Scalar.U32
+                  ? length.name() + " as usize"
+                  : q + SUPPORT + "::signed(" + length.name() + " as i64)";
           boolean writable = p.access() != Access.READ;
           String helper = (p.nullable() ? "optional" : "slice") + (writable ? "_mut" : "");
           body.append(pad)
@@ -262,7 +269,7 @@ final class RustImplementation {
                     + p.name()
                     + ".is_null() {\n"
                     + pad
-                    + "    debug_assert!(false, \""
+                    + "    ::core::debug_assert!(false, \""
                     + f.name()
                     + ": null "
                     + shape.resource(p)
@@ -280,14 +287,16 @@ final class RustImplementation {
           if (p.nullable())
             args.add("if " + p.name() + ".is_null() { None } else { Some(" + reference + ") }");
           else {
+            // A reference from null is undefined, and no result is safe to make up: a panic in an
+            // extern "C" function aborts, in every build.
             body.append(pad)
-                .append("debug_assert!(!")
+                .append("if ")
                 .append(p.name())
-                .append(".is_null(), \"")
+                .append(".is_null() { ::core::panic!(\"")
                 .append(f.name())
                 .append(": null ")
                 .append(shape.resource(p))
-                .append("\");\n");
+                .append("\") }\n");
             args.add(reference);
           }
         }
@@ -317,7 +326,7 @@ final class RustImplementation {
           .append(pad)
           .append("    Some(owned) => Box::into_raw(owned).cast(),\n")
           .append(pad)
-          .append("    None => core::ptr::null_mut(),\n")
+          .append("    None => ::core::ptr::null_mut(),\n")
           .append(pad)
           .append("}\n");
     else out.append(pad).append(call).append('\n');
