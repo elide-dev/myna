@@ -64,6 +64,14 @@ the same output as before.
   pointer-returning function stay rejected.
 - A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
 - Ownership and call-buffer validation errors name the function and parameter they concern.
+- Adopting these in an existing descriptor changes Truffle cell entry points, as declaring a resource
+  or a borrow always has:
+  - a function that becomes a resource's `destroy` loses its raw cell entry (`release_Cell.invoke(long)`),
+    since a resource is destroyed through its owner. Code that holds a constructor cell's raw address
+    frees it through `<Class>Native.<destroy>(WordFactory.pointer(address))`;
+  - a buffer that becomes a borrow drops its length argument from the cell (`syntax_Cell` goes from
+    `(buffer, length)` to `(buffer)`). Cells take `Object[]`, so an old two-argument call fails at run
+    time in the cell's arity check, not at compile time.
 - `rust_implementation=trait` on the module generates, for Rust code that *implements* the imports,
   a safe `<Module>Implementation` trait and `define_implementations!`, which defines every
   `extern "C"` entry point from an implementing type. Call borrows arrive as slices, returned
