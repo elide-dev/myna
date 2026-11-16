@@ -269,7 +269,7 @@ class NativeImageIntegrationTests(unittest.TestCase):
         scaled = {"functionAt": r"(shl\w* \$0x4, %r|lsl #(4|0x4)\b|^(lsl|[su]bfiz) x\d+, x\d+, #(4|0x4)\b)",
                   "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #(1|0x1)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(1|0x1)\b)",
                   # A pointer array: the element pointer is one 8-scaled load.
-                  "rootAt": r"(\(%r\w+,%r\w+,8\)|lsl #(3|0x3)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(3|0x3)\b)"}
+                  "rootAt": r"(\(%r\w+,%r\w+,8\)|lsl #(3|0x3)(\]|$)|^(lsl|[su]bfiz) x\d+, x\d+, #(3|0x3)\b)"}
         for name in ("functionAt", "textAt", "rootAt"):
             helper = body(name)
             raw = body("raw" + name[0].upper() + name[1:])

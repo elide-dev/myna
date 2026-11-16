@@ -290,7 +290,7 @@ class ConstantsTest {
         Arguments.of(
             "flags F type=u32\n range hash_code = 0..3\nend\n",
             "flags F: range hash_code: getter hashCode is a reserved Java name; rename the range"
-                + " (generated Java getters and with setters use the range's name)"),
+                + " (generated Java getters use the range's name)"),
         Arguments.of(
             "flags F type=u32\n bit has_unknown = 0\nend\n",
             "flags F: bit has_unknown: predicate hasUnknown is a reserved Java name; rename the bit"
@@ -322,14 +322,16 @@ class ConstantsTest {
         // Each const is also a @CConstant accessor method of the Native Image class.
         Arguments.of(
             "const CLASS type=u32 value=1\n",
-            "const CLASS: Native Image accessor class is a reserved Java name"),
+            "const CLASS: Native Image accessor class is a reserved Java name; rename the const"
+                + " (its accessor uses the const's name)"),
         Arguments.of(
             "const HASH_CODE type=u32 value=1\n",
-            "const HASH_CODE: Native Image accessor hashCode is a reserved Java name"),
+            "const HASH_CODE: Native Image accessor hashCode is a reserved Java name; rename the"
+                + " const (its accessor uses the const's name)"),
         Arguments.of(
             "const SEAM_HEADER_CHECK type=u32 value=1\n",
             "const SEAM_HEADER_CHECK: Native Image accessor seamHeaderCheck is a reserved Java"
-                + " name"),
+                + " name; rename the const (its accessor uses the const's name)"),
         Arguments.of(
             "import seamHeaderCheck symbol=s return=i32 error=no_failure\nend\n",
             "function seamHeaderCheck: name collides with the generated seam.h check of the Native"

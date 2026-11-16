@@ -180,7 +180,10 @@ final class ConstantsValidator {
     for (Constant c : m.constants()) {
       String accessor = Names.lowerCamel(c.name());
       String where = "const " + c.name() + ": Native Image accessor " + accessor;
-      require(!RESERVED_ACCESSORS.contains(accessor), where + " is a reserved Java name");
+      require(
+          !RESERVED_ACCESSORS.contains(accessor),
+          where
+              + " is a reserved Java name; rename the const (its accessor uses the const's name)");
       String other = methods.putIfAbsent(accessor, "const " + c.name());
       require(other == null, where + " collides with " + other);
     }
@@ -303,17 +306,16 @@ final class ConstantsValidator {
       }
       String getter = Names.javaRangeGetter(r.name());
       String setter = Names.javaRangeSetter(r.name());
-      for (String method : List.of(getter, setter))
-        require(
-            !RESERVED_ACCESSORS.contains(method),
-            where
-                + "range "
-                + r.name()
-                + ": "
-                + (method.equals(getter) ? "getter " : "setter ")
-                + method
-                + " is a reserved Java name; rename the range (generated Java getters and with"
-                + " setters use the range's name)");
+      // No reserved name starts with "with", so only the getter can be one.
+      require(
+          !RESERVED_ACCESSORS.contains(getter),
+          where
+              + "range "
+              + r.name()
+              + ": getter "
+              + getter
+              + " is a reserved Java name; rename the range (generated Java getters use the"
+              + " range's name)");
       for (String method : List.of(getter, setter)) {
         String other = javaMethods.putIfAbsent(method, "range " + r.name());
         require(
