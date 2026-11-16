@@ -189,6 +189,16 @@ public final class ViewsFFM {
             this.empty_address = lookup.find("views_empty").orElse(null);
             this.program_address = lookup.find("views_program").orElse(null);
         }
+        /** The resolved address of views_empty, valid while the library arena is open. */
+        public MemorySegment empty_address() {
+            if (this.empty_address == null) throw new UnsatisfiedLinkError("views_empty");
+            return this.empty_address;
+        }
+        /** The resolved address of views_program, valid while the library arena is open. */
+        public MemorySegment program_address() {
+            if (this.program_address == null) throw new UnsatisfiedLinkError("views_program");
+            return this.program_address;
+        }
         public MemorySegment empty() throws Throwable {
             if (this.empty_address == null) throw new UnsatisfiedLinkError("views_empty");
             return (MemorySegment) ViewsFFM.empty_Downcall.HANDLE.invokeExact(this.empty_address);
@@ -215,6 +225,16 @@ public final class ViewsFFM {
             java.util.Objects.requireNonNull(lookup);
             this.empty_address = lookup.find("views_empty").orElse(null);
             this.program_address = lookup.find("views_program").orElse(null);
+        }
+        /** The resolved address of views_empty, valid while the library arena is open. */
+        public MemorySegment empty_address() {
+            if (this.empty_address == null) throw new UnsatisfiedLinkError("views_empty");
+            return this.empty_address;
+        }
+        /** The resolved address of views_program, valid while the library arena is open. */
+        public MemorySegment program_address() {
+            if (this.program_address == null) throw new UnsatisfiedLinkError("views_program");
+            return this.program_address;
         }
         public MemorySegment empty() throws Throwable {
             if (this.empty_address == null) throw new UnsatisfiedLinkError("views_empty");

@@ -116,6 +116,10 @@ public final class FfmBindingMain {
         if (binding.liveCount() != 0) throw new AssertionError("failed adoption leaked");
         // An unavailable destructor must preserve the adoption error and report cleanup failure.
         var lookup = SymbolLookup.libraryLookup(Path.of(args[0]), library);
+        // The address the binding resolved, for a symbol handed to native code rather than called.
+        if (binding.checksum_address().address() != lookup.find("buffer_checksum").orElseThrow().address())
+          throw new AssertionError("resolved address");
+        rejects(UnsatisfiedLinkError.class, () -> missing.liveCount_address());
         var noDestructor = new NativeApiFFM.LibraryBinding(symbol -> symbol.equals("ticket_destroy")
             ? java.util.Optional.empty() : lookup.find(symbol));
         var adoptedAddress = new AtomicReference<MemorySegment>();
@@ -168,6 +172,39 @@ public final class FfmBindingMain {
         binding.failNext();
         if (NativeApiFFM.Parsed.analyze(binding, adopt, source, (byte) 1) != null) throw new AssertionError("failed analyze");
         parsed.run(); empty.run(); analyzed.run();
+        // Status plus out-pointer: a success status adopts the handle; any other goes to onFailure,
+        // which reads the message the caller lent, and nothing is adopted.
+        var message = memory.allocate(32);
+        NativeApiFFM.Surface.Failure<Action> refuse = status -> { throw new AssertionError("status " + status); };
+        var widths = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> keep = (address, destructor, threadConstraint) -> {
+          widths.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var surface = NativeApiFFM.Surface.surfaceOpen(binding, keep, refuse, 7, message);
+        var from = NativeApiFFM.Surface.surfaceFrom(binding, keep, refuse, source.asSlice(1, 2), null);
+        if (binding.surfaceWidth(widths.get(0)) != 7 || binding.surfaceWidth(widths.get(1)) != 5)
+          throw new AssertionError("surface widths");
+        String why = NativeApiFFM.Surface.surfaceOpen(binding, (address, destructor, threadConstraint) -> {
+          throw new AssertionError("a failed create was adopted");
+        }, status -> status + ": " + message.getString(0), -1, message);
+        if (!why.equals("3: negative width")) throw new AssertionError(why);
+        // A C string beside a call buffer on one constructor.
+        var titled = NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "abcd", message);
+        if (binding.surfaceWidth(widths.get(2)) != 4) throw new AssertionError("titled width");
+        titled.run();
+        rejects(IllegalArgumentException.class, () -> NativeApiFFM.Surface.surfaceTitled(binding, keep, refuse, "ab\0cd", message));
+        binding.failNext();
+        if (NativeApiFFM.Surface.surfaceFrom(binding, adopt, status -> null, source, null) != null)
+          throw new AssertionError("failed surfaceFrom");
+        if (binding.liveCount() != 2) throw new AssertionError("surfaces live");
+        surface.run(); from.run();
+        // A C string: NUL-terminated UTF-8 in the call's arena.
+        if (binding.titleLength("h\u00e9llo") != 6) throw new AssertionError("title length");
+        rejects(NullPointerException.class, () -> binding.titleLength((String) null));
+        // An embedded NUL would end the string early on the C side: refused before any copy.
+        rejects(IllegalArgumentException.class, () -> binding.titleLength("ab\0cd"));
+        if (binding.liveCount() != 0) throw new AssertionError("surfaces released");
         // The release accepts null as a no-op; no owner ever passes it one.
         binding.release(MemorySegment.NULL);
         if (binding.liveCount() != 0) throw new AssertionError("constructed resources leaked");

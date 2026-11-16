@@ -131,3 +131,48 @@ end
 import bundleValue symbol=bundle_value return=u64 error=no_failure nounwind=true@explicit_contract
   param bundle type=ptr<Bundle> nullable=false ownership=borrowed access=read
 end
+# Constructors that report a status and write the handle through an out-pointer, the usual C shape
+# for "status plus handle": the wrappers pass a slot of their own, adopt the handle on a success
+# status and hand any other status to the caller, who can read the message it lent. The error
+# buffer's length is a size_t.
+enum SurfaceStatus type=i32
+  value ok = 0
+  value negative = 3
+  value failed = 4
+end
+opaque Surface
+resource Surface representation=native threading=shared create=surfaceOpen,surfaceFrom,surfaceTitled destroy=surfaceClose handle=out success=0
+borrow surfaceOpen error length=capacity lifetime=call
+borrow surfaceFrom source length=length lifetime=call
+borrow surfaceFrom error length=capacity lifetime=call
+import surfaceOpen symbol=surface_open return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i32
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+import surfaceFrom symbol=surface_from return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param source type=ptr<u8> nullable=false ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param length type=u64
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+# A constructor with a C string beside its call buffer: the title's length is the width.
+borrow surfaceTitled error length=capacity lifetime=call
+import surfaceTitled symbol=surface_titled return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+import surfaceClose symbol=surface_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param surface type=ptr<Surface> nullable=false ownership=transferred_to_callee access=read_write
+end
+import surfaceWidth symbol=surface_width return=i64 error=no_failure nounwind=true@explicit_contract
+  param surface type=ptr<Surface> nullable=false ownership=borrowed access=read
+end
+# A NUL-terminated string read during the call, with no length: a String in Java, a &CStr in Rust.
+import titleLength symbol=title_length return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+end
