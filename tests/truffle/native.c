@@ -143,6 +143,27 @@ Parsed *cells_fill_text(uint8_t *report, uint64_t capacity, int32_t *gate) {
   for (uint64_t i = 0; i < capacity; i++) report[i] = 0x5a;
   return parsed_new(capacity);
 }
+typedef struct Window { int64_t width; } Window;
+// A negative width fails with status 3, junk in the out slot and a message in the error buffer.
+int32_t cells_window_open(int64_t width, Window **out, uint8_t *error, size_t capacity) {
+  if (width < 0) {
+    *out = (Window *)0xdead;
+    static const char message[] = "negative width";
+    for (size_t i = 0; i < capacity && i < sizeof message - 1; i++) error[i] = (uint8_t)message[i];
+    return 3;
+  }
+  Window *window = malloc(sizeof *window);
+  if (!window) return 4;
+  window->width = width;
+  live++;
+  *out = window;
+  return 0;
+}
+void cells_window_close(Window *window) {
+  free(window);
+  live--;
+}
+int64_t cells_window_width(const Window *window) { return window->width; }
 void cells_parsed_release(Parsed *parsed) {
   if (!parsed) return;
   free(parsed);

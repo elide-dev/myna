@@ -67,6 +67,10 @@ the same output as before.
 
 ## Status-plus-out-pointer constructors, `usize` lengths, C strings (#141)
 
+- A resource's `handle=PARAMETER` may name a `ptr<ptr<R>>` out-parameter: the "status plus handle"
+  constructor. FFM and Native Image owners take an `onFailure` callback for any status outside
+  `success=`, Rust returns `Result<R, Status>`, and Truffle cells adopt it as other status creates
+  (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
 - A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
 - `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
   from the same lookup, for symbols handed to native code rather than called.

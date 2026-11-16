@@ -912,6 +912,29 @@ public final class Seam {
     }
 
     /**
+     * Whether a resource's constructors report a status and write its pointer through a {@code
+     * ptr<ptr<R>>} out-parameter ({@code handle=PARAMETER}), rather than initializing a struct in
+     * place: the usual C shape for "status plus handle".
+     */
+    public boolean outPointer(Resource r) {
+      if (r.handle() == null || r.handleField() != null) return false;
+      Type slot = new Pointer(new Pointer(new Named(r.name())));
+      for (Function f : functions)
+        if (r.createdBy(f.name()))
+          for (Parameter p : f.parameters())
+            if (p.name().equals(r.handleParameter())) return p.type().equals(slot);
+      return false;
+    }
+
+    /**
+     * The resources the Rust, Native Image and FFM ownership APIs own: those whose constructors
+     * return their pointer, and those that write it through an out-parameter.
+     */
+    public List<Resource> ownedResources() {
+      return resources.stream().filter(r -> r.handle() == null || outPointer(r)).toList();
+    }
+
+    /**
      * The borrows that call-scoped wrappers project: every borrow of a function none of whose
      * buffers a resource holds. A held buffer outlives the call, which only a Truffle cell's owner
      * can express, so the other backends leave such a function to its raw binding.

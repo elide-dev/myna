@@ -25,7 +25,7 @@ public final class NativeOwnership implements Backend {
                 + " {\n    private "
                 + m.ownershipClass()
                 + "() {}\n");
-    if (!m.returnedResources().isEmpty())
+    if (!m.ownedResources().isEmpty())
       out.append(
 """
         /** Called exactly once by the consumer when its resource is no longer accessible. */
@@ -44,13 +44,35 @@ public final class NativeOwnership implements Backend {
         }
 
 """);
-    for (Resource r : m.returnedResources()) {
-      out.append("    public static final class ")
-          .append(r.name())
-          .append(" {\n        private ")
-          .append(r.name())
-          .append("() {}\n")
-          .append("        private static final NativeDestructor DESTRUCTOR = address -> ")
+    for (Resource r : m.ownedResources()) {
+      if (m.outPointer(r)) {
+        Function first =
+            m.functions().stream()
+                .filter(f -> f.name().equals(r.creates().getFirst()))
+                .findFirst()
+                .orElseThrow();
+        out.append("    public static final class ")
+            .append(r.name())
+            .append(" {\n        private ")
+            .append(r.name())
+            .append("() {}\n")
+            .append(
+                "        /**\n"
+                    + "         * What a constructor returns for a status outside its success"
+                    + " list, when it created\n"
+                    + "         * nothing. The out slot is ignored then.\n"
+                    + "         */\n"
+                    + "        @FunctionalInterface\n"
+                    + "        public interface Failure<T> { T failed(")
+            .append(NativeImage.qualifiedCarrier(m, first.returns()))
+            .append(" status); }\n");
+      } else
+        out.append("    public static final class ")
+            .append(r.name())
+            .append(" {\n        private ")
+            .append(r.name())
+            .append("() {}\n");
+      out.append("        private static final NativeDestructor DESTRUCTOR = address -> ")
           .append(m.nativeClass())
           .append('.')
           .append(r.destroy())
@@ -58,6 +80,8 @@ public final class NativeOwnership implements Backend {
       for (String name : r.creates()) {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        // A held borrow outlives the call, which only a Truffle cell can express.
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
         if (m.callBorrows().stream().anyMatch(b -> b.function().equals(name))) {
           // The buffer wrappers of the import lend each buffer for the call only.
           String target = m.ownershipClass() + "." + name;
@@ -130,12 +154,52 @@ public final class NativeOwnership implements Backend {
     for (int i = 0; i < create.parameters().size(); i++) {
       Parameter p = create.parameters().get(i);
       if (buffer != null && call.length(p) != null) continue;
+      boolean outPointer = m.outPointer(r);
+      // The out slot is the constructor's own: one word on its stack frame.
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        args.add("org.graalvm.word.WordFactory.pointer(slot.rawValue())");
+        continue;
+      }
       String carrier =
           buffer != null && call.buffer(p) != null
               ? buffer
               : NativeImage.qualifiedCarrier(m, p.type());
       params.add(carrier + " arg" + i);
       args.add("arg" + i);
+    }
+    if (m.outPointer(r)) {
+      var succeeded = new ArrayList<String>();
+      String status = NativeImage.qualifiedCarrier(m, create.returns());
+      for (long value : r.success())
+        succeeded.add("status == " + value + (status.equals("long") ? "L" : ""));
+      out.append(
+              "        /** A status outside the success list goes to onFailure, and nothing is"
+                  + " adopted. */\n")
+          .append("        public static <T> T ")
+          .append(r.wrapperName(name))
+          .append("(ResourceFactory<T> factory, Failure<? extends T> onFailure")
+          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+          .append(") {\n")
+          .append("            java.util.Objects.requireNonNull(factory);\n")
+          .append("            java.util.Objects.requireNonNull(onFailure);\n")
+          .append(
+              "            org.graalvm.word.Pointer slot ="
+                  + " org.graalvm.nativeimage.StackValue.get(8);\n")
+          .append("            slot.writeLong(0, 0L);\n")
+          .append("            ")
+          .append(status)
+          .append(" status = ")
+          .append(target)
+          .append('(')
+          .append(String.join(", ", args))
+          .append(");\n")
+          .append("            if (!(")
+          .append(String.join(" || ", succeeded))
+          .append(")) return onFailure.failed(status);\n")
+          .append("            long address = slot.readLong(0);\n")
+          .append("            if (address == 0) return null;\n")
+          .append("            return adoptUnsafe(address, factory);\n        }\n");
+      return;
     }
     out.append("        /** Null means native creation failed; the consumer is not called. */\n")
         .append("        public static <T> T ")

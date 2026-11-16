@@ -824,6 +824,27 @@ public final class CellChecks {
       check(call(cells, "counterLive").equals(0L), "parsed destroyed once each");
     }
     constructorWriteBack(cells);
+    // Status plus out-pointer: the guest lends an 8-byte buffer for the slot and receives a copy;
+    // a success status adopts the handle, any other is a guest error naming it, after the error
+    // buffer received its message.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment slot = arena.allocate(8);
+      byte[] message = new byte[32];
+      Object window = call(cells, "windowOpen", 9, NativeBytes.of(slot, true), new HeapBytes(message, true));
+      check(window instanceof NativeResource r && r.type().equals("Window"), "windowOpen owner");
+      check(call(cells, "windowWidth", window).equals(9L), "window width");
+      check(slot.get(ValueLayout.JAVA_LONG, 0) != 0, "the guest's slot received the handle");
+      try {
+        call(cells, "windowOpen", -1, NativeBytes.of(slot, true), new HeapBytes(message, true));
+        throw new AssertionError("a failed windowOpen made an owner");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("status 3"), expected.getMessage());
+      }
+      check(new String(message, 0, 14, StandardCharsets.US_ASCII).equals("negative width"), "window message");
+      check(call(cells, "counterLive").equals(1L), "one window live");
+      check(call(cells, "windowClose", window) == NativeVoid.INSTANCE, "window closed");
+      check(call(cells, "counterLive").equals(0L), "window destroyed");
+    }
     // Creates that report a status and write the resource through a parameter. The guest passes
     // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
     // native side writes into memory the runtime owns and the buffer receives a copy.

@@ -64,6 +64,20 @@ fn main() {
     // The release accepts null as a no-op; no owner ever passes it one.
     unsafe { seam::release(core::ptr::null_mut()); }
     assert_eq!(unsafe { seam::liveCount() }, 0);
+    // Status plus out-pointer: Ok adopts the handle; Err carries the status, with the message in
+    // the buffer the caller lent and nothing created.
+    let mut error = [0u8; 32];
+    let surface = Surface::surfaceOpen(7, Some(&mut error)).unwrap();
+    assert_eq!(unsafe { seam::surfaceWidth(surface.borrow().as_ptr()) }, 7);
+    let from = Surface::surfaceFrom(&[1, 2, 3], None).unwrap();
+    assert_eq!(unsafe { seam::surfaceWidth(from.borrow().as_ptr()) }, 6);
+    assert_eq!(Surface::surfaceOpen(-1, Some(&mut error)).err(), Some(seam::SurfaceStatus::NEGATIVE));
+    assert_eq!(&error[..14], b"negative width");
+    unsafe { seam::failNext(); }
+    assert_eq!(Surface::surfaceFrom(&[1], None).err(), Some(seam::SurfaceStatus::FAILED));
+    assert_eq!(unsafe { seam::liveCount() }, 2);
+    drop((surface, from));
+    assert_eq!(unsafe { seam::liveCount() }, 0);
     assert!(std::panic::catch_unwind(|| {
         let _owner = Ticket::create().unwrap();
         panic!("release during unwinding");

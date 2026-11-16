@@ -171,6 +171,29 @@ public final class FfmBindingMain {
         binding.failNext();
         if (NativeApiFFM.Parsed.analyze(binding, adopt, source, (byte) 1) != null) throw new AssertionError("failed analyze");
         parsed.run(); empty.run(); analyzed.run();
+        // Status plus out-pointer: a success status adopts the handle; any other goes to onFailure,
+        // which reads the message the caller lent, and nothing is adopted.
+        var message = memory.allocate(32);
+        NativeApiFFM.Surface.Failure<Action> refuse = status -> { throw new AssertionError("status " + status); };
+        var widths = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> keep = (address, destructor, threadConstraint) -> {
+          widths.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var surface = NativeApiFFM.Surface.surfaceOpen(binding, keep, refuse, 7, message);
+        var from = NativeApiFFM.Surface.surfaceFrom(binding, keep, refuse, source.asSlice(1, 2), null);
+        if (binding.surfaceWidth(widths.get(0)) != 7 || binding.surfaceWidth(widths.get(1)) != 5)
+          throw new AssertionError("surface widths");
+        String why = NativeApiFFM.Surface.surfaceOpen(binding, (address, destructor, threadConstraint) -> {
+          throw new AssertionError("a failed create was adopted");
+        }, status -> status + ": " + message.getString(0), -1, message);
+        if (!why.equals("3: negative width")) throw new AssertionError(why);
+        binding.failNext();
+        if (NativeApiFFM.Surface.surfaceFrom(binding, adopt, status -> null, source, null) != null)
+          throw new AssertionError("failed surfaceFrom");
+        if (binding.liveCount() != 2) throw new AssertionError("surfaces live");
+        surface.run(); from.run();
+        if (binding.liveCount() != 0) throw new AssertionError("surfaces released");
         // The release accepts null as a no-op; no owner ever passes it one.
         binding.release(MemorySegment.NULL);
         if (binding.liveCount() != 0) throw new AssertionError("constructed resources leaked");

@@ -77,3 +77,34 @@ unsafe fn parsed_new(value: u64) -> *mut u64 {
     LIVE.fetch_sub(1, Ordering::SeqCst);
 }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn parsed_value(p: *const u64) -> u64 { unsafe { p.read() } }
+// Status-plus-out-pointer constructors. A negative width fails with status 3 and a message in the
+// error buffer when there is one; ticket_fail_next makes the next one fail with status 4. A failed
+// call writes junk to the out slot, which callers must ignore.
+unsafe fn surface_new(width: i64, out: *mut *mut i64, error: *mut u8, capacity: usize) -> i32 {
+    let fail = |message: &[u8], status: i32| {
+        if !out.is_null() { unsafe { out.write(0xdead as *mut i64); } }
+        if !error.is_null() {
+            for (i, &b) in message.iter().take(capacity).enumerate() { unsafe { error.add(i).write(b); } }
+        }
+        status
+    };
+    if FAIL.swap(false, Ordering::SeqCst) { return fail(b"failed", 4); }
+    if width < 0 { return fail(b"negative width", 3); }
+    let p = unsafe { malloc(8) } as *mut i64;
+    unsafe { p.write(width); }
+    LIVE.fetch_add(1, Ordering::SeqCst);
+    unsafe { out.write(p); }
+    0
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn surface_open(width: i32, out: *mut *mut i64, error: *mut u8, capacity: usize) -> i32 {
+    unsafe { surface_new(i64::from(width), out, error, capacity) }
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn surface_from(source: *const u8, length: u64, out: *mut *mut i64, error: *mut u8, capacity: usize) -> i32 {
+    let width = (0..length as usize).map(|i| i64::from(unsafe { source.add(i).read() })).sum();
+    unsafe { surface_new(width, out, error, capacity) }
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn surface_close(p: *mut i64) {
+    unsafe { free(p as *mut u8); }
+    LIVE.fetch_sub(1, Ordering::SeqCst);
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn surface_width(p: *const i64) -> i64 { unsafe { p.read() } }

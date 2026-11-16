@@ -77,8 +77,16 @@ final class OwnershipValidator {
     for (Resource r : m.resources()) {
       // A resource initialized in place is the struct its handle parameter points to; every other
       // resource is an opaque allocation.
-      boolean inPlace = r.handle() != null && r.handleField() == null;
-      if (inPlace)
+      // A resource written through a ptr<ptr<R>> out-parameter may be either.
+      boolean outPointer = m.outPointer(r);
+      boolean inPlace = r.handle() != null && r.handleField() == null && !outPointer;
+      if (outPointer)
+        require(
+            m.opaqueTypes().contains(r.name())
+                || m.structs().stream().anyMatch(s -> s.name().equals(r.name())),
+            "a resource written through an out-pointer must name an opaque type or a struct: "
+                + r.name());
+      else if (inPlace)
         require(
             m.structs().stream().anyMatch(s -> s.name().equals(r.name())),
             "a resource initialized in place must name a struct: " + r.name());
@@ -147,6 +155,20 @@ final class OwnershipValidator {
                   + " "
                   + argument.name());
       }
+      // One Failure callback takes every out-pointer constructor's status, in one carrier.
+      if (outPointer)
+        for (String name : r.creates())
+          require(
+              functions.get(name).returns().equals(functions.get(r.creates().getFirst()).returns())
+                  && Objects.equals(
+                      functions.get(name).returnsGroup(),
+                      functions.get(r.creates().getFirst()).returnsGroup()),
+              "the out-pointer constructors of "
+                  + r.name()
+                  + " return one status type: "
+                  + name
+                  + " differs from "
+                  + r.creates().getFirst());
       // Several constructors are named after their imports beside the generated members.
       if (r.creates().size() > 1)
         for (String name : r.creates())
@@ -301,8 +323,10 @@ final class OwnershipValidator {
    */
   private static void handle(Module m, Resource r, Function create) {
     String form = r.name() + " handle=" + r.handle();
+    // A ptr<ptr<R>> out-parameter: every ownership API wraps it, not only Truffle cells.
+    boolean outPointer = m.outPointer(r);
     require(
-        m.truffleConfig() != null && Seam.truffleCell(m, create),
+        outPointer || (m.truffleConfig() != null && Seam.truffleCell(m, create)),
         "a resource handle is generated for Truffle cells only; "
             + create.name()
             + " needs one: "
@@ -317,14 +341,36 @@ final class OwnershipValidator {
             .filter(p -> p.name().equals(parameter))
             .findFirst()
             .orElse(null);
+    if (outPointer) {
+      // Every wrapper passes a slot of its own, so the parameter may be declared nullable.
+      require(
+          out != null
+              && out.type().equals(new Pointer(new Pointer(new Named(r.name()))))
+              && out.access() == Access.WRITE,
+          "a resource out-pointer must be a ptr<ptr<"
+              + r.name()
+              + ">> parameter with access=write: "
+              + create.name()
+              + " "
+              + parameter);
+      require(
+          create.returns() instanceof Scalar status
+              && status != Scalar.VOID
+              && status != Scalar.BOOL
+              && status != Scalar.F32
+              && status != Scalar.F64,
+          "a resource create with an out-pointer returns an integer status: " + create.name());
+    }
     require(
         out != null
             && out.type() instanceof Pointer
-            && !out.nullable()
+            && (outPointer || !out.nullable())
             && (out.access() == Access.WRITE || out.access() == Access.READ_WRITE),
         "resource handle must name a non-null pointer parameter with write access: " + form);
     Type pointee = ((Pointer) out.type()).pointee();
-    if (field == null) {
+    if (outPointer) {
+      // Checked above.
+    } else if (field == null) {
       require(
           pointee.equals(new Named(r.name())),
           "a resource initialized in place is what its handle parameter points to: " + form);

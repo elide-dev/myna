@@ -27,7 +27,7 @@ public final class JavaFfm implements Backend {
                 1024L
                     + functions.size() * 2304L
                     + m.callbacks().size() * 1024L
-                    + m.returnedResources().size() * 1024L
+                    + m.ownedResources().size() * 1024L
                     + m.callBorrows().size() * 2048L
                     + m.structs().size() * 512L);
     var out =
@@ -405,7 +405,7 @@ public final class JavaFfm implements Backend {
   }
 
   private static void ownership(Module m, StringBuilder out) {
-    if (m.returnedResources().isEmpty()) return;
+    if (m.ownedResources().isEmpty()) return;
     out.append(
 """
         @FunctionalInterface
@@ -421,16 +421,39 @@ public final class JavaFfm implements Backend {
             T adopt(MemorySegment address, NativeDestructor destructor, Thread requiredThread) throws Throwable;
         }
 """);
-    for (Resource r : m.returnedResources()) {
+    for (Resource r : m.ownedResources()) {
+      boolean outPointer = m.outPointer(r);
       out.append("    public static final class ")
           .append(r.name())
           .append(" {\n")
           .append("        private ")
           .append(r.name())
           .append("() {}\n");
+      String status = null;
+      if (outPointer) {
+        Function first =
+            m.functions().stream()
+                .filter(f -> f.name().equals(r.creates().getFirst()))
+                .findFirst()
+                .orElseThrow();
+        status = Types.ffmCarrier(first.returns());
+        out.append(
+                "        /**\n"
+                    + "         * What a constructor returns for a status outside its success"
+                    + " list, when it created\n"
+                    + "         * nothing: null, a value, or a throw. The out slot is ignored"
+                    + " then.\n"
+                    + "         */\n"
+                    + "        @FunctionalInterface\n"
+                    + "        public interface Failure<T> { T failed(")
+            .append(status)
+            .append(" status) throws Throwable; }\n");
+      }
       for (String name : r.creates()) {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        // A held borrow outlives the call, which only a Truffle cell can express.
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
         // A constructor with call borrows takes each buffer as a segment and calls the binding's
         // buffer wrapper, which lends it for the call only.
         boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
@@ -441,6 +464,11 @@ public final class JavaFfm implements Backend {
         for (Parameter p : create.parameters()) {
           String arg = "arg" + index++;
           if (buffers && call.length(p) != null) continue;
+          // The out slot is the constructor's own, allocated for the call.
+          if (outPointer && p.name().equals(r.handleParameter())) {
+            args.add("slot");
+            continue;
+          }
           params.add(
               (buffers && call.buffer(p) != null ? "MemorySegment" : Types.ffmCarrier(p.type()))
                   + " "
@@ -450,15 +478,38 @@ public final class JavaFfm implements Backend {
         out.append("        public static <T> T ")
             .append(r.wrapperName(name))
             .append("(LibraryBinding binding, ResourceFactory<T> factory")
+            .append(outPointer ? ", Failure<? extends T> onFailure" : "")
             .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
             .append(") throws Throwable {\n")
-            .append("            java.util.Objects.requireNonNull(factory);\n")
-            .append("            MemorySegment address = binding.")
-            .append(create.name())
-            .append('(')
-            .append(String.join(", ", args))
-            .append(");\n")
-            .append("            if (address.address() == 0) return null;\n")
+            .append("            java.util.Objects.requireNonNull(factory);\n");
+        if (outPointer) {
+          var succeeded = new ArrayList<String>();
+          for (long value : r.success())
+            succeeded.add("status == " + value + (status.equals("long") ? "L" : ""));
+          out.append("            java.util.Objects.requireNonNull(onFailure);\n")
+              .append("            ")
+              .append(status)
+              .append(" status;\n")
+              .append("            MemorySegment address;\n")
+              .append("            try (Arena out = Arena.ofConfined()) {\n")
+              .append("                MemorySegment slot = out.allocate(ValueLayout.ADDRESS);\n")
+              .append("                status = binding.")
+              .append(create.name())
+              .append('(')
+              .append(String.join(", ", args))
+              .append(");\n")
+              .append("                address = slot.get(ValueLayout.ADDRESS, 0);\n")
+              .append("            }\n")
+              .append("            if (!(")
+              .append(String.join(" || ", succeeded))
+              .append(")) return onFailure.failed(status);\n");
+        } else
+          out.append("            MemorySegment address = binding.")
+              .append(create.name())
+              .append('(')
+              .append(String.join(", ", args))
+              .append(");\n");
+        out.append("            if (address.address() == 0) return null;\n")
             .append("            try {\n")
             .append(
                 "                return java.util.Objects.requireNonNull(factory.adopt(address,"

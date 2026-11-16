@@ -238,7 +238,7 @@ Negative lengths, lengths outside the ABI integer range, and null addresses with
 
 An additional `byte[]` overload pins the array for the call and unpins it afterward. It is a convenience path separate from off-heap access. Array callers must prevent conflicting concurrent access. No pointer may escape the pin's lifetime. With several buffers the overload takes every buffer as a `byte[]`: non-empty arrays are pinned in parameter order and unpinned in reverse, and an empty array gets the stack dummy instead of a pin. A `null` array for a nullable buffer is not pinned and passes the null pointer. There is no overload that mixes arrays with `NativeBuffer`s.
 
-## Creates that report a status (Truffle cells only)
+## Creates that report a status
 
 Many C creates do not return the resource. They return a status and write the resource through a
 parameter: into a field of a struct the caller allocates, or by initializing the caller's struct
@@ -272,11 +272,53 @@ The parameter must be a non-null pointer with `write` or `read_write` access. Th
 create's: on a listed status it has written a live resource and transferred sole ownership of it;
 on any other it has left nothing to release.
 
-Only Truffle cells generate an owner for these forms, so the module must set `truffle_cells=true`
+Only Truffle cells generate an owner for the two struct forms, so the module must set `truffle_cells=true`
 and the create must have a cell. A cell does not let the create write into guest memory: it
 passes a struct the runtime owns and copies the result to the buffer the guest supplied. The Native Image, FFM and Rust ownership APIs do not wrap them;
 their raw bindings, and any call-buffer wrappers the create declares, are generated as for any
 other import. See [Truffle native cells](truffle-cells.md#ownership) for what the cell does.
+
+### Status plus out-pointer
+
+The usual C shape for "status plus handle" writes the handle through a `ptr<ptr<R>>` parameter,
+and every ownership API wraps it:
+
+```text
+opaque Surface
+resource Surface representation=native threading=confined create=surfaceOpen,surfaceFrom destroy=surfaceClose handle=out success=0
+borrow surfaceOpen error length=capacity lifetime=call
+import surfaceOpen symbol=surface_open return=i32 enum=SurfaceStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param width type=i32
+  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write
+  param error type=ptr<u8> nullable=true ownership=borrowed access=write nocapture=true@explicit_contract
+  param capacity type=usize
+end
+```
+
+`handle=PARAMETER` names a `ptr<ptr<R>>` parameter with `access=write`, for an opaque or struct
+resource `R`. The create returns an integer status, `success=` is required, and every constructor of
+the resource takes this shape with one status type. The parameter may be declared nullable: every
+wrapper passes a slot of its own. On a listed status the slot holds a live resource, adopted as any
+create's is (a null handle then reads as "nothing created"). On any other status nothing is adopted
+and the slot's contents are ignored, whatever the create left there. The caller decides what that
+status means:
+
+- **FFM**: `ApiFFM.Surface.surfaceOpen(binding, factory, onFailure, width, error)` allocates the slot in
+  a confined arena for the call, and on any other status returns `onFailure.failed(status)`, from a
+  generated `Surface.Failure<T>` whose `failed` takes the status in its Java carrier (`int` for an
+  `i32`, the declared carrier for an `enum=` result): null, a value, or a throw. The caller can read
+  the message buffer it lent there.
+- **Native Image**: `ApiOwnership.Surface.surfaceOpen(factory, onFailure, width, error)`, the same
+  with the slot on the stack, and a `NativeBuffer` and a `byte[]` overload when the create has call
+  buffers.
+- **Rust**: `Surface::surfaceOpen(width, error) -> Result<Surface, SurfaceStatus>`: `Err` carries the
+  status, as the `enum=` newtype when the result has one and the raw integer otherwise.
+- **Truffle cells**: as for a handle field, the guest lends an 8-byte buffer for the slot and
+  receives a copy; any other status is a guest error that names it.
+
+With one constructor the wrapper is `create`, as for any resource. The [implementer
+trait](#implementing-imports-in-rust) leaves these constructors, their destroy and their handles
+raw. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
 
 ## Borrows held by a resource (Truffle cells only)
 

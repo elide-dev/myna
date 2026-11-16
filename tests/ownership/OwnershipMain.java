@@ -188,7 +188,33 @@ public final class OwnershipMain {
     verifySeveralBuffers(empty);
     verifyNullableBuffers(empty);
     verifyConstructors(empty);
+    verifySurfaces();
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
+  }
+
+  /**
+   * Status plus out-pointer constructors: a success status adopts the handle from the slot the
+   * wrapper passes on its own stack; any other status goes to onFailure, which can read the message
+   * the caller lent, and nothing is adopted.
+   */
+  private static void verifySurfaces() {
+    check(NativeApi.liveCount() == 0);
+    NativeApiOwnership.Surface.Failure<Owner> refuse = status -> { throw new AssertionError("status " + status); };
+    byte[] message = new byte[32];
+    Owner surface = NativeApiOwnership.Surface.surfaceOpen(Owner::new, refuse, 7, message);
+    check(NativeApi.surfaceWidth(WordFactory.pointer(surface.address())) == 7);
+    Owner from = NativeApiOwnership.Surface.surfaceFrom(Owner::new, refuse, new byte[] {1, 2, 3}, (byte[]) null);
+    check(NativeApi.surfaceWidth(WordFactory.pointer(from.address())) == 6);
+    String why = NativeApiOwnership.Surface.surfaceOpen((address, destructor, thread) -> {
+      throw new AssertionError("a failed create was adopted");
+    }, status -> status + ": " + new String(message, 0, 14, java.nio.charset.StandardCharsets.US_ASCII), -1, message);
+    check(why.equals("3: negative width"));
+    NativeApi.failNext();
+    check(NativeApiOwnership.Surface.surfaceFrom(Owner::new, status -> null, new byte[] {1}, (byte[]) null) == null);
+    check(NativeApi.liveCount() == 2);
+    surface.registration.clean();
+    from.registration.clean();
+    check(NativeApi.liveCount() == 0);
   }
 
   /**

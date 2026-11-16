@@ -11,14 +11,14 @@ final class RustOwnership {
   private RustOwnership() {}
 
   static String generate(Module m) {
-    if (m.returnedResources().isEmpty() && m.callBorrows().isEmpty()) return "";
+    if (m.ownedResources().isEmpty() && m.callBorrows().isEmpty()) return "";
     var out =
         new StringBuilder(
             "\n"
                 + "/// Ownership APIs. Native implementations must uphold the descriptor's"
                 + " lifecycle contracts.\n"
                 + "pub mod ownership {\n");
-    for (Resource r : m.returnedResources()) {
+    for (Resource r : m.ownedResources()) {
       String n = r.name();
       out.append("    pub struct ")
           .append(n)
@@ -207,12 +207,20 @@ final class RustOwnership {
   private static void constructor(Module m, Resource r, String name, StringBuilder out) {
     Function create =
         m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+    // A held borrow outlives the call, which only a Truffle cell can express.
+    if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) return;
     boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
     CallBorrows call = CallBorrows.of(m, create);
+    boolean outPointer = m.outPointer(r);
     var parameters = new ArrayList<String>();
     var arguments = new ArrayList<String>();
     for (Parameter p : create.parameters()) {
       if (buffers && call.length(p) != null) continue;
+      // The out slot is the constructor's own local.
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        arguments.add("&mut slot");
+        continue;
+      }
       BufferBorrow buffer = buffers ? call.buffer(p) : null;
       arguments.add(p.name());
       if (buffer == null)
@@ -227,7 +235,47 @@ final class RustOwnership {
     // slices of a constructor's buffers vouch for themselves, for exactly the call.
     boolean pointers =
         create.parameters().stream()
-            .anyMatch(p -> p.type() instanceof Pointer && (!buffers || call.buffer(p) == null));
+            .anyMatch(p ->
+                p.type() instanceof Pointer
+                    && (!buffers || call.buffer(p) == null)
+                    && !(outPointer && p.name().equals(r.handleParameter())));
+    if (outPointer) {
+      // Status plus out-pointer: Err carries any status outside the success list, with nothing
+      // created; the slot is ignored then. A success that wrote no handle is an Err too.
+      String status = Types.rust(create.returns(), create.returnsGroup(), "super::");
+      String raw = create.returnsGroup() == null ? "status" : "status.0";
+      var succeeded = new ArrayList<String>();
+      for (long value : r.success()) succeeded.add(raw + " == " + value);
+      out.append(
+              pointers
+                  ? "        /// # Safety\n"
+                      + "        /// Every pointer argument"
+                      + (buffers ? " other than a borrowed buffer" : "")
+                      + " must satisfy the raw function's requirements, for as long\n"
+                      + "        /// as the created resource depends on it.\n"
+                      + "        pub unsafe fn "
+                  : "        pub fn ")
+          .append(r.wrapperName(name))
+          .append('(')
+          .append(String.join(", ", parameters))
+          .append(") -> Result<Self, ")
+          .append(status)
+          .append("> {\n            let mut slot: *mut super::")
+          .append(r.name())
+          .append(" = core::ptr::null_mut();\n            let status = unsafe { ")
+          .append(buffers ? "self::" : "super::")
+          .append(name)
+          .append('(')
+          .append(String.join(", ", arguments))
+          .append(") };\n            if !(")
+          .append(String.join(" || ", succeeded))
+          .append(") {\n                return Err(status);\n            }\n")
+          .append(
+              "            core::ptr::NonNull::new(slot).map(|pointer| Self { pointer, _thread:"
+                  + " core::marker::PhantomData }).ok_or(status)\n"
+                  + "        }\n");
+      return;
+    }
     out.append(
             pointers
                 ? "        /// # Safety\n"

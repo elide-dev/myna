@@ -955,6 +955,101 @@ class OwnershipTest {
             .getMessage());
   }
 
+  /** A status-plus-out-pointer create: handle=out names a ptr<ptr<R>> parameter. */
+  static final String OUT_POINTER =
+      "module surfaces target=aarch64-apple-darwin java_class=Api\n"
+          + "opaque Surface\n"
+          + "resource Surface representation=native threading=confined create=open"
+          + " destroy=close handle=out success=0\n"
+          + "borrow open error length=capacity lifetime=call\n"
+          + "import open return=i32 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param width type=i32\n"
+          + "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n"
+          + "  param error type=ptr<u8> nullable=true ownership=borrowed access=write"
+          + " nocapture=true@explicit_contract\n"
+          + "  param capacity type=usize\n"
+          + "end\n"
+          + "import close return=void error=no_failure nounwind=true@explicit_contract\n"
+          + "  param surface type=ptr<Surface> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  @Test
+  void outPointerCreatesAreOwnedEverywhere() {
+    var output = Generator.generate(Dsl.parse(OUT_POINTER), true);
+    assertEquals(output, Generator.generate(Dsl.parse(OUT_POINTER), false));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " Failure<? extends T> onFailure, int arg0, MemorySegment arg2) throws Throwable"
+                + " {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("public interface Failure<T> { T failed(int status) throws Throwable; }"));
+    assertTrue(ffm.contains("                status = binding.open(arg0, slot, arg2);\n"), ffm);
+    assertTrue(ffm.contains("            if (!(status == 0)) return onFailure.failed(status);\n"));
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains(
+            "            int status = ApiOwnership.open(arg0,"
+                + " org.graalvm.word.WordFactory.pointer(slot.rawValue()), arg2);\n"),
+        java);
+    assertTrue(java.contains("public interface Failure<T> { T failed(int status); }"), java);
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            "        pub fn create(width: i32, error: Option<&mut [u8]>) -> Result<Self, i32> {\n"
+                + "            let mut slot: *mut super::Surface = core::ptr::null_mut();\n"
+                + "            let status = unsafe { self::open(width, &mut slot, error) };\n"),
+        rust);
+    // No Truffle cell needed, unlike a struct handle.
+    assertFalse(output.containsKey("ApiTruffle.java"));
+  }
+
+  static Stream<Arguments> outPointerRejections() {
+    String out =
+        "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n";
+    return Stream.of(
+        Arguments.of(
+            out,
+            out.replace("access=write", "access=read_write"),
+            "a resource out-pointer must be a ptr<ptr<Surface>> parameter with access=write: open"
+                + " out"),
+        Arguments.of(
+            "import open return=i32",
+            "import open return=void",
+            "a resource create with an out-pointer returns an integer status: open"),
+        Arguments.of(
+            " handle=out success=0",
+            " handle=out",
+            "a resource create with a handle must list the results that mean success: Surface"
+                + " handle=out"),
+        Arguments.of(
+            "create=open destroy",
+            "create=open,reopen destroy",
+            "the out-pointer constructors of Surface return one status type: reopen differs from"
+                + " open"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("outPointerRejections")
+  void rejectsOutPointerShapesWithTheirReason(String from, String to, String message) {
+    String valid =
+        OUT_POINTER
+            + "import reopen return=i64 error=no_failure nounwind=true@explicit_contract\n"
+            + "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n"
+            + "end\n";
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(valid), true));
+    assertTrue(valid.contains(from), "mutation must affect fixture");
+    String changed = valid.replace(from, to);
+    assertEquals(
+        message,
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), true))
+            .getMessage());
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";
