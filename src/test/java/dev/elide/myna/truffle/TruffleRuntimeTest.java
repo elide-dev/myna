@@ -853,6 +853,35 @@ class TruffleRuntimeTest {
     }
   }
 
+  /**
+   * The thread NativeBytes uses to tell confined scopes apart never starts and must not keep the
+   * inheritable thread-locals of the thread that first made a confined buffer.
+   */
+  @Test
+  void nativeBytesSentinelThreadInheritsNoThreadLocals() throws Exception {
+    AtomicLong inherited = new AtomicLong();
+    InheritableThreadLocal<Object> local =
+        new InheritableThreadLocal<>() {
+          @Override
+          protected Object childValue(Object parent) {
+            inherited.incrementAndGet();
+            return parent;
+          }
+        };
+    local.set(new Object());
+    try {
+      Thread sentinel = NativeBytes.newUnowned();
+      assertEquals(Thread.State.NEW, sentinel.getState());
+      try (Arena arena = Arena.ofConfined()) {
+        // Making a confined buffer creates the shared sentinel if no test has yet.
+        assertFalse(NativeBytes.of(arena.allocate(16), true).segment().isAccessibleBy(sentinel));
+      }
+      assertEquals(0, inherited.get());
+    } finally {
+      local.remove();
+    }
+  }
+
   @Test
   void nativeBytesMessagesCheckTheArenaScope() throws Exception {
     // A closed confined arena: every message fails, before any access, as the segment does.

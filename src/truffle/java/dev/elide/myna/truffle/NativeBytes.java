@@ -87,8 +87,18 @@ public final class NativeBytes implements TruffleObject {
   private static Thread unowned() {
     Thread thread = unowned;
     // A benign race: any thread that never starts will do.
-    if (thread == null) unowned = thread = Thread.ofPlatform().unstarted(() -> {});
+    if (thread == null) unowned = thread = newUnowned();
     return thread;
+  }
+
+  /**
+   * A new thread that is never started. It does not inherit inheritable thread-locals, so it keeps
+   * no values of whichever thread first made a confined buffer. Created at run time, on first use,
+   * so it is not part of an image heap unless a buffer is made at build time, where a thread that
+   * has not started is allowed.
+   */
+  static Thread newUnowned() {
+    return Thread.ofPlatform().inheritInheritableThreadLocals(false).unstarted(() -> {});
   }
 
   /**
