@@ -3,8 +3,10 @@
 Run `mise run build:jvm`, `mise run bench:cells-build`, then `mise run bench:cells`. Results, the
 Native Image build log, per-process samples with each process's Truffle compilation trace, input
 and binary hashes, commands and toolchain identities are retained under `build/cells/`. The
-`Truffle cell costs` workflow runs the same experiment on the hosted ARM machine. Use the same
-machine and build for comparisons.
+`Truffle cell costs` workflow runs the same experiment on the hosted ARM machine with one process
+per case (`--forks 1`), a smoke run that keeps every compiled-path, allocation and checksum check
+within a short job; publishable numbers use the default five. Use the same machine and build for
+comparisons.
 
 Every case is one fresh process running one language-less Truffle root (a `NativeCell` driven
 through its `NativeFunction` wrapper from the host) that contains the whole measured loop. The
