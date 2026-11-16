@@ -872,6 +872,7 @@ class TruffleRuntimeTest {
     try {
       Thread sentinel = NativeBytes.newUnowned();
       assertEquals(Thread.State.NEW, sentinel.getState());
+      assertNull(sentinel.getContextClassLoader());
       try (Arena arena = Arena.ofConfined()) {
         // Making a confined buffer creates the shared sentinel if no test has yet.
         assertFalse(NativeBytes.of(arena.allocate(16), true).segment().isAccessibleBy(sentinel));

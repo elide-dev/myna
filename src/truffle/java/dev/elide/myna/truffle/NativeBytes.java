@@ -98,7 +98,10 @@ public final class NativeBytes implements TruffleObject {
    * has not started is allowed.
    */
   static Thread newUnowned() {
-    return Thread.ofPlatform().inheritInheritableThreadLocals(false).unstarted(() -> {});
+    Thread thread = Thread.ofPlatform().inheritInheritableThreadLocals(false).unstarted(() -> {});
+    // Nor the creating thread's context class loader, which would otherwise stay reachable.
+    thread.setContextClassLoader(null);
+    return thread;
   }
 
   /**
