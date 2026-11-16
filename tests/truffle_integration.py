@@ -180,8 +180,9 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BytesCoercion.emptyAddress", "AlignedBytesCoercion.execute", "AlignedBytesCoercion.slow",
             "OverAlignedBytesCoercion.execute", "OverAlignedBytesCoercion.slow",
             "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText",
-            # Guest-visible constants: the cached read folds; names are a switch over constants.
-            "NativeConstants$ReadMember.cached")]
+            # Guest-visible constants: the exported cached read (the specialization body is trivially
+            # inlined into it at analysis); names are a switch over constants.
+            "NativeConstantsGen$InteropLibraryExports$Cached.readMember")]
         expected.append("fixture.cells.CellApiTruffle$StatusNames.name")
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
