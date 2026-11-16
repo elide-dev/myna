@@ -12,3 +12,14 @@ pub unsafe extern "C" fn batch_view_total(sources: *const *mut u8, lengths: *con
     let batch = unsafe { seam::BufferBatch::from_raw(sources, lengths, count) };
     batch.iter().map(|bytes| bytes.iter().map(|&byte| u64::from(byte)).sum::<u64>()).sum()
 }
+// The caller side too: both wrapper forms instantiate the lending helpers. The extern symbol is
+// referenced, not linked, as a staticlib leaves it to the final link.
+#[unsafe(no_mangle)]
+pub extern "C" fn batch_view_lend(first: u8, second: u8) -> u64 {
+    let (a, b) = ([first], [second, first]);
+    let buffers: [&[u8]; 2] = [&a, &b];
+    let mut pointers = [core::mem::MaybeUninit::uninit(); 2];
+    let mut lengths = [core::mem::MaybeUninit::uninit(); 2];
+    let scratch = seam::BatchScratch::new(&mut pointers, &mut lengths);
+    seam::ownership::digest(&buffers) ^ seam::ownership::digest_with_scratch(&buffers, scratch)
+}

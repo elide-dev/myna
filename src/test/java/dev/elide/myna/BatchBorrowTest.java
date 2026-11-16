@@ -185,6 +185,38 @@ class BatchBorrowTest {
   }
 
   @Test
+  void aConstructorOverABatchHasAScratchForm() {
+    String source =
+        BATCH
+                .replace(
+                    "module api target=aarch64-apple-darwin java_class=Api\n",
+                    "module api target=aarch64-apple-darwin java_class=Api\n"
+                        + "opaque Bundle\n"
+                        + "resource Bundle representation=native threading=shared create=digest"
+                        + " destroy=bundleRelease\n")
+                .replace("symbol=api_digest return=u64", "symbol=api_digest return=ptr<Bundle>")
+            + "import bundleRelease symbol=api_release return=void error=no_failure"
+            + " nounwind=true@explicit_contract\n"
+            + "  param bundle type=ptr<Bundle> nullable=false ownership=transferred_to_callee"
+            + " access=read_write\n"
+            + "end\n";
+    String rust = Generator.generate(Dsl.parse(source), true).get("seam.rs");
+    assertTrue(
+        rust.contains(
+            """
+                    /// # Panics
+                    /// When a batch has more than eight buffers: pass scratch to the `_with_scratch` form.
+                    pub fn create(sources: &[&[u8]]) -> Option<Self> {
+                        core::ptr::NonNull::new(self::digest(sources)).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+                    pub fn create_with_scratch(sources: &[&[u8]], sources_scratch: super::BatchScratch<'_, u64>) -> Option<Self> {
+                        core::ptr::NonNull::new(self::digest_with_scratch(sources, sources_scratch)).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+            """),
+        rust);
+  }
+
+  @Test
   void staticJniKeepsTheRawBindingOfABatch() {
     var jni = StaticJni.generate(Dsl.parse(BATCH));
     assertFalse(jni.toString().contains("digestBuffer"), jni.toString());

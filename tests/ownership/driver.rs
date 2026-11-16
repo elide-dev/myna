@@ -112,6 +112,13 @@ fn batches() {
     // A constructor that takes a batch keeps what it read, never the buffers.
     let bundle = Bundle::create(&[&a, &b]).unwrap();
     assert_eq!(unsafe { seam::bundleValue(bundle.borrow().as_ptr()) }, fold_batch(FNV_OFFSET, &[Some(&a), Some(&b)]));
+    // More than eight parts need the constructor's scratch form; the plain one panics.
+    assert!(std::panic::catch_unwind(|| Bundle::create(&slices)).is_err());
+    let mut parts = vec![core::mem::MaybeUninit::uninit(); 20];
+    let mut part_lengths = vec![core::mem::MaybeUninit::uninit(); 20];
+    let large = Bundle::create_with_scratch(&slices, seam::BatchScratch::new(&mut parts, &mut part_lengths)).unwrap();
+    assert_eq!(unsafe { seam::bundleValue(large.borrow().as_ptr()) }, fold_batch(FNV_OFFSET, &expected));
+    drop(large);
     let empty = Bundle::create(&[]).unwrap();
     assert_eq!(unsafe { seam::bundleValue(empty.borrow().as_ptr()) }, fold_batch(FNV_OFFSET, &[]));
     drop((bundle, empty));

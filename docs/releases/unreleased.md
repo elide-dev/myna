@@ -68,7 +68,8 @@ array of read buffers with a parallel array of lengths: `SOURCES[i]` holds `LENG
 single buffers.
 
 - **Rust**: the wrapper takes `&[&[u8]]` (`&[Option<&[u8]>]` with nullable elements) and builds both
-  arrays on the stack for up to eight buffers; a `_with_scratch` form takes caller scratch for more.
+  arrays on the stack for up to eight buffers and panics above that; a `_with_scratch` form, on the
+  wrapper and on a resource constructor over a batch import, takes caller scratch for more.
   Nothing allocates, so `seam.rs` builds in `no_std` crates without an allocator. `seam.rs` gains
   the `BufferBatch` and `OptionalBufferBatch` views an implementation builds from the raw arrays.
 - **Native Image**: `NativeBuffer[]` and `byte[][]` overloads that acquire or pin each element under the

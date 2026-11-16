@@ -248,7 +248,11 @@ none of it past the call.
   digest_with_scratch(&parts, seam::BatchScratch::new(&mut pointers, &mut lengths));
   ```
 
-  A length or count that does not fit its type panics before the foreign call. The lending
+  A resource constructor whose import takes a batch has the same two forms:
+  `Bundle::create(&parts)` keeps up to eight elements on the stack and panics above that, and
+  `Bundle::create_with_scratch(&parts, scratch)` (`NAME_with_scratch` for a constructor named after
+  its import) takes a `BatchScratch` after each batch. A length or count that does not fit its type
+  panics before the foreign call. The lending
   helpers live in a hidden `ownership::batch` module; the names `BufferBatch`, `BufferBatchIter`,
   `OptionalBufferBatch`, `OptionalBufferBatchIter`, `BatchLength`, `BatchScratch` and `batch`, an
   import named `F_with_scratch` beside a batch import `F`, and a parameter named `P_scratch` beside

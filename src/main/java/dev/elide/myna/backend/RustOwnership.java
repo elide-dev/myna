@@ -321,37 +321,65 @@ final class RustOwnership {
             .anyMatch(p ->
                 p.type() instanceof Pointer
                     && (!buffers || (call.buffer(p) == null && call.length(p) == null)));
-    out.append(
-            pointers
-                ? "        /// # Safety\n"
-                    + "        /// Every pointer argument"
-                    + (buffers ? " other than a borrowed buffer" : "")
-                    + " must satisfy the raw function's requirements, for as long\n"
-                    + "        /// as the created resource depends on it.\n"
-                    + "        pub unsafe fn "
-                : "        pub fn ")
-        .append(r.wrapperName(name))
-        .append('(')
-        .append(String.join(", ", parameters))
-        .append(") -> Option<Self> {\n            core::ptr::NonNull::new(")
-        // The buffer wrapper is this module's function of the same name.
-        .append(
-            buffers && !call.passesPointers()
-                ? "self::"
-                : "unsafe { " + (buffers ? "self::" : "super::"))
-        .append(name)
-        .append('(')
-        .append(String.join(", ", arguments))
-        .append(buffers && !call.passesPointers() ? ")" : ") }")
-        .append(
-            ").map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
-                + "        }\n");
+    // A constructor over a batch also has a _with_scratch form, as its import's wrapper does: the
+    // plain one keeps up to eight elements on the stack and panics above that.
+    boolean batched = buffers && call.batched();
+    for (boolean scratch : batched ? List.of(false, true) : List.of(false)) {
+      var signature = new ArrayList<String>();
+      var passed = new ArrayList<String>();
+      for (int i = 0; i < parameters.size(); i++) {
+        signature.add(parameters.get(i));
+        passed.add(arguments.get(i));
+        String argument = arguments.get(i);
+        BufferBorrow b =
+            create.parameters().stream()
+                .filter(p -> p.name().equals(argument))
+                .map(call::buffer)
+                .filter(x -> x != null && x.batch())
+                .findFirst()
+                .orElse(null);
+        if (scratch && b != null) {
+          signature.add(
+              argument
+                  + "_scratch: super::BatchScratch<'_, "
+                  + Types.rust(call.lengthElement(b))
+                  + ">");
+          passed.add(argument + "_scratch");
+        }
+      }
+      if (batched && !scratch)
+        out.append(
+            "        /// # Panics\n"
+                + "        /// When a batch has more than eight buffers: pass scratch to the"
+                + " `_with_scratch` form.\n");
+      out.append(
+              pointers
+                  ? "        /// # Safety\n"
+                      + "        /// Every pointer argument"
+                      + (buffers ? " other than a borrowed buffer" : "")
+                      + " must satisfy the raw function's requirements, for as long\n"
+                      + "        /// as the created resource depends on it.\n"
+                      + "        pub unsafe fn "
+                  : "        pub fn ")
+          .append(r.wrapperName(name))
+          .append(scratch ? "_with_scratch(" : "(")
+          .append(String.join(", ", signature))
+          .append(") -> Option<Self> {\n            core::ptr::NonNull::new(")
+          // The buffer wrapper is this module's function of the same name.
+          .append(
+              buffers && !call.passesPointers()
+                  ? "self::"
+                  : "unsafe { " + (buffers ? "self::" : "super::"))
+          .append(name)
+          .append(scratch ? "_with_scratch(" : "(")
+          .append(String.join(", ", passed))
+          .append(buffers && !call.passesPointers() ? ")" : ") }")
+          .append(
+              ").map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
+                  + "        }\n");
+    }
   }
 
-  /**
-   * The implementation side of a batch: a safe view of the raw arrays an import receives. Emitted
-   * once, at the top level of {@code seam.rs}, when a module declares a batch.
-   */
   /**
    * The implementation side of a batch, and the scratch a caller lends for a large one: emitted
    * once, at the top level of {@code seam.rs}, when a module declares a batch.
