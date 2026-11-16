@@ -53,13 +53,14 @@ public final class JavaFfm implements Backend {
             + "        if (ValueLayout.ADDRESS.byteSize() != 8) throw new"
             + " ExceptionInInitializerError(\"64-bit seam target required\");\n"
             + "    }\n");
-    for (Struct s : m.structs()) {
+    var layouts = new StructLayouts(m);
+    for (Struct s : layouts.order) {
       var elements = new ArrayList<String>();
       long offset = 0;
       for (Field f : s.fields()) {
         if (f.offset() > offset)
           elements.add("MemoryLayout.paddingLayout(" + (f.offset() - offset) + ")");
-        elements.add(Types.layout(f.type()) + ".withName(\"" + f.name() + "\")");
+        elements.add(layouts.field(f) + ".withName(\"" + f.name() + "\")");
         offset = f.offset() + Validator.size(f.type());
       }
       if (s.size() > offset)
@@ -69,6 +70,15 @@ public final class JavaFfm implements Backend {
           .append("_LAYOUT = MemoryLayout.structLayout(\n        ")
           .append(String.join(",\n        ", elements))
           .append(");\n");
+      out.append("    /** A pointer to one ")
+          .append(s.name())
+          .append(": a read or return through it is a ")
+          .append(s.size())
+          .append("-byte segment in the global scope. */\n    public static final AddressLayout ")
+          .append(s.name())
+          .append("_POINTER = ValueLayout.ADDRESS.withTargetLayout(")
+          .append(s.name())
+          .append("_LAYOUT);\n");
       for (Field f : s.fields()) {
         for (FieldCase c : f.cases())
           out.append("    // when ")
@@ -92,8 +102,8 @@ public final class JavaFfm implements Backend {
     for (FfmFunction prepared : functions) {
       Function f = prepared.function();
       var args = new ArrayList<String>();
-      if (f.returns() != Scalar.VOID) args.add(Types.layout(f.returns()));
-      prepared.abiParameters().forEach(p -> args.add(paramLayout(p.type())));
+      if (f.returns() != Scalar.VOID) args.add(layouts.value(f.returns()));
+      prepared.abiParameters().forEach(p -> args.add(paramLayout(layouts, p.type())));
       if (f.returnsGroup() != null)
         out.append("    // returns ").append(groupComment(m, f.returnsGroup()));
       for (Parameter p : f.parameters())
@@ -229,7 +239,9 @@ public final class JavaFfm implements Backend {
     String name = v.struct().name() + "_" + v.pointer().name();
     String size = v.elementSize() + "L";
     String imported =
-        " A record an import returns is a zero-length segment: reinterpret it to "
+        " A record an import returns, or one read through "
+            + v.struct().name()
+            + "_POINTER, is sized already; reinterpret any other zero-length pointer to "
             + v.struct().name()
             + "_LAYOUT first.";
     String carrier = Types.ffmCarrier(v.element());
@@ -929,8 +941,80 @@ public final class JavaFfm implements Backend {
   }
 
   /** A downcall sign-extends narrow signed carriers, so u8/u16 pass as a zero-extended int. */
-  private static String paramLayout(Type type) {
-    return unsignedSmall(type) ? "ValueLayout.JAVA_INT" : Types.layout(type);
+  private static String paramLayout(StructLayouts layouts, Type type) {
+    return unsignedSmall(type) ? "ValueLayout.JAVA_INT" : layouts.value(type);
+  }
+
+  /**
+   * The order in which struct layouts are declared, and the layout of every value that may point to
+   * a struct. A {@code ptr<S>} to a declared struct is {@code S_POINTER}, an address whose target
+   * layout is {@code S_LAYOUT}, so a downcall result and a field read are segments sized to S.
+   * Pointers to opaque types, scalars and other pointers stay unsized, and so does a counted view's
+   * pointer, whose view accessors size it by its count.
+   *
+   * <p>A layout is complete when it is created, so {@code S_LAYOUT} is declared before every layout
+   * that points to S: depth first from each struct in name order, pointees first. A pointer field
+   * that closes a cycle (a self-reference such as {@code next: ptr<Node>}, or the last edge of a
+   * mutual cycle) cannot name a layout still being defined; it targets a padding layout of S's size
+   * and alignment instead, which sizes the segment alike but carries no field names. {@code
+   * S_POINTER} itself always targets {@code S_LAYOUT}.
+   */
+  private static final class StructLayouts {
+    final List<Struct> order;
+    private final Map<String, Struct> structs = new HashMap<>();
+    private final Set<Field> cycles = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    StructLayouts(Module m) {
+      for (Struct s : m.structs()) structs.put(s.name(), s);
+      var order = new ArrayList<Struct>(m.structs().size());
+      var open = new HashSet<String>();
+      var done = new HashSet<String>();
+      for (Struct s : m.structs()) visit(s, open, done, order);
+      this.order = List.copyOf(order);
+    }
+
+    private void visit(Struct s, Set<String> open, Set<String> done, List<Struct> order) {
+      if (done.contains(s.name())) return;
+      open.add(s.name());
+      for (Field f : s.fields()) {
+        Struct target = target(f);
+        if (target == null) continue;
+        if (open.contains(target.name())) cycles.add(f);
+        else visit(target, open, done, order);
+      }
+      open.remove(s.name());
+      done.add(s.name());
+      order.add(s);
+    }
+
+    /** The struct a field points to, or null for any other field and a counted view's pointer. */
+    private Struct target(Field f) {
+      return f.count() != null ? null : pointee(f.type());
+    }
+
+    private Struct pointee(Type type) {
+      return type instanceof Pointer p && p.pointee() instanceof Named n
+          ? structs.get(n.name())
+          : null;
+    }
+
+    /** The layout of a parameter or return: {@code S_POINTER} for a pointer to a struct. */
+    String value(Type type) {
+      Struct s = pointee(type);
+      return s == null ? Types.layout(type) : s.name() + "_POINTER";
+    }
+
+    /** The layout of a struct field, before its name. */
+    String field(Field f) {
+      Struct s = target(f);
+      if (s == null) return Types.layout(f.type());
+      if (!cycles.contains(f)) return s.name() + "_POINTER";
+      return "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout("
+          + s.size()
+          + ").withByteAlignment("
+          + s.alignment()
+          + "))";
+    }
   }
 
   private static String widened(Type t, String value) {

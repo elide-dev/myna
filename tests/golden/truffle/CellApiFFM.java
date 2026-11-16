@@ -13,6 +13,8 @@ public final class CellApiFFM {
     public static final StructLayout Pair_LAYOUT = MemoryLayout.structLayout(
         ValueLayout.JAVA_LONG.withName("left"),
         ValueLayout.JAVA_LONG.withName("right"));
+    /** A pointer to one Pair: a read or return through it is a 16-byte segment in the global scope. */
+    public static final AddressLayout Pair_POINTER = ValueLayout.ADDRESS.withTargetLayout(Pair_LAYOUT);
     public static final long Pair_left_OFFSET = 0L;
     public static final long Pair_right_OFFSET = 8L;
     public static final FunctionDescriptor add_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);

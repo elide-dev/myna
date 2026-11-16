@@ -52,6 +52,17 @@ Image gains `addressOf(long)` on element structs and an asserted, always-inlined
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
 
+## Sized struct pointers in FFM (#135)
+
+Java FFM types every `ptr<Struct>` parameter, return and field with its target layout through a new
+`<Struct>_POINTER` constant, `ValueLayout.ADDRESS.withTargetLayout(<Struct>_LAYOUT)`. An import's
+`ptr<Struct>` result and `record.get(<Struct>_POINTER, offset)` are segments of the struct's size, so
+records and their counted views need no `reinterpret`. Pointers to opaque types, scalars and pointers, and a
+counted view's pointer, stay zero-length. Layouts are declared pointees first; a field that closes a
+cycle (`next: ptr<Node>`) targets a padding layout of the pointee's size (see
+[types and layouts](../dsl.md#types-and-layouts)). Layouts stay static final constants, with no work per call. The C ABI,
+`seam.json` and fingerprints are unchanged.
+
 ## Resources with several constructors (#139)
 
 - `create=` takes a comma-separated list of imports. Rust, Native Image and FFM owners gain one
@@ -104,8 +115,9 @@ single buffers.
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
 | 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
+| 14 | FFM `ptr<Struct>` results and field reads are segments of the struct's size, not zero-length. A null result is a sized segment at address 0; a pointer misaligned for the struct is an `IllegalArgumentException`. Each struct gains `<Struct>_POINTER`. The FFM class calls the restricted `withTargetLayout` when it is initialized, so with `--illegal-native-access=deny` it needs native access even before its first downcall. | FFM consumers of struct pointers | none for `reinterpret` callers; check code that tests `byteSize() == 0`; enable native access for the module, as downcalls already require |
 
-Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
+Not broken: FFM output apart from #14 (otherwise comments only), Truffle cell signatures and behaviour, leaf status of every
 import, export entry-point signatures at the C level.
 
 ### The header check

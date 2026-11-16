@@ -134,6 +134,14 @@ end
                       run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                           "FfmBindingMain", library).stdout)
 
+    def test_ffm_struct_pointers_are_sized(self):
+        from ffm_pointers import build_pointers_fixture
+        _, generated, classes, library = build_pointers_fixture()
+        self.assertIn("public static final AddressLayout Node_POINTER", (generated / "PointersFFM.java").read_text())
+        self.assertIn("FFM struct pointers passed",
+                      run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                          "PointersMain", library).stdout)
+
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")
         self.assertEqual(run(BINARY, "--version").stdout.strip(), VERSION)

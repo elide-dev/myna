@@ -15,6 +15,8 @@ public final class ViewsFFM {
         ValueLayout.JAVA_SHORT.withName("arity"),
         MemoryLayout.paddingLayout(2),
         ValueLayout.JAVA_LONG.withName("entry"));
+    /** A pointer to one Function: a read or return through it is a 16-byte segment in the global scope. */
+    public static final AddressLayout Function_POINTER = ValueLayout.ADDRESS.withTargetLayout(Function_LAYOUT);
     public static final long Function_id_OFFSET = 0L;
     public static final long Function_arity_OFFSET = 4L;
     public static final long Function_entry_OFFSET = 8L;
@@ -26,6 +28,8 @@ public final class ViewsFFM {
         ValueLayout.JAVA_INT.withName("version"),
         ValueLayout.ADDRESS.withName("roots"),
         ValueLayout.JAVA_LONG.withName("rootCount"));
+    /** A pointer to one Program: a read or return through it is a 48-byte segment in the global scope. */
+    public static final AddressLayout Program_POINTER = ValueLayout.ADDRESS.withTargetLayout(Program_LAYOUT);
     public static final long Program_functions_OFFSET = 0L;
     public static final long Program_functionCount_OFFSET = 8L;
     public static final long Program_text_OFFSET = 16L;
@@ -33,17 +37,17 @@ public final class ViewsFFM {
     public static final long Program_version_OFFSET = 28L;
     public static final long Program_roots_OFFSET = 32L;
     public static final long Program_rootCount_OFFSET = 40L;
-    /** The count of Program.functions: functionCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The count of Program.functions: functionCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static long Program_functions_count(MemorySegment record) {
         return record.get(ValueLayout.JAVA_LONG, 8L);
     }
-    /** The functionCount elements at functions, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The functionCount elements at functions, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
         long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, 8L, "Program.functions", "functionCount");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The functionCount elements at functions, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The functionCount elements at functions, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 0L);
         long bytes = seam$viewBytes(base, Program_functions_count(record), 16L, 8L, "Program.functions", "functionCount");
@@ -53,25 +57,25 @@ public final class ViewsFFM {
     public static MemorySegment Program_functions_at(MemorySegment view, long i) {
         return view.asSlice(java.util.Objects.checkIndex(i, view.byteSize() / 16L) * 16L, 16L);
     }
-    /** Element i of Program.functions through one view; IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.functions through one view; IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, long i) {
         return Program_functions_at(Program_functions(record), i);
     }
-    /** Element i of Program.functions, read-only and alive while owner is (a confined owner confines it to its thread); IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.functions, read-only and alive while owner is (a confined owner confines it to its thread); IndexOutOfBoundsException unless 0 <= i < functionCount. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_functions(MemorySegment record, long i, Arena owner) {
         return Program_functions_at(Program_functions(record, owner), i);
     }
-    /** The count of Program.text: textLength, widened unsigned. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The count of Program.text: textLength, widened unsigned. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static long Program_text_count(MemorySegment record) {
         return Integer.toUnsignedLong(record.get(ValueLayout.JAVA_INT, 24L));
     }
-    /** The textLength elements at text, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The textLength elements at text, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_text(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
         long bytes = seam$viewBytes(base, Program_text_count(record), 2L, 2L, "Program.text", "textLength");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The textLength elements at text, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The textLength elements at text, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_text(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 16L);
         long bytes = seam$viewBytes(base, Program_text_count(record), 2L, 2L, "Program.text", "textLength");
@@ -81,21 +85,21 @@ public final class ViewsFFM {
     public static short Program_text_at(MemorySegment view, long i) {
         return view.getAtIndex(ValueLayout.JAVA_SHORT, java.util.Objects.checkIndex(i, view.byteSize() / 2L));
     }
-    /** Element i of Program.text through one view; IndexOutOfBoundsException unless 0 <= i < textLength. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.text through one view; IndexOutOfBoundsException unless 0 <= i < textLength. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static short Program_text(MemorySegment record, long i) {
         return Program_text_at(Program_text(record), i);
     }
-    /** The count of Program.roots: rootCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The count of Program.roots: rootCount, widened unsigned (above Long.MAX_VALUE it reads negative, which every view rejects: take the view before looping on this count). A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static long Program_roots_count(MemorySegment record) {
         return record.get(ValueLayout.JAVA_LONG, 40L);
     }
-    /** The rootCount elements at roots, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The rootCount elements at roots, read-only; valid for as long as the record is, which the caller ensures. IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 32L);
         long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, 8L, "Program.roots", "rootCount");
         return base.reinterpret(bytes).asReadOnly();
     }
-    /** The rootCount elements at roots, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** The rootCount elements at roots, read-only and alive while owner is (the record's own lifetime is the caller's contract; a confined owner confines the view to its thread). IndexOutOfBoundsException for a count the pointer cannot hold or a misaligned pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, Arena owner) {
         MemorySegment base = record.get(ValueLayout.ADDRESS, 32L);
         long bytes = seam$viewBytes(base, Program_roots_count(record), 8L, 8L, "Program.roots", "rootCount");
@@ -110,11 +114,11 @@ public final class ViewsFFM {
         MemorySegment element = view.getAtIndex(ValueLayout.ADDRESS, java.util.Objects.checkIndex(i, view.byteSize() / 8L));
         return (element.address() == 0L ? element : element.reinterpret(16L, owner, null)).asReadOnly();
     }
-    /** Element i of Program.roots through one view; IndexOutOfBoundsException unless 0 <= i < rootCount; a read-only, zero-length, global-scope element pointer. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.roots through one view; IndexOutOfBoundsException unless 0 <= i < rootCount; a read-only, zero-length, global-scope element pointer. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, long i) {
         return Program_roots_at(Program_roots(record), i);
     }
-    /** Element i of Program.roots, the pointee read-only and bound to owner (see the owner form of _at); IndexOutOfBoundsException unless 0 <= i < rootCount. A record an import returns is a zero-length segment: reinterpret it to Program_LAYOUT first. */
+    /** Element i of Program.roots, the pointee read-only and bound to owner (see the owner form of _at); IndexOutOfBoundsException unless 0 <= i < rootCount. A record an import returns, or one read through Program_POINTER, is sized already; reinterpret any other zero-length pointer to Program_LAYOUT first. */
     public static MemorySegment Program_roots(MemorySegment record, long i, Arena owner) {
         return Program_roots_at(Program_roots(record, owner), i, owner);
     }
@@ -128,7 +132,7 @@ public final class ViewsFFM {
             throw new IndexOutOfBoundsException(view + " is misaligned: 0x" + Long.toHexString(base.address()) + " is not a multiple of " + alignment);
         return count * size;
     }
-    public static final FunctionDescriptor empty_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.ADDRESS);
+    public static final FunctionDescriptor empty_DESCRIPTOR = FunctionDescriptor.of(Program_POINTER);
     public static MethodHandle empty(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("views_empty").orElseThrow(() -> new UnsatisfiedLinkError("views_empty")), empty_DESCRIPTOR);
     }
@@ -137,7 +141,7 @@ public final class ViewsFFM {
         if (!critical) return empty(lookup);
         return Linker.nativeLinker().downcallHandle(lookup.find("views_empty").orElseThrow(() -> new UnsatisfiedLinkError("views_empty")), empty_DESCRIPTOR, Linker.Option.critical(false));
     }
-    public static final FunctionDescriptor program_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.ADDRESS);
+    public static final FunctionDescriptor program_DESCRIPTOR = FunctionDescriptor.of(Program_POINTER);
     public static MethodHandle program(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("views_program").orElseThrow(() -> new UnsatisfiedLinkError("views_program")), program_DESCRIPTOR);
     }

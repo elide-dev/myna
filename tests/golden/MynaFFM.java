@@ -15,6 +15,8 @@ public final class MynaFFM {
         ValueLayout.JAVA_LONG.withName("length"),
         ValueLayout.JAVA_INT.withName("flags"),
         MemoryLayout.paddingLayout(4));
+    /** A pointer to one BufferView: a read or return through it is a 24-byte segment in the global scope. */
+    public static final AddressLayout BufferView_POINTER = ValueLayout.ADDRESS.withTargetLayout(BufferView_LAYOUT);
     public static final long BufferView_data_OFFSET = 0L;
     public static final long BufferView_length_OFFSET = 8L;
     public static final long BufferView_flags_OFFSET = 16L;
@@ -22,12 +24,16 @@ public final class MynaFFM {
         ValueLayout.JAVA_LONG.withName("left"),
         ValueLayout.JAVA_INT.withName("right"),
         MemoryLayout.paddingLayout(4));
+    /** A pointer to one Pair: a read or return through it is a 16-byte segment in the global scope. */
+    public static final AddressLayout Pair_POINTER = ValueLayout.ADDRESS.withTargetLayout(Pair_LAYOUT);
     public static final long Pair_left_OFFSET = 0L;
     public static final long Pair_right_OFFSET = 8L;
     public static final StructLayout Triple_LAYOUT = MemoryLayout.structLayout(
         ValueLayout.JAVA_LONG.withName("a"),
         ValueLayout.JAVA_LONG.withName("b"),
         ValueLayout.JAVA_LONG.withName("c"));
+    /** A pointer to one Triple: a read or return through it is a 24-byte segment in the global scope. */
+    public static final AddressLayout Triple_POINTER = ValueLayout.ADDRESS.withTargetLayout(Triple_LAYOUT);
     public static final long Triple_a_OFFSET = 0L;
     public static final long Triple_b_OFFSET = 8L;
     public static final long Triple_c_OFFSET = 16L;
@@ -121,7 +127,7 @@ public final class MynaFFM {
         if (!critical) return rotate(lookup);
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_rotate").orElseThrow(() -> new UnsatisfiedLinkError("seam_rotate")), rotate_DESCRIPTOR, Linker.Option.critical(false));
     }
-    public static final FunctionDescriptor scale_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+    public static final FunctionDescriptor scale_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, Pair_POINTER, ValueLayout.JAVA_INT, Pair_POINTER);
     public static MethodHandle scale(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_scale_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_scale_myna_ref")), scale_DESCRIPTOR);
     }
@@ -130,7 +136,7 @@ public final class MynaFFM {
         if (!critical) return scale(lookup);
         throw new IllegalArgumentException("critical downcall requires a native leaf contract");
     }
-    public static final FunctionDescriptor spread_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
+    public static final FunctionDescriptor spread_DESCRIPTOR = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, Triple_POINTER, Triple_POINTER);
     public static MethodHandle spread(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("seam_spread_myna_ref").orElseThrow(() -> new UnsatisfiedLinkError("seam_spread_myna_ref")), spread_DESCRIPTOR);
     }
