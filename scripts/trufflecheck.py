@@ -13,7 +13,10 @@ recorded in the report. Maven Central analyzers publish no attestation and rely 
 Areas: the Truffle runtime (src/truffle), generated Truffle cells (tests/truffle/cells.seam in both backends and
 examples/truffle.seam) with the binding classes they compile against, the generator/values/Feature Java, the Cargo
 workspace, and generated seam.rs files. Findings never fail the run; a missing tool, a checksum mismatch or a failed
-attestation does. Reports land in build/trufflecheck: findings.json, summary.md and each tool's raw output.
+attestation does, and so does an analyzer that fails without reporting findings (javac rejecting its arguments, a
+Cargo download failure, a clippy crash): the remaining analyses still run and their reports are written, but the run
+names each failed analysis and exits nonzero. Reports land in build/trufflecheck: findings.json, summary.md and each
+tool's raw output.
 
 Needs the JVM jars (`mise run build:jvm`), GRAALVM_HOME, cargo, and gh for the one-time attestation check.
 """
@@ -44,6 +47,16 @@ EXPORTS = [f'-J--add-exports=jdk.compiler/com.sun.tools.javac.{part}=ALL-UNNAMED
 EXPORTS += ['-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
             '-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED']
 DIAGNOSTIC = re.compile(r'^(?P<file>[^\s:][^:]*\.java):(?P<line>\d+): (?P<severity>error|warning): \[(?P<rule>[^\]]+)\] (?P<message>.*)$')
+# Any javac error line, with or without a source position; those DIAGNOSTIC doesn't match mean javac itself failed.
+JAVAC_ERROR = re.compile(r'^(?:.+:\d+: )?error: ')
+# The Error Prone policy, relative to the javac working directory (ROOT): javac splits -Xplugin: options on whitespace.
+POLICY = 'trufflecheck.properties'
+
+
+def failure(failures, analysis, reason, log):
+    """Records an analyzer that ran but failed without producing a findings report."""
+    failures.append({'analysis': analysis, 'reason': reason, 'log': relative(log)})
+    print(f'ERROR: {analysis} failed: {reason}; see {relative(log)}', file=sys.stderr)
 
 
 def cache_dir():
@@ -145,22 +158,60 @@ def errorprone_args(profile):
     return flags
 
 
-def javac(name, out, sources, classpath, analyzers, flags, options=()):
+def argfile_entry(path):
+    """One javac @argfile entry: quoted, with backslashes and quotes escaped, so spaces survive javac's tokenizer."""
+    text = str(path)
+    if '\n' in text or '\r' in text:
+        raise SystemExit(f'javac argument files cannot hold a path with a line break: {text!r}')
+    return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def plugin_option(flags, disabled):
+    """The -Xplugin:ErrorProne option. javac splits it on whitespace and offers no quoting, so no flag may hold any."""
+    words = [*flags, *(f'-Xep:{c}:OFF' for c in disabled), f'-XepOpt:Trufflecheck:Policy={POLICY}']
+    spaced = [w for w in words if not w or re.search(r'\s', w)]
+    if spaced:
+        raise SystemExit(f'Error Prone flags cannot contain whitespace (javac splits -Xplugin: on it): {spaced}')
+    return '-Xplugin:ErrorProne ' + ' '.join(words)
+
+
+def javac_failure(text, returncode, recognized):
+    """Why a finished javac run is not a findings report, or None when it is.
+
+    javac exits 0 when clean and 1 when it reports errors. Exit 1 is a findings result only when every error line is a
+    recognized diagnostic and at least one is an error; anything else (bad arguments, an unparsed compile error, a
+    system error or crash, a signal) means the sources were not fully analyzed.
+    """
+    unparsed = [line for line in text.splitlines() if JAVAC_ERROR.match(line) and not DIAGNOSTIC.match(line)]
+    if unparsed:
+        return f'javac exited {returncode} with errors that are not analyzer findings: {unparsed[0]}'
+    if returncode == 0:
+        return None
+    if returncode == 1 and recognized:
+        return None
+    if returncode == 1:
+        return 'javac exited 1 without reporting an analyzer error'
+    if returncode < 0:
+        return f'javac was killed by signal {-returncode}'
+    return f'javac exited {returncode}'
+
+
+def javac(name, out, sources, classpath, analyzers, flags, options=(), failures=None):
     """One Error Prone compilation; the log is kept and its findings returned.
 
     A check that crashes stops javac at that class. The crash is recorded as a finding, and the compilation is
-    repeated with that check off so the remaining classes are still analyzed; earlier findings are kept.
+    repeated with that check off so the remaining classes are still analyzed; earlier findings are kept. A javac run
+    that fails without a findings result is added to `failures` (see javac_failure).
     """
     home = Path(os.environ['GRAALVM_HOME'])
     argfile = out / f'{name}.sources'
-    argfile.write_text('\n'.join(str(s) for s in sources) + '\n')
+    argfile.write_text(''.join(argfile_entry(s) + '\n' for s in sources))
     findings, disabled, attempt = {}, [], 0
     while True:
         classes = out / 'classes' / name
         shutil.rmtree(classes, ignore_errors=True)
         classes.mkdir(parents=True)
-        plugin = ('-Xplugin:ErrorProne ' + ' '.join([*flags, *(f'-Xep:{c}:OFF' for c in disabled)])
-                  + f' -XepOpt:Trufflecheck:Policy={ROOT / "trufflecheck.properties"}')
+        plugin = plugin_option(flags, disabled)
         command = [str(home / 'bin/javac'), *EXPORTS, '-XDcompilePolicy=simple', '--should-stop=ifError=FLOW',
                    '-processorpath', os.pathsep.join(map(str, analyzers)), plugin, *options,
                    '-cp', os.pathsep.join(map(str, classpath)), '-d', str(classes), '-Xmaxerrs', '100000',
@@ -172,6 +223,7 @@ def javac(name, out, sources, classpath, analyzers, flags, options=()):
         if re.search(r'InvalidCommandLineOption|plug-in not found', text):
             raise SystemExit(f'Error Prone did not load for {name}; see {log}')
         lines = text.splitlines()
+        recognized = False
         for index, line in enumerate(lines):
             match = DIAGNOSTIC.match(line)
             if not match and ': error: An unhandled exception was thrown by the Error Prone' in line:
@@ -192,7 +244,13 @@ def javac(name, out, sources, classpath, analyzers, flags, options=()):
                            'line': int(match['line']), 'rule': rule, 'severity': match['severity'],
                            'message': match['message']}
                 findings[(finding['file'], finding['line'], finding['rule'], finding['message'])] = finding
+                recognized = recognized or finding['severity'] == 'error'
         else:
+            reason = javac_failure(text, result.returncode, recognized)
+            if reason is not None:
+                if failures is None:
+                    raise SystemExit(f'javac {name} failed: {reason}; see {log}')
+                failure(failures, f'javac {name}', reason, log)
             return list(findings.values()), result.returncode, disabled
         attempt += 1
 
@@ -218,8 +276,10 @@ def generate(out, java, jar):
     seams = {'cells': ROOT / 'tests/truffle/cells.seam', 'cells-ffm': ffm, 'example': ROOT / 'examples/truffle.seam',
              'ownership': ROOT / 'tests/ownership/ownership.seam'}
     for name, seam in seams.items():
-        subprocess.run([str(java), '--enable-native-access=ALL-UNNAMED', '-jar', str(jar), 'generate', str(seam),
-                        '--out', str(cells / name), '--target', TARGET], check=True, cwd=ROOT, stdout=subprocess.DEVNULL)
+        result = subprocess.run([str(java), '--enable-native-access=ALL-UNNAMED', '-jar', str(jar), 'generate', str(seam),
+                                 '--out', str(cells / name), '--target', TARGET], cwd=ROOT, stdout=subprocess.DEVNULL)
+        if result.returncode != 0:
+            raise SystemExit(f'generating the {name} fixture failed (exit {result.returncode})')
     return cells
 
 
@@ -239,16 +299,43 @@ def rust_message(message, levels, area, findings):
     code = (message.get('code') or {}).get('code')
     spans = [s for s in message.get('spans', []) if s.get('is_primary')]
     if not code or not spans:
-        return
+        return False
     span = spans[0]
     level = levels.get(code)
     severity = {'deny': 'error', 'forbid': 'error', 'warn': 'warning'}.get(level, message['level'])
     findings.append({'tool': 'clippy', 'area': area, 'file': relative(span['file_name']), 'line': span['line_start'],
                      'rule': code, 'severity': severity, 'profile_level': level or 'default',
                      'message': message['message']})
+    return message['level'] == 'error'
 
 
-def clippy(out, profile, cells):
+def json_lines(text):
+    """The JSON records in a tool's output; anything else (progress, panics) is left to its log."""
+    for line in text.splitlines():
+        if line.startswith('{'):
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+
+def rust_failure(tool, returncode, errors, findings_exit):
+    """Why a finished Rust analyzer run is not a findings report, or None when it is.
+
+    `findings_exit` is the code the tool uses when it reports compiler errors (Cargo 101, rustc and clippy-driver 1);
+    it is a findings result only with at least one recognized error diagnostic. Other codes (a rustc ICE is 101, a
+    Cargo download or lockfile failure 101 with no diagnostic) and signals mean the analysis did not complete.
+    """
+    if returncode == 0:
+        return None
+    if returncode == findings_exit and errors:
+        return None
+    if returncode < 0:
+        return f'{tool} was killed by signal {-returncode}'
+    return f'{tool} exited {returncode} without reporting an analyzer error'
+
+
+def clippy(out, profile, cells, failures):
     levels, flags = lint_flags(profile)
     env = dict(os.environ, CLIPPY_CONF_DIR=str(profile / 'rust'), CARGO_TARGET_DIR=str(out / 'cargo-target'))
     findings = []
@@ -256,39 +343,42 @@ def clippy(out, profile, cells):
                              *flags], capture_output=True, text=True, cwd=ROOT, env=env)
     (out / 'clippy-workspace.json').write_text(result.stdout)
     (out / 'clippy-workspace.log').write_text(result.stderr)
-    for line in result.stdout.splitlines():
-        record = json.loads(line)
+    errors = False
+    for record in json_lines(result.stdout):
         if record.get('reason') == 'compiler-message':
-            rust_message(record['message'], levels, 'rust-workspace', findings)
+            errors |= rust_message(record['message'], levels, 'rust-workspace', findings)
+    reason = rust_failure('cargo clippy', result.returncode, errors, 101)
+    if reason:
+        failure(failures, 'clippy workspace', reason, out / 'clippy-workspace.log')
     for name in ('ownership', 'cells'):
         seam = cells / name / 'seam.rs'
         result = subprocess.run(['clippy-driver', '--edition=2024', '--crate-type=lib', '--emit=metadata',
                                  '--error-format=json', '-o', str(out / f'libseam_{name}.rmeta'), str(seam), *flags],
                                 capture_output=True, text=True, cwd=ROOT, env=env)
         (out / f'clippy-seam-{name}.json').write_text(result.stderr)
-        for line in result.stderr.splitlines():
-            if line.startswith('{'):
-                rust_message(json.loads(line), levels, 'rust-seam', findings)
+        errors = False
+        for record in json_lines(result.stderr):
+            errors |= rust_message(record, levels, 'rust-seam', findings)
+        reason = rust_failure('clippy-driver', result.returncode, errors, 1)
+        if reason:
+            failure(failures, f'clippy seam {name}', reason, out / f'clippy-seam-{name}.json')
     unique = {(f['file'], f['line'], f['rule'], f['message']): f for f in findings}
     return list(unique.values())
 
 
-def cargo_deny(out, profile):
+def cargo_deny(out, profile, failures):
     tool = shutil.which('cargo-deny')
     where = subprocess.run(['mise', 'where', 'aqua:EmbarkStudios/cargo-deny'], capture_output=True, text=True)
     if where.returncode == 0:
         pinned = sorted(Path(where.stdout.strip()).glob('**/cargo-deny'))
         tool = str(pinned[0]) if pinned else tool
     if tool is None:
-        return [], {'version': 'not installed (pinned in mise.toml)'}
+        raise SystemExit('cargo-deny is missing (pinned in mise.toml; `mise install`), or pass --skip-rust')
     result = subprocess.run([tool, '--manifest-path', str(ROOT / 'Cargo.toml'), '--format', 'json', '--config',
                              str(profile / 'rust/deny.toml'), 'check'], capture_output=True, text=True, cwd=ROOT)
     (out / 'cargo-deny.json').write_text(result.stderr)
     findings, totals = [], None
-    for line in result.stderr.splitlines():
-        if not line.startswith('{'):
-            continue
-        record = json.loads(line)
+    for record in json_lines(result.stderr):
         if record.get('type') == 'summary':
             totals = record['fields']
         if record.get('type') != 'diagnostic':
@@ -302,7 +392,10 @@ def cargo_deny(out, profile):
                          'severity': fields['severity'], 'message': fields['message'] + (
                              f' ({label["span"]})' if label.get('span') else '')})
     if totals is None:
-        raise SystemExit(f'cargo-deny produced no summary; see {out / "cargo-deny.json"}')
+        failure(failures, 'cargo-deny', f'cargo-deny exited {result.returncode} without a summary', out / 'cargo-deny.json')
+    elif result.returncode != 0 and not any(f['severity'] == 'error' for f in findings):
+        failure(failures, 'cargo-deny', f'cargo-deny exited {result.returncode} without reporting an error',
+                out / 'cargo-deny.json')
     version = subprocess.run([tool, '--version'], capture_output=True, text=True).stdout.strip()
     return findings, {'version': version, 'summary': totals}
 
@@ -320,6 +413,10 @@ def area(finding):
 
 def summary(out, findings, meta):
     lines = ['# trufflecheck run', '', f'Commit `{meta["commit"]}`; trufflecheck {meta["version"]}.', '']
+    if meta['failures']:
+        lines += ['**FAILED: these analyses did not complete, so the findings below are incomplete.**', '']
+        lines += [f'- {f["analysis"]}: {f["reason"]} (`{f["log"]}`)' for f in meta['failures']]
+        lines.append('')
     for item in meta['provenance']:
         state = 'attested by ' + item['signer'] if item['verified'] else 'NOT attested: ' + item['reason']
         lines.append(f'- `{item["file"]}` sha256 `{item["sha256"]}`: {state}')
@@ -367,7 +464,7 @@ def main():
                                        'trufflecheck-errorprone')]
     sdk = [home / 'lib/svm' / name for name in ('svm-shared.jar', 'svm-guest-staging.jar', 'svm-guest.jar')]
     api = [truffle[n] for n in ('truffle-api', 'polyglot', 'collections', 'nativeimage', 'word')]
-    findings, exits, crashed = [], {}, {}
+    findings, exits, crashed, failures = [], {}, {}, []
 
     def tree(path):
         return sorted((ROOT / path).rglob('*.java'))
@@ -375,7 +472,7 @@ def main():
     # (a) The runtime, with the Truffle DSL processor as Elide runs it; DSL output lands under an excluded path.
     found, exits['runtime'], crashed['runtime'] = javac('runtime', out, tree('src/truffle/java'), [*api, analyzers['jspecify']],
                                     [*checkers, truffle['truffle-dsl-processor']], flags,
-                                    ('-proc:full', '-s', str(out / 'dsl/generated')))
+                                    ('-proc:full', '-s', str(out / 'dsl/generated')), failures)
     findings += found
     # (b) Generated cells, compiled with the bindings they call, as tests/truffle_integration.py compiles them.
     # The SVM backend's Directives name the fixture's own @CContext directives; FFM cells need no C context.
@@ -388,23 +485,23 @@ def main():
             sources.append(ROOT / 'tests/truffle/Directives.java')
         options = ('-proc:none',) if name == 'cells-ffm' else ('-proc:none', '--module-path', os.pathsep.join(map(str, api)))
         found, exits[name], crashed[name] = javac(name, out, sources, [*sdk, truffle_jar, *truffle.values(), analyzers['jspecify']],
-                                   checkers, flags, options)
+                                   checkers, flags, options, failures)
         findings += found
     # (c) Generator, value reader and hosted Feature: the non-Truffle profile checks.
     found, exits['java'], crashed['java'] = javac('java', out, tree('src/main/java') + tree('src/values/java') + tree('src/feature/java'),
                                  [*sdk, truffle['nativeimage'], truffle['word'], analyzers['jspecify']], checkers, flags,
-                                 ('-proc:none',))
+                                 ('-proc:none',), failures)
     findings += found
     for finding in findings:
         finding['area'] = area(finding)
     deny_version = 'skipped'
     if not args.skip_rust:
-        findings += clippy(out, profile, cells)
-        deny, deny_version = cargo_deny(out, profile)
+        findings += clippy(out, profile, cells, failures)
+        deny, deny_version = cargo_deny(out, profile, failures)
         findings += deny
     commit = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=ROOT).stdout.strip()
     meta = {'commit': commit, 'version': PINS['version'], 'provenance': provenance,
-            'attestation_skipped': SKIP_ATTESTATION, 'javac_exit': exits, 'crashed_checks': crashed,
+            'attestation_skipped': SKIP_ATTESTATION, 'failures': failures, 'javac_exit': exits, 'crashed_checks': crashed,
             'cargo_deny': deny_version, 'analyzers': {n: PINS['analyzers'][n]['sha256'] for n in PINS['analyzers']},
             'profiles_sha256': PINS['profiles']['sha256'],
             'clippy': subprocess.run(['cargo', 'clippy', '--version'], capture_output=True, text=True).stdout.strip(),
@@ -412,6 +509,11 @@ def main():
     (out / 'findings.json').write_text(json.dumps({'meta': meta, 'findings': findings}, indent=1) + '\n')
     summary(out, findings, meta)
     print(f'trufflecheck reports: {(out / "summary.md").relative_to(ROOT)}, {(out / "findings.json").relative_to(ROOT)}')
+    if failures:
+        print(f'trufflecheck FAILED: {", ".join(f["analysis"] for f in failures)} did not complete; the report is incomplete',
+              file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
