@@ -333,6 +333,16 @@ class NativeImageIntegrationTests(unittest.TestCase):
         driver = work / "driver"
         run("rustc", "--edition=2024", ROOT / "tests/ownership/driver.rs", "-C", f"link-arg={fixture}", "-o", driver)
         self.assertIn("Rust ownership passed", run(driver).stdout)
+        # BatchLength is sealed: a length type of the consumer's own cannot implement it, so a
+        # batch view's to_usize is never code that could race when the view crosses threads.
+        invalid = work / "sealed_length.rs"
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            '#[derive(Clone, Copy)] struct Racy;\n'
+            'impl seam::BatchLength for Racy { fn to_usize(self) -> usize { 0 } }\n'
+            'fn main() {}\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("Sealed", rejected.stderr)
         # seam.rs of a module with batches builds in a no_std staticlib without an allocator.
         run("rustc", "--edition=2024", "--crate-type=staticlib", "-Cpanic=abort", "-Copt-level=2",
             ROOT / "tests/ownership/batch_view.rs", "-o", work / "libbatchview.a")
