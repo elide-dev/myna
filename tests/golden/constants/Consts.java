@@ -26,14 +26,14 @@ import org.graalvm.word.PointerBase;
 @CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
-    public static final String ABI_FINGERPRINT = "16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09";
+    public static final String ABI_FINGERPRINT = "6d7151fad6c4bde0b28437f9cc6f7c7491c3812da85623bdd84a1a09c2e09f40";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_SEAM_ABI_16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_SEAM_ABI_6d7151fad6c4bde0b28437f9cc6f7c7491c3812da85623bdd84a1a09c2e09f40") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */
@@ -158,24 +158,26 @@ public final class Consts {
             }
         }
     }
-    /** enum UnaryOp: u64. The raw carrier keeps unlisted values; {@code of} maps them to null. */
+    /** enum UnaryOp: u32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_unary_op_t")
     public enum UnaryOp {
-        @CEnumConstant("CONSTANTS_UNARY_OP_NEGATE") NEGATE(0L),
-        @CEnumConstant("CONSTANTS_UNARY_OP_INVERT") INVERT(1L);
+        @CEnumConstant("CONSTANTS_UNARY_OP_NEGATE") NEGATE(0),
+        @CEnumConstant("CONSTANTS_UNARY_OP_INVERT") INVERT(1);
         /** The literal value: a constant enum folds to an immediate, a variable one is one field load. */
-        public final long value;
-        UnaryOp(long value) {
+        public final int value;
+        UnaryOp(int value) {
             this.value = value;
         }
         /** SVM's conversion, for consumer-written C-interface signatures. */
-        @CEnumValue public native long cValue();
-        @CEnumLookup public static native UnaryOp lookup(long value);
+        @CEnumValue public native int cValue();
+        @CEnumLookup public static native UnaryOp lookup(int value);
         /** A switch: no image-heap table, no virtual call. Null for an unlisted value. */
-        public static UnaryOp of(long value) {
-            if (value == 0L) return NEGATE;
-            if (value == 1L) return INVERT;
-            return null;
+        public static UnaryOp of(int value) {
+            switch (value) {
+                case 0: return NEGATE;
+                case 1: return INVERT;
+                default: return null;
+            }
         }
     }
     public interface setLevel_Leaf extends CFunctionPointer {
@@ -236,7 +238,8 @@ public final class Consts {
     /** {@code Node.operand} as enum UnaryOp, its meaning when tag is unary: null for an unlisted value. */
     @AlwaysInline("Myna tagged field accessor")
     public static UnaryOp operandAsUnaryOp(Node record) {
-        return UnaryOp.of(record.operand());
+        long raw = record.operand();
+        return (raw >>> 32) == 0 ? UnaryOp.of((int) raw) : null;
     }
     @CStruct(value = "Record", addStructKeyword = true)
     public interface Record extends PointerBase {
@@ -260,6 +263,14 @@ public final class Consts {
         @CField("raw") long raw();
         @CField("raw") void raw(long value);
         @CFieldAddress("raw") CLongPointer addressOfRaw();
+    }
+    @CStruct(value = "Unary", addStructKeyword = true)
+    public interface Unary extends PointerBase {
+        int SIZE = 4;
+        int ALIGNMENT = 4;
+        @CField("op") int op();
+        @CField("op") void op(int value);
+        @CFieldAddress("op") CIntPointer addressOfOp();
     }
     public interface Listener extends CFunctionPointer {
         @InvokeCFunctionPointer

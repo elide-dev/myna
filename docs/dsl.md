@@ -184,6 +184,15 @@ end
 - A struct `field`, an import or export `param`, a return (`enum=`/`flags=` on the header) and a callback
   parameter or return may carry `enum=GROUP` or `flags=GROUP` (at most one) when its type is the group's carrier.
   Parameters write the options before any fact.
+- **Narrowed field references.** A struct field's `enum=`, and a `when ... enum=` case, may also name an enum
+  whose integer carrier is narrower than the field's integer type, when the field's type represents every
+  declared value (always, when both are unsigned or both signed; a signed enum with a negative value on an
+  unsigned field is rejected). One code table then serves a `u32` field and a `u64` operand alike. The field
+  keeps its raw integer type in C, Rust and Java, and readers check that the raw value fits the enum's
+  carrier, so upper bits never alias a declared code: Rust gets `<field>_as_<enum>()` returning
+  `Option<Enum>` (`None` when the carrier cannot hold the value; casts and a compare, no panic), the Native
+  Image `<field>As<Enum>(record)` case accessor returns `null` for such a value as for an unlisted one, and the
+  enum gets `int` switch keys (below). Flag sets, parameters and returns keep the exact carrier.
 - **Enums are open sets.** A value outside the list is legal: the name functions return `NULL`/`None`/`null`,
   the Java `<Enum>.of(v)` returns `null`, and flag sets expose the unknown bits (`hasUnknown`). Nothing checks a
   returned value against the list, and a reference adds no optimizer fact (`range` would let LLVM delete a
@@ -257,7 +266,7 @@ end
 - `when TAG=VALUE enum=ENUM` or `flags=FLAGS` lines directly follow the `field` line they annotate. `TAG` is
   another field of the same struct that carries `enum=`, and `VALUE` one of that enum's values. A field's
   `when` lines all name the same tag field, name each value at most once, and reference groups whose carrier is
-  the field's type. A field with `when` lines carries no `enum=`/`flags=` of its own.
+  the field's type (or, for an enum, [narrower](#constants-enums-and-flag-sets) than it). A field with `when` lines carries no `enum=`/`flags=` of its own.
 - Nothing changes in the layout or the ABI, and nothing checks the tag: an accessor reads the field as the
   named group whatever the tag holds. The caller reads the case the tag selects.
 - Rust: `<field>_as_<group>()` on the record (`operand_as_binary_op()`), one per field and group, returning
@@ -269,14 +278,18 @@ end
   once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
   paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
   which compiles to immediate compares.
-- Java cannot `switch` on a `long`, so an enum with a 64-bit carrier (`i64`, `u64`, `isize`, `usize`) whose
-  every declared value an `int` holds (`0..Integer.MAX_VALUE` unsigned; the `int` range without
-  `Integer.MIN_VALUE` signed) also gets `int` switch keys in `<Class>Constants.<Enum>`: a
-  `public static final int <VALUE>_KEY` per value, and `public static int key(long value)`, which returns
-  `(int) value` when an `int` holds the value and `Integer.MIN_VALUE` otherwise, so a wide value whose low bits
-  equal a code cannot alias its label. It is branch-free in source and allocates nothing:
-  `switch (UnaryOp.key(record.operand())) { case UnaryOp.NEGATE_KEY -> …; default -> … }`. Other enums get
-  nothing new. In a keyed enum a value may not be named `key`, nor `<value>_key` beside `<value>`.
+- **Switch keys.** Java cannot `switch` on a `long`, and a narrowed field's value is wider than its enum. One
+  rule covers both: an enum gets `int` switch keys in `<Class>Constants.<Enum>` when its carrier is 64 bits
+  wide (`i64`, `u64`, `isize`, `usize`) or a struct field references it narrowed, and every declared value is
+  an `int` other than `Integer.MIN_VALUE` (`0..Integer.MAX_VALUE` unsigned, so a `u32` enum with a larger value
+  gets none). Keys are a `public static final int <VALUE>_KEY` per value, holding the value's number (`u8`
+  255 is `255`, though the enum's own constant is `(byte) 255`), and `public static int key(long value)`, which
+  returns `(int) value` when the enum's carrier holds `value` and an `int` label can name it, and
+  `Integer.MIN_VALUE`, which no label equals, otherwise. A raw value whose low bits equal a code therefore
+  cannot alias its label, from any field width: `switch (UnaryOp.key(record.operand())) { case
+  UnaryOp.NEGATE_KEY -> …; default -> … }` compiles the same over a `u32` field and a `u64` operand. It is
+  branch-free in source and allocates nothing. Other enums get nothing new. In a keyed enum a value may not be
+  named `key`, nor `<value>_key` beside `<value>`.
 - The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
   so they are part of the fingerprint.
 

@@ -78,7 +78,7 @@ final class ConstantsValidator {
     }
     rustValues(m);
     accessors(m);
-    for (EnumGroup e : m.enums()) enumValues(e, abi);
+    for (EnumGroup e : m.enums()) enumValues(m, e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
     for (FlagSet f : m.flagSets()) flagRanges(m, f);
 
@@ -228,7 +228,7 @@ final class ConstantsValidator {
     }
   }
 
-  private static void enumValues(EnumGroup e, TargetAbi abi) {
+  private static void enumValues(Module m, EnumGroup e, TargetAbi abi) {
     String where = "enum " + e.name() + ": ";
     var names = new HashSet<String>();
     var byValue = new HashMap<BigInteger, String>();
@@ -243,7 +243,7 @@ final class ConstantsValidator {
           other == null, where + "values " + other + " and " + v.name() + " are both " + v.value());
     }
     // A 64-bit enum whose values fit an int also gets <VALUE>_KEY fields and key(long) in Java.
-    if (e.intKeys())
+    if (m.intKeys(e))
       for (EnumValue v : e.values()) {
         require(
             !v.name().equals("key"),
@@ -457,7 +457,7 @@ final class ConstantsValidator {
   private static void references(Module m) {
     for (Struct s : m.structs())
       for (Field f : s.fields()) {
-        reference(m, "field " + s.name() + "." + f.name(), f.group(), f.type(), "field's type");
+        fieldReference(m, "field " + s.name() + "." + f.name(), f.group(), f.type());
         cases(m, s, f);
       }
     caseAccessors(m);
@@ -516,7 +516,7 @@ final class ConstantsValidator {
           e.values().stream().anyMatch(v -> v.name().equals(c.value())),
           when + ": enum " + e.name() + " declares no value " + c.value());
       require(values.add(c.value()), where + ": two when lines for " + tagName + "=" + c.value());
-      reference(m, when, c.group(), f.type(), "field's type");
+      fieldReference(m, when, c.group(), f.type());
     }
   }
 
@@ -531,6 +531,23 @@ final class ConstantsValidator {
       // A counted pointer's Rust view is an inherent method named after the field.
       for (Field f : s.fields())
         if (f.count() != null) rust.put(f.name(), "counted field " + f.name());
+      for (Field f : s.fields())
+        if (m.narrowed(f.group(), f.type()) != null) {
+          // A narrowed field keeps its raw integer and gains <field>_as_<enum>() -> Option<Enum>.
+          String owner = "field " + f.name() + " group " + f.group().name();
+          String other =
+              rust.putIfAbsent(Names.rustCaseAccessor(f.name(), f.group().name()), owner);
+          require(
+              other == null,
+              "struct "
+                  + s.name()
+                  + ": Rust accessor "
+                  + Names.rustCaseAccessor(f.name(), f.group().name())
+                  + " of "
+                  + owner
+                  + " collides with the accessor of "
+                  + other);
+        }
       for (Field f : s.fields())
         for (FieldCase c : f.cases()) {
           String owner = "field " + f.name() + " group " + c.group().name();
@@ -548,6 +565,35 @@ final class ConstantsValidator {
                   + other);
         }
     }
+  }
+
+  /**
+   * A struct field's {@code enum=} (plain or in a {@code when} case) may name an enum whose carrier
+   * is narrower than the field's integer type when the field's type represents every declared
+   * value; the field stays its raw integer. Everything else needs the exact carrier.
+   */
+  private static void fieldReference(Module m, String where, GroupRef ref, Type type) {
+    EnumGroup e = ref == null || ref.kind() != GroupKind.ENUM ? null : m.enumGroup(ref.name());
+    if (e != null
+        && type instanceof Scalar field
+        && integer(field)
+        && e.type().bytes < field.bytes) {
+      TargetAbi abi = Seam.targetAbi(m.targetTriple());
+      for (EnumValue v : e.values())
+        require(
+            Ranges.fits(field, v.value(), abi),
+            where
+                + ": enum="
+                + e.name()
+                + " value "
+                + v.name()
+                + " = "
+                + v.value()
+                + " does not fit the field's type "
+                + field.text());
+      return;
+    }
+    reference(m, where, ref, type, "field's type");
   }
 
   private static void reference(Module m, String where, GroupRef ref, Type type, String what) {

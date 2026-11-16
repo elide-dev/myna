@@ -14,7 +14,7 @@ import org.graalvm.word.WordFactory;
 
 public final class ConstsTruffle {
     private ConstsTruffle() {}
-    public static final String ABI_FINGERPRINT = "16469a681ece5f1cc14c586c487f698b0b178e3a3f13636e8f0628b0d7461a09";
+    public static final String ABI_FINGERPRINT = "6d7151fad6c4bde0b28437f9cc6f7c7491c3812da85623bdd84a1a09c2e09f40";
     /** Logical names of every generated cell, in symbol order. */
     public static final String[] CELLS = {"blockingStatus", "setLevel", "status"};
     /** A fresh executable per call: a cell holds call-site profiles and is adopted once. */
@@ -261,7 +261,7 @@ public final class ConstsTruffle {
             }
         }
     }
-    /** Names of enum UnaryOp: u64. */
+    /** Names of enum UnaryOp: u32. */
     public static final class UnaryOpNames {
         private UnaryOpNames() {}
         private static final TruffleString NEGATE =
@@ -272,6 +272,14 @@ public final class ConstsTruffle {
          * The declared name of a value, or null when the enum does not list it. Folds to a
          * constant for a constant value; no boundary.
          */
+        public static TruffleString name(int value) {
+            switch (value) {
+                case 0: return NEGATE;
+                case 1: return INVERT;
+                default: return null;
+            }
+        }
+        /** The same, for the value as a cell returns it: no narrowing needed. */
         public static TruffleString name(long value) {
             if (value == 0L) return NEGATE;
             if (value == 1L) return INVERT;

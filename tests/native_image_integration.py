@@ -610,15 +610,17 @@ class ConstantsTests(unittest.TestCase):
             self.assertEqual(calls, [], code)
             self.assertFalse([i for i in code if "CEnumRuntimeData" in i or allocation.search(i)], code)
         # The constants have nothing to initialize and nothing reaches them: javac inlined every
-        # field. At most the flag sets whose static predicates and range accessors the fixture calls
-        # are reached classes; the builder usually inlines those methods too, so none is reached.
+        # field. At most the groups whose static predicates, range accessors and key() switch helpers
+        # the fixture calls are reached classes; the builder often inlines those methods too.
         reports = sorted(work.rglob("used_classes_*.txt"))
         self.assertEqual(len(reports), 1, reports)
         used = [line.rsplit(":", 1)[-1] for line in reports[0].read_text().splitlines()]
         self.assertIn("fixture.constants.ConstantsMain", used)
         reached = {c for c in used if c.startswith("fixture.constants.ConstsConstants")}
         self.assertLessEqual(reached, {"fixture.constants.ConstsConstants$Wide",
-                                     "fixture.constants.ConstsConstants$Packed"}, reached)
+                                     "fixture.constants.ConstsConstants$Packed",
+                                     "fixture.constants.ConstsConstants$BinaryOp",
+                                     "fixture.constants.ConstsConstants$UnaryOp"}, reached)
 
 
 if __name__ == "__main__": main(sys.modules[__name__], "native-image-integration")

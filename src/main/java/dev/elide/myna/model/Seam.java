@@ -359,20 +359,35 @@ public final class Seam {
      * values outside it).
      */
     public boolean intKeys() {
-      if (type != Scalar.U64 && type != Scalar.USIZE && type != Scalar.I64 && type != Scalar.ISIZE)
-        return false;
+      return wide() && keyable();
+    }
+
+    /** Whether the carrier is 64 bits wide, too wide for a Java {@code switch}. */
+    public boolean wide() {
+      return type == Scalar.U64
+          || type == Scalar.USIZE
+          || type == Scalar.I64
+          || type == Scalar.ISIZE;
+    }
+
+    /**
+     * Whether every value is an {@code int} other than {@code Integer.MIN_VALUE}, the key of values
+     * no label names: {@code 0..Integer.MAX_VALUE} for an unsigned carrier, the {@code int} range
+     * without {@code Integer.MIN_VALUE} for a signed one.
+     */
+    public boolean keyable() {
       BigInteger min = BigInteger.valueOf(unsignedKeys() ? 0 : Integer.MIN_VALUE + 1L);
       BigInteger max = BigInteger.valueOf(Integer.MAX_VALUE);
       return values.stream()
           .allMatch(v -> v.value().compareTo(min) >= 0 && v.value().compareTo(max) <= 0);
     }
 
-    /**
-     * Whether {@code key(long)} reads its value as unsigned: a {@code u64} or {@code usize}
-     * carrier.
-     */
+    /** Whether {@code key(long)} reads its value as unsigned: an unsigned carrier. */
     public boolean unsignedKeys() {
-      return type == Scalar.U64 || type == Scalar.USIZE;
+      return switch (type) {
+        case U8, U16, U32, U64, USIZE -> true;
+        default -> false;
+      };
     }
   }
 
@@ -838,6 +853,44 @@ public final class Seam {
     /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
     public boolean declaresConstants() {
       return abiDeclared || !constants.isEmpty() || !enums.isEmpty() || !flagSets.isEmpty();
+    }
+
+    /** The declared enum named {@code name}, or null. */
+    public EnumGroup enumGroup(String name) {
+      for (EnumGroup e : enums) if (e.name().equals(name)) return e;
+      return null;
+    }
+
+    /**
+     * The enum a struct field's {@code enum=} or {@code when ... enum=} names when its carrier is
+     * narrower than the field's type (a narrowed reference), or null: the field keeps its raw
+     * integer type, and readers check that the raw value fits the enum's carrier.
+     */
+    public EnumGroup narrowed(GroupRef ref, Type fieldType) {
+      if (ref == null || ref.kind() != GroupKind.ENUM) return null;
+      EnumGroup e = enumGroup(ref.name());
+      return e == null || e.type() == fieldType ? null : e;
+    }
+
+    /** The group a field's own type spells: its reference unless that reference narrows. */
+    public GroupRef fieldTypeGroup(Field f) {
+      return narrowed(f.group(), f.type()) == null ? f.group() : null;
+    }
+
+    /**
+     * Whether Java gets {@code int} switch keys for {@code e}: its values are {@link
+     * EnumGroup#keyable keyable}, and its carrier is 64 bits wide or a struct field references it
+     * narrowed, so a {@code key(long)} reads the field's wide value.
+     */
+    public boolean intKeys(EnumGroup e) {
+      if (!e.keyable()) return false;
+      if (e.wide()) return true;
+      for (Struct s : structs)
+        for (Field f : s.fields()) {
+          if (narrowed(f.group(), f.type()) == e) return true;
+          for (FieldCase c : f.cases()) if (narrowed(c.group(), f.type()) == e) return true;
+        }
+      return false;
     }
 
     public String javaPackageName() {

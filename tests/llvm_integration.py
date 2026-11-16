@@ -614,6 +614,8 @@ pub fn scale_probe(thread: *mut core::ffi::c_void) -> i64 {
 #endif
 CHECK(CONSTANTS_MAGIC == 0x3141514bu, "magic");
 CHECK(CONSTANTS_ABI_VERSION == 3 && sizeof(CONSTANTS_ABI_VERSION) == 4, "module abi version");
+CHECK(sizeof(((struct Record *)0)->raw) == 8 && sizeof(constants_unary_op_t) == 4, "narrowed field stays raw");
+CHECK(sizeof(struct Unary) == 4, "unary record");
 CHECK(CONSTANTS_LIMIT == 0xffffffffffffffffull, "limit");
 CHECK(CONSTANTS_FLOOR < 0 && CONSTANTS_FLOOR == (-9223372036854775807ll - 1), "floor");
 CHECK(CONSTANTS_STATUS_NULL_RESULT == -1 && CONSTANTS_STATUS_SYNTAX_ERROR == 16, "status");
