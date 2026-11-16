@@ -76,6 +76,7 @@ final class ConstantsValidator {
                 + f.name()
                 + " in Truffle constants()");
     }
+    rustValues(m);
     accessors(m);
     for (EnumGroup e : m.enums()) enumValues(e, abi);
     for (FlagSet f : m.flagSets()) flagBits(f);
@@ -84,6 +85,30 @@ final class ConstantsValidator {
     references(m);
     bitfieldAccessors(m);
     cNames(m, functionSymbols);
+  }
+
+  /**
+   * The crate root of {@code seam.rs} has one value namespace for the {@code pub const} of each
+   * const (upper-cased) and of {@code abi=}, the {@code pub fn} of each function, and the
+   * tuple-struct newtype of each enum and flag set (a tuple struct's constructor is a value): any
+   * two of the same name are rustc error E0428.
+   */
+  private static void rustValues(Module m) {
+    var values = new HashMap<String, String>();
+    if (m.abiDeclared()) values.put("ABI_VERSION", "the const ABI_VERSION generated from abi=");
+    for (Constant c : m.constants())
+      rustValue(values, c.name().toUpperCase(Locale.ROOT), "const " + c.name());
+    for (Function f : m.functions())
+      rustValue(values, f.name(), f.direction().name().toLowerCase(Locale.ROOT) + " " + f.name());
+    for (EnumGroup e : m.enums()) rustValue(values, e.name(), "enum " + e.name());
+    for (FlagSet f : m.flagSets()) rustValue(values, f.name(), "flags " + f.name());
+  }
+
+  private static void rustValue(Map<String, String> values, String name, String owner) {
+    String other = values.putIfAbsent(name, owner);
+    require(
+        other == null,
+        owner + ": Rust name " + name + " collides with " + other + " in seam.rs; rename one");
   }
 
   private static boolean integer(Scalar s) {

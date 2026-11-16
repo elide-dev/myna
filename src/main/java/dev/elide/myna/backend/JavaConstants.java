@@ -135,7 +135,7 @@ public final class JavaConstants implements Backend {
     }
     out.append("        }\n");
     if (e.intKeys()) {
-      boolean unsigned = e.type() == Scalar.U64 || e.type() == Scalar.USIZE;
+      boolean unsigned = e.unsignedKeys();
       out.append(
               "        /**\n"
                   + "         * {@code value} as an {@code int} switch key: the value itself when"

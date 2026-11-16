@@ -359,18 +359,20 @@ public final class Seam {
      * values outside it).
      */
     public boolean intKeys() {
-      boolean unsigned;
-      switch (type) {
-        case U64, USIZE -> unsigned = true;
-        case I64, ISIZE -> unsigned = false;
-        default -> {
-          return false;
-        }
-      }
-      BigInteger min = BigInteger.valueOf(unsigned ? 0 : Integer.MIN_VALUE + 1L);
+      if (type != Scalar.U64 && type != Scalar.USIZE && type != Scalar.I64 && type != Scalar.ISIZE)
+        return false;
+      BigInteger min = BigInteger.valueOf(unsignedKeys() ? 0 : Integer.MIN_VALUE + 1L);
       BigInteger max = BigInteger.valueOf(Integer.MAX_VALUE);
       return values.stream()
           .allMatch(v -> v.value().compareTo(min) >= 0 && v.value().compareTo(max) <= 0);
+    }
+
+    /**
+     * Whether {@code key(long)} reads its value as unsigned: a {@code u64} or {@code usize}
+     * carrier.
+     */
+    public boolean unsignedKeys() {
+      return type == Scalar.U64 || type == Scalar.USIZE;
     }
   }
 

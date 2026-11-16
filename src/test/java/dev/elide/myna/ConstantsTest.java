@@ -1308,7 +1308,9 @@ class ConstantsTest {
                 + "enum Op type=u64\n value negate = 0\n value invert = 1\n"
                 + " value top = 2147483647\nend\n"
                 + "enum Signed type=i64\n value low = -2147483647\n value zero = 0\n"
-                + " value high = 5\nend\n"
+                + " value high = 5\n value max = 2147483647\nend\n"
+                + "enum Size type=usize\n value none = 0\n value seven = 7\nend\n"
+                + "enum Delta type=isize\n value back = -3\n value far = 2147483647\nend\n"
                 + "enum Huge type=u64\n value small = 1\n value big = 2147483648\nend\n"
                 + "enum Floor type=i64\n value min = -2147483648\nend\n"
                 + "enum Narrow type=u32\n value one = 1\nend\n");
@@ -1343,22 +1345,46 @@ class ConstantsTest {
               case Signed.LOW_KEY: return "low";
               case Signed.ZERO_KEY: return "zero";
               case Signed.HIGH_KEY: return "high";
+              case Signed.MAX_KEY: return "max";
               default: return "?";
             }
           }
+          static String size(long raw) {
+            return switch (Size.key(raw)) {
+              case Size.NONE_KEY -> "none";
+              case Size.SEVEN_KEY -> "seven";
+              default -> "?";
+            };
+          }
+          static String delta(long raw) {
+            return switch (Delta.key(raw)) {
+              case Delta.BACK_KEY -> "back";
+              case Delta.FAR_KEY -> "far";
+              default -> "?";
+            };
+          }
           public static String run() {
             StringBuilder out = new StringBuilder().append(ABI_VERSION).append(' ');
-            for (long raw : new long[] {0, 1, 2147483647L, 2147483648L, -1L, (1L << 32) | 1, Op.TOP})
+            for (long raw : new long[] {0, 1, 2147483647L, 2147483648L, -1L, (1L << 32) | 1, Op.TOP,
+                0x8000000000000001L})
               out.append(op(raw)).append(',');
             out.append(' ');
-            for (long raw : new long[] {-2147483647L, -2147483648L, 0, 5, (1L << 32) | 5, -1L, Signed.LOW})
+            for (long raw : new long[] {-2147483647L, -2147483648L, 0, 5, (1L << 32) | 5, -1L, Signed.LOW,
+                2147483647L, 2147483648L})
               out.append(signed(raw)).append(',');
+            out.append(' ');
+            for (long raw : new long[] {0, 7, (1L << 32) | 7, -1L, 0x8000000000000007L})
+              out.append(size(raw)).append(',');
+            out.append(' ');
+            for (long raw : new long[] {-3, 2147483647L, -3L - (1L << 32), 2147483648L, Long.MIN_VALUE})
+              out.append(delta(raw)).append(',');
             return out.append(' ').append(Op.key(-1L)).toString();
           }
         }
         """;
     assertEquals(
-        "21 negate,invert,top,?,?,?,top, low,?,zero,high,?,?,low, -2147483648",
+        "21 negate,invert,top,?,?,?,top,?, low,?,zero,high,?,?,low,max,?, none,seven,?,?,?,"
+            + " back,far,?,?,?, -2147483648",
         runOnHotSpot(module, constants, consumer));
   }
 
@@ -1402,6 +1428,60 @@ class ConstantsTest {
         invalid(abi, "opaque MynaNativeConstants\n"));
     // Without abi= the const is the consumer's own.
     Validator.validate(Dsl.parse(HEAD + "const ABI_VERSION type=i32 value=4\n"), true);
+    // A group's tuple-struct newtype is a Rust value too.
+    assertEquals(
+        "enum ABI_VERSION: Rust name ABI_VERSION collides with the const ABI_VERSION generated"
+            + " from abi= in seam.rs; rename one",
+        invalid(abi, "enum ABI_VERSION type=i32\n value ok = 0\nend\n"));
+    assertEquals(
+        "flags ABI_VERSION: Rust name ABI_VERSION collides with the const ABI_VERSION generated"
+            + " from abi= in seam.rs; rename one",
+        invalid(abi, "flags ABI_VERSION type=u32\n bit a = 0\nend\n"));
+  }
+
+  /** Consts, functions and group newtypes share the crate-root value namespace of seam.rs. */
+  @Test
+  void rustValueNamesCollide() {
+    assertEquals(
+        "enum MAGIC: Rust name MAGIC collides with const MAGIC in seam.rs; rename one",
+        invalid(HEAD, "const MAGIC type=u32 value=1\nenum MAGIC type=i32\n value ok = 0\nend\n"));
+    assertEquals(
+        "flags MAGIC: Rust name MAGIC collides with const Magic in seam.rs; rename one",
+        invalid(HEAD, "const Magic type=u32 value=1\nflags MAGIC type=u32\n bit a = 0\nend\n"));
+    assertEquals(
+        "enum Status: Rust name Status collides with import Status in seam.rs; rename one",
+        invalid(HEAD, ST + "import Status symbol=s return=void error=no_failure\nend\n"));
+    assertEquals(
+        "import MAGIC: Rust name MAGIC collides with const MAGIC in seam.rs; rename one",
+        invalid(
+            HEAD,
+            "const MAGIC type=u32 value=1\n"
+                + "import MAGIC symbol=s return=void error=no_failure\n"
+                + "end\n"));
+  }
+
+  /** Without abi= a module has no ABI_VERSION anywhere and no constants class of its own. */
+  @Test
+  void withoutAbiNoAbiVersion() {
+    var out =
+        Generator.generate(
+            Dsl.parse(
+                "module plain target=x86_64-unknown-linux-gnu\n"
+                    + "import f symbol=f return=void error=no_failure\nend\n"),
+            true);
+    assertFalse(out.containsKey("MynaNativeConstants.java"), out.keySet().toString());
+    for (var file : out.entrySet())
+      assertFalse(
+          file.getValue().contains("ABI_VERSION\n") || file.getValue().contains(" ABI_VERSION"),
+          file.getKey());
+    var withConst =
+        Generator.generate(
+            Dsl.parse(
+                "module plain target=x86_64-unknown-linux-gnu\nconst MAGIC type=u32 value=1\n"),
+            true);
+    assertFalse(withConst.get("MynaNativeConstants.java").contains("ABI_VERSION"));
+    assertFalse(withConst.get("seam.h").contains("PLAIN_ABI_VERSION"));
+    assertFalse(withConst.get("seam.rs").contains("pub const ABI_VERSION"));
   }
 
   /**
