@@ -5,6 +5,7 @@ package dev.elide.myna.backend;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import java.math.BigInteger;
 import java.util.*;
@@ -93,6 +94,11 @@ public final class TruffleCells implements Backend {
   }
 
   public String generate(Module m) {
+    return generate(m, new Fingerprint(m));
+  }
+
+  public String generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     TruffleConfig config = m.truffleConfig();
     boolean ffm = config.backend() == TruffleBackend.FFM;
     String bindings = ffm ? m.ffmClass() : m.nativeClass();
@@ -124,7 +130,7 @@ public final class TruffleCells implements Backend {
         .append(m.truffleClass())
         .append("() {}\n")
         .append("    public static final String ABI_FINGERPRINT = ")
-        .append(SeamJson.quote(SeamJson.fingerprint(m)))
+        .append(SeamJson.quote(fingerprint))
         .append(";\n")
         .append("    /** Logical names of every generated cell, in symbol order. */\n")
         .append("    public static final String[] CELLS = {")
