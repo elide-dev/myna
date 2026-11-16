@@ -348,7 +348,14 @@ public final class RustFfi implements Backend {
           m.enums().stream().filter(g -> g.name().equals(r.enumName())).findFirst().orElseThrow();
       String enumCarrier = Types.rust(e.type());
       valueType = e.name();
-      String bits = raw.equals("self.0") ? raw : "(" + raw + ")";
+      // A full-width signed word is the range's bits as is: reinterpret it unsigned first, so a
+      // wider enum carrier gets the unsigned number (255, not -1) the setter stored.
+      String bits =
+          raw.equals("self.0")
+              ? (carrier.startsWith("i") && !enumCarrier.equals(carrier)
+                  ? "(self.0 as u" + carrier.substring(1) + ")"
+                  : raw)
+              : "(" + raw + ")";
       read =
           e.name() + "(" + (enumCarrier.equals(carrier) ? raw : bits + " as " + enumCarrier) + ")";
       write = enumCarrier.equals(carrier) ? "value.0" : "(value.0 as " + carrier + ")";

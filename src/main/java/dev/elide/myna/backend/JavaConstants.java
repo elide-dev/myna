@@ -174,8 +174,9 @@ public final class JavaConstants implements Backend {
                   .findFirst()
                   .orElseThrow()
                   .type());
-    // Shifts and masks promote byte and short to int.
-    String work = carrier.equals("long") ? "long" : "int";
+    // Shifts and masks promote byte and short to int; a long result masks in long, so a range
+    // that reaches the carrier's sign bit does not sign-extend into a wider enum carrier.
+    String work = carrier.equals("long") || value.equals("long") ? "long" : "int";
     String low = "0x" + r.valueMask().toString(16) + (work.equals("long") ? "L" : "");
     String read = "(flags >>> " + upper + "_SHIFT) & " + low;
     out.append("        /** Range ")

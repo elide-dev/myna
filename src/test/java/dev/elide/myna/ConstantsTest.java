@@ -889,6 +889,59 @@ class ConstantsTest {
             .getMessage());
   }
 
+  /** The DSL cannot spell a negative range start either; a module built in code can. */
+  @Test
+  void negativeRangeStartIsRejected() {
+    var m = Dsl.parse(HEAD);
+    var bad =
+        new Module(
+            m.name(),
+            m.abiVersion(),
+            m.targetTriple(),
+            m.javaPackage(),
+            m.javaClass(),
+            m.opaqueTypes(),
+            m.structs(),
+            m.callbacks(),
+            m.functions(),
+            m.resources(),
+            m.borrows(),
+            m.nativeConfig(),
+            m.truffleConfig(),
+            m.constants(),
+            m.enums(),
+            java.util.List.of(
+                new FlagSet(
+                    "Perms",
+                    Scalar.U32,
+                    java.util.List.of(),
+                    false,
+                    java.util.List.of(new FlagRange("code", -1, 3, null)))));
+    assertEquals(
+        "flags Perms: range code = -1..3 is outside u32 (bits 0..31)",
+        assertThrows(IllegalArgumentException.class, () -> Validator.validate(bad, true))
+            .getMessage());
+  }
+
+  /** A counted pointer's Rust view and a tagged field's case accessor share the record's impl. */
+  @Test
+  void countedViewCollidingWithCaseAccessorIsRejected() {
+    assertEquals(
+        "struct Node: Rust accessor operand_as_binary_op of field operand group BinaryOp collides"
+            + " with the accessor of counted field operand_as_binary_op",
+        invalid(
+            HEAD,
+            "enum NodeTag type=u32\n value binary = 0\nend\n"
+                + "enum BinaryOp type=u32\n value add = 0\nend\n"
+                + "struct Node size=24 align=8\n"
+                + " field tag type=u32 offset=0 enum=NodeTag\n"
+                + " field operand type=u32 offset=4\n"
+                + "  when tag=binary enum=BinaryOp\n"
+                + " field operand_as_binary_op type=ptr<u8> offset=8 count=n\n"
+                + " field n type=u64 offset=16\n"
+                + "end\n"));
+  }
+
   @Test
   void examplePasses() throws Exception {
     Validator.validate(Dsl.parse(Files.readString(Path.of("examples/constants.seam"))), true);
@@ -1281,6 +1334,40 @@ class ConstantsTest {
     assertEquals(
         "ffff00fffffffc5f c80000000000true0 -939524095truefalsetrue0 -1515falsetrue",
         runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * A full-width range into a wider enum carrier reads the unsigned number the setter stored, in
+   * Java (long masking, no sign extension) and Rust (through the same-width unsigned type).
+   */
+  @Test
+  void fullWidthRangesIntoWiderEnums() throws Exception {
+    var module =
+        Dsl.parse(
+            "module wide target=x86_64-unknown-linux-gnu java_package=fixture.wide"
+                + " java_class=Wide\n"
+                + "enum Huge type=u64\n value a = 0\n value last = 4294967295\nend\n"
+                + "enum Half type=i16\n value a = 0\n value last = 255\nend\n"
+                + "flags Word type=u32\n range code = 0..31 enum=Huge\nend\n"
+                + "flags Octet type=i8\n range code = 0..7 enum=Half\nend\n");
+    Validator.validate(module, true);
+    var out = Generator.generate(module, true);
+    assertTrue(out.get("seam.rs").contains("Half((self.0 as u8) as i16)"), out.get("seam.rs"));
+    String consumer =
+        """
+        package fixture.wide;
+        import static fixture.wide.WideConstants.*;
+        public final class Consumer {
+          public static String run() {
+            int word = Word.withCode(0, Huge.LAST);
+            byte b = Octet.withCode((byte) 0, Half.LAST);
+            return Word.code(word) + " " + (Word.code(word) == Huge.LAST) + " " + Octet.code(b)
+                + " " + (Octet.code(b) == Half.LAST);
+          }
+        }
+        """;
+    assertEquals(
+        "4294967295 true 255 true", runOnHotSpot(module, out.get("WideConstants.java"), consumer));
   }
 
   /**

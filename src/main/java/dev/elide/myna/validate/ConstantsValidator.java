@@ -286,7 +286,7 @@ final class ConstantsValidator {
       Validator.identifier(r.name());
       require(r.low() <= r.high(), where + range + " is empty (LOW > HIGH)");
       require(
-          r.high() < width,
+          r.low() >= 0 && r.high() < width,
           where + range + " is outside " + f.type().text() + " (bits 0.." + (width - 1) + ")");
       // C, Rust and Java spell the derived constants NAME_SHIFT and NAME_MASK.
       for (String member : List.of(r.name(), r.name() + "_shift", r.name() + "_mask")) {
@@ -454,6 +454,9 @@ final class ConstantsValidator {
   private static void caseAccessors(Module m) {
     for (Struct s : m.structs()) {
       var rust = new HashMap<String, String>();
+      // A counted pointer's Rust view is an inherent method named after the field.
+      for (Field f : s.fields())
+        if (f.count() != null) rust.put(f.name(), "counted field " + f.name());
       for (Field f : s.fields())
         for (FieldCase c : f.cases()) {
           String owner = "field " + f.name() + " group " + c.group().name();
