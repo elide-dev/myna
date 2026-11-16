@@ -92,6 +92,10 @@ public final class TruffleCells implements Backend {
   }
 
   public String generate(Module m) {
+    return generate(m, SeamJson.fingerprint(m));
+  }
+
+  public String generate(Module m, String fingerprint) {
     TruffleConfig config = m.truffleConfig();
     boolean ffm = config.backend() == TruffleBackend.FFM;
     String bindings = ffm ? m.ffmClass() : m.nativeClass();
@@ -123,7 +127,7 @@ public final class TruffleCells implements Backend {
         .append(m.truffleClass())
         .append("() {}\n")
         .append("    public static final String ABI_FINGERPRINT = ")
-        .append(SeamJson.quote(SeamJson.fingerprint(m)))
+        .append(SeamJson.quote(fingerprint))
         .append(";\n")
         .append("    /** Logical names of every generated cell, in symbol order. */\n")
         .append("    public static final String[] CELLS = {")

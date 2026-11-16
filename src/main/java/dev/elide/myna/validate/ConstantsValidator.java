@@ -6,7 +6,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
-import dev.elide.myna.serialize.SeamJson;
+import dev.elide.myna.serialize.Fingerprint;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -21,7 +21,7 @@ final class ConstantsValidator {
   private static final Pattern MEMBER = Pattern.compile("[a-z][a-z0-9_]*");
   private static final Set<String> RESERVED_BITS = Set.of("all", "none");
 
-  static void validate(Module m) {
+  static void validate(Module m, Fingerprint fingerprint) {
     TargetAbi abi = Seam.targetAbi(m.targetTriple());
     for (Constant c : m.constants()) carrier("const " + c.name(), c.type());
     for (EnumGroup e : m.enums()) carrier("enum " + e.name(), e.type());
@@ -84,7 +84,7 @@ final class ConstantsValidator {
 
     references(m);
     bitfieldAccessors(m);
-    cNames(m, functionSymbols);
+    cNames(m, functionSymbols, fingerprint);
   }
 
   /**
@@ -677,12 +677,12 @@ final class ConstantsValidator {
 
   // ---- generated C names ----
 
-  private static void cNames(Module m, Set<String> functionSymbols) {
+  private static void cNames(Module m, Set<String> functionSymbols, Fingerprint fingerprint) {
     String upper = m.name().toUpperCase(Locale.ROOT);
     var reserved =
         Set.of(
             upper + "_SEAM_ABI",
-            Names.seamAbiCheck(m, SeamJson.fingerprint(m)),
+            Names.seamAbiCheck(m, fingerprint.value()),
             upper + "_BINDING_ABI_VERSION",
             upper + "_SEAM_H");
     var claimed = new HashMap<String, String>();

@@ -12,6 +12,11 @@ public final class StaticJni {
   private StaticJni() {}
 
   public static Map<String, String> generate(Module m) {
+    return generate(m, SeamJson.fingerprint(m));
+  }
+
+  /** {@link #generate(Module)} given the module's ABI fingerprint, computed once by the caller. */
+  public static Map<String, String> generate(Module m, String fingerprint) {
     var methods = JniAbi.methods(m);
     if (methods.isEmpty()) throw new IllegalArgumentException("JNI generation requires imports");
     String cls = JniAbi.className(m);
@@ -26,7 +31,7 @@ public final class StaticJni {
             .append(cls)
             .append("() {}\n")
             .append("    public static final String ABI_FINGERPRINT = ")
-            .append(SeamJson.quote(SeamJson.fingerprint(m)))
+            .append(SeamJson.quote(fingerprint))
             .append(";\n")
             .append("    static { System.loadLibrary(")
             .append(SeamJson.quote(JniAbi.library(m)))
@@ -42,7 +47,7 @@ public final class StaticJni {
                     + "  (void)vm; (void)reserved; return JNI_VERSION_1_8;\n"
                     + "}\n");
     var llvm =
-        new StringBuilder(new Llvm().generate(m))
+        new StringBuilder(new Llvm().generate(m, fingerprint))
             .append("\n; JNI signatures: no raw function effects propagate to wrappers.\n");
     var header =
         new StringBuilder(

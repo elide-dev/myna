@@ -5,6 +5,7 @@ package dev.elide.myna.validate;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -86,6 +87,14 @@ public final class Validator {
   static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
 
   public static void validate(Module module, boolean strict) {
+    validate(module, strict, new Fingerprint(module));
+  }
+
+  /**
+   * {@link #validate(Module, boolean)} given the generation's fingerprint, which validation reads
+   * only when a name it checks derives from it.
+   */
+  public static void validate(Module module, boolean strict, Fingerprint fingerprint) {
     identifier(module.name());
     if (module.javaPackage() != null)
       for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
@@ -463,7 +472,7 @@ public final class Validator {
             "noalias requires explicit_contract or compiler_proven");
       }
     }
-    ConstantsValidator.validate(module);
+    ConstantsValidator.validate(module, fingerprint);
     OwnershipValidator.validate(module);
     ViewsValidator.validate(module);
   }

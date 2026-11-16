@@ -134,7 +134,8 @@ public final class Main {
       if (destination == null)
         throw new IllegalArgumentException("generate requires --out DIRECTORY");
       var outputs = new TreeMap<>(Generator.generate(module, strict));
-      if (jni) outputs.putAll(StaticJni.generate(module));
+      String fingerprint = outputs.get("seam.abi").strip();
+      if (jni) outputs.putAll(StaticJni.generate(module, fingerprint));
       if (check) {
         for (var item : outputs.entrySet()) {
           Path file = destination.resolve(item.getKey());
@@ -144,11 +145,7 @@ public final class Main {
           }
         }
       } else write(outputs, destination);
-      out.println(
-          (check ? "verified " : "generated ")
-              + module.name()
-              + " "
-              + SeamJson.fingerprint(module));
+      out.println((check ? "verified " : "generated ") + module.name() + " " + fingerprint);
       return 0;
     } catch (IllegalArgumentException | IOException e) {
       err.println("myna: " + e.getMessage());

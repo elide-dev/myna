@@ -4,7 +4,7 @@ package dev.elide.myna;
 
 import dev.elide.myna.backend.*;
 import dev.elide.myna.model.Seam.Module;
-import dev.elide.myna.serialize.SeamJson;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.validate.Validator;
 import java.util.*;
 
@@ -12,10 +12,13 @@ public final class Generator {
   private Generator() {}
 
   public static SortedMap<String, String> generate(Module module, boolean strict) {
-    Validator.validate(module, strict);
+    // Serialized and hashed at most once: validation and every backend share the one fingerprint.
+    var abi = new Fingerprint(module);
+    Validator.validate(module, strict, abi);
+    String fingerprint = abi.value();
     var outputs = new TreeMap<String, String>();
-    outputs.put("seam.json", SeamJson.canonical(module));
-    outputs.put("seam.abi", SeamJson.fingerprint(module) + "\n");
+    outputs.put("seam.json", abi.json());
+    outputs.put("seam.abi", fingerprint + "\n");
     for (Backend backend :
         List.of(
             new CHeader(),
@@ -25,7 +28,8 @@ public final class Generator {
             new NativeImageDirectives(),
             new NativeImageProperties(),
             new NativeImageForeign(),
-            new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
+            new Llvm()))
+      outputs.put(backend.filename(module), backend.generate(module, fingerprint));
     if (!module.returnedResources().isEmpty() || !module.callBorrows().isEmpty()) {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
@@ -36,7 +40,7 @@ public final class Generator {
     }
     if (module.truffleConfig() != null) {
       var cells = new TruffleCells();
-      outputs.put(cells.filename(module), cells.generate(module));
+      outputs.put(cells.filename(module), cells.generate(module, fingerprint));
     }
     return Collections.unmodifiableSortedMap(outputs);
   }

@@ -361,11 +361,16 @@ public final class SeamJson {
   }
 
   public static String fingerprint(Module module) {
+    return fingerprintOf(canonical(module));
+  }
+
+  /** The fingerprint of an already serialized {@link #canonical(Module) canonical} descriptor. */
+  public static String fingerprintOf(String canonical) {
     try {
       return HexFormat.of()
           .formatHex(
               MessageDigest.getInstance("SHA-256")
-                  .digest(canonical(module).getBytes(StandardCharsets.UTF_8)));
+                  .digest(canonical.getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException e) {
       throw new AssertionError(e);
     }

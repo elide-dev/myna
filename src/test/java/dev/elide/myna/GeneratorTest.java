@@ -785,6 +785,36 @@ class GeneratorTest {
           output.getKey());
   }
 
+  /**
+   * A generation fingerprints the module once and hands that fingerprint to every backend; each
+   * backend used on its own computes it and must produce the same text.
+   */
+  @Test
+  void standaloneBackendsMatchOneGeneration() throws Exception {
+    for (String example : List.of("examples/truffle.seam", "examples/constants.seam")) {
+      var module = Dsl.parse(Files.readString(Path.of(example)));
+      var generated = Generator.generate(module, true);
+      var fingerprint = new dev.elide.myna.serialize.Fingerprint(module);
+      Validator.validate(module, true, fingerprint);
+      assertEquals(SeamJson.canonical(module), fingerprint.json());
+      assertEquals(SeamJson.fingerprint(module) + "\n", generated.get("seam.abi"));
+      for (dev.elide.myna.backend.Backend backend :
+          List.of(
+              new dev.elide.myna.backend.CHeader(),
+              new dev.elide.myna.backend.RustFfi(),
+              new dev.elide.myna.backend.JavaFfm(),
+              new dev.elide.myna.backend.NativeImage(),
+              new dev.elide.myna.backend.NativeImageDirectives(),
+              new dev.elide.myna.backend.NativeImageProperties(),
+              new dev.elide.myna.backend.Llvm(),
+              new dev.elide.myna.backend.TruffleCells()))
+        assertEquals(
+            generated.get(backend.filename(module)),
+            backend.generate(module),
+            example + " " + backend.filename(module));
+    }
+  }
+
   @Test
   void constantsGoldenOutputs() throws Exception {
     var actual = generate(Files.readString(Path.of("examples/constants.seam")));

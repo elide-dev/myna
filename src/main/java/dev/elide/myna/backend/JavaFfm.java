@@ -15,6 +15,10 @@ public final class JavaFfm implements Backend {
   }
 
   public String generate(Module m) {
+    return generate(m, SeamJson.fingerprint(m));
+  }
+
+  public String generate(Module m, String fingerprint) {
     String ffm = m.ffmClass();
     var functions = new ArrayList<FfmFunction>(m.functions().size());
     for (Function function : m.functions()) functions.add(prepare(m, function));
@@ -46,7 +50,7 @@ public final class JavaFfm implements Backend {
                     + ffm
                     + "() {}\n");
     out.append("    public static final String ABI_FINGERPRINT = ")
-        .append(SeamJson.quote(SeamJson.fingerprint(m)))
+        .append(SeamJson.quote(fingerprint))
         .append(";\n");
     out.append(
         "    static {\n"
