@@ -66,6 +66,22 @@ public final class CellChecks {
     // A string in another encoding, as Python passes one, and one made from a Java string.
     check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
+    // access=cstring: the same lending, and a string with an embedded NUL is refused.
+    check(call(cells, "titleLength", "h\u00e9llo").equals(6L), "titleLength of a host string");
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "titleLength of a guest string");
+    rejects(cells, "titleLength", "ab\0cd");
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("evil.so\0.txt", TruffleString.Encoding.UTF_8));
+    // Strings only: bytes, even NUL-terminated ones, are not a C string parameter's to take.
+    rejects(cells, "titleLength", new HeapBytes(new byte[] {'a', 0}, false));
+    rejects(cells, "titleLength", NativeVoid.INSTANCE);
+    // A NUL in a wide or a non-ASCII Latin-1 guest string is found in the bytes they encode to.
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("\u3053\0\u3093", TruffleString.Encoding.UTF_16));
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9\0llo", TruffleString.Encoding.ISO_8859_1));
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.ISO_8859_1)).equals(6L), "titleLength of a Latin-1 guest string");
+    // A nullable C string takes null, which reaches native code as the null pointer.
+    check(call(cells, "titleOrEmpty", NativeVoid.INSTANCE).equals(0L), "titleOrEmpty of null");
+    check(call(cells, "titleOrEmpty", "abc").equals(3L), "titleOrEmpty of a string");
+    rejects(cells, "titleOrEmpty", "a\0b");
   }
   /**
    * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,
@@ -824,6 +840,27 @@ public final class CellChecks {
       check(call(cells, "counterLive").equals(0L), "parsed destroyed once each");
     }
     constructorWriteBack(cells);
+    // Status plus out-pointer: the guest lends an 8-byte buffer for the slot and receives a copy;
+    // a success status adopts the handle, any other is a guest error naming it, after the error
+    // buffer received its message.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment slot = arena.allocate(8);
+      byte[] message = new byte[32];
+      Object window = call(cells, "windowOpen", 9, NativeBytes.of(slot, true), new HeapBytes(message, true));
+      check(window instanceof NativeResource r && r.type().equals("Window"), "windowOpen owner");
+      check(call(cells, "windowWidth", window).equals(9L), "window width");
+      check(slot.get(ValueLayout.JAVA_LONG, 0) != 0, "the guest's slot received the handle");
+      try {
+        call(cells, "windowOpen", -1, NativeBytes.of(slot, true), new HeapBytes(message, true));
+        throw new AssertionError("a failed windowOpen made an owner");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("status 3"), expected.getMessage());
+      }
+      check(new String(message, 0, 14, StandardCharsets.US_ASCII).equals("negative width"), "window message");
+      check(call(cells, "counterLive").equals(1L), "one window live");
+      check(call(cells, "windowClose", window) == NativeVoid.INSTANCE, "window closed");
+      check(call(cells, "counterLive").equals(0L), "window destroyed");
+    }
     // Creates that report a status and write the resource through a parameter. The guest passes
     // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
     // native side writes into memory the runtime owns and the buffer receives a copy.

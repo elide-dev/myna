@@ -11,7 +11,7 @@ final class RustOwnership {
   private RustOwnership() {}
 
   static String generate(Module m) {
-    if (m.returnedResources().isEmpty() && m.callBorrows().isEmpty()) return "";
+    if (m.ownedResources().isEmpty() && CallBorrows.of(m).isEmpty()) return "";
     boolean batches = m.callBorrows().stream().anyMatch(BufferBorrow::batch);
     var out = new StringBuilder(batches ? BATCH_ADAPTER : "");
     out.append(
@@ -20,7 +20,7 @@ final class RustOwnership {
             + " lifecycle contracts.\n"
             + "pub mod ownership {\n");
     if (batches) out.append(LEND_BATCH);
-    for (Resource r : m.returnedResources()) {
+    for (Resource r : m.ownedResources()) {
       String n = r.name();
       out.append("    pub struct ")
           .append(n)
@@ -210,7 +210,16 @@ final class RustOwnership {
               length.parameter()
                   + (call.nullable(length) ? ".1" : ".len()")
                   + ".try_into().expect(\"buffer length exceeds ABI range\")");
-        else {
+        else if (CallBorrows.cstring(p)) {
+          // A C string is its own terminator: the CStr vouches for it.
+          if (p.nullable()) {
+            params.add(p.name() + ": Option<&::core::ffi::CStr>");
+            args.add(p.name() + ".map_or(::core::ptr::null(), |text| text.as_ptr().cast())");
+          } else {
+            params.add(p.name() + ": &::core::ffi::CStr");
+            args.add(p.name() + ".as_ptr().cast()");
+          }
+        } else {
           // Declared types live in the parent module; scalars are spelled the same either way.
           params.add(p.name() + ": " + Types.rust(p, "super::"));
           args.add(p.name());
@@ -295,17 +304,37 @@ final class RustOwnership {
   private static void constructor(Module m, Resource r, String name, StringBuilder out) {
     Function create =
         m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
-    boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
+    // A held borrow outlives the call, which only a Truffle cell can express.
+    if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) return;
+    // A constructor with call buffers or C strings calls the import's wrapper, which lends them.
+    boolean buffers =
+        m.callBorrows().stream().anyMatch(b -> b.function().equals(name))
+            || create.parameters().stream().anyMatch(CallBorrows::cstring);
     CallBorrows call = CallBorrows.of(m, create);
+    boolean outPointer = m.outPointer(r);
+    // Each parameter the constructor takes, beside what it passes: the out slot is passed without
+    // being taken.
     var parameters = new ArrayList<String>();
     var arguments = new ArrayList<String>();
+    var batchOf = new ArrayList<BufferBorrow>();
     for (Parameter p : create.parameters()) {
       if (buffers && call.derived(p)) continue;
+      // The out slot is the constructor's own local.
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        parameters.add(null);
+        arguments.add("&mut slot");
+        batchOf.add(null);
+        continue;
+      }
       BufferBorrow buffer = buffers ? call.buffer(p) : null;
       arguments.add(p.name());
+      batchOf.add(buffer != null && buffer.batch() ? buffer : null);
       if (buffer != null && buffer.batch())
         parameters.add(
             p.name() + ": " + (buffer.elementsNullable() ? "&[Option<&[u8]>]" : "&[&[u8]]"));
+      else if (CallBorrows.cstring(p))
+        parameters.add(
+            p.name() + ": " + (p.nullable() ? "Option<&::core::ffi::CStr>" : "&::core::ffi::CStr"));
       else if (buffer == null)
         // Declared types live in the parent module; scalars are spelled the same either way.
         parameters.add(p.name() + ": " + Types.rust(p, "super::"));
@@ -320,31 +349,26 @@ final class RustOwnership {
         create.parameters().stream()
             .anyMatch(p ->
                 p.type() instanceof Pointer
-                    && (!buffers || (call.buffer(p) == null && call.length(p) == null)));
+                    && (!buffers || (call.buffer(p) == null && call.length(p) == null))
+                    && !CallBorrows.cstring(p)
+                    && !(outPointer && p.name().equals(r.handleParameter())));
     // A constructor over a batch also has a _with_scratch form, as its import's wrapper does: the
     // plain one keeps up to eight elements on the stack and panics above that.
     boolean batched = buffers && call.batched();
     for (boolean scratch : batched ? List.of(false, true) : List.of(false)) {
       var signature = new ArrayList<String>();
       var passed = new ArrayList<String>();
-      for (int i = 0; i < parameters.size(); i++) {
-        signature.add(parameters.get(i));
+      for (int i = 0; i < arguments.size(); i++) {
+        if (parameters.get(i) != null) signature.add(parameters.get(i));
         passed.add(arguments.get(i));
-        String argument = arguments.get(i);
-        BufferBorrow b =
-            create.parameters().stream()
-                .filter(p -> p.name().equals(argument))
-                .map(call::buffer)
-                .filter(x -> x != null && x.batch())
-                .findFirst()
-                .orElse(null);
+        BufferBorrow b = batchOf.get(i);
         if (scratch && b != null) {
           signature.add(
-              argument
+              arguments.get(i)
                   + "_scratch: super::BatchScratch<'_, "
                   + Types.rust(call.lengthElement(b))
                   + ">");
-          passed.add(argument + "_scratch");
+          passed.add(arguments.get(i) + "_scratch");
         }
       }
       if (batched && !scratch)
@@ -363,8 +387,33 @@ final class RustOwnership {
                   : "        pub fn ")
           .append(r.wrapperName(name))
           .append(scratch ? "_with_scratch(" : "(")
-          .append(String.join(", ", signature))
-          .append(") -> Option<Self> {\n            core::ptr::NonNull::new(")
+          .append(String.join(", ", signature));
+      if (outPointer) {
+        // Status plus out-pointer: Err carries any status outside the success list, with nothing
+        // created; the slot is ignored then. A success that wrote no handle is an Err too.
+        String status = Types.rust(create.returns(), create.returnsGroup(), "super::");
+        String raw = create.returnsGroup() == null ? "status" : "status.0";
+        var succeeded = new ArrayList<String>();
+        for (long value : r.success()) succeeded.add(raw + " == " + value);
+        out.append(") -> Result<Self, ")
+            .append(status)
+            .append("> {\n            let mut slot: *mut super::")
+            .append(r.name())
+            .append(" = core::ptr::null_mut();\n            let status = unsafe { ")
+            .append(buffers ? "self::" : "super::")
+            .append(name)
+            .append(scratch ? "_with_scratch(" : "(")
+            .append(String.join(", ", passed))
+            .append(") };\n            if !(")
+            .append(String.join(" || ", succeeded))
+            .append(") {\n                return Err(status);\n            }\n")
+            .append(
+                "            core::ptr::NonNull::new(slot).map(|pointer| Self { pointer, _thread:"
+                    + " core::marker::PhantomData }).ok_or(status)\n"
+                    + "        }\n");
+        continue;
+      }
+      out.append(") -> Option<Self> {\n            core::ptr::NonNull::new(")
           // The buffer wrapper is this module's function of the same name.
           .append(
               buffers && !call.passesPointers()

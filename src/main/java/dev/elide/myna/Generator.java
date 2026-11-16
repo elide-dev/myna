@@ -3,6 +3,7 @@
 package dev.elide.myna;
 
 import dev.elide.myna.backend.*;
+import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
@@ -26,7 +27,12 @@ public final class Generator {
             new NativeImageProperties(),
             new NativeImageForeign(),
             new Llvm())) outputs.put(backend.filename(module), backend.generate(module));
-    if (!module.returnedResources().isEmpty() || !module.callBorrows().isEmpty()) {
+    if (!module.ownedResources().isEmpty()
+        || !module.callBorrows().isEmpty()
+        // C string wrappers live in the ownership class too.
+        || module.functions().stream()
+            .anyMatch(
+                f -> f.parameters().stream().anyMatch(p -> p.access() == Seam.Access.CSTRING))) {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
     }

@@ -560,6 +560,61 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void cStringsTakeStringsOnlyAndRefuseAnEmbeddedNul() {
+    assertEquals("ok", CStrings.strings("ok", false, "f", "text", null));
+    var guest =
+        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+            "fine", com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_8);
+    assertSame(guest, CStrings.strings(guest, false, "f", "text", null));
+    // Any other interop string is converted; anything else is refused, bytes included.
+    Object foreign =
+        CStrings.strings(new GuestLanguageString("evil.so\0.txt"), false, "f", "text", null);
+    assertTrue(foreign instanceof com.oracle.truffle.api.strings.TruffleString);
+    assertNull(CStrings.strings(null, true, "f", "text", null));
+    assertThrows(NativeCellException.class, () -> CStrings.strings(null, false, "f", "text", null));
+    assertTrue(
+        assertThrows(
+                NativeCellException.class,
+                () ->
+                    CStrings.strings(
+                        new HeapBytes(new byte[] {1}, false), false, "f", "text", null))
+            .getMessage()
+            .contains("text"));
+    // The lent bytes are scanned: an embedded NUL is refused, the terminator is not.
+    Borrow fine = Borrow.ofString("fine", true);
+    CStrings.checkLent(fine.address(), fine.length(), "f", "text", null);
+    fine.release();
+    Borrow evil = Borrow.ofString("evil.so\0.txt", true);
+    assertTrue(
+        assertThrows(
+                NativeCellException.class,
+                () -> CStrings.checkLent(evil.address(), evil.length(), "f", "text", null))
+            .getMessage()
+            .equals("f text: embedded NUL in a C string"));
+    evil.release();
+  }
+
+  /** An interop string that is not a TruffleString, as a guest language's own string type is. */
+  @ExportLibrary(InteropLibrary.class)
+  static final class GuestLanguageString implements TruffleObject {
+    final String text;
+
+    GuestLanguageString(String text) {
+      this.text = text;
+    }
+
+    @ExportMessage
+    boolean isString() {
+      return true;
+    }
+
+    @ExportMessage
+    String asString() {
+      return text;
+    }
+  }
+
+  @Test
   void closeAfterFailureDestroysWhatACreateMadeAndKeepsItsFailure() {
     var failure = NativeCellException.of(null, "write-back failed");
     // Nothing made: the failure passes through untouched.

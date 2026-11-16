@@ -54,12 +54,13 @@ the same output as before.
 
 ## Sized struct pointers in FFM (#135)
 
-Java FFM types `ptr<Struct>` parameters, returns and fields of imports, callbacks and structs with a
+Java FFM types `ptr<Struct>` parameters, returns and fields of imports, callbacks and structs, and the
+out slot of a struct resource's out-pointer constructor, with a
 new `<Struct>_POINTER` constant, `ValueLayout.ADDRESS.withTargetLayout(<Struct>_LAYOUT)`. The constant
 is emitted only for structs some pointer targets. An import's `ptr<Struct>` result, a callback's
 `ptr<Struct>` argument and `record.get(<Struct>_POINTER, offset)` are segments of the struct's size, so
 records and their counted views need no `reinterpret`. **A null one is sized too**, and reading through
-it is an unchecked native read that crashes. Test `address() == 0` first (see breaking change 14).
+it is an unchecked native read that crashes. Test `address() == 0` first (see breaking change 15).
 Pointers to opaque types, scalars and pointers, a counted view's pointer, and pointer-array elements stay
 zero-length, and Truffle FFM cells are unchanged. Every pointer field inside a cycle of pointer fields
 (`next: ptr<Node>`, or a mutual cycle) targets a padding layout of the pointee's size and alignment.
@@ -78,6 +79,27 @@ static final constants, with no work per call. The C ABI, `seam.json` and finger
   pointer-returning function stay rejected.
 - A resource destroy may take a `nullable=true` parameter; no generated owner passes it null.
 - Ownership and call-buffer validation errors name the function and parameter they concern.
+- `rust_implementation=trait` on the module generates, for Rust code that *implements* the imports,
+  a safe `<Module>Implementation` trait and `define_implementations!`, which defines every
+  `extern "C"` entry point from an implementing type. Call borrows arrive as slices, returned
+  resources as associated types owned through `Box`, and everything else as declared. Modules
+  without the option generate the same output (see
+  [implementing imports in Rust](../ownership.md#implementing-imports-in-rust)).
+
+## Status-plus-out-pointer constructors, `usize` lengths, C strings (#141)
+
+- A resource's `handle=PARAMETER` may name a `ptr<ptr<R>>` out-parameter: the "status plus handle"
+  constructor. FFM and Native Image owners take an `onFailure` callback for any status outside
+  `success=`, Rust returns `Result<R, Status>`, and Truffle cells adopt it as other status creates
+  (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
+- A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
+- `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
+  Rust wrappers and implementer trait, a `String` overload in FFM, a guest string in Truffle cells
+  (see [C strings](../ownership.md#c-strings)).
+- An import may no longer be named `NAME_address` with no parameters beside an import `NAME`: it
+  would collide with that binding's accessor.
+- `LibraryBinding.NAME_address()` exposes the address an FFM binding resolved for each import,
+  from the same lookup, for symbols handed to native code rather than called.
 
 ## Batches of borrowed buffers (#132)
 
@@ -118,9 +140,10 @@ single buffers.
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
 | 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
-| 14 | FFM `ptr<Struct>` results, callback arguments and field reads are segments of the struct's size, not zero-length. **A null one is a sized segment at address 0, so a read through it, or through a dangling pointer, is an unchecked native read that crashes the process where it used to throw `IndexOutOfBoundsException`.** A pointer misaligned for the struct, including a sentinel such as `(T *)-1`, is an `IllegalArgumentException` after the call completes. Structs that a pointer targets gain `<Struct>_POINTER`, and struct layouts can be declared in a different order. The FFM class of such a module calls the restricted `withTargetLayout` when it is initialized, so with `--illegal-native-access=deny` it needs native access even before its first downcall. | FFM consumers of struct pointers | test `address() == 0` or `equals(MemorySegment.NULL)` before reading, never `byteSize() == 0`; existing `reinterpret` calls still work; declare sentinel-carrying pointers `ptr<void>`; enable native access for the module, as downcalls already require |
+| 14 | An import named `NAME_address` with no parameters beside an import `NAME` is rejected: FFM bindings gain a `NAME_address()` accessor per import. | descriptors with such a pair of imports | rename one |
+| 15 | FFM `ptr<Struct>` results, callback arguments and field reads are segments of the struct's size, not zero-length. **A null one is a sized segment at address 0, so a read through it, or through a dangling pointer, is an unchecked native read that crashes the process where it used to throw `IndexOutOfBoundsException`.** A pointer misaligned for the struct, including a sentinel such as `(T *)-1`, is an `IllegalArgumentException` after the call completes. Structs that a pointer targets gain `<Struct>_POINTER`, and struct layouts can be declared in a different order. The FFM class of such a module calls the restricted `withTargetLayout` when it is initialized, so with `--illegal-native-access=deny` it needs native access even before its first downcall. | FFM consumers of struct pointers | test `address() == 0` or `equals(MemorySegment.NULL)` before reading, never `byteSize() == 0`; existing `reinterpret` calls still work; declare sentinel-carrying pointers `ptr<void>`; enable native access for the module, as downcalls already require |
 
-Not broken: FFM output apart from #14 (otherwise comments only), Truffle cell signatures and behaviour, leaf status of every
+Not broken: FFM output apart from #15 (otherwise additions and comments only), Truffle cell signatures and behaviour, leaf status of every
 import, export entry-point signatures at the C level.
 
 ### The header check

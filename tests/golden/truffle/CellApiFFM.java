@@ -379,6 +379,81 @@ public final class CellApiFFM {
             this.swap_address = lookup.find("cells_swap").orElse(null);
             this.widen_address = lookup.find("cells_widen").orElse(null);
         }
+        /** The resolved address of cells_add, valid while the library arena is open. */
+        public MemorySegment add_address() {
+            if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");
+            return this.add_address;
+        }
+        /** The resolved address of cells_checksum, valid while the library arena is open. */
+        public MemorySegment checksum_address() {
+            if (this.checksum_address == null) throw new UnsatisfiedLinkError("cells_checksum");
+            return this.checksum_address;
+        }
+        /** The resolved address of cells_counter_create, valid while the library arena is open. */
+        public MemorySegment counterCreate_address() {
+            if (this.counterCreate_address == null) throw new UnsatisfiedLinkError("cells_counter_create");
+            return this.counterCreate_address;
+        }
+        /** The resolved address of cells_counter_destroy, valid while the library arena is open. */
+        public MemorySegment counterDestroy_address() {
+            if (this.counterDestroy_address == null) throw new UnsatisfiedLinkError("cells_counter_destroy");
+            return this.counterDestroy_address;
+        }
+        /** The resolved address of cells_counter_next, valid while the library arena is open. */
+        public MemorySegment counterNext_address() {
+            if (this.counterNext_address == null) throw new UnsatisfiedLinkError("cells_counter_next");
+            return this.counterNext_address;
+        }
+        /** The resolved address of cells_fill, valid while the library arena is open. */
+        public MemorySegment fill_address() {
+            if (this.fill_address == null) throw new UnsatisfiedLinkError("cells_fill");
+            return this.fill_address;
+        }
+        /** The resolved address of cells_low_byte, valid while the library arena is open. */
+        public MemorySegment lowByte_address() {
+            if (this.lowByte_address == null) throw new UnsatisfiedLinkError("cells_low_byte");
+            return this.lowByte_address;
+        }
+        /** The resolved address of cells_peek, valid while the library arena is open. */
+        public MemorySegment peek_address() {
+            if (this.peek_address == null) throw new UnsatisfiedLinkError("cells_peek");
+            return this.peek_address;
+        }
+        /** The resolved address of cells_poke, valid while the library arena is open. */
+        public MemorySegment poke_address() {
+            if (this.poke_address == null) throw new UnsatisfiedLinkError("cells_poke");
+            return this.poke_address;
+        }
+        /** The resolved address of cells_raw_length, valid while the library arena is open. */
+        public MemorySegment rawLength_address() {
+            if (this.rawLength_address == null) throw new UnsatisfiedLinkError("cells_raw_length");
+            return this.rawLength_address;
+        }
+        /** The resolved address of cells_scale, valid while the library arena is open. */
+        public MemorySegment scale_address() {
+            if (this.scale_address == null) throw new UnsatisfiedLinkError("cells_scale");
+            return this.scale_address;
+        }
+        /** The resolved address of cells_sleepy_add, valid while the library arena is open. */
+        public MemorySegment sleepyAdd_address() {
+            if (this.sleepyAdd_address == null) throw new UnsatisfiedLinkError("cells_sleepy_add");
+            return this.sleepyAdd_address;
+        }
+        /** The resolved address of cells_strlen, valid while the library arena is open. */
+        public MemorySegment strlen_address() {
+            if (this.strlen_address == null) throw new UnsatisfiedLinkError("cells_strlen");
+            return this.strlen_address;
+        }
+        /** The resolved address of cells_swap, valid while the library arena is open. */
+        public MemorySegment swap_address() {
+            if (this.swap_address == null) throw new UnsatisfiedLinkError("cells_swap");
+            return this.swap_address;
+        }
+        /** The resolved address of cells_widen, valid while the library arena is open. */
+        public MemorySegment widen_address() {
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("cells_widen");
+            return this.widen_address;
+        }
         public int add(int left, int right) throws Throwable {
             if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");
             return (int) CellApiFFM.add_Downcall.HANDLE.invokeExact(this.add_address, left, right);
@@ -512,6 +587,66 @@ public final class CellApiFFM {
             this.strlen_address = lookup.find("cells_strlen").orElse(null);
             this.swap_address = lookup.find("cells_swap").orElse(null);
             this.widen_address = lookup.find("cells_widen").orElse(null);
+        }
+        /** The resolved address of cells_add, valid while the library arena is open. */
+        public MemorySegment add_address() {
+            if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");
+            return this.add_address;
+        }
+        /** The resolved address of cells_checksum, valid while the library arena is open. */
+        public MemorySegment checksum_address() {
+            if (this.checksum_address == null) throw new UnsatisfiedLinkError("cells_checksum");
+            return this.checksum_address;
+        }
+        /** The resolved address of cells_counter_next, valid while the library arena is open. */
+        public MemorySegment counterNext_address() {
+            if (this.counterNext_address == null) throw new UnsatisfiedLinkError("cells_counter_next");
+            return this.counterNext_address;
+        }
+        /** The resolved address of cells_fill, valid while the library arena is open. */
+        public MemorySegment fill_address() {
+            if (this.fill_address == null) throw new UnsatisfiedLinkError("cells_fill");
+            return this.fill_address;
+        }
+        /** The resolved address of cells_low_byte, valid while the library arena is open. */
+        public MemorySegment lowByte_address() {
+            if (this.lowByte_address == null) throw new UnsatisfiedLinkError("cells_low_byte");
+            return this.lowByte_address;
+        }
+        /** The resolved address of cells_peek, valid while the library arena is open. */
+        public MemorySegment peek_address() {
+            if (this.peek_address == null) throw new UnsatisfiedLinkError("cells_peek");
+            return this.peek_address;
+        }
+        /** The resolved address of cells_poke, valid while the library arena is open. */
+        public MemorySegment poke_address() {
+            if (this.poke_address == null) throw new UnsatisfiedLinkError("cells_poke");
+            return this.poke_address;
+        }
+        /** The resolved address of cells_raw_length, valid while the library arena is open. */
+        public MemorySegment rawLength_address() {
+            if (this.rawLength_address == null) throw new UnsatisfiedLinkError("cells_raw_length");
+            return this.rawLength_address;
+        }
+        /** The resolved address of cells_scale, valid while the library arena is open. */
+        public MemorySegment scale_address() {
+            if (this.scale_address == null) throw new UnsatisfiedLinkError("cells_scale");
+            return this.scale_address;
+        }
+        /** The resolved address of cells_strlen, valid while the library arena is open. */
+        public MemorySegment strlen_address() {
+            if (this.strlen_address == null) throw new UnsatisfiedLinkError("cells_strlen");
+            return this.strlen_address;
+        }
+        /** The resolved address of cells_swap, valid while the library arena is open. */
+        public MemorySegment swap_address() {
+            if (this.swap_address == null) throw new UnsatisfiedLinkError("cells_swap");
+            return this.swap_address;
+        }
+        /** The resolved address of cells_widen, valid while the library arena is open. */
+        public MemorySegment widen_address() {
+            if (this.widen_address == null) throw new UnsatisfiedLinkError("cells_widen");
+            return this.widen_address;
         }
         public int add(int left, int right) throws Throwable {
             if (this.add_address == null) throw new UnsatisfiedLinkError("cells_add");

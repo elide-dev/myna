@@ -553,6 +553,34 @@ class ViewsTest {
         runOnHotSpot("fixture.pointers", "PointersFFM", ffm, consumer));
   }
 
+  /**
+   * An out-pointer constructor reads a struct resource from its slot sized to the struct, and an
+   * opaque one as a plain address, as before.
+   */
+  @Test
+  void ffmOutPointerStructResourcesAreSized() {
+    String opaque =
+        Generator.generate(Dsl.parse(OwnershipTest.OUT_POINTER), true).get("ApiFFM.java");
+    assertTrue(opaque.contains("address = slot.get(ValueLayout.ADDRESS, 0);\n"), opaque);
+    assertFalse(opaque.contains("_POINTER"), opaque);
+    String struct =
+        Generator.generate(
+                Dsl.parse(
+                    OwnershipTest.OUT_POINTER.replace(
+                        "opaque Surface\n",
+                        "struct Surface size=8 align=8\n  field id type=i64 offset=0\nend\n")),
+                true)
+            .get("ApiFFM.java");
+    assertTrue(struct.contains("address = slot.get(Surface_POINTER, 0);\n"), struct);
+    assertTrue(
+        struct.contains(
+            "public static final AddressLayout Surface_POINTER ="
+                + " ValueLayout.ADDRESS.withTargetLayout(Surface_LAYOUT);"),
+        struct);
+    assertTrue(
+        struct.contains("close_DESCRIPTOR = FunctionDescriptor.ofVoid(Surface_POINTER);"), struct);
+  }
+
   /** Compiles a generated FFM class beside a consumer and returns the consumer's {@code run()}. */
   private static Object runOnHotSpot(String pkg, String ffmClass, String ffm, String consumer)
       throws Exception {

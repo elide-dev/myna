@@ -27,7 +27,7 @@ public final class JavaFfm implements Backend {
                 1024L
                     + functions.size() * 2304L
                     + m.callbacks().size() * 1024L
-                    + m.returnedResources().size() * 1024L
+                    + m.ownedResources().size() * 1024L
                     + m.callBorrows().size() * 2048L
                     + m.structs().size() * 512L);
     var out =
@@ -218,7 +218,7 @@ public final class JavaFfm implements Backend {
     }
     binding(m, ffm, functions, out, false);
     binding(m, ffm, functions, out, true);
-    ownership(m, out);
+    ownership(m, layouts, out);
     FfmCallbacks.generate(m, layouts, out);
     return out.append("}\n").toString();
   }
@@ -422,8 +422,8 @@ public final class JavaFfm implements Backend {
     };
   }
 
-  private static void ownership(Module m, StringBuilder out) {
-    if (m.returnedResources().isEmpty()) return;
+  private static void ownership(Module m, StructLayouts layouts, StringBuilder out) {
+    if (m.ownedResources().isEmpty()) return;
     out.append(
 """
         @FunctionalInterface
@@ -439,16 +439,39 @@ public final class JavaFfm implements Backend {
             T adopt(MemorySegment address, NativeDestructor destructor, Thread requiredThread) throws Throwable;
         }
 """);
-    for (Resource r : m.returnedResources()) {
+    for (Resource r : m.ownedResources()) {
+      boolean outPointer = m.outPointer(r);
       out.append("    public static final class ")
           .append(r.name())
           .append(" {\n")
           .append("        private ")
           .append(r.name())
           .append("() {}\n");
+      String status = null;
+      if (outPointer) {
+        Function first =
+            m.functions().stream()
+                .filter(f -> f.name().equals(r.creates().getFirst()))
+                .findFirst()
+                .orElseThrow();
+        status = Types.ffmCarrier(first.returns());
+        out.append(
+                "        /**\n"
+                    + "         * What a constructor returns for a status outside its success"
+                    + " list, when it created\n"
+                    + "         * nothing: null, a value, or a throw. The out slot is ignored"
+                    + " then.\n"
+                    + "         */\n"
+                    + "        @FunctionalInterface\n"
+                    + "        public interface Failure<T> { T failed(")
+            .append(status)
+            .append(" status) throws Throwable; }\n");
+      }
       for (String name : r.creates()) {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
+        // A held borrow outlives the call, which only a Truffle cell can express.
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
         // A constructor with call borrows takes each buffer as a segment and calls the binding's
         // buffer wrapper, which lends it for the call only.
         boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
@@ -459,11 +482,17 @@ public final class JavaFfm implements Backend {
         for (Parameter p : create.parameters()) {
           String arg = "arg" + index++;
           if (buffers && call.derived(p)) continue;
+          // The out slot is the constructor's own, allocated for the call.
+          if (outPointer && p.name().equals(r.handleParameter())) {
+            args.add("slot");
+            continue;
+          }
+          // A C string is the String of the binding's wrapper, which converts it for the call.
           BufferBorrow lent = buffers ? call.buffer(p) : null;
           params.add(
               (lent != null
                       ? (lent.batch() ? "MemorySegment[]" : "MemorySegment")
-                      : Types.ffmCarrier(p.type()))
+                      : CallBorrows.cstring(p) ? "String" : Types.ffmCarrier(p.type()))
                   + " "
                   + arg);
           args.add(arg);
@@ -471,16 +500,46 @@ public final class JavaFfm implements Backend {
         out.append("        public static <T> T ")
             .append(r.wrapperName(name))
             .append("(LibraryBinding binding, ResourceFactory<T> factory")
+            .append(outPointer ? ", Failure<? extends T> onFailure" : "")
             .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
             .append(") throws Throwable {\n")
-            .append("            java.util.Objects.requireNonNull(factory);\n")
-            .append("            MemorySegment address = binding.")
-            .append(create.name())
-            .append('(')
-            .append(String.join(", ", args))
-            .append(");\n")
-            .append("            if (address.address() == 0) return null;\n")
-            .append("            try {\n")
+            .append("            java.util.Objects.requireNonNull(factory);\n");
+        if (outPointer) {
+          var succeeded = new ArrayList<String>();
+          boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
+          for (long value : r.success())
+            succeeded.add(
+                Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
+          out.append("            java.util.Objects.requireNonNull(onFailure);\n")
+              .append("            ")
+              .append(status)
+              .append(" status;\n")
+              .append("            MemorySegment address;\n")
+              .append("            try (Arena out = Arena.ofConfined()) {\n")
+              .append("                MemorySegment slot = out.allocate(ValueLayout.ADDRESS);\n")
+              .append("                status = binding.")
+              .append(create.name())
+              .append('(')
+              .append(String.join(", ", args))
+              .append(");\n")
+              // A struct resource is read sized to its layout; an opaque one stays an address.
+              .append("                address = slot.get(")
+              .append(layouts.value(new Pointer(new Named(r.name()))))
+              .append(", 0);\n")
+              .append("            }\n")
+              .append("            if (!(")
+              .append(String.join(" || ", succeeded))
+              .append(")) return onFailure.failed(status);\n")
+              // A success that wrote no handle created nothing either.
+              .append("            if (address.address() == 0) return onFailure.failed(status);\n");
+        } else
+          out.append("            MemorySegment address = binding.")
+              .append(create.name())
+              .append('(')
+              .append(String.join(", ", args))
+              .append(");\n");
+        if (!outPointer) out.append("            if (address.address() == 0) return null;\n");
+        out.append("            try {\n")
             .append(
                 "                return java.util.Objects.requireNonNull(factory.adopt(address,"
                     + " binding::")
@@ -545,6 +604,23 @@ public final class JavaFfm implements Backend {
           .append(").orElse(null);\n");
     }
     out.append("        }\n");
+    // The address this binding resolved, for a symbol handed to native code rather than called:
+    // the same lookup result, held by this instance, never a second lookup or an image constant.
+    for (FfmFunction function : functions) {
+      Function f = function.function();
+      out.append("        /** The resolved address of ")
+          .append(function.symbol().replace("\"", ""))
+          .append(", valid while the library arena is open. */\n")
+          .append("        public MemorySegment ")
+          .append(f.name())
+          .append("_address() {\n            if (this.")
+          .append(f.name())
+          .append("_address == null) throw new UnsatisfiedLinkError(")
+          .append(function.symbol())
+          .append(");\n            return this.")
+          .append(f.name())
+          .append("_address;\n        }\n");
+    }
     for (FfmFunction function : functions) {
       Function f = function.function();
       String carrier = function.carrier();
@@ -599,6 +675,9 @@ public final class JavaFfm implements Backend {
     var lent = new StringBuilder();
     var temporary = new StringBuilder();
     var present = new ArrayList<String>();
+    // C strings need the call's arena whatever the buffers are, so every buffer is lent from it.
+    var text = new StringBuilder();
+    boolean strings = f.parameters().stream().anyMatch(CallBorrows::cstring);
     int index = 0;
     for (Parameter p : f.parameters()) {
       String arg = "arg" + index++;
@@ -664,7 +743,31 @@ public final class JavaFfm implements Backend {
       if (buffer == null) {
         if (length != null)
           args.add((call.narrow(length) ? "(int) length" : "length") + call.suffix(length));
-        else {
+        else if (CallBorrows.cstring(p)) {
+          // NUL-terminated UTF-8 in the call's arena; null is the null pointer where allowed.
+          params.add("String " + arg);
+          args.add("text" + (index - 1));
+          // An embedded NUL would silently end the string early on the C side: reject it.
+          checks
+              .append("            if (")
+              .append(
+                  p.nullable()
+                      ? arg + " != null && "
+                      : "java.util.Objects.requireNonNull(" + arg + ") != null && ")
+              .append(arg)
+              .append(".indexOf('\\0') >= 0) throw new IllegalArgumentException(\"")
+              .append(f.name())
+              .append(' ')
+              .append(p.name())
+              .append(": embedded NUL in a C string\");\n");
+          text.append("                MemorySegment text")
+              .append(index - 1)
+              .append(" = ")
+              .append(p.nullable() ? arg + " == null ? MemorySegment.NULL : " : "")
+              .append("empty.allocateFrom(")
+              .append(arg)
+              .append(");\n");
+        } else {
           params.add(Types.ffmCarrier(p.type()) + " " + arg);
           args.add(arg);
         }
@@ -756,7 +859,10 @@ public final class JavaFfm implements Backend {
           .append("                MemorySegment pointer")
           .append(s)
           .append(" = ")
-          .append(several || batched ? missing + "length" + s + " != 0 ? " + arg + " : " : "")
+          .append(
+              several || batched || strings
+                  ? missing + "length" + s + " != 0 ? " + arg + " : "
+                  : "")
           // Aligned like the fact, which LLVM's align attribute makes independent of the extent.
           .append(
               call.align(buffer) > 1
@@ -804,11 +910,13 @@ public final class JavaFfm implements Backend {
                     + " is a native leaf);\n"
                     + "         * any other is copied into memory that lives for the call.\n"
                     + "         */\n"
-                : several
-                    ? "        /** Borrows each entire native segment for this call; lengths are in"
-                        + " bytes. */\n"
-                    : "        /** Borrows the entire native segment for this call; length is in"
-                        + " bytes. */\n")
+                : call.borrows().isEmpty()
+                    ? "        /** Lends each string NUL-terminated as UTF-8 for this call. */\n"
+                    : several
+                        ? "        /** Borrows each entire native segment for this call; lengths"
+                            + " are in bytes. */\n"
+                        : "        /** Borrows the entire native segment for this call; length is"
+                            + " in bytes. */\n")
         .append("        public ")
         .append(Types.ffmCarrier(f.returns()))
         .append(' ')
@@ -817,8 +925,8 @@ public final class JavaFfm implements Backend {
         .append(String.join(", ", params))
         .append(") throws Throwable {\n")
         .append(checks);
-    // A batch's arrays need the arena whatever its buffers are.
-    if (!batched) {
+    // A batch's arrays and a C string need the arena whatever the buffers are.
+    if (!batched && !strings) {
       out.append("            if (")
           .append(String.join(" && ", present))
           .append(") {\n")
@@ -829,6 +937,7 @@ public final class JavaFfm implements Backend {
       out.append("            }\n");
     }
     out.append("            try (Arena empty = Arena.ofConfined()) {\n")
+        .append(text)
         .append(temporary)
         .append("                ")
         .append(invoke)
@@ -954,9 +1063,10 @@ public final class JavaFfm implements Backend {
   /**
    * The order in which struct layouts are declared, and the layout of every value that may point to
    * a struct. A struct that some {@code ptr<S>} targets (an import's parameter or return, a
-   * callback's, or a struct field other than a counted view's pointer) gets {@code S_POINTER}, an
-   * address whose target layout is {@code S_LAYOUT}, and every such pointer uses it: a downcall
-   * result, an upcall argument and a field read are segments sized to S. Creating it is a
+   * callback's, a struct field other than a counted view's pointer, or the slot of a struct
+   * resource written through an out-pointer) gets {@code S_POINTER}, an address whose target layout
+   * is {@code S_LAYOUT}, and every such pointer uses it: a downcall result, an upcall argument, a
+   * field read and an out-pointer constructor's result are segments sized to S. Creating it is a
    * restricted call, so a struct no pointer targets gets none, and a module whose structs are only
    * passed by value initializes as it did without it. Pointers to opaque types, scalars and other
    * pointers stay unsized, and so does a counted view's pointer, whose view accessors size it by
@@ -987,6 +1097,9 @@ public final class JavaFfm implements Backend {
         target(c.returns(), targeted);
         for (Parameter p : c.parameters()) target(p.type(), targeted);
       }
+      // A struct resource written through an out-pointer is read from its slot as a pointer to it.
+      for (Resource r : m.ownedResources())
+        if (m.outPointer(r)) target(new Pointer(new Named(r.name())), targeted);
       var order = new ArrayList<Struct>(m.structs().size());
       var done = new HashSet<String>();
       for (Struct s : m.structs()) visit(s, done, order);
