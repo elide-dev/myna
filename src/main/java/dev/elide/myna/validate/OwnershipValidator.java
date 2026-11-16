@@ -439,13 +439,6 @@ final class OwnershipValidator {
               && !array.facts().containsKey("nonnull"),
           "a batch array cannot impose extent, alignment, noalias or nonnull preconditions: " + at);
     }
-    require(
-        m.truffleConfig() == null || !Seam.truffleCell(m, f),
-        "a batch borrow has no Truffle cell yet; opt out with truffle_cell=false@explicit_contract"
-            + " on "
-            + f.name()
-            + ": "
-            + form);
     for (Parameter other : f.parameters())
       require(
           other.type() instanceof Scalar || other.type() instanceof Pointer,

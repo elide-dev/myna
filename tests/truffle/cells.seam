@@ -314,3 +314,23 @@ end
 import tdRelease symbol=td_release return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
   param result type=ptr<TdResult> nullable=false ownership=transferred_to_callee access=read_write
 end
+# Batches: an array of buffers with a parallel array of lengths and a count. A cell takes a guest
+# array of buffers or strings (or null for the empty batch) and lends each element as a single
+# buffer. digest is a leaf with 64-bit lengths; merge transitions, with 32-bit lengths and count
+# for its inputs and nullable elements with signed 64-bit lengths for its dependencies.
+borrow digest sources lengths=lengths count=count lifetime=call
+import digest symbol=cells_batch_digest return=u64 error=no_failure nounwind=true@explicit_contract
+  param sources type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+end
+borrow merge inputs lengths=inputLengths count=inputCount lifetime=call
+borrow merge deps lengths=depLengths count=depCount lifetime=call elements_nullable=true
+import merge symbol=cells_batch_merge return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param inputs type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputLengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param inputCount type=u32
+  param deps type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depLengths type=ptr<i64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param depCount type=i32
+end

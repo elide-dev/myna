@@ -389,6 +389,95 @@ public final class CellChecks {
     }
     System.out.println("copy-back after close refused: confined, " + shared);
   }
+  // The fixture's batch digest (tests/truffle/native.c): the count, then each element's length and
+  // bytes, or NULL_ELEMENT for an absent one; the empty batch folds in ABSENT.
+  static final long FNV_OFFSET = 0xcbf29ce484222325L;
+  static long mix(long hash, long value) { return (hash ^ value) * 0x100000001b3L; }
+  static long foldBatch(long hash, byte[]... buffers) {
+    if (buffers.length == 0) return mix(hash, 1L << 32);
+    hash = mix(hash, buffers.length);
+    for (byte[] buffer : buffers) {
+      if (buffer == null) { hash = mix(hash, -2L); continue; }
+      hash = mix(hash, buffer.length);
+      for (byte b : buffer) hash = mix(hash, b & 0xff);
+    }
+    return hash;
+  }
+  /** Where the scratch stack's top is: a probe borrow lands there, and is released at once. */
+  static long scratchTop() {
+    Borrow probe = Borrow.ofString("probe", true);
+    long at = probe.address();
+    probe.release();
+    return at;
+  }
+  /**
+   * Batches (#132): a guest array of buffers or strings, each element lent as a single buffer is,
+   * and null or an empty array for the empty batch. Every path leaves the scratch stack balanced.
+   */
+  static void batches(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    byte[] a = {1, 2, 3}, none = {}, b = {(byte) 255}, text = "h\u00e9".getBytes(StandardCharsets.UTF_8);
+    // Many elements spill the arrays into an arena, and their copies past the scratch block too;
+    // the block then grows to that high-water mark on its next use, so the top is measured after.
+    Object[] many = new Object[1100];
+    byte[][] manyBytes = new byte[many.length][];
+    for (int i = 0; i < many.length; i++) {
+      manyBytes[i] = new byte[] {(byte) i, (byte) (i >> 8)};
+      many[i] = new HeapBytes(manyBytes[i], false);
+    }
+    long previous = -1, top = scratchTop();
+    for (int round = 0; round < 8 && top != previous; round++) {
+      check(call(cells, "digest", BufferArray.of(many)).equals(foldBatch(FNV_OFFSET, manyBytes)), "digest of 1100 elements");
+      previous = top;
+      top = scratchTop();
+    }
+    check(previous == top, "scratch stack balanced after 1100 elements");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment native1 = arena.allocateFrom(ValueLayout.JAVA_BYTE, b);
+      // Three buffers of different sizes, one empty, plus a string: the native side folds exactly
+      // those bytes.
+      check(call(cells, "digest", BufferArray.of(new HeapBytes(a, false), new HeapBytes(none, false), NativeBytes.of(native1, false), "h\u00e9"))
+          .equals(foldBatch(FNV_OFFSET, a, none, b, text)), "digest of a batch");
+      check(call(cells, "digest", BufferArray.of(NativeBytes.of(Arena.global().allocate(0), false)))
+          .equals(foldBatch(FNV_OFFSET, none)), "digest of an empty native element");
+      // The empty batch, as null, an interop null or an empty array, passes null arrays.
+      long empty = foldBatch(FNV_OFFSET);
+      check(cells.apply("digest").call((Object) null).equals(empty), "digest of host null");
+      check(call(cells, "digest", NativeVoid.INSTANCE).equals(empty), "digest of interop null");
+      check(call(cells, "digest", BufferArray.of()).equals(empty), "digest of an empty array");
+      // A large element is pinned in a Native Image.
+      check(call(cells, "digest", BufferArray.of(new HeapBytes(large, false), new HeapBytes(a, false)))
+          .equals(foldBatch(FNV_OFFSET, large, a)), "digest with a large element");
+      // Two batches; the second's elements may be absent, and its lengths are signed 64-bit.
+      check(call(cells, "merge", BufferArray.of(new HeapBytes(a, false), "h\u00e9"), BufferArray.of(NativeBytes.of(native1, false), null, new HeapBytes(none, false)))
+          .equals(foldBatch(foldBatch(FNV_OFFSET, a, text), b, null, none)), "merge of two batches");
+      check(call(cells, "merge", null, BufferArray.of()).equals(foldBatch(foldBatch(FNV_OFFSET))), "merge of two empty batches");
+      check(scratchTop() == top, "scratch stack balanced after batches");
+      // An absent element where none may be, a value that is no buffer, or a closed segment fails
+      // the call; the elements lent before it are released.
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), null));
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), "ok", 42));
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(large, false), 42));
+      rejects(cells, "digest", new HeapBytes(a, false));
+      check(scratchTop() == top, "scratch stack balanced after refused batches");
+    }
+    System.out.println("batches passed");
+  }
+  /**
+   * FFM cells copy a batch element of scoped native memory through its segment, since no downcall
+   * holds its scope: a live confined segment is read, a closed one is refused, and the stack stays
+   * balanced. (Native Image cells lend native memory in place, as for a single buffer.)
+   */
+  public static void batchScopes(Function<String, NativeFunction> cells) throws Exception {
+    long top = scratchTop();
+    byte[] a = {1, 2, 3};
+    Arena closing = Arena.ofConfined();
+    MemorySegment live = closing.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 7, (byte) 8);
+    check(call(cells, "digest", BufferArray.of(NativeBytes.of(live, false))).equals(foldBatch(FNV_OFFSET, new byte[] {7, 8})), "digest of a confined element");
+    closing.close();
+    rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), NativeBytes.of(live, false)));
+    check(scratchTop() == top, "scratch stack balanced after a closed element");
+    System.out.println("batch scopes passed");
+  }
   /** The refusal a cell raises for {@code args}, which it must refuse. */
   static NativeCellException refusal(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
     try { call(cells, name, args); } catch (NativeCellException expected) { return expected; }
@@ -646,6 +735,7 @@ public final class CellChecks {
       }
     }
     check(cells.apply("rawLength").call((Object) null).equals(0L), "nullable host null");
+    batches(cells, new byte[600]);
     copyBackAfterClose(cells);
     check(call(cells, "add", 40, 2).equals(42), "add");
     check(call(cells, "add", 40L, 2.0).equals(42), "add from long and double");

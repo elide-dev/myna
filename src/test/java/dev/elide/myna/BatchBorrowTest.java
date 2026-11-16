@@ -349,12 +349,33 @@ class BatchBorrowTest {
   }
 
   @Test
-  void cellsAreRejectedForBatchesUntilSupported() {
-    String cells = BATCH.replace("java_class=Api", "java_class=Api truffle_cells=true");
-    String message =
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
-            .getMessage();
-    assertTrue(message.contains("truffle_cell=false@explicit_contract"), message);
+  void batchImportsGetCellsThatLendEachElement() {
+    for (String backend : new String[] {"", " truffle_backend=ffm"}) {
+      String cells = BATCH.replace("java_class=Api", "java_class=Api truffle_cells=true" + backend);
+      String java = Generator.generate(Dsl.parse(cells), true).get("ApiTruffle.java");
+      boolean ffm = !backend.isEmpty();
+      assertTrue(
+          java.contains(
+              "this.coerce_sources = new BatchCoercion(\"digest\", \"sources\", false, true,"
+                  + " Long.MAX_VALUE, "
+                  + ffm
+                  + ");"),
+          java);
+      assertTrue(
+          java.contains(
+              "this.coerce_deps = new BatchCoercion(\"merge\", \"deps\", true, false, 4294967295L, "
+                  + ffm
+                  + ");"),
+          java);
+      // The lengths and count drop out of the guest signature; the cell derives them.
+      assertTrue(java.contains("super(\"digest\", 1);"), java);
+      assertTrue(java.contains("super(\"merge\", 3);"), java);
+      assertTrue(
+          java.contains(
+              "borrow_deps.address() + 8L * borrow_deps.length(), (int) borrow_deps.length()"),
+          java);
+      // A batch is always borrowed: no call skips its borrow for segments passed in place.
+      assertFalse(java.contains("lent_"), java);
+    }
   }
 }

@@ -351,8 +351,9 @@ none of it past the call.
   copied into the call's confined arena, as a single buffer's temporary storage is, and the copy
   is lent. The arrays live in the same arena.
 - **Static JNI** generates no buffer adapter for an import with a batch; its raw binding remains.
-- **Truffle cells** do not lend batches yet: an import with one must declare
-  `truffle_cell=false@explicit_contract`.
+- **Truffle cells** take a guest array of byte buffers or strings (or null for the empty batch)
+  and lend each element as a single buffer, from the scratch stack; see
+  [Truffle cells](truffle-cells.md#batches-of-buffers).
 
 An implementation in Rust can read a batch through the safe views `seam.rs` defines when a module
 declares one:
