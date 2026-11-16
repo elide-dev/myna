@@ -84,6 +84,11 @@ fn main() {
     assert_eq!(unsafe { seam::liveCount() }, 0);
     // A C string: the CStr is its own terminator.
     assert_eq!(titleLength(c"hello"), 5);
+    // A create that keeps its input: the owner borrows the bytes until it is dropped.
+    let held = vec![4u8, 5, 6];
+    let doc = Doc::create(&held).unwrap();
+    assert_eq!(unsafe { seam::docSum(doc.borrow().as_ptr()) }, 15);
+    drop(doc);
     assert!(std::panic::catch_unwind(|| {
         let _owner = Ticket::create().unwrap();
         panic!("release during unwinding");

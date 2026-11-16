@@ -199,6 +199,20 @@ public final class FfmBindingMain {
           throw new AssertionError("failed surfaceFrom");
         if (binding.liveCount() != 2) throw new AssertionError("surfaces live");
         surface.run(); from.run();
+        // A create that keeps its input: the binding copies it into memory the owner frees after
+        // the destroy, so the caller's segment may change or close at once.
+        var docs = new java.util.ArrayList<MemorySegment>();
+        NativeApiFFM.ResourceFactory<Action> keepDoc = (address, destructor, threadConstraint) -> {
+          docs.add(address);
+          return () -> destructor.destroy(address);
+        };
+        var held = memory.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 4, (byte) 5, (byte) 6);
+        var doc = NativeApiFFM.Doc.create(binding, keepDoc, held);
+        held.fill((byte) 0);
+        if (binding.docSum(docs.get(0)) != 15) throw new AssertionError("held copy");
+        var fromHeap = NativeApiFFM.Doc.create(binding, keepDoc, MemorySegment.ofArray(new byte[] {1, 2}));
+        if (binding.docSum(docs.get(1)) != 3) throw new AssertionError("held heap copy");
+        doc.run(); fromHeap.run();
         // A C string: NUL-terminated UTF-8 in the call's arena.
         if (binding.titleLength("h\u00e9llo") != 6) throw new AssertionError("title length");
         rejects(NullPointerException.class, () -> binding.titleLength((String) null));

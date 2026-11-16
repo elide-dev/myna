@@ -78,6 +78,10 @@ the same output as before.
   `success=`, Rust returns `Result<R, Status>`, and Truffle cells adopt it as other status creates
   (see [status plus out-pointer](../ownership.md#status-plus-out-pointer)).
 - A buffer length may be `usize` (`size_t`), treated as 64-bit unsigned in every wrapper.
+- A constructor that keeps its read-only input (`lifetime=resource:`) is wrapped beyond Truffle cells:
+  Rust owners carry the buffer's lifetime (`Doc<'held>`), and FFM and Native Image copy the bytes
+  into memory the owner frees after the destroy. A Truffle cell holds a buffer only for a `handle=`
+  create (see [borrows held by a resource](../ownership.md#borrows-held-by-a-resource)).
 - `access=cstring` declares a read-only NUL-terminated `ptr<u8>` with no length: `&CStr` in the
   Rust wrappers and implementer trait, a `String` overload in FFM, a guest string in Truffle cells
   (see [C strings](../ownership.md#c-strings)).

@@ -188,3 +188,19 @@ unsafe fn surface_new(width: i64, out: *mut *mut i64, error: *mut u8, capacity: 
     let width = unsafe { title_length(title) } as i64;
     unsafe { surface_new(width, out, error, capacity) }
 }
+// A document that keeps its input: doc_sum reads the held bytes long after doc_open returned, so a
+// caller that freed or reused them would be caught here.
+#[repr(C)] pub struct HeldDoc { data: *const u8, length: u64 }
+#[unsafe(no_mangle)] pub unsafe extern "C" fn doc_open(data: *const u8, length: u64) -> *mut HeldDoc {
+    let p = unsafe { malloc(core::mem::size_of::<HeldDoc>()) } as *mut HeldDoc;
+    if !p.is_null() { unsafe { p.write(HeldDoc { data, length }); } LIVE.fetch_add(1, Ordering::SeqCst); }
+    p
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn doc_sum(p: *const HeldDoc) -> u64 {
+    let doc = unsafe { p.read() };
+    (0..doc.length as usize).map(|i| u64::from(unsafe { doc.data.add(i).read() })).sum()
+}
+#[unsafe(no_mangle)] pub unsafe extern "C" fn doc_close(p: *mut HeldDoc) {
+    unsafe { free(p as *mut u8); }
+    LIVE.fetch_sub(1, Ordering::SeqCst);
+}

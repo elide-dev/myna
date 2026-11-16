@@ -336,6 +336,19 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot move out of `owner` because it is borrowed", rejected.stderr)
+        # A resource whose create keeps its buffer cannot outlive that buffer, nor let it change.
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let doc = { let bytes = vec![1u8, 2]; seam::ownership::Doc::create(&bytes).unwrap() }; '
+            'drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("`bytes` does not live long enough", rejected.stderr)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let mut bytes = vec![1u8, 2]; let doc = seam::ownership::Doc::create(&bytes).unwrap(); '
+            'bytes[0] = 9; drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("cannot borrow `bytes` as mutable because it is also borrowed as immutable", rejected.stderr)
         # Confined resources must not accidentally implement Send.
         confined = work / "confined.seam"
         confined.write_text((ROOT / "tests/ownership/ownership.seam").read_text()
