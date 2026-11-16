@@ -14,8 +14,6 @@ public final class ConstsFFM {
         ValueLayout.JAVA_INT.withName("tag"),
         ValueLayout.JAVA_INT.withName("packed"),
         ValueLayout.JAVA_LONG.withName("operand"));
-    /** A pointer to one Node: a read or return through it is a 16-byte segment in the global scope. */
-    public static final AddressLayout Node_POINTER = ValueLayout.ADDRESS.withTargetLayout(Node_LAYOUT);
     // enum NodeTag: values in ConstsConstants.NodeTag
     public static final long Node_tag_OFFSET = 0L;
     // flags Packed: values in ConstsConstants.Packed
@@ -29,7 +27,7 @@ public final class ConstsFFM {
         ValueLayout.JAVA_INT.withName("perms"),
         ValueLayout.JAVA_LONG.withName("wide"),
         ValueLayout.JAVA_LONG.withName("raw"));
-    /** A pointer to one Record: a read or return through it is a 24-byte segment in the global scope. */
+    /** A pointer to one Record: a read or return through it is a 24-byte segment in the global scope, and so is a null one, at address 0: test address() == 0 before reading, since a read through it is unchecked native access. */
     public static final AddressLayout Record_POINTER = ValueLayout.ADDRESS.withTargetLayout(Record_LAYOUT);
     // enum Status: values in ConstsConstants.Status
     public static final long Record_status_OFFSET = 0L;
@@ -41,8 +39,6 @@ public final class ConstsFFM {
     public static final long Record_raw_OFFSET = 16L;
     public static final StructLayout Unary_LAYOUT = MemoryLayout.structLayout(
         ValueLayout.JAVA_INT.withName("op"));
-    /** A pointer to one Unary: a read or return through it is a 4-byte segment in the global scope. */
-    public static final AddressLayout Unary_POINTER = ValueLayout.ADDRESS.withTargetLayout(Unary_LAYOUT);
     // enum UnaryOp: values in ConstsConstants.UnaryOp
     public static final long Unary_op_OFFSET = 0L;
     // returns enum Status: values in ConstsConstants.Status

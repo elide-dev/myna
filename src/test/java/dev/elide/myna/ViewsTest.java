@@ -464,18 +464,44 @@ class ViewsTest {
   void ffmStructPointersAreSized() throws Exception {
     var module = Dsl.parse(Files.readString(Path.of("tests/pointers/pointers.seam")));
     String ffm = Generator.generate(module, true).get("PointersFFM.java");
-    assertTrue(ffm.indexOf("Node_LAYOUT =") < ffm.indexOf("Leaf_LAYOUT ="), ffm);
+    // Pointees first over full edges only: Anchor -> Node; the Node/Leaf cycle keeps name order.
+    assertTrue(ffm.indexOf("Node_LAYOUT =") < ffm.indexOf("Anchor_LAYOUT ="), ffm);
+    assertTrue(ffm.indexOf("Anchor_LAYOUT =") < ffm.indexOf("Leaf_LAYOUT ="), ffm);
+    for (String shell :
+        List.of(
+            "paddingLayout(40).withByteAlignment(8)).withName(\"next\")",
+            "paddingLayout(16).withByteAlignment(8)).withName(\"leaf\")",
+            "paddingLayout(40).withByteAlignment(8)).withName(\"owner\")"))
+      assertTrue(ffm.contains("ValueLayout.ADDRESS.withTargetLayout(MemoryLayout." + shell), ffm);
+    assertTrue(ffm.contains("Node_POINTER.withName(\"first\")"), ffm);
+    // Only targeted structs get a pointer layout, and with it the restricted call.
+    assertFalse(ffm.contains("Pair_POINTER"), ffm);
     assertTrue(
-        ffm.contains(
-            "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout(40)"
-                + ".withByteAlignment(8)).withName(\"next\")"),
+        ffm.contains("sum_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG, Pair_LAYOUT);"),
         ffm);
     assertTrue(
         ffm.contains(
+            "Visit_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_LONG,"
+                + " Node_POINTER);"),
+        ffm);
+    // The shells depend on the graph, not on names: renaming Leaf to sort last changes nothing.
+    String renamed =
+        Generator.generate(
+                Dsl.parse(
+                    Files.readString(Path.of("tests/pointers/pointers.seam"))
+                        .replace("Leaf", "Zleaf")),
+                true)
+            .get("PointersFFM.java");
+    assertTrue(
+        renamed.contains(
+            "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout(40)"
+                + ".withByteAlignment(8)).withName(\"owner\")"),
+        renamed);
+    assertTrue(
+        renamed.contains(
             "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout(16)"
                 + ".withByteAlignment(8)).withName(\"leaf\")"),
-        ffm);
-    assertTrue(ffm.contains("Node_POINTER.withName(\"owner\")"), ffm);
+        renamed);
     assertTrue(ffm.contains("ValueLayout.ADDRESS.withName(\"handle\")"), ffm);
     assertTrue(ffm.contains("ValueLayout.ADDRESS.withName(\"name\")"), ffm);
     assertTrue(ffm.contains("head_DESCRIPTOR = FunctionDescriptor.of(Node_POINTER);"), ffm);

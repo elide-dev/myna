@@ -60,7 +60,7 @@ public final class JavaFfm implements Backend {
       for (Field f : s.fields()) {
         if (f.offset() > offset)
           elements.add("MemoryLayout.paddingLayout(" + (f.offset() - offset) + ")");
-        elements.add(layouts.field(f) + ".withName(\"" + f.name() + "\")");
+        elements.add(layouts.field(s, f) + ".withName(\"" + f.name() + "\")");
         offset = f.offset() + Validator.size(f.type());
       }
       if (s.size() > offset)
@@ -70,15 +70,20 @@ public final class JavaFfm implements Backend {
           .append("_LAYOUT = MemoryLayout.structLayout(\n        ")
           .append(String.join(",\n        ", elements))
           .append(");\n");
-      out.append("    /** A pointer to one ")
-          .append(s.name())
-          .append(": a read or return through it is a ")
-          .append(s.size())
-          .append("-byte segment in the global scope. */\n    public static final AddressLayout ")
-          .append(s.name())
-          .append("_POINTER = ValueLayout.ADDRESS.withTargetLayout(")
-          .append(s.name())
-          .append("_LAYOUT);\n");
+      // The only generated field ending in _POINTER: keep that suffix to this constant.
+      if (layouts.pointer(s))
+        out.append("    /** A pointer to one ")
+            .append(s.name())
+            .append(": a read or return through it is a ")
+            .append(s.size())
+            .append(
+                "-byte segment in the global scope, and so is a null one, at address 0: test"
+                    + " address() == 0 before reading, since a read through it is unchecked native"
+                    + " access. */\n    public static final AddressLayout ")
+            .append(s.name())
+            .append("_POINTER = ValueLayout.ADDRESS.withTargetLayout(")
+            .append(s.name())
+            .append("_LAYOUT);\n");
       for (Field f : s.fields()) {
         for (FieldCase c : f.cases())
           out.append("    // when ")
@@ -214,7 +219,7 @@ public final class JavaFfm implements Backend {
     binding(m, ffm, functions, out, false);
     binding(m, ffm, functions, out, true);
     ownership(m, out);
-    FfmCallbacks.generate(m, out);
+    FfmCallbacks.generate(m, layouts, out);
     return out.append("}\n").toString();
   }
 
@@ -241,7 +246,8 @@ public final class JavaFfm implements Backend {
     String imported =
         " A record an import returns, or one read through "
             + v.struct().name()
-            + "_POINTER, is sized already; reinterpret any other zero-length pointer to "
+            + "_POINTER, is sized already, even when null: test address() == 0 before reading"
+            + " it. Reinterpret any other zero-length pointer to "
             + v.struct().name()
             + "_LAYOUT first.";
     String carrier = Types.ffmCarrier(v.element());
@@ -947,44 +953,80 @@ public final class JavaFfm implements Backend {
 
   /**
    * The order in which struct layouts are declared, and the layout of every value that may point to
-   * a struct. A {@code ptr<S>} to a declared struct is {@code S_POINTER}, an address whose target
-   * layout is {@code S_LAYOUT}, so a downcall result and a field read are segments sized to S.
-   * Pointers to opaque types, scalars and other pointers stay unsized, and so does a counted view's
-   * pointer, whose view accessors size it by its count.
+   * a struct. A struct that some {@code ptr<S>} targets (an import's parameter or return, a
+   * callback's, or a struct field other than a counted view's pointer) gets {@code S_POINTER}, an
+   * address whose target layout is {@code S_LAYOUT}, and every such pointer uses it: a downcall
+   * result, an upcall argument and a field read are segments sized to S. Creating it is a
+   * restricted call, so a struct no pointer targets gets none, and a module whose structs are only
+   * passed by value initializes as it did without it. Pointers to opaque types, scalars and other
+   * pointers stay unsized, and so does a counted view's pointer, whose view accessors size it by
+   * its count.
    *
-   * <p>A layout is complete when it is created, so {@code S_LAYOUT} is declared before every layout
-   * that points to S: depth first from each struct in name order, pointees first. A pointer field
-   * that closes a cycle (a self-reference such as {@code next: ptr<Node>}, or the last edge of a
-   * mutual cycle) cannot name a layout still being defined; it targets a padding layout of S's size
-   * and alignment instead, which sizes the segment alike but carries no field names. {@code
-   * S_POINTER} itself always targets {@code S_LAYOUT}.
+   * <p>A layout is complete when it is created and cannot contain itself. A pointer field whose
+   * target can reach its own struct through pointer fields (both are in one strongly connected
+   * component: a self-reference such as {@code next: ptr<Node>}, or any edge of a mutual cycle)
+   * targets a padding layout of the target's size and alignment instead, which sizes the segment
+   * alike but carries no field names. Whether a field is such a shell depends only on the graph,
+   * never on names. Every other pointer field names {@code S_POINTER}, so layouts are declared
+   * pointees first, depth first from each struct in name order; {@code S_POINTER} itself always
+   * targets the full {@code S_LAYOUT}.
    */
-  private static final class StructLayouts {
+  static final class StructLayouts {
     final List<Struct> order;
     private final Map<String, Struct> structs = new HashMap<>();
-    private final Set<Field> cycles = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<String> targeted = new HashSet<>();
 
     StructLayouts(Module m) {
       for (Struct s : m.structs()) structs.put(s.name(), s);
+      for (Struct s : m.structs()) for (Field f : s.fields()) target(f, targeted);
+      for (Function f : m.functions()) {
+        target(f.returns(), targeted);
+        for (Parameter p : f.parameters()) target(p.type(), targeted);
+      }
+      for (Signature c : m.callbacks()) {
+        target(c.returns(), targeted);
+        for (Parameter p : c.parameters()) target(p.type(), targeted);
+      }
       var order = new ArrayList<Struct>(m.structs().size());
-      var open = new HashSet<String>();
       var done = new HashSet<String>();
-      for (Struct s : m.structs()) visit(s, open, done, order);
+      for (Struct s : m.structs()) visit(s, done, order);
       this.order = List.copyOf(order);
     }
 
-    private void visit(Struct s, Set<String> open, Set<String> done, List<Struct> order) {
-      if (done.contains(s.name())) return;
-      open.add(s.name());
+    private void target(Field f, Set<String> into) {
+      Struct s = target(f);
+      if (s != null) into.add(s.name());
+    }
+
+    private void target(Type type, Set<String> into) {
+      Struct s = pointee(type);
+      if (s != null) into.add(s.name());
+    }
+
+    /** Pointees first, over the edges that name {@code S_POINTER}: these form no cycle. */
+    private void visit(Struct s, Set<String> done, List<Struct> order) {
+      if (!done.add(s.name())) return;
       for (Field f : s.fields()) {
         Struct target = target(f);
-        if (target == null) continue;
-        if (open.contains(target.name())) cycles.add(f);
-        else visit(target, open, done, order);
+        if (target != null && !cyclic(s, target)) visit(target, done, order);
       }
-      open.remove(s.name());
-      done.add(s.name());
       order.add(s);
+    }
+
+    /** Whether {@code target} reaches {@code owner} through pointer fields, itself included. */
+    private boolean cyclic(Struct owner, Struct target) {
+      var seen = new HashSet<String>();
+      var pending = new ArrayDeque<Struct>(List.of(target));
+      while (!pending.isEmpty()) {
+        Struct s = pending.pop();
+        if (s.name().equals(owner.name())) return true;
+        if (!seen.add(s.name())) continue;
+        for (Field f : s.fields()) {
+          Struct next = target(f);
+          if (next != null) pending.push(next);
+        }
+      }
+      return false;
     }
 
     /** The struct a field points to, or null for any other field and a counted view's pointer. */
@@ -998,17 +1040,26 @@ public final class JavaFfm implements Backend {
           : null;
     }
 
-    /** The layout of a parameter or return: {@code S_POINTER} for a pointer to a struct. */
-    String value(Type type) {
-      Struct s = pointee(type);
-      return s == null ? Types.layout(type) : s.name() + "_POINTER";
+    /** Whether {@code s} gets {@code S_POINTER}. */
+    boolean pointer(Struct s) {
+      return targeted.contains(s.name());
     }
 
-    /** The layout of a struct field, before its name. */
-    String field(Field f) {
+    /**
+     * The layout of a parameter or return: {@code S_POINTER} for a pointer to a struct that has
+     * one. The synthetic pointer of a by-value record lowered for an export is a plain address
+     * unless something else targets that struct.
+     */
+    String value(Type type) {
+      Struct s = pointee(type);
+      return s == null || !pointer(s) ? Types.layout(type) : s.name() + "_POINTER";
+    }
+
+    /** The layout of a field of {@code owner}, before its name. */
+    String field(Struct owner, Field f) {
       Struct s = target(f);
       if (s == null) return Types.layout(f.type());
-      if (!cycles.contains(f)) return s.name() + "_POINTER";
+      if (!cyclic(owner, s)) return s.name() + "_POINTER";
       return "ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.paddingLayout("
           + s.size()
           + ").withByteAlignment("

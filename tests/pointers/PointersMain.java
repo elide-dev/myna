@@ -35,14 +35,14 @@ public final class PointersMain {
         MemorySegment end = second.get(Node_POINTER, Node_next_OFFSET);
         check(end.address() == 0 && end.equals(MemorySegment.NULL) && end.byteSize() == 40, "null next");
 
-        // Through the record layout's field elements. Node.next and Node.leaf close the cycles, so
-        // they target a padding layout of the pointee's size; Leaf.owner targets Node_LAYOUT itself.
+        // Through the record layout's field elements. Node.next, Node.leaf and Leaf.owner are in one
+        // cycle, so they target a padding layout of the pointee's size and alignment.
         MemorySegment next = head.get(field(Node_LAYOUT, "next"), Node_next_OFFSET);
         check(next.equals(second) && next.byteSize() == Node_LAYOUT.byteSize(), "self-reference field");
         MemorySegment leaf = head.get(field(Node_LAYOUT, "leaf"), Node_leaf_OFFSET);
         check(leaf.byteSize() == Leaf_LAYOUT.byteSize(), "cycle field");
         check(leaf.get(ValueLayout.JAVA_DOUBLE, Leaf_weight_OFFSET) == 2.5, "leaf weight");
-        check(field(Leaf_LAYOUT, "owner").targetLayout().orElseThrow().equals(Node_LAYOUT), "owner target");
+        check(field(Leaf_LAYOUT, "owner").targetLayout().orElseThrow() instanceof PaddingLayout, "owner shell");
         MemorySegment owner = leaf.get(field(Leaf_LAYOUT, "owner"), Leaf_owner_OFFSET);
         check(owner.equals(head) && owner.byteSize() == 40, "owner");
         check(owner.get(ValueLayout.JAVA_LONG, Node_value_OFFSET) == 1, "owner value");
@@ -56,6 +56,26 @@ public final class PointersMain {
         check(binding.weigh(leaf) == 2.5 && critical.weigh(leaf) == 2.5, "typed parameter");
       }
       check(head_DESCRIPTOR.returnLayout().orElseThrow().equals(Node_POINTER), "typed descriptor");
+
+      // A pointer outside every cycle targets the full layout.
+      MemorySegment anchor = binding.anchor();
+      check(anchor.byteSize() == Anchor_LAYOUT.byteSize(), "anchor");
+      check(field(Anchor_LAYOUT, "first").targetLayout().orElseThrow().equals(Node_LAYOUT), "full target");
+      MemorySegment first = anchor.get(field(Anchor_LAYOUT, "first"), Anchor_first_OFFSET);
+      check(first.byteSize() == 40 && first.get(ValueLayout.JAVA_LONG, Node_value_OFFSET) == 1, "first");
+
+      // A callback's ptr<Node> argument is sized too.
+      MemorySegment visit = PointersFFM.VisitUpcalls.create(node -> node.byteSize() != 40 ? -2L
+          : node.get(ValueLayout.JAVA_LONG, Node_value_OFFSET)
+              + 10 * node.get(Node_POINTER, Node_next_OFFSET).get(ValueLayout.JAVA_LONG, Node_value_OFFSET),
+          -1L, library);
+      check(binding.visit(visit) == 21L, "callback argument");
+
+      // A struct passed only by value (no Pair_POINTER; the JVM test checks the source).
+      MemorySegment pair = library.allocate(Pair_LAYOUT);
+      pair.set(ValueLayout.JAVA_LONG, Pair_left_OFFSET, 3L);
+      pair.set(ValueLayout.JAVA_LONG, Pair_right_OFFSET, 4L);
+      check(binding.sum(pair) == 7L, "by value");
       MemorySegment none = binding.none();
       check(none.address() == 0 && none.byteSize() == Node_LAYOUT.byteSize(), "null return");
     }
