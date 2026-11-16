@@ -86,6 +86,8 @@ public final class MynaNative {
         static final CGlobalData<swapPair_Leaf> swapPair = CGlobalDataFactory.forSymbol("seam_swap_pair_myna_ref");
         static final CGlobalData<widen_Leaf> widen = CGlobalDataFactory.forSymbol("seam_widen");
         static final CGlobalData<CFunctionPointer> forEach = CGlobalDataFactory.forSymbol("seam_for_each");
+        static final CGlobalData<CFunctionPointer> rotate$declared = CGlobalDataFactory.forSymbol("seam_rotate");
+        static final CGlobalData<CFunctionPointer> swapPair$declared = CGlobalDataFactory.forSymbol("seam_swap_pair");
     }
     /** The linked address of seam_for_each, for a symbol handed to native code rather than called. */
     public static CFunctionPointer forEach_address() {
@@ -109,11 +111,11 @@ public final class MynaNative {
     }
     /** The linked address of seam_rotate, for a symbol handed to native code rather than called. */
     public static CFunctionPointer rotate_address() {
-        return MynaSymbols.rotate.get();
+        return MynaSymbols.rotate$declared.get();
     }
     /** The linked address of seam_swap_pair, for a symbol handed to native code rather than called. */
     public static CFunctionPointer swapPair_address() {
-        return MynaSymbols.swapPair.get();
+        return MynaSymbols.swapPair$declared.get();
     }
     /** The linked address of seam_widen, for a symbol handed to native code rather than called. */
     public static CFunctionPointer widen_address() {

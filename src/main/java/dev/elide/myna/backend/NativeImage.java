@@ -235,6 +235,15 @@ public final class NativeImage implements Backend {
           .append(" = CGlobalDataFactory.forSymbol(")
           .append(SeamJson.quote(f.symbol()))
           .append(");\n");
+    // A by-value leaf calls its reference shim; its address is still the declared symbol, which a
+    // native caller invokes with the declared signature. Seam identifiers have no '$'.
+    for (Function f : m.functions())
+      if (f.direction() == Direction.IMPORT && ByValue.applies(f) && Seam.nativeLeaf(f))
+        out.append("        static final CGlobalData<CFunctionPointer> ")
+            .append(f.name())
+            .append("$declared = CGlobalDataFactory.forSymbol(")
+            .append(SeamJson.quote(f.symbol()))
+            .append(");\n");
     out.append("    }\n");
     // The linked address of each import, read at run time: never a value in the image heap.
     for (Function f : m.functions()) {
@@ -246,6 +255,7 @@ public final class NativeImage implements Backend {
           .append(f.name())
           .append("_address() {\n        return MynaSymbols.")
           .append(f.name())
+          .append(ByValue.applies(f) && Seam.nativeLeaf(f) ? "$declared" : "")
           .append(".get();\n    }\n");
     }
     for (Function f : leaves)

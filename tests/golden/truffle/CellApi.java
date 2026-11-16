@@ -118,6 +118,7 @@ public final class CellApi {
         static final CGlobalData<CFunctionPointer> counterCreate = CGlobalDataFactory.forSymbol("cells_counter_create");
         static final CGlobalData<CFunctionPointer> counterDestroy = CGlobalDataFactory.forSymbol("cells_counter_destroy");
         static final CGlobalData<CFunctionPointer> sleepyAdd = CGlobalDataFactory.forSymbol("cells_sleepy_add");
+        static final CGlobalData<CFunctionPointer> swap$declared = CGlobalDataFactory.forSymbol("cells_swap");
     }
     /** The linked address of cells_add, for a symbol handed to native code rather than called. */
     public static CFunctionPointer add_address() {
@@ -173,7 +174,7 @@ public final class CellApi {
     }
     /** The linked address of cells_swap, for a symbol handed to native code rather than called. */
     public static CFunctionPointer swap_address() {
-        return MynaSymbols.swap.get();
+        return MynaSymbols.swap$declared.get();
     }
     /** The linked address of cells_widen, for a symbol handed to native code rather than called. */
     public static CFunctionPointer widen_address() {

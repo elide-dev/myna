@@ -170,6 +170,24 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
 
 
+    def test_import_addresses_are_declared_symbols(self):
+        """NAME_address() of a by-value import is its declared symbol, leaf or not, called from C."""
+        work = ROOT / "build/addresses-test"
+        fixture = ROOT / "tests/addresses"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", fixture / "addresses.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-I", generated, "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "AddressApi.java", generated / "AddressApiDirectives.java",
+                       fixture / "AddressesMain.java")
+        shutil.copytree(generated / "META-INF", classes / "META-INF", dirs_exist_ok=True)
+        app = work / "addresses-app"
+        native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={work / 'native.o'}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.addresses.AddressesMain", "-o", app)
+        self.assertIn("Native Image import addresses passed", run(app).stdout)
+
     def test_records_are_cstructs(self):
         """Records are @CStruct interfaces: StackValue and SizeOf agree with SIZE, every carrier keeps
         its raw bits in both directions, and each @CField accessor is the single access at the
