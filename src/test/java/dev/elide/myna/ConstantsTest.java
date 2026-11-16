@@ -1275,15 +1275,133 @@ class ConstantsTest {
                 .append(Packed.hasUnknown(packed | 0x100000));
             byte octet = Octet.withCode((byte) 0x12, (byte) 0xa5);
             out.append(' ').append(octet).append(Octet.code(octet)).append(Octet.hasUnknown(octet));
+            out.append(' ').append(ABI_VERSION).append(' ');
+            for (long raw : new long[] {UnaryOp.INVERT, UnaryOp.NEGATE, 1L << 32}) {
+              out.append(switch (UnaryOp.key(raw)) {
+                case UnaryOp.NEGATE_KEY -> "negate";
+                case UnaryOp.INVERT_KEY -> "invert";
+                default -> "?";
+              });
+            }
             return out.toString();
           }
         }
         """;
     assertEquals(
-        "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error"
-            + " ?7null highlow truefalsetruefalsetrue truefalsetrue 826364235 -1"
-            + " -9223372036854775808 90501 59boxed 3ff01lastfalsetruetrue -91-91false",
+        "null_resultnull_result okok syntax_errorsyntax_error internal_errorinternal_error ?7null"
+            + " highlow truefalsetruefalsetrue truefalsetrue 826364235 -1 -9223372036854775808"
+            + " 90501 59boxed 3ff01lastfalsetruetrue -91-91false 3 invertnegate?",
         runOnHotSpot(module, constants, consumer));
+  }
+
+  /**
+   * A 64-bit enum whose values fit an int gets int switch keys; {@code key} maps every value no
+   * label names, including one whose low 32 bits equal a label, to {@code Integer.MIN_VALUE}. Wider
+   * and narrower enums get none. {@code abi=} is {@code ABI_VERSION} in C, Rust and Java.
+   */
+  @Test
+  void wideEnumsSwitchOnIntKeysAndAbiVersionIsAConstant() throws Exception {
+    var module =
+        Dsl.parse(
+            "module keys abi=21 target=x86_64-unknown-linux-gnu java_package=fixture.keys"
+                + " java_class=Keys\n"
+                + "enum Op type=u64\n value negate = 0\n value invert = 1\n"
+                + " value top = 2147483647\nend\n"
+                + "enum Signed type=i64\n value low = -2147483647\n value zero = 0\n"
+                + " value high = 5\nend\n"
+                + "enum Huge type=u64\n value small = 1\n value big = 2147483648\nend\n"
+                + "enum Floor type=i64\n value min = -2147483648\nend\n"
+                + "enum Narrow type=u32\n value one = 1\nend\n");
+    Validator.validate(module, true);
+    var out = Generator.generate(module, true);
+    String constants = out.get("KeysConstants.java");
+    assertTrue(constants.contains("public static final int ABI_VERSION = 21;"), constants);
+    assertTrue(constants.contains("public static final int LOW_KEY = -2147483647;"), constants);
+    for (String group : new String[] {"Huge", "Floor", "Narrow"}) {
+      String body = constants.substring(constants.indexOf("class " + group + " "));
+      body = body.substring(0, body.indexOf("\n    }\n"));
+      assertFalse(body.contains("_KEY") || body.contains(" key("), body);
+    }
+    assertTrue(out.get("seam.h").contains("#define KEYS_ABI_VERSION INT32_C(21)\n"));
+    assertTrue(out.get("seam.rs").contains("\npub const ABI_VERSION: i32 = 21;\n"));
+    assertFalse(out.get("seam.ll").contains("ABI_VERSION"));
+    String consumer =
+        """
+        package fixture.keys;
+        import static fixture.keys.KeysConstants.*;
+        public final class Consumer {
+          static String op(long raw) {
+            return switch (Op.key(raw)) {
+              case Op.NEGATE_KEY -> "negate";
+              case Op.INVERT_KEY -> "invert";
+              case Op.TOP_KEY -> "top";
+              default -> "?";
+            };
+          }
+          static String signed(long raw) {
+            switch (Signed.key(raw)) {
+              case Signed.LOW_KEY: return "low";
+              case Signed.ZERO_KEY: return "zero";
+              case Signed.HIGH_KEY: return "high";
+              default: return "?";
+            }
+          }
+          public static String run() {
+            StringBuilder out = new StringBuilder().append(ABI_VERSION).append(' ');
+            for (long raw : new long[] {0, 1, 2147483647L, 2147483648L, -1L, (1L << 32) | 1, Op.TOP})
+              out.append(op(raw)).append(',');
+            out.append(' ');
+            for (long raw : new long[] {-2147483647L, -2147483648L, 0, 5, (1L << 32) | 5, -1L, Signed.LOW})
+              out.append(signed(raw)).append(',');
+            return out.append(' ').append(Op.key(-1L)).toString();
+          }
+        }
+        """;
+    assertEquals(
+        "21 negate,invert,top,?,?,?,top, low,?,zero,high,?,?,low, -2147483648",
+        runOnHotSpot(module, constants, consumer));
+  }
+
+  @Test
+  void intKeyAndAbiVersionCollisions() {
+    String keyed = "enum Op type=u64\n value x = 0\n";
+    assertEquals(
+        "enum Op: value key: reserved beside the generated key(long) switch helper; rename the"
+            + " value",
+        invalid(HEAD, keyed + " value key = 1\nend\n"));
+    assertEquals(
+        "enum Op: values x and x_key both generate the Java constant X_KEY; rename one",
+        invalid(HEAD, keyed + " value x_key = 1\nend\n"));
+    // Without keys (a u32 carrier, or a value no int holds) the names are free.
+    Validator.validate(
+        Dsl.parse(HEAD + "enum Op type=u32\n value x = 0\n value x_key = 1\n value key = 2\nend\n"),
+        true);
+    Validator.validate(
+        Dsl.parse(HEAD + keyed + " value key = 1\n value huge = 0x80000000\nend\n"), true);
+
+    String abi = "module komodo_frontend abi=4 target=x86_64-unknown-linux-gnu\n";
+    assertEquals(
+        "const ABI_VERSION: collides with the ABI_VERSION generated from the module's abi=;"
+            + " remove the const and use the generated one",
+        invalid(abi, "const ABI_VERSION type=i32 value=4\n"));
+    assertEquals(
+        "function ABI_VERSION: collides with the Rust const ABI_VERSION generated from the"
+            + " module's abi=; rename the function",
+        invalid(abi, "import ABI_VERSION symbol=v return=i32 error=no_failure\nend\n"));
+    assertEquals(
+        "C name KOMODO_FRONTEND_ABI_VERSION is generated by both function symbol"
+            + " KOMODO_FRONTEND_ABI_VERSION and module abi= version",
+        invalid(
+            abi, "import v symbol=KOMODO_FRONTEND_ABI_VERSION return=i32 error=no_failure\nend\n"));
+    assertEquals(
+        "C name KOMODO_FRONTEND_ABI_VERSION is generated by both module abi= version and enum Abi"
+            + " value version",
+        invalid(abi, "enum Abi type=i32\n value version = 1\nend\n"));
+    assertEquals(
+        "type collides with generated constants class MynaNativeConstants",
+        invalid(abi, "opaque MynaNativeConstants\n"));
+    // Without abi= the const is the consumer's own.
+    Validator.validate(Dsl.parse(HEAD + "const ABI_VERSION type=i32 value=4\n"), true);
   }
 
   /**

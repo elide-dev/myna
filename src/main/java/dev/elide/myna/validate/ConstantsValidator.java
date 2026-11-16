@@ -31,6 +31,20 @@ final class ConstantsValidator {
     for (Function f : m.functions()) functionSymbols.add(f.symbol());
     groupNames(m, functionSymbols);
 
+    // abi= is emitted as ABI_VERSION beside the consts: a crate-root Rust const, a field of
+    // <Class>Constants and <MODULE>_ABI_VERSION in C (claimed with the other C names).
+    if (m.abiDeclared()) {
+      for (Constant c : m.constants())
+        require(
+            !c.name().equals("ABI_VERSION"),
+            "const ABI_VERSION: collides with the ABI_VERSION generated from the module's abi=;"
+                + " remove the const and use the generated one");
+      for (Function f : m.functions())
+        require(
+            !f.name().equals("ABI_VERSION"),
+            "function ABI_VERSION: collides with the Rust const ABI_VERSION generated from the"
+                + " module's abi=; rename the function");
+    }
     var constants = new HashSet<String>();
     for (Constant c : m.constants()) {
       Validator.identifier(c.name());
@@ -114,7 +128,7 @@ final class ConstantsValidator {
     require(
         !declared.contains(m.directivesClass()),
         "type collides with generated directives class " + m.directivesClass());
-    if (!groups.isEmpty() || !m.constants().isEmpty())
+    if (m.declaresConstants())
       require(
           !declared.contains(m.constantsClass()),
           "type collides with generated constants class " + m.constantsClass());
@@ -203,6 +217,25 @@ final class ConstantsValidator {
       require(
           other == null, where + "values " + other + " and " + v.name() + " are both " + v.value());
     }
+    // A 64-bit enum whose values fit an int also gets <VALUE>_KEY fields and key(long) in Java.
+    if (e.intKeys())
+      for (EnumValue v : e.values()) {
+        require(
+            !v.name().equals("key"),
+            where
+                + "value key: reserved beside the generated key(long) switch helper; rename the"
+                + " value");
+        require(
+            !names.contains(v.name() + "_key"),
+            where
+                + "values "
+                + v.name()
+                + " and "
+                + v.name()
+                + "_key both generate the Java constant "
+                + v.name().toUpperCase(Locale.ROOT)
+                + "_KEY; rename one");
+      }
   }
 
   private static void flagBits(FlagSet f) {
@@ -587,6 +620,7 @@ final class ConstantsValidator {
     // Callback names are C typedefs in the same ordinary-identifier namespace as the generated
     // macros, typedefs and name functions.
     for (Signature c : m.callbacks()) claim(claimed, c.name(), "callback " + c.name());
+    if (m.abiDeclared()) claim(claimed, Names.abiVersionMacro(m), "module abi= version");
     // Opaque and record names are struct tags, the namespace of the generated bits structs.
     var tags = new HashMap<String, String>();
     for (String name : m.opaqueTypes()) claim(tags, name, "opaque " + name);

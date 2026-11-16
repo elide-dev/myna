@@ -351,6 +351,27 @@ public final class Seam {
     public EnumGroup {
       values = values.stream().sorted(Comparator.comparing(EnumValue::value)).toList();
     }
+
+    /**
+     * Whether Java gets {@code int} switch keys for this enum: a 64-bit carrier, which Java cannot
+     * switch on, whose every value an {@code int} holds ({@code 0..Integer.MAX_VALUE} when
+     * unsigned; when signed, the {@code int} range without {@code Integer.MIN_VALUE}, the key of
+     * values outside it).
+     */
+    public boolean intKeys() {
+      boolean unsigned;
+      switch (type) {
+        case U64, USIZE -> unsigned = true;
+        case I64, ISIZE -> unsigned = false;
+        default -> {
+          return false;
+        }
+      }
+      BigInteger min = BigInteger.valueOf(unsigned ? 0 : Integer.MIN_VALUE + 1L);
+      BigInteger max = BigInteger.valueOf(Integer.MAX_VALUE);
+      return values.stream()
+          .allMatch(v -> v.value().compareTo(min) >= 0 && v.value().compareTo(max) <= 0);
+    }
   }
 
   public record FlagBit(String name, int bit) {}
@@ -522,7 +543,12 @@ public final class Seam {
 
   public static final String DEFAULT_JAVA_PACKAGE = "dev.elide.myna.generated";
 
-  /** {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. */
+  /**
+   * {@code javaPackage}/{@code javaClass} are null unless the descriptor names them. {@code
+   * abiDeclared} is true when the module line names {@code abi=}: only then is {@code abiVersion}
+   * emitted as the {@code ABI_VERSION} constant (the canonical JSON records the version either
+   * way).
+   */
   public record Module(
       String name,
       int abiVersion,
@@ -539,7 +565,45 @@ public final class Seam {
       TruffleConfig truffleConfig,
       List<Constant> constants,
       List<EnumGroup> enums,
-      List<FlagSet> flagSets) {
+      List<FlagSet> flagSets,
+      boolean abiDeclared) {
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          false);
+    }
+
     public Module(
         String name,
         int abiVersion,
@@ -747,7 +811,13 @@ public final class Seam {
           truffleConfig,
           constants,
           enums,
-          flagSets);
+          flagSets,
+          abiDeclared);
+    }
+
+    /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
+    public boolean declaresConstants() {
+      return abiDeclared || !constants.isEmpty() || !enums.isEmpty() || !flagSets.isEmpty();
     }
 
     public String javaPackageName() {

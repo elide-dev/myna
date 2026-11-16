@@ -19,7 +19,7 @@ import java.util.Locale;
 public final class JavaConstants implements Backend {
   /** True when the module declares anything this class would carry. */
   public static boolean applies(Module m) {
-    return !m.constants().isEmpty() || !m.enums().isEmpty() || !m.flagSets().isEmpty();
+    return m.declaresConstants();
   }
 
   public String filename(Module module) {
@@ -41,6 +41,14 @@ public final class JavaConstants implements Backend {
                 + " {\n    private "
                 + m.constantsClass()
                 + "() {}\n");
+    if (m.abiDeclared())
+      field(
+          out,
+          "    ",
+          "module abi=" + m.abiVersion() + ": i32",
+          Scalar.I32,
+          "ABI_VERSION",
+          Integer.toString(m.abiVersion()));
     for (Constant c : m.constants())
       field(
           out,
@@ -91,6 +99,15 @@ public final class JavaConstants implements Backend {
           e.type(),
           v.name().toUpperCase(Locale.ROOT),
           Types.javaLiteral(e.type(), v.value(), false));
+    if (e.intKeys())
+      for (EnumValue v : e.values())
+        field(
+            out,
+            "        ",
+            null,
+            Scalar.I32,
+            v.name().toUpperCase(Locale.ROOT) + "_KEY",
+            Types.javaLiteral(Scalar.I32, v.value(), false));
     String carrier = Types.java(e.type());
     out.append(
             "        /** The declared name of {@code value}, or null for an unlisted value. */\n")
@@ -116,7 +133,23 @@ public final class JavaConstants implements Backend {
             .append(";\n");
       out.append("                default -> null;\n            };\n");
     }
-    out.append("        }\n    }\n");
+    out.append("        }\n");
+    if (e.intKeys()) {
+      boolean unsigned = e.type() == Scalar.U64 || e.type() == Scalar.USIZE;
+      out.append(
+              "        /**\n"
+                  + "         * {@code value} as an {@code int} switch key: the value itself when"
+                  + " an {@code int} holds\n"
+                  + "         * it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label"
+                  + " equals. Java cannot\n"
+                  + "         * switch on a {@code long}: {@code switch (key(raw)) { case ")
+          .append(e.values().get(0).name().toUpperCase(Locale.ROOT))
+          .append("_KEY -> ... }}.\n         */\n")
+          .append("        public static int key(long value) { return ")
+          .append(unsigned ? "(value >>> 31) == 0" : "value == (int) value")
+          .append(" ? (int) value : Integer.MIN_VALUE; }\n");
+    }
+    out.append("    }\n");
   }
 
   private static void flagSet(Module m, FlagSet f, StringBuilder out) {

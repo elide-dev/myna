@@ -218,6 +218,10 @@ public final class RustFfi implements Backend {
   }
 
   private static void constants(Module m, StringBuilder out) {
+    if (m.abiDeclared())
+      out.append("/// The module's `abi=` version.\npub const ABI_VERSION: i32 = ")
+          .append(m.abiVersion())
+          .append(";\n");
     for (Constant c : m.constants())
       out.append("pub const ")
           .append(c.name().toUpperCase(Locale.ROOT))

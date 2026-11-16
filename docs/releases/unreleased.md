@@ -26,6 +26,11 @@ parameters, returns and callback types reference them (see
   constants, getters and `with` setters in C, Rust and Java, and a `@CBitfield` member with
   `c_bitfields=true`. `<GROUP>_ALL` and `hasUnknown` count the ranges as declared bits (see
   [bit ranges](../dsl.md#bit-ranges)).
+- A 64-bit enum whose values all fit an `int` gets `<VALUE>_KEY` labels and `key(long)` in
+  `<Class>Constants`, so Java can `switch` on it (Java has no `switch` on `long`); see
+  [tagged fields](../dsl.md#fields-whose-meaning-depends-on-a-tag).
+- A module that declares `abi=N` emits it as `<MODULE>_ABI_VERSION` (C), `ABI_VERSION` (Rust) and
+  `<Class>Constants.ABI_VERSION`, typed `i32`; `<Class>Constants` is generated for it alone if needed.
 - A struct field can name the group that applies per value of a tag field with `when tag=binary
   enum=BinaryOp` lines (#134). Rust gains `<field>_as_<group>()` record accessors and Native Image
   `<field>As<Enum>(record)`; the layout and ABI are unchanged and nothing checks the tag (see

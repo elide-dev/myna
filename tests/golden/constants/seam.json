@@ -3,7 +3,7 @@
   "bindingAbiVersion": 2,
   "generatorVersion": "0.18.0",
   "name": "constants",
-  "abiVersion": 1,
+  "abiVersion": 3,
   "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
   "java": {"package":"fixture.constants","class":"Consts"},
   "truffle": {"cells":true,"backend":"NATIVE","coercion":"STRICT","transitions":"DIRECT"},

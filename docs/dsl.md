@@ -8,6 +8,14 @@ A module starts with:
 module moduleName abi=1 target=aarch64-apple-darwin
 ```
 
+`abi=N` is the consumer's own protocol version (a positive integer, 1 when omitted), recorded in the canonical
+JSON. When the module line names it, every backend that emits constants also emits it, typed `i32`:
+`#define <MODULE>_ABI_VERSION INT32_C(N)` in `seam.h`, `pub const ABI_VERSION: i32 = N;` in `seam.rs` and
+`public static final int ABI_VERSION = N;` in `<Class>Constants`, which is generated for it even when the
+module declares no other constants. A provider can return it and a consumer check it from generated code. It
+never reaches `seam.ll`. With `abi=` declared, a `const ABI_VERSION`, a function named `ABI_VERSION`, and any
+other generated C name `<MODULE>_ABI_VERSION` are rejected.
+
 Optional `java_package=dev.example.io` and `java_class=IoNatives` name the generated Java: the Native Image class becomes `IoNatives`, the FFM class `IoNativesFFM`, and the Feature `IoNativesForeignFeature`, each named `<class>.java`. Defaults are `dev.elide.myna.generated` and `MynaNative`/`MynaFFM`/`MynaForeignFeature`. Naming is part of the canonical JSON and fingerprint only when set.
 
 Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-gnu`. Their layouts are modeled explicitly as 64-bit little-endian targets; no global assumption about other ABIs is made. The CLI's `--target` overrides the descriptor target before validation/fingerprinting.
@@ -250,6 +258,14 @@ end
   once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
   paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
   which compiles to immediate compares.
+- Java cannot `switch` on a `long`, so an enum with a 64-bit carrier (`i64`, `u64`, `isize`, `usize`) whose
+  every declared value an `int` holds (`0..Integer.MAX_VALUE` unsigned; the `int` range without
+  `Integer.MIN_VALUE` signed) also gets `int` switch keys in `<Class>Constants.<Enum>`: a
+  `public static final int <VALUE>_KEY` per value, and `public static int key(long value)`, which returns
+  `(int) value` when an `int` holds the value and `Integer.MIN_VALUE` otherwise, so a wide value whose low bits
+  equal a code cannot alias its label. It is one compare and a conditional move, with no allocation:
+  `switch (UnaryOp.key(record.operand())) { case UnaryOp.NEGATE_KEY -> …; default -> … }`. Other enums get
+  nothing new. In a keyed enum a value may not be named `key`, nor `<value>_key` beside `<value>`.
 - The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
   so they are part of the fingerprint.
 
