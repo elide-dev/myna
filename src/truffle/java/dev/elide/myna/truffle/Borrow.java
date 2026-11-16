@@ -286,6 +286,12 @@ public final class Borrow {
       // Guest native memory read through its segment: closed, or confined to another thread.
       if (!(buffer instanceof NativeBytes)) throw e;
       throw unavailable("copy-in", e);
+    } catch (NativeCellException e) {
+      // NativeBytes refuses a closed or foreign scope itself, with the segment's exception as
+      // cause.
+      if (buffer instanceof NativeBytes && e.getCause() instanceof RuntimeException cause)
+        throw unavailable("copy-in", cause);
+      throw e;
     }
     return bytes;
   }
