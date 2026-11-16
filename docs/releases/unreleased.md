@@ -26,6 +26,11 @@ parameters, returns and callback types reference them (see
   constants, getters and `with` setters in C, Rust and Java, and a `@CBitfield` member with
   `c_bitfields=true`. `<GROUP>_ALL` and `hasUnknown` count the ranges as declared bits (see
   [bit ranges](../dsl.md#bit-ranges)).
+- A 64-bit enum whose values all fit an `int` gets `<VALUE>_KEY` labels and `key(long)` in
+  `<Class>Constants`, so Java can `switch` on it (Java has no `switch` on `long`); see
+  [tagged fields](../dsl.md#fields-whose-meaning-depends-on-a-tag).
+- A module that declares `abi=N` emits it as `<MODULE>_ABI_VERSION` (C), `ABI_VERSION` (Rust) and
+  `<Class>Constants.ABI_VERSION`, typed `i32`; `<Class>Constants` is generated for it alone if needed.
 - A struct field can name the group that applies per value of a tag field with `when tag=binary
   enum=BinaryOp` lines (#134). Rust gains `<field>_as_<group>()` record accessors and Native Image
   `<field>As<Enum>(record)`; the layout and ABI are unchanged and nothing checks the tag (see
@@ -35,7 +40,8 @@ parameters, returns and callback types reference them (see
 
 A `ptr<T>` record field may name the integer field counting its elements with `count=FIELD` (#133; see
 [the descriptor format](../dsl.md#counted-element-views)). Rust records gain an `unsafe fn` `&[T]` accessor, FFM
-gains `<Struct>_<field>(record)` and the `Objects.checkIndex`ed `<Struct>_<field>(record, i)`, and Native
+gains read-only views `<Struct>_<field>(record)` and `(record, Arena owner)`, `<Struct>_<field>_count(record)`, the loop helper
+`<Struct>_<field>_at(view, i)` and element forms, with every bad count or index an `IndexOutOfBoundsException`, and Native
 Image gains `addressOf(long)` on element structs and an asserted, always-inlined `<Struct>_<field>At(record, i)`. Counts are `u8`, `u16`, `u32`, `u64` or `usize`; elements are structs, scalars, or pointers to a struct or opaque type (`ptr<ptr<T>>`). The C ABI is
 unchanged; `seam.json` and the fingerprint record the relation, and descriptors without `count=` generate
 the same output as before.
@@ -60,13 +66,16 @@ the same output as before.
 | 1 | Native Image records are `@CStruct` interfaces. `MynaNative.IrFunction.flags(record)` becomes `record.flags()`; the nested static accessor classes are gone; `SIZE` and `ALIGNMENT` move to the interface. A record field named `isNull`, `isNonNull`, `rawValue`, `equal`, `notEqual` or `addressOf<Other>` is rejected. | every descriptor with a `struct` | call on the receiver |
 | 2 | `ptr<Struct>` and `ptr<Opaque>` parameters and returns of `@CFunction`s, callbacks, export targets and ownership wrappers use the struct or opaque interface instead of `PointerBase`. | every descriptor passing struct or opaque pointers | `WordFactory.pointer(...)` still infers the type; declared variables and export signatures need the new type |
 | 3 | The Native Image class is always `@CContext(<Class>Directives.class)`. A consumer `c_context` is instantiated and delegated to, not the annotation value, and must not add `seam.h` itself. | every Native Image consumer | none for most; a `c_context` needs a public no-argument constructor |
-| 4 | New generated files: `<Class>Directives.java` (always) and `<Class>Constants.java` (when constants, enums or flags are declared). An image that compiles the Native Image class must also compile `<Class>Directives.java` (the `@CContext`, with `seam.h` embedded in segments of at most 16 KiB, read only at image build) and any `c_context` delegate. The image build then checks automatically that `seam.h` is the bindings' own generation; no `--features` flag. FFM-only, JNI-only and Truffle-FFM-only images need nothing new. | images with the Native Image class; consumers that check generated Java in | add the files |
+| 4 | New generated files: `<Class>Directives.java` (always) and `<Class>Constants.java` (when constants, enums or flags are declared, or the module line names `abi=`). An image that compiles the Native Image class must also compile `<Class>Directives.java` (the `@CContext`, with `seam.h` embedded in segments of at most 16 KiB, read only at image build) and any `c_context` delegate. The image build then checks automatically that `seam.h` is the bindings' own generation; no `--features` flag. FFM-only, JNI-only and Truffle-FFM-only images need nothing new. | images with the Native Image class; consumers that check generated Java in | add the files |
 | 5 | Rust: annotated struct fields, `extern` signatures, `<Name>Fn` and callback aliases use the newtype, and `assert_implementations!` requires it. | descriptors that add `enum=`/`flags=` | wrap or unwrap with `.0`, or use the constants |
 | 6 | Annotated imports gain `<name>Enum` methods and typed overloads. A descriptor whose names already end in `Enum` next to an annotated import is rejected, as are declared types named `CEnum`, `CBitfield` and other SVM names. | descriptors that add `enum=` | rename |
 | 7 | `myna-truffle` gains `NativeConstants`; `<Class>Truffle` gains `constants()` and `<Enum>Names`. `constants` and the `<Enum>Names` classes are reserved. | Truffle consumers | none unless a cell is named `constants` |
 | 8 | `seam.h` uses carrier typedefs in annotated fields and prototypes. | descriptors that add references | source-compatible in C and C++ |
 | 9 | `@CBitfield` accessors and the C bitfield union exist only with `c_bitfields=true` on the flag set. | descriptors using flag sets | add the option to ask for them |
 | 10 | `align=N@explicit_contract` is accepted on borrow buffers (a power of two, at most 4096). | descriptors that declare it | none; see the fixes below |
+| 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
+| 12 | In an enum with a 64-bit carrier whose values all fit an `int` (now given `int` switch keys), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
+| 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
 
 Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
 import, export entry-point signatures at the C level.

@@ -4,6 +4,8 @@ package fixture.constants;
 /** Named constants of seam constants: literal primitives, no imports, no static initializer. */
 public final class ConstsConstants {
     private ConstsConstants() {}
+    /** module abi=3: i32 */
+    public static final int ABI_VERSION = 3;
     /** const FLOOR: i64 */
     public static final long FLOOR = -9223372036854775808L;
     /** const LIMIT: u64 */
@@ -16,12 +18,20 @@ public final class ConstsConstants {
         private BinaryOp() {}
         public static final long ADD = 0L;
         public static final long SUB = 1L;
+        public static final int ADD_KEY = 0;
+        public static final int SUB_KEY = 1;
         /** The declared name of {@code value}, or null for an unlisted value. */
         public static String name(long value) {
             if (value == ADD) return "add";
             if (value == SUB) return "sub";
             return null;
         }
+        /**
+         * {@code value} as an {@code int} switch key: the value itself when an {@code int} holds
+         * it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label equals. Java cannot
+         * switch on a {@code long}: {@code switch (key(raw)) { case ADD_KEY -> ... }}.
+         */
+        public static int key(long value) { return (value >>> 31) == 0 ? (int) value : Integer.MIN_VALUE; }
     }
 
     /** enum Kind: u8 */
@@ -99,12 +109,20 @@ public final class ConstsConstants {
         private UnaryOp() {}
         public static final long NEGATE = 0L;
         public static final long INVERT = 1L;
+        public static final int NEGATE_KEY = 0;
+        public static final int INVERT_KEY = 1;
         /** The declared name of {@code value}, or null for an unlisted value. */
         public static String name(long value) {
             if (value == NEGATE) return "negate";
             if (value == INVERT) return "invert";
             return null;
         }
+        /**
+         * {@code value} as an {@code int} switch key: the value itself when an {@code int} holds
+         * it, else {@code Integer.MIN_VALUE}, which no {@code _KEY} label equals. Java cannot
+         * switch on a {@code long}: {@code switch (key(raw)) { case NEGATE_KEY -> ... }}.
+         */
+        public static int key(long value) { return (value >>> 31) == 0 ? (int) value : Integer.MIN_VALUE; }
     }
 
     /** flags Octet: u8 */

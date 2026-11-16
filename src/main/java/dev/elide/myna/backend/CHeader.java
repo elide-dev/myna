@@ -183,6 +183,13 @@ public final class CHeader implements Backend {
   }
 
   private static void constants(Module m, StringBuilder out) {
+    if (m.abiDeclared()) {
+      out.append("/* module abi=").append(m.abiVersion()).append(": i32 */\n");
+      define(
+          out,
+          Names.abiVersionMacro(m),
+          literal(Scalar.I32, BigInteger.valueOf(m.abiVersion()), false));
+    }
     for (Constant c : m.constants()) {
       out.append("/* const ").append(c.name()).append(": ").append(c.type().text()).append(" */\n");
       define(
@@ -235,8 +242,7 @@ public final class CHeader implements Backend {
       for (FlagRange r : f.ranges()) rangeFunctions(m, f, r, out);
       if (f.cBitfields()) bitsStruct(m, f, carrier, out);
     }
-    if (!m.constants().isEmpty() || !m.enums().isEmpty() || !m.flagSets().isEmpty())
-      out.append('\n');
+    if (m.declaresConstants()) out.append('\n');
   }
 
   /**

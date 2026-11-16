@@ -63,6 +63,11 @@ public final class Names {
     return prefix(m) + "_SEAM_ABI_" + fingerprint;
   }
 
+  /** The C macro of the module's declared {@code abi=} version: {@code KOMODO_ABI_VERSION}. */
+  public static String abiVersionMacro(Module m) {
+    return prefix(m) + "_ABI_VERSION";
+  }
+
   /** The C carrier typedef of a group: {@code komodo_frontend_status_t}. */
   public static String cTypedef(Module m, String group) {
     return m.name().toLowerCase(Locale.ROOT) + "_" + lowerSnake(group) + "_t";

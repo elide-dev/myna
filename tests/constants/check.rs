@@ -12,6 +12,7 @@ use seam::{
 };
 
 const _: () = assert!(seam::MAGIC == 0x3141514b);
+const _: () = assert!(seam::ABI_VERSION == 3);
 const _: () = assert!(seam::LIMIT == u64::MAX);
 const _: () = assert!(seam::FLOOR == i64::MIN);
 const _: () = assert!(Status::NULL_RESULT.0 == -1);

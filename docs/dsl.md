@@ -8,6 +8,17 @@ A module starts with:
 module moduleName abi=1 target=aarch64-apple-darwin
 ```
 
+`abi=N` is the consumer's own protocol version (a positive integer, 1 when omitted), recorded in the canonical
+JSON. When the module line names it, three outputs also emit it, typed `i32`:
+`#define <MODULE>_ABI_VERSION INT32_C(N)` in `seam.h`, `pub const ABI_VERSION: i32 = N;` in `seam.rs` and
+`public static final int ABI_VERSION = N;` in `<Class>Constants`, which is generated for it even when the
+module declares no other constants. A provider can return it and a consumer check it from generated code. The
+Truffle `constants()` object, the Native Image `@CConstant` accessors and `seam.ll` do not carry it. Only the
+version is part of the canonical JSON and fingerprint, not whether `abi=` was written: `abi=1` and an omitted
+`abi=` share a fingerprint but differ in these outputs (and in whether `<Class>Constants` exists). With `abi=`
+declared, a `const ABI_VERSION`, a function or an enum or flag set named `ABI_VERSION`, and any other
+generated C name `<MODULE>_ABI_VERSION` are rejected.
+
 Optional `java_package=dev.example.io` and `java_class=IoNatives` name the generated Java: the Native Image class becomes `IoNatives`, the FFM class `IoNativesFFM`, and the Feature `IoNativesForeignFeature`, each named `<class>.java`. Defaults are `dev.elide.myna.generated` and `MynaNative`/`MynaFFM`/`MynaForeignFeature`. Naming is part of the canonical JSON and fingerprint only when set.
 
 Supported targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-gnu`. Their layouts are modeled explicitly as 64-bit little-endian targets; no global assumption about other ABIs is made. The CLI's `--target` overrides the descriptor target before validation/fingerprinting.
@@ -70,11 +81,19 @@ end
 The pair is a contract on the record: a non-null pointer addresses `count` consecutive elements that stay valid for as long as the record does, and a null pointer has a zero count. The carrier, layout, C ABI, `seam.h` and `seam.ll` do not change; `seam.json` records `"count"` on the pointer field, so the relation is part of the fingerprint. `T` is a declared struct, a non-`bool` scalar, or a pointer to a struct or opaque type (`ptr<ptr<Node>>`, an array of element pointers such as a tree's child list; the views read the element pointers as stored, so a null element comes back null and is the caller's to check); the count is a plain `u8`, `u16`, `u32`, `u64` or `usize` field (no `enum=`/`flags=`) that counts at most one pointer. A count is never negative, so signed carriers, `isize` included, are rejected: declare a C `int` count as `u32` (the layout is identical) and a `size_t` count as `usize`. A view that should share another view's count is not expressible yet. Generated accessors (see `examples/views.seam`):
 
 - **Rust**: `unsafe fn functions(&self) -> &[Function]` on the record (the field's name; Rust keeps methods and fields apart). It is `unsafe` because records are `Copy` with public raw fields, so safe code can build one whose pointer and count disagree. Its `# Safety` contract: the record came from the producer, or a non-null pointer addresses `count` initialized, aligned elements that stay valid and unmodified while the record is borrowed, and a null one has a zero count. Null is the empty slice; `debug_assert!` checks a null pointer's zero count, the `isize` size limit and alignment. Indexing past the count panics as any slice does. A pointer array is `&[*mut T]`, the field's own pointer spelling, with the same rules.
-- **Java FFM**: `<Struct>_<field>(MemorySegment record)` is a segment of `count * sizeof(T)` bytes (`MemorySegment.NULL` when the pointer is null, with an `assert` on the count). `<Struct>_<field>(record, i)` reads the count once, calls `Objects.checkIndex(i, count)` before anything else, and then addresses element `i` directly (a slice for a struct, the value for a scalar, and for a pointer array the element pointer as a zero-length segment, like other pointer reads; the whole view is `count * ADDRESS.byteSize()` bytes), so any index outside `0 <= i < count` throws `IndexOutOfBoundsException`; a `u64` count above `Long.MAX_VALUE` reads as negative, so every index throws. The whole-view accessor throws `ArithmeticException` (from `Math.multiplyExact`) when `count * sizeof(T)` overflows a `long`, and `IllegalArgumentException` (from `reinterpret`) when the product is negative without overflowing, which only a `u64` count above `Long.MAX_VALUE` produces. Narrow counts zero-extend. Both read the record through its segment's bounds: a record an import returns is a zero-length segment, so reinterpret it to `<Struct>_LAYOUT.byteSize()` first. The view has the global scope; "valid for as long as the record is" is a contract, not a check.
+- **Java FFM**: every view is **read-only**: the elements are the producer's memory, as Rust's shared `&[T]` is. Beside the `_OFFSET` constants, each view gets:
+  - `long <Struct>_<field>_count(record)`: the count widened unsigned. A `u64` above `Long.MAX_VALUE` reads negative, which every view rejects, so take the view before looping on a `u64` count: a loop bounded by a negative count silently runs zero times.
+  - `<Struct>_<field>(record)`: the elements as one segment of `count * sizeof(T)` bytes (`count * ADDRESS.byteSize()` for a pointer array) in the global scope, for callers that manage the lifetime themselves.
+  - `<Struct>_<field>(record, Arena owner)`: the same view bound to `owner`, so a read after the owner closes throws `IllegalStateException` instead of reading freed memory. A confined owner makes the view confined to its thread (`WrongThreadException` elsewhere).
+  - `<Struct>_<field>_at(view, i)`: element `i` of a view taken once, the loop shape. A struct element is `view.asSlice(i * size, size)`, a scalar `view.getAtIndex(layout, i)`, and a pointer array's element the address at `i` as a read-only, zero-length segment in the global scope, like other pointer reads. No call is restricted, and there is no `reinterpret` per element. The bound is the view's own size (`view.byteSize() / size`), which is the count for a view from the generated accessor; any other segment gets its own size as the bound.
+  - `<Struct>_<field>_at(view, i, Arena owner)`, pointer arrays only: the element's pointee as a read-only segment of `T`'s size (0 for an opaque `T`) bound to `owner`. It asserts the pointee lives as long as the owner does, as when one arena owns a whole result, pointees included. A null element stays a null segment. Scoping costs one restricted call per element.
+  - `<Struct>_<field>(record, i)`: element `i` through one view (one `reinterpret`). Struct and pointer elements also have `(record, i, owner)`, scoped to `owner` (a pointer array's goes through the owner form of `_at`). Every returned segment is read-only, elements included.
+
+  There is one failure mode, checked unconditionally: `IndexOutOfBoundsException`, whose message names the struct, the field and the count field. It covers an index outside `0 <= i < count`, a null pointer with a nonzero count, a `u64` count above `Long.MAX_VALUE`, a count whose byte size overflows a `long`, and a non-null pointer misaligned for the element. A null pointer with a zero count is an empty view. Every accessor reads the record through its segment's bounds: a record an import returns is a zero-length segment, so reinterpret it to `<Struct>_LAYOUT.byteSize()` first. The record's own lifetime stays the caller's contract; the owner overloads bind the view, not the record.
 - **Native Image**: the record's getter keeps returning the typed pointer, and an element struct's interface gains `T addressOf(long index)`. SVM accepts only C-interface methods in a `@CStruct` interface, so the bounded accessor is an `@AlwaysInline` static method of the class: `<Struct>_<field>At(record, i)` returns the element record (`addressOf(i)`), the scalar (`read(WordFactory.signed(i))`), or for a pointer array the element's struct or opaque interface (`((WordPointer) record.field()).read(WordFactory.signed(i))`: one load of the field and one scaled load) after an `assert` of `0 <= i < count`, which compiles out unless the image is built with `-ea`; the image then holds one load of the pointer field and the scaled access. The helpers are not for `@Uninterruptible` code (an enabled assert would allocate there); use `record.field().read(...)` or `record.field().addressOf(i)` directly. A struct used as an element may not have a field named `addressOf`.
 - **Truffle**: records are not guest-visible objects (cells take and copy buffers), so cells generate nothing for views.
 
-The accessor names `<Struct>_<field>` and `<Struct>_<field>At` may not be function names.
+The accessor names `<Struct>_<field>`, `<Struct>_<field>At`, `<Struct>_<field>_count` and `<Struct>_<field>_at` may not be function names, and two views' names may not meet (a view of `p_count` beside a view of `p`).
 
 ### Records by value
 
@@ -250,6 +269,14 @@ end
   once inlined, but a `switch` on the result also pays `of`, the enum's ordinal and javac's switch map. Hot
   paths should switch on the raw field, `record.<field>()`, with the `<Class>Constants` literals as labels,
   which compiles to immediate compares.
+- Java cannot `switch` on a `long`, so an enum with a 64-bit carrier (`i64`, `u64`, `isize`, `usize`) whose
+  every declared value an `int` holds (`0..Integer.MAX_VALUE` unsigned; the `int` range without
+  `Integer.MIN_VALUE` signed) also gets `int` switch keys in `<Class>Constants.<Enum>`: a
+  `public static final int <VALUE>_KEY` per value, and `public static int key(long value)`, which returns
+  `(int) value` when an `int` holds the value and `Integer.MIN_VALUE` otherwise, so a wide value whose low bits
+  equal a code cannot alias its label. It is branch-free in source and allocates nothing:
+  `switch (UnaryOp.key(record.operand())) { case UnaryOp.NEGATE_KEY -> …; default -> … }`. Other enums get
+  nothing new. In a keyed enum a value may not be named `key`, nor `<value>_key` beside `<value>`.
 - The canonical JSON records a field's `cases` (`tag`, `value`, and `enum` or `flags`) only when it has some,
   so they are part of the fingerprint.
 

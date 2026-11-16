@@ -12,7 +12,14 @@ import java.util.*;
  * zero count; otherwise the pointer addresses {@code count} consecutive elements, valid for as long
  * as the record is.
  */
-record Views(Struct struct, Field pointer, Field count, Type element, long elementSize) {
+record Views(
+    Struct struct,
+    Field pointer,
+    Field count,
+    Type element,
+    long elementSize,
+    long elementAlignment,
+    long pointeeSize) {
   /** The views of one record, in field order; empty when no field declares {@code count=}. */
   static List<Views> of(Module m, Struct s) {
     var views = new ArrayList<Views>();
@@ -21,17 +28,23 @@ record Views(Struct struct, Field pointer, Field count, Type element, long eleme
       Field count =
           s.fields().stream().filter(c -> c.name().equals(f.count())).findFirst().orElseThrow();
       Type element = ((Pointer) f.type()).pointee();
+      Struct record = struct(m, element);
       long size =
-          element instanceof Named n
-              ? m.structs().stream()
-                  .filter(e -> e.name().equals(n.name()))
-                  .findFirst()
-                  .orElseThrow()
-                  .size()
+          record != null
+              ? record.size()
               : element instanceof Scalar e ? e.bytes : 8; // a ptr<T> element is one word
-      views.add(new Views(s, f, count, element, size));
+      long alignment = record != null ? record.alignment() : size;
+      // A pointer array's pointee: a struct's size, or 0 for an opaque type.
+      Struct pointee = element instanceof Pointer p ? struct(m, p.pointee()) : null;
+      views.add(
+          new Views(s, f, count, element, size, alignment, pointee == null ? 0 : pointee.size()));
     }
     return views;
+  }
+
+  private static Struct struct(Module m, Type type) {
+    if (!(type instanceof Named n)) return null;
+    return m.structs().stream().filter(e -> e.name().equals(n.name())).findFirst().orElse(null);
   }
 
   /** Records that are the element type of some view. */

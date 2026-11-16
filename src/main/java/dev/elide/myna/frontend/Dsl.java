@@ -15,6 +15,7 @@ public final class Dsl {
   public static Module parse(String source) {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
+    boolean abiDeclared = false;
     NativeConfig nativeConfig = null;
     TruffleConfig truffleConfig = null;
     var opaque = new ArrayList<String>();
@@ -56,6 +57,7 @@ public final class Dsl {
             name = words[1];
             var opts = options(words, 2);
             target = take(opts, "target", null);
+            abiDeclared = opts.containsKey("abi");
             abi = Integer.parseInt(take(opts, "abi", "1"));
             javaPackage = take(opts, "java_package", null);
             javaClass = take(opts, "java_class", null);
@@ -329,7 +331,8 @@ public final class Dsl {
         truffleConfig,
         constants,
         enums,
-        flagSets);
+        flagSets,
+        abiDeclared);
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */
