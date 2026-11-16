@@ -436,11 +436,18 @@ final class RustOwnership {
   private static final String BATCH_ADAPTER =
 """
 /// A length or count of a borrowed batch, as its import declares it.
-pub trait BatchLength: Copy {
+///
+/// Sealed: only the carriers a batch's lengths and count may have (`u32`, `u64`, `i32`, `i64`)
+/// implement it, so `to_usize` is never code that could race when a view crosses threads.
+pub trait BatchLength: Copy + ownership::batch::sealed::Sealed {
     /// The value as a byte length or element count. Negative and oversized values break the
     /// caller's contract, which debug builds assert.
     fn to_usize(self) -> usize;
 }
+impl ownership::batch::sealed::Sealed for u32 {}
+impl ownership::batch::sealed::Sealed for i32 {}
+impl ownership::batch::sealed::Sealed for u64 {}
+impl ownership::batch::sealed::Sealed for i64 {}
 impl BatchLength for u32 { #[inline(always)] fn to_usize(self) -> usize { self as usize } }
 impl BatchLength for i32 {
     #[inline(always)]
@@ -629,6 +636,10 @@ impl<L: BatchLength> core::iter::FusedIterator for OptionalBufferBatchIter<'_, L
     /// Lends batches to the calls above; not part of the API.
     #[doc(hidden)]
     pub mod batch {
+        /// Seals `BatchLength`: nameable from `seam.rs` only, so no other type can implement it.
+        pub(in super::super) mod sealed {
+            pub trait Sealed {}
+        }
         #[inline(always)]
         pub fn present(buffer: &&[u8]) -> (*mut u8, usize) { (buffer.as_ptr().cast_mut(), buffer.len()) }
         #[inline(always)]

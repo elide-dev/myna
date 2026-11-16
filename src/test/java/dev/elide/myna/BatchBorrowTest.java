@@ -123,6 +123,10 @@ class BatchBorrowTest {
         rust);
     assertTrue(rust.contains("let depCount: i32 = deps.len().try_into()"), rust);
     assertTrue(rust.contains("pub struct BufferBatch<'a, L: BatchLength = u64> {"), rust);
+    // BatchLength is sealed to the length carriers.
+    assertTrue(
+        rust.contains("pub trait BatchLength: Copy + ownership::batch::sealed::Sealed {"), rust);
+    assertTrue(rust.contains("pub(in super::super) mod sealed {"), rust);
     assertTrue(rust.contains("pub struct OptionalBufferBatch<'a, L: BatchLength = u64> {"), rust);
     // No allocation: above eight elements the _with_scratch form takes the caller's scratch.
     assertFalse(rust.contains("extern crate alloc") || rust.contains("alloc::"), rust);
