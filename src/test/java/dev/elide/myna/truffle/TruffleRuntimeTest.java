@@ -582,11 +582,13 @@ class TruffleRuntimeTest {
             .contains("text"));
     // The lent bytes are scanned: an embedded NUL is refused, the terminator is not.
     Borrow fine = Borrow.ofString("fine", true);
-    CStrings.checkLent(fine, "f", "text", null);
+    CStrings.checkLent(fine.address(), fine.length(), "f", "text", null);
     fine.release();
     Borrow evil = Borrow.ofString("evil.so\0.txt", true);
     assertTrue(
-        assertThrows(NativeCellException.class, () -> CStrings.checkLent(evil, "f", "text", null))
+        assertThrows(
+                NativeCellException.class,
+                () -> CStrings.checkLent(evil.address(), evil.length(), "f", "text", null))
             .getMessage()
             .equals("f text: embedded NUL in a C string"));
     evil.release();

@@ -97,6 +97,7 @@ the same output as before.
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
 | 12 | In an enum with a 64-bit carrier whose values all fit an `int` (now given `int` switch keys), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
+| 14 | An import named `NAME_address` with no parameters beside an import `NAME` is rejected: FFM bindings gain a `NAME_address()` accessor per import. | descriptors with such a pair of imports | rename one |
 
 Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
 import, export entry-point signatures at the C level.

@@ -221,11 +221,12 @@ final class OwnershipValidator {
                 && !p.facts().containsKey("truffle_buffer")
                 && !p.facts().containsKey("dereferenceable"),
             "access=cstring takes no align, dereferenceable or truffle_buffer fact: " + text);
-        // Its wrappers pass every other parameter through, as call buffer wrappers do.
+        // Its wrappers pass every other parameter through in the raw binding's carrier, callbacks
+        // and isolate threads included; a by-value record has no such carrier in every wrapper.
         for (Parameter other : f.parameters())
           require(
-              other.type() instanceof Scalar || other.type() instanceof Pointer,
-              "C string wrappers pass only scalars and pointers beside their strings: "
+              !(other.type() instanceof Named),
+              "C string wrappers pass no by-value record beside their strings: "
                   + f.name()
                   + " "
                   + other.name());

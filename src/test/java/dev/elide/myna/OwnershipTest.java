@@ -1120,6 +1120,58 @@ class OwnershipTest {
           + "end\n";
 
   @Test
+  void cStringsPassCallbacksThroughAndTheFfmOutputCompiles() throws Exception {
+    String source =
+        CSTRING
+            .replace(
+                "module strings target=aarch64-apple-darwin java_class=Api\n",
+                "module strings target=aarch64-apple-darwin java_class=Api\n"
+                    + "callback Visit return=void\n  param value type=i64\nend\n")
+            .replace("end\n", "  param visit type=fn<Visit>\nend\n")
+            .replace(
+                "callback Visit return=void\n"
+                    + "  param value type=i64\n"
+                    + "  param visit type=fn<Visit>\n"
+                    + "end\n",
+                "callback Visit return=void\n  param value type=i64\nend\n");
+    var output = Generator.generate(Dsl.parse(source), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains(
+                "    pub fn titleLength(title: &::core::ffi::CStr, visit: super::Visit) -> u64"
+                    + " {\n"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("ApiOwnership.java").contains("public static long titleLength(String arg0, "),
+        output.get("ApiOwnership.java"));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public long titleLength(String arg0, MemorySegment arg1) throws Throwable"
+                + " {\n"),
+        ffm);
+    // The FFM output compiles as generated.
+    Path dir = Files.createTempDirectory("myna-cstring");
+    String pkg = Dsl.parse(source).javaPackageName();
+    Path file = dir.resolve(pkg.replace('.', '/') + "/ApiFFM.java");
+    Files.createDirectories(file.getParent());
+    Files.writeString(file, ffm);
+    var compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+    assertEquals(
+        0,
+        compiler.run(
+            null,
+            null,
+            null,
+            "-proc:none",
+            "-d",
+            dir.resolve("classes").toString(),
+            file.toString()),
+        ffm);
+  }
+
+  @Test
   void cStringsAreLentNulTerminated() {
     var output = Generator.generate(Dsl.parse(CSTRING), true);
     assertTrue(
@@ -1158,7 +1210,9 @@ class OwnershipTest {
                 + " \"title\", this))"),
         cells);
     assertTrue(
-        cells.contains("CStrings.checkLent(borrow_title, \"titleLength\", \"title\", this);"),
+        cells.contains(
+            "CStrings.checkLent(borrow_title.address(), borrow_title.length(), \"titleLength\","
+                + " \"title\", this);"),
         cells);
     // The implementer trait takes a CStr, and a null one aborts.
     String trait =
@@ -1191,8 +1245,8 @@ class OwnershipTest {
             List.of(
                 "end\n",
                 "  param pair type=Pair\nend\n",
-                "C string wrappers pass only scalars and pointers beside their strings:"
-                    + " titleLength pair"),
+                "C string wrappers pass no by-value record beside their strings: titleLength"
+                    + " pair"),
             List.of(
                 " readonly=true@explicit_contract",
                 " readonly=true@explicit_contract dereferenceable=16@explicit_contract",

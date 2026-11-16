@@ -52,10 +52,13 @@ public final class CStrings {
     throw NativeCellException.type(function, parameter, "string", value, node);
   }
 
-  /** Refuses a lent string whose encoded bytes hold a NUL before its terminator. */
-  public static void checkLent(Borrow borrow, String function, String parameter, Node node) {
-    long address = borrow.address();
-    long length = borrow.length();
+  /**
+   * Refuses a lent string whose encoded bytes hold a NUL before its terminator. It takes the
+   * borrow's address and length, never the borrow itself, so the borrow does not escape into this
+   * call and stays scalar-replaced whether or not the host compiler inlines it.
+   */
+  public static void checkLent(
+      long address, long length, String function, String parameter, Node node) {
     if (address == 0 || length == 0) return;
     if (IMAGE) {
       for (long i = 0; i < length; i++)

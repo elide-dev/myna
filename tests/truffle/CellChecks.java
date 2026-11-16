@@ -74,6 +74,14 @@ public final class CellChecks {
     // Strings only: bytes, even NUL-terminated ones, are not a C string parameter's to take.
     rejects(cells, "titleLength", new HeapBytes(new byte[] {'a', 0}, false));
     rejects(cells, "titleLength", NativeVoid.INSTANCE);
+    // A NUL in a wide or a non-ASCII Latin-1 guest string is found in the bytes they encode to.
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("\u3053\0\u3093", TruffleString.Encoding.UTF_16));
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9\0llo", TruffleString.Encoding.ISO_8859_1));
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.ISO_8859_1)).equals(6L), "titleLength of a Latin-1 guest string");
+    // A nullable C string takes null, which reaches native code as the null pointer.
+    check(call(cells, "titleOrEmpty", NativeVoid.INSTANCE).equals(0L), "titleOrEmpty of null");
+    check(call(cells, "titleOrEmpty", "abc").equals(3L), "titleOrEmpty of a string");
+    rejects(cells, "titleOrEmpty", "a\0b");
   }
   /**
    * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,

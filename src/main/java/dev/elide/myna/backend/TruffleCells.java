@@ -452,7 +452,15 @@ public final class TruffleCells implements Backend {
                       + ", this)";
               stringChecks.put(
                   local,
-                  "CStrings.checkLent(" + local + ", " + quotedName + ", " + declared + ", this);");
+                  "CStrings.checkLent("
+                      + local
+                      + ".address(), "
+                      + local
+                      + ".length(), "
+                      + quotedName
+                      + ", "
+                      + declared
+                      + ", this);");
             }
             borrows.add(local + " = " + field + ".execute(" + lentArgument + ")");
             if (writable && !cell.isHeld(p)) writableBorrows.add(local);
