@@ -3,6 +3,7 @@
 package fixture.views;
 
 import com.oracle.svm.shared.NeverInline;
+import org.graalvm.word.Pointer;
 import org.graalvm.word.WordFactory;
 
 /**
@@ -40,6 +41,17 @@ public final class ViewsMain {
     return program.text().read(WordFactory.signed(i));
   }
 
+  @NeverInline("measured")
+  static Views.Function rootAt(Views.Program program, long i) {
+    return Views.Program_rootsAt(program, i);
+  }
+
+  // The hand-written form: load the array pointer, then the element pointer at i * 8.
+  @NeverInline("measured")
+  static Views.Function rawRootAt(Views.Program program, long i) {
+    return ((Pointer) program.roots()).readWord(WordFactory.signed(i).multiply(8));
+  }
+
   public static void main(String[] args) {
     // Indexes the image builder cannot see (no arguments are passed), so the measured methods
     // keep their index parameter instead of folding a constant one.
@@ -56,9 +68,14 @@ public final class ViewsMain {
     check(functionAt(program, first).id() == 10, "first element");
     check(textAt(program, second) == 'i' && rawTextAt(program, second) == 'i', "scalar element");
     check(textAt(program, third) == (short) 0xffff, "unsigned scalar element");
+    check(program.rootCount() == 2, "root count");
+    check(rootAt(program, first).equal(element), "pointer element");
+    check(rootAt(program, second).id() == 10, "second pointer element");
+    check(rawRootAt(program, second).equal(rootAt(program, second)), "raw pointer element");
     Views.Program empty = Views.empty();
     check(empty.functions().isNull() && empty.functionCount() == 0, "empty functions");
     check(empty.text().isNull() && empty.textLength() == 0, "empty text");
+    check(empty.roots().isNull() && empty.rootCount() == 0, "empty roots");
     System.out.println("Native Image counted views passed");
   }
 }

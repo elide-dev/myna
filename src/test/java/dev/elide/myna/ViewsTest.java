@@ -47,6 +47,8 @@ class ViewsTest {
     assertEquals("functionCount", fields.get(0).count());
     assertNull(fields.get(1).count());
     assertEquals("textLength", fields.get(2).count());
+    assertEquals("rootCount", fields.get(5).count());
+    assertEquals(new Pointer(new Pointer(new Named("Function"))), fields.get(5).type());
     assertNull(new Field("a", Scalar.U8, 0).count());
     String json = SeamJson.canonical(m);
     assertTrue(json.contains("\"offset\":0,\"count\":\"functionCount\"}"), json);
@@ -74,7 +76,10 @@ class ViewsTest {
     var outputs =
         Generator.generate(
             Dsl.parse(
-                example().replace(" count=functionCount", "").replace(" count=textLength", "")),
+                example()
+                    .replace(" count=functionCount", "")
+                    .replace(" count=textLength", "")
+                    .replace(" count=rootCount", "")),
             true);
     assertFalse(outputs.get("seam.rs").contains("impl Program"));
     assertFalse(outputs.get("ViewsFFM.java").contains("Program_functions("));
@@ -142,9 +147,12 @@ class ViewsTest {
         reject(
             "opaque O\n"
                 + record("  field p type=ptr<O> offset=0 count=n\n  field n type=u64 offset=8\n")));
-    for (String element : List.of("void", "bool", "ptr<u8>"))
+    for (String element : List.of("void", "bool", "ptr<u8>", "ptr<ptr<E>>"))
       assertEquals(
-          "field R.p: count= needs struct or integer/float elements, found ptr<" + element + ">",
+          "field R.p: count= needs struct, integer/float or ptr<struct or opaque> elements, found"
+              + " ptr<"
+              + element
+              + ">",
           reject(
               record(
                   "  field p type=ptr<"
@@ -170,6 +178,7 @@ class ViewsTest {
         Generator.generate(
             Dsl.parse(
                 HEAD.replace("\n", " java_package=p java_class=C\n")
+                    + "opaque O\n"
                     + "struct R size=64 align=8\n"
                     + "  field a type=ptr<usize> offset=0 count=an\n"
                     + "  field b type=ptr<char> offset=8 count=bn\n"
@@ -179,6 +188,8 @@ class ViewsTest {
                     + "  field bn type=u16 offset=34\n"
                     + "  field cn type=u32 offset=36\n"
                     + "  field dn type=usize offset=40\n"
+                    + "  field o type=ptr<ptr<O>> offset=48 count=on\n"
+                    + "  field on type=u64 offset=56\n"
                     + "end\n"),
             true);
     String rust = out.get("seam.rs");
@@ -186,7 +197,9 @@ class ViewsTest {
     assertTrue(rust.contains("pub unsafe fn b(&self) -> &[core::ffi::c_char] {"), rust);
     assertFalse(rust.contains(">= 0"), rust);
     assertTrue(rust.contains("let count = self.dn;\n"), rust);
+    assertTrue(rust.contains("pub unsafe fn o(&self) -> &[*mut O] {"), rust);
     String ffm = out.get("CFFM.java");
+    assertTrue(ffm.contains("reinterpret(8L).get(ValueLayout.ADDRESS, 0L);"), ffm);
     assertTrue(
         ffm.contains("long count = Byte.toUnsignedLong(record.get(ValueLayout.JAVA_BYTE, 32L));"));
     assertTrue(
@@ -194,6 +207,8 @@ class ViewsTest {
             "long count = Short.toUnsignedLong(record.get(ValueLayout.JAVA_SHORT, 34L));"));
     assertTrue(ffm.contains("public static double R_c(MemorySegment record, long i) {"), ffm);
     String ni = out.get("C.java");
+    assertTrue(ni.contains("return ((WordPointer) record.o()).read(WordFactory.signed(i));"), ni);
+    assertTrue(ni.contains("public static O R_oAt(R record, long i) {"), ni);
     assertTrue(ni.contains("i < Byte.toUnsignedLong(record.an())"), ni);
     assertTrue(ni.contains("i < Short.toUnsignedLong(record.bn())"), ni);
     assertTrue(ni.contains("i < Integer.toUnsignedLong(record.cn())"), ni);
@@ -230,20 +245,32 @@ class ViewsTest {
               program.set(ValueLayout.JAVA_LONG, 8, 2L);
               program.set(ValueLayout.ADDRESS, 16, text);
               program.set(ValueLayout.JAVA_INT, 24, 3);
+              MemorySegment roots = arena.allocate(ValueLayout.ADDRESS, 2);
+              roots.setAtIndex(ValueLayout.ADDRESS, 0, functions.asSlice(16));
+              roots.setAtIndex(ValueLayout.ADDRESS, 1, functions);
+              program.set(ValueLayout.ADDRESS, 32, roots);
+              program.set(ValueLayout.JAVA_LONG, 40, 2L);
               out.append(ViewsFFM.Program_functions(program).byteSize()).append(' ')
                   .append(ViewsFFM.Program_text(program).byteSize()).append(' ')
                   .append(ViewsFFM.Program_functions(program, 1).get(ValueLayout.JAVA_INT, 0)).append(' ')
                   .append(ViewsFFM.Program_functions(program, 1).byteSize()).append(' ')
                   .append((char) ViewsFFM.Program_text(program, 1)).append(' ')
-                  .append(ViewsFFM.Program_text(program, 2)).append(' ');
+                  .append(ViewsFFM.Program_text(program, 2)).append(' ')
+                  .append(ViewsFFM.Program_roots(program).byteSize()).append(' ')
+                  .append(ViewsFFM.Program_roots(program, 0).address() - functions.address()).append(' ')
+                  .append(ViewsFFM.Program_roots(program, 1).address() == functions.address())
+                  .append(ViewsFFM.Program_roots(program, 0).byteSize()).append(' ');
               out.append(outOfBounds(() -> ViewsFFM.Program_functions(program, 2)))
                   .append(outOfBounds(() -> ViewsFFM.Program_text(program, 3)))
-                  .append(outOfBounds(() -> ViewsFFM.Program_text(program, -1))).append(' ');
+                  .append(outOfBounds(() -> ViewsFFM.Program_text(program, -1)))
+                  .append(outOfBounds(() -> ViewsFFM.Program_roots(program, 2))).append(' ');
               MemorySegment empty = arena.allocate(ViewsFFM.Program_LAYOUT);
               out.append(ViewsFFM.Program_functions(empty).byteSize())
                   .append(ViewsFFM.Program_text(empty).byteSize())
                   .append(outOfBounds(() -> ViewsFFM.Program_functions(empty, 0)))
-                  .append(outOfBounds(() -> ViewsFFM.Program_text(empty, 0)));
+                  .append(outOfBounds(() -> ViewsFFM.Program_text(empty, 0)))
+                  .append(ViewsFFM.Program_roots(empty).byteSize())
+                  .append(outOfBounds(() -> ViewsFFM.Program_roots(empty, 0)));
             }
             return out.toString();
           }
@@ -273,7 +300,7 @@ class ViewsTest {
       assertTrue(ok, diagnostics.getDiagnostics().toString());
       try (var loader = new URLClassLoader(new URL[] {out.toUri().toURL()}, null)) {
         Object result = loader.loadClass("fixture.views.Consumer").getMethod("run").invoke(null);
-        assertEquals("32 6 11 16 i -1 truetruetrue 00truetrue", result);
+        assertEquals("32 6 11 16 i -1 16 16 true0 truetruetruetrue 00truetrue0true", result);
       }
     } finally {
       try (var walk = Files.walk(out)) {

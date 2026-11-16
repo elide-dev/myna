@@ -133,8 +133,10 @@ public final class NativeImage implements Backend {
     for (Struct st : m.structs()) {
       var views = Views.of(m, st);
       if (!views.isEmpty()) imports.add("com.oracle.svm.shared.AlwaysInline");
-      if (views.stream().anyMatch(v -> v.element() instanceof Scalar))
+      if (views.stream().anyMatch(v -> !(v.element() instanceof Named)))
         imports.add("org.graalvm.word.WordFactory");
+      if (views.stream().anyMatch(Views::pointerElements))
+        imports.add("org.graalvm.nativeimage.c.type.WordPointer");
     }
     for (Struct st : m.structs())
       for (Field f : st.fields()) {
@@ -576,6 +578,10 @@ public final class NativeImage implements Backend {
       element = Types.java(e);
       access = record + ".read(WordFactory.signed(i))";
       if (e == Scalar.USIZE || e == Scalar.ISIZE) access += ".rawValue()";
+    } else if (v.element() instanceof Pointer) {
+      // The field's carrier is a plain word; read it as a word array of the element's interface.
+      element = javaType(m, v.element());
+      access = "((WordPointer) " + record + ").read(WordFactory.signed(i))";
     } else {
       element = javaType(m, v.pointer().type());
       access = record + ".addressOf(i)";

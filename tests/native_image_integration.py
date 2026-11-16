@@ -228,9 +228,10 @@ class NativeImageIntegrationTests(unittest.TestCase):
 
     def test_counted_views(self):
         """examples/views.seam over C's static records, built as consumers build images (no -ea):
-        the element helpers read records through the indexed addressOf(long) and scalars through
-        the C pointer, and each compiles to the raw access it wraps, with no call: one load of the
-        pointer field and one scaled access. The bound is a caller contract and compiles out."""
+        the element helpers read records through the indexed addressOf(long), the element pointers
+        of a pointer array as a word array, and scalars through the C pointer. Each compiles to the
+        raw access it wraps, with no call: one load of the pointer field and one scaled access (a
+        scaled load for a pointer array). The bound is a caller contract and compiles out."""
         work = ROOT / "build/views-test"
         fixture = ROOT / "tests/views"
         generated = work / "generated"
@@ -252,15 +253,19 @@ class NativeImageIntegrationTests(unittest.TestCase):
         def body(method):
             return disassembly(app, "ViewsMain", method, evidence)
         call = re.compile(r"^(call|bl|blr|jmp\s+\*|br)\b")
-        # Program.functions is at offset 0 and Program.text at 0x10 (x86-64 and AArch64 spellings).
+        # Program.functions is at offset 0, Program.text at 0x10 and Program.roots at 0x20
+        # (x86-64 and AArch64 spellings).
         loads = {"functionAt": (r"^\S+ \(%rdi\), %r", r"^ldr x\d+, \[x0\]$"),
-                 "textAt": (r"^\S+ 0x10\(%rdi\), %r", r"^ldr x\d+, \[x0, #(0x10|16)\]$")}
+                 "textAt": (r"^\S+ 0x10\(%rdi\), %r", r"^ldr x\d+, \[x0, #(0x10|16)\]$"),
+                 "rootAt": (r"^\S+ 0x20\(%rdi\), %r", r"^ldr x\d+, \[x0, #(0x20|32)\]$")}
         # The scaled access: Function is 16 bytes, so its address is pointer + (i << 4); a u16 is
         # one 2-scaled halfword load.
         # AArch64 may fold the shift into the add or load, or emit it alone (lsl/ubfiz/sbfiz).
         scaled = {"functionAt": r"(shl\w* \$0x4, %r|lsl #(4|0x4)\b|^(lsl|[su]bfiz) x\d+, x\d+, #(4|0x4)\b)",
-                  "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #(1|0x1)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(1|0x1)\b)"}
-        for name in ("functionAt", "textAt"):
+                  "textAt": r"(\(%r\w+,%r\w+,2\)|lsl #(1|0x1)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(1|0x1)\b)",
+                  # A pointer array: the element pointer is one 8-scaled load.
+                  "rootAt": r"(\(%r\w+,%r\w+,8\)|lsl #(3|0x3)\]|^(lsl|[su]bfiz) x\d+, x\d+, #(3|0x3)\b)"}
+        for name in ("functionAt", "textAt", "rootAt"):
             helper = body(name)
             raw = body("raw" + name[0].upper() + name[1:])
             # Equal code, including the known extra register extension after a narrow read

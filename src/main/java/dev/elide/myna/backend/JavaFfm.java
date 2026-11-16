@@ -252,7 +252,7 @@ public final class JavaFfm implements Backend {
         .append('.')
         .append(imported)
         .append("    public static ")
-        .append(v.element() instanceof Scalar e ? Types.java(e) : "MemorySegment")
+        .append(Types.ffmCarrier(v.element()))
         .append(' ')
         .append(name)
         .append("(MemorySegment record, long i) {\n        java.util.Objects.checkIndex(i, ")
@@ -267,8 +267,9 @@ public final class JavaFfm implements Backend {
         .append(").reinterpret(")
         .append(size)
         .append(')');
-    if (v.element() instanceof Scalar e)
-      out.append(".get(").append(Types.layout(e)).append(", 0L)");
+    // A scalar or pointer element is read; a pointer reads as a zero-length segment.
+    if (!(v.element() instanceof Named))
+      out.append(".get(").append(Types.layout(v.element())).append(", 0L)");
     out.append(";\n    }\n");
   }
 

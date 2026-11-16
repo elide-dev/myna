@@ -7,12 +7,15 @@ static struct Function functions[2] = {
     {.id = 11, .arity = 2, .entry = UINT64_C(0xfffffffff)},
 };
 static uint16_t text[3] = {'h', 'i', 0xffff};
+static struct Function *roots[2] = {&functions[1], &functions[0]};
 static struct Program program = {
     .functions = functions,
     .functionCount = 2,
     .text = text,
     .textLength = 3,
     .version = 1,
+    .roots = roots,
+    .rootCount = 2,
 };
 static struct Program empty = {0};
 

@@ -16,20 +16,21 @@ import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
 import org.graalvm.nativeimage.c.type.CShortPointer;
+import org.graalvm.nativeimage.c.type.WordPointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.WordFactory;
 
 @CContext(ViewsDirectives.class)
 public final class Views {
     private Views() {}
-    public static final String ABI_FINGERPRINT = "7fffcacc4a3425300f4fd61af7716d5b2c737c26e294da0f9e53f8a2d6a04c1f";
+    public static final String ABI_FINGERPRINT = "068a0d6bf110713b8e26977f580e34c1c874ea679590ac60b96b18352e2a150e";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("VIEWS_SEAM_ABI_7fffcacc4a3425300f4fd61af7716d5b2c737c26e294da0f9e53f8a2d6a04c1f") static native int seamHeaderCheck();
+    @CConstant("VIEWS_SEAM_ABI_068a0d6bf110713b8e26977f580e34c1c874ea679590ac60b96b18352e2a150e") static native int seamHeaderCheck();
     public interface empty_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
@@ -73,7 +74,7 @@ public final class Views {
     }
     @CStruct(value = "Program", addStructKeyword = true)
     public interface Program extends PointerBase {
-        int SIZE = 32;
+        int SIZE = 48;
         int ALIGNMENT = 8;
         @CField("functions") Function functions();
         @CField("functions") void functions(Function value);
@@ -90,6 +91,12 @@ public final class Views {
         @CField("version") int version();
         @CField("version") void version(int value);
         @CFieldAddress("version") CIntPointer addressOfVersion();
+        @CField("roots") PointerBase roots();
+        @CField("roots") void roots(PointerBase value);
+        @CFieldAddress("roots") PointerBase addressOfRoots();
+        @CField("rootCount") long rootCount();
+        @CField("rootCount") void rootCount(long value);
+        @CFieldAddress("rootCount") WordPointer addressOfRootCount();
     }
     /** Element i of Program.functions; asserts 0 <= i < functionCount. Not for {@code @Uninterruptible} code; use {@code record.functions().addressOf(i)} there. */
     @AlwaysInline("Myna counted view element")
@@ -102,6 +109,12 @@ public final class Views {
     public static short Program_textAt(Program record, long i) {
         assert i >= 0L && i < Integer.toUnsignedLong(record.textLength()) : "Program.text: index out of bounds";
         return record.text().read(WordFactory.signed(i));
+    }
+    /** Element i of Program.roots; asserts 0 <= i < rootCount. Not for {@code @Uninterruptible} code; use {@code ((WordPointer) record.roots()).read(WordFactory.signed(i))} there. */
+    @AlwaysInline("Myna counted view element")
+    public static Function Program_rootsAt(Program record, long i) {
+        assert i >= 0L && Long.compareUnsigned(i, record.rootCount()) < 0 : "Program.roots: index out of bounds";
+        return ((WordPointer) record.roots()).read(WordFactory.signed(i));
     }
     /** Resolve before entering an uninterruptible caller; retain the linked library. */
     @AlwaysInline("Myna native leaf address")

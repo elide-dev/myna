@@ -28,7 +28,7 @@ record Views(Struct struct, Field pointer, Field count, Type element, long eleme
                   .findFirst()
                   .orElseThrow()
                   .size()
-              : ((Scalar) element).bytes;
+              : element instanceof Scalar e ? e.bytes : 8; // a ptr<T> element is one word
       views.add(new Views(s, f, count, element, size));
     }
     return views;
@@ -44,6 +44,11 @@ record Views(Struct struct, Field pointer, Field count, Type element, long eleme
 
   Scalar countType() {
     return (Scalar) count.type();
+  }
+
+  /** A {@code ptr<ptr<T>>} view: its elements are pointers to a struct or opaque {@code T}. */
+  boolean pointerElements() {
+    return element instanceof Pointer;
   }
 
   /** {@code Struct.field}, for messages. */

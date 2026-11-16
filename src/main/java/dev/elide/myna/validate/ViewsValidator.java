@@ -35,8 +35,11 @@ final class ViewsValidator {
           elements.putIfAbsent(n.name(), where);
         } else
           require(
-              element instanceof Scalar e && e != Scalar.VOID && e != Scalar.BOOL,
-              where + ": count= needs struct or integer/float elements, found " + f.type().text());
+              (element instanceof Scalar e && e != Scalar.VOID && e != Scalar.BOOL)
+                  || (element instanceof Pointer p && p.pointee() instanceof Named),
+              where
+                  + ": count= needs struct, integer/float or ptr<struct or opaque> elements, found "
+                  + f.type().text());
         Field count =
             s.fields().stream().filter(c -> c.name().equals(f.count())).findFirst().orElse(null);
         require(count != null, where + ": count=" + f.count() + " names no field of " + s.name());

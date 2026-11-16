@@ -32,6 +32,8 @@ fn program() -> Program {
         text: TEXT.as_ptr().cast_mut(),
         textLength: 3,
         version: 1,
+        roots: core::ptr::null_mut(),
+        rootCount: 0,
     }
 }
 
@@ -42,6 +44,8 @@ fn empty() -> Program {
         text: core::ptr::null_mut(),
         textLength: 0,
         version: 0,
+        roots: core::ptr::null_mut(),
+        rootCount: 0,
     }
 }
 
@@ -64,6 +68,34 @@ fn views_have_the_counted_elements() {
     assert_eq!(functions[1].id, 11);
     assert_eq!(functions[1].entry, 0x2000);
     assert_eq!(text, &[b'h' as u16, b'i' as u16, 0xffff]);
+}
+
+#[test]
+fn pointer_arrays_hold_the_element_pointers() {
+    let mut roots = [
+        (&raw const FUNCTIONS[1]).cast_mut(),
+        (&raw const FUNCTIONS[0]).cast_mut(),
+    ];
+    let mut p = program();
+    p.roots = roots.as_mut_ptr();
+    p.rootCount = roots.len();
+    // SAFETY: `roots` outlives the borrow and holds `rootCount` pointers to live functions.
+    let view: &[*mut Function] = unsafe { p.roots() };
+    assert_eq!(view.len(), 2);
+    // SAFETY: each element points into FUNCTIONS.
+    assert_eq!(unsafe { (*view[0]).id }, 11);
+    assert_eq!(unsafe { (*view[1]).id }, 10);
+}
+
+#[test]
+#[should_panic]
+fn pointer_array_index_count_panics() {
+    let mut roots = [(&raw const FUNCTIONS[0]).cast_mut()];
+    let mut p = program();
+    p.roots = roots.as_mut_ptr();
+    p.rootCount = 1;
+    // SAFETY: as above; the index is what is out of bounds.
+    let _ = unsafe { p.roots() }[p.rootCount];
 }
 
 #[test]
@@ -90,6 +122,7 @@ fn null_with_zero_count_is_empty() {
     // SAFETY: null pointers with zero counts obey the contract.
     assert!(unsafe { p.functions() }.is_empty());
     assert!(unsafe { p.text() }.is_empty());
+    assert!(unsafe { p.roots() }.is_empty());
 }
 
 #[test]
