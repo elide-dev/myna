@@ -6,6 +6,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.math.BigInteger;
@@ -17,10 +18,49 @@ public final class CHeader implements Backend {
   }
 
   public String generate(Module m) {
-    return generate(m, SeamJson.fingerprint(m));
+    return generate(m, new Fingerprint(m));
   }
 
-  public String generate(Module m, String fingerprint) {
+  public String generate(Module m, Fingerprint abi) {
+    return header(m, abi).text();
+  }
+
+  /**
+   * A generated {@code seam.h} and the module instance it was generated for. Only {@link CHeader}
+   * makes one, so {@link NativeImageDirectives#withHeader} can embed it knowing it is that module's
+   * header.
+   */
+  public static final class Generated {
+    private final Module module;
+    private final String text;
+
+    private Generated(Module module, String text) {
+      this.module = module;
+      this.text = text;
+    }
+
+    public String text() {
+      return text;
+    }
+
+    /** Throws unless this header was generated for exactly {@code m}. */
+    void requireFor(Module m) {
+      if (m != module)
+        throw new IllegalArgumentException(
+            "seam.h of module "
+                + module.name()
+                + " ("
+                + module.targetTriple()
+                + ") used for another module instance");
+    }
+  }
+
+  /** {@code seam.h} for {@code m}, which {@code abi} must describe. */
+  public Generated header(Module m, Fingerprint abi) {
+    return new Generated(m, emit(m, abi.valueFor(m)));
+  }
+
+  private static String emit(Module m, String fingerprint) {
     String guard = m.name().toUpperCase(Locale.ROOT) + "_SEAM_H";
     var out =
         new StringBuilder(

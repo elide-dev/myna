@@ -296,6 +296,24 @@ class ConstantsTest {
         Dsl.parse(head + "import statusEnum symbol=t return=i32 error=no_failure\nend\n"), true);
   }
 
+  /**
+   * The C-name claims that ConstantsValidator skips without consts or groups rely on Validator's
+   * earlier checks. A callback and a function symbol of one name must still fail with Validator's
+   * error, with and without abi= (whose claim map runs): if the constants checks ran first or
+   * alone, the module would pass or fail with another message.
+   */
+  @Test
+  void callbackAndSymbolCollisionIsValidatorsError() {
+    String callback =
+        "callback foo return=i32\n param value type=i32\nend\n"
+            + "import call symbol=foo return=i32 error=no_failure\nend\n";
+    for (String head :
+        List.of(
+            "module plain target=x86_64-unknown-linux-gnu\n",
+            "module plain abi=2 target=x86_64-unknown-linux-gnu\n"))
+      assertEquals("symbol collides with callback: foo", invalid(head, callback));
+  }
+
   static Stream<Arguments> rejects() {
     return Stream.of(
         Arguments.of(

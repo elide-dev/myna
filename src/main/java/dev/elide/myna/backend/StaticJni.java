@@ -4,6 +4,7 @@ package dev.elide.myna.backend;
 
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import java.util.*;
 
@@ -12,11 +13,15 @@ public final class StaticJni {
   private StaticJni() {}
 
   public static Map<String, String> generate(Module m) {
-    return generate(m, SeamJson.fingerprint(m));
+    return generate(m, new Fingerprint(m));
   }
 
-  /** {@link #generate(Module)} given the module's ABI fingerprint, computed once by the caller. */
-  public static Map<String, String> generate(Module m, String fingerprint) {
+  /**
+   * {@link #generate(Module)} given the fingerprint a generation already computed for exactly
+   * {@code m}; throws if it describes another module instance.
+   */
+  public static Map<String, String> generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     var methods = JniAbi.methods(m);
     if (methods.isEmpty()) throw new IllegalArgumentException("JNI generation requires imports");
     String cls = JniAbi.className(m);
@@ -47,7 +52,7 @@ public final class StaticJni {
                     + "  (void)vm; (void)reserved; return JNI_VERSION_1_8;\n"
                     + "}\n");
     var llvm =
-        new StringBuilder(new Llvm().generate(m, fingerprint))
+        new StringBuilder(new Llvm().generate(m, abi))
             .append("\n; JNI signatures: no raw function effects propagate to wrappers.\n");
     var header =
         new StringBuilder(

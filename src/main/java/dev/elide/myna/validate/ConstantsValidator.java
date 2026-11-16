@@ -21,6 +21,16 @@ final class ConstantsValidator {
   private static final Pattern MEMBER = Pattern.compile("[a-z][a-z0-9_]*");
   private static final Set<String> RESERVED_BITS = Set.of("all", "none");
 
+  /**
+   * Runs only from {@link Validator#validate(Module, boolean, Fingerprint)}, as its last checks but
+   * ownership and views, and relies on what that method has established by then: type names
+   * (opaque, struct, group and callback) are unique, function logical names and linker symbols are
+   * unique, and no function symbol is a callback's name. Several checks here are skipped when the
+   * module declares nothing that could break them given those facts (see {@code declaresValues});
+   * called earlier or on its own, they would miss collisions such as a callback and a symbol of the
+   * same name. The class and this method are package-private so that only {@link Validator} calls
+   * them.
+   */
   static void validate(Module m, Fingerprint fingerprint) {
     TargetAbi abi = Seam.targetAbi(m.targetTriple());
     for (Constant c : m.constants()) carrier("const " + c.name(), c.type());
@@ -78,6 +88,7 @@ final class ConstantsValidator {
     }
     // Checks that only a const, enum or flag set can fail are skipped for modules without one; the
     // rest run unchanged, in the same order, so every module gets the same first error as before.
+    // rustValues relies on unique logical names (Validator) and the ABI_VERSION check above.
     if (declaresValues(m)) rustValues(m);
     accessors(m);
     for (EnumGroup e : m.enums()) enumValues(m, e, abi);
@@ -725,7 +736,8 @@ final class ConstantsValidator {
 
   private static void cNames(Module m, Set<String> functionSymbols, Fingerprint fingerprint) {
     // Without consts, groups or abi=, the claims are function symbols, callbacks and declared
-    // types, which Validator has already made distinct.
+    // types, which Validator has already made distinct (unique types, unique symbols, no symbol
+    // named like a callback); see validate's precondition.
     if (!m.declaresConstants()) return;
     String upper = m.name().toUpperCase(Locale.ROOT);
     // Only const, enum and flag names are checked against the header's own macros, and only they

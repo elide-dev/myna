@@ -365,7 +365,7 @@ public final class SeamJson {
   }
 
   /** The fingerprint of an already serialized {@link #canonical(Module) canonical} descriptor. */
-  public static String fingerprintOf(String canonical) {
+  static String fingerprintOf(String canonical) {
     try {
       return HexFormat.of()
           .formatHex(

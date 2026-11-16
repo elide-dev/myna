@@ -4,13 +4,29 @@ package dev.elide.myna;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.elide.myna.backend.Backend;
+import dev.elide.myna.backend.CHeader;
+import dev.elide.myna.backend.JavaFfm;
+import dev.elide.myna.backend.Llvm;
+import dev.elide.myna.backend.NativeImage;
+import dev.elide.myna.backend.NativeImageDirectives;
+import dev.elide.myna.backend.NativeImageForeign;
+import dev.elide.myna.backend.NativeImageProperties;
+import dev.elide.myna.backend.RustFfi;
 import dev.elide.myna.backend.StaticJni;
+import dev.elide.myna.backend.TruffleCells;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.nio.file.*;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.MessageDigestSpi;
+import java.security.Provider;
+import java.security.Security;
 import java.util.*;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -791,29 +807,165 @@ class GeneratorTest {
    */
   @Test
   void standaloneBackendsMatchOneGeneration() throws Exception {
-    for (String example : List.of("examples/truffle.seam", "examples/constants.seam")) {
+    for (String example :
+        List.of("examples/truffle.seam", "examples/constants.seam", "tests/bemo/bemo.seam")) {
       var module = Dsl.parse(Files.readString(Path.of(example)));
       var generated = Generator.generate(module, true);
-      var fingerprint = new dev.elide.myna.serialize.Fingerprint(module);
+      var fingerprint = new Fingerprint(module);
       Validator.validate(module, true, fingerprint);
+      assertSame(module, fingerprint.module());
       assertEquals(SeamJson.canonical(module), fingerprint.json());
       assertEquals(SeamJson.fingerprint(module) + "\n", generated.get("seam.abi"));
-      String abi = fingerprint.value();
-      for (dev.elide.myna.backend.Backend backend :
-          List.of(
-              new dev.elide.myna.backend.CHeader(),
-              new dev.elide.myna.backend.RustFfi(),
-              new dev.elide.myna.backend.JavaFfm(),
-              new dev.elide.myna.backend.NativeImage(),
-              new dev.elide.myna.backend.NativeImageDirectives(),
-              new dev.elide.myna.backend.NativeImageProperties(),
-              new dev.elide.myna.backend.Llvm(),
-              new dev.elide.myna.backend.TruffleCells())) {
+      assertEquals(generated, Generator.generate(module, true, fingerprint));
+      var backends =
+          new ArrayList<Backend>(
+              List.of(
+                  new CHeader(),
+                  new RustFfi(),
+                  new JavaFfm(),
+                  new NativeImage(),
+                  new NativeImageDirectives(),
+                  new NativeImageProperties(),
+                  new Llvm()));
+      if (module.truffleConfig() != null) backends.add(new TruffleCells());
+      for (Backend backend : backends) {
         String expected = generated.get(backend.filename(module));
         assertEquals(expected, backend.generate(module), example + " " + backend.filename(module));
         assertEquals(
-            expected, backend.generate(module, abi), example + " " + backend.filename(module));
+            expected,
+            backend.generate(module, fingerprint),
+            example + " " + backend.filename(module));
       }
+    }
+  }
+
+  /**
+   * A fingerprint or seam.h describes the exact module instance it was computed for; a retargeted
+   * module (whose fingerprint differs) or any other instance is rejected rather than mislabeled.
+   */
+  @Test
+  void precomputedFingerprintsAndHeadersRejectOtherModules() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("examples/truffle.seam")));
+    var retargeted = module.withTarget("aarch64-unknown-linux-gnu");
+    assertNotEquals(SeamJson.fingerprint(module), SeamJson.fingerprint(retargeted));
+    var stale = new Fingerprint(module);
+    String expected =
+        "fingerprint of module truffle_demo (aarch64-apple-darwin) used for another module"
+            + " instance; compute a Fingerprint for that module";
+    List<org.junit.jupiter.api.function.Executable> misuses =
+        new ArrayList<>(
+            List.of(
+                () -> Generator.generate(retargeted, true, stale),
+                () -> Validator.validate(retargeted, true, stale),
+                () -> StaticJni.generate(retargeted, stale),
+                () -> stale.valueFor(retargeted),
+                () -> new CHeader().header(retargeted, stale)));
+    for (Backend backend :
+        List.of(
+            new CHeader(),
+            new RustFfi(),
+            new JavaFfm(),
+            new NativeImage(),
+            new NativeImageDirectives(),
+            new NativeImageProperties(),
+            new NativeImageForeign(),
+            new Llvm(),
+            new TruffleCells())) misuses.add(() -> backend.generate(retargeted, stale));
+    // An equal but distinct instance is another module too.
+    var copy = Dsl.parse(Files.readString(Path.of("examples/truffle.seam")));
+    assertEquals(module, copy);
+    misuses.add(() -> new RustFfi().generate(copy, stale));
+    for (var misuse : misuses)
+      assertEquals(expected, assertThrows(IllegalArgumentException.class, misuse).getMessage());
+
+    var header = new CHeader().header(module, stale);
+    assertEquals(new CHeader().generate(module), header.text());
+    assertEquals(
+        "seam.h of module truffle_demo (aarch64-apple-darwin) used for another module instance",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new NativeImageDirectives().withHeader(retargeted, header))
+            .getMessage());
+  }
+
+  /** Counts SHA-256 digests created on the calling thread, delegating to the JDK's. */
+  public static final class CountingSha256 extends MessageDigestSpi {
+    static final ThreadLocal<int[]> COUNT = ThreadLocal.withInitial(() -> new int[1]);
+    private final MessageDigest delegate;
+
+    public CountingSha256() throws GeneralSecurityException {
+      delegate = MessageDigest.getInstance("SHA-256", "SUN");
+      COUNT.get()[0]++;
+    }
+
+    @Override
+    protected void engineUpdate(byte input) {
+      delegate.update(input);
+    }
+
+    @Override
+    protected void engineUpdate(byte[] input, int offset, int length) {
+      delegate.update(input, offset, length);
+    }
+
+    @Override
+    protected byte[] engineDigest() {
+      return delegate.digest();
+    }
+
+    @Override
+    protected void engineReset() {
+      delegate.reset();
+    }
+  }
+
+  /** Each SHA-256 digest is one fingerprint: a generation computes exactly one. */
+  @Test
+  void generationFingerprintsOnce() throws Exception {
+    var provider = new Provider("MynaCountingSha256", "1", "counts SHA-256 digests") {};
+    provider.put("MessageDigest.SHA-256", CountingSha256.class.getName());
+    Security.insertProviderAt(provider, 1);
+    try {
+      for (String example :
+          List.of(
+              "examples/buffer.seam",
+              "examples/constants.seam",
+              "examples/truffle.seam",
+              "tests/bemo/bemo.seam")) {
+        var module = Dsl.parse(Files.readString(Path.of(example)));
+        int[] count = CountingSha256.COUNT.get();
+        count[0] = 0;
+        Generator.generate(module, true);
+        assertEquals(1, count[0], example + " generate");
+        count[0] = 0;
+        Validator.validate(module, true);
+        // Validation hashes only to name the header check a const, enum or flag set must avoid.
+        boolean values =
+            !module.constants().isEmpty()
+                || !module.enums().isEmpty()
+                || !module.flagSets().isEmpty();
+        assertEquals(values ? 1 : 0, count[0], example + " validate");
+        Path out = Files.createTempDirectory("myna-generate-once");
+        try {
+          count[0] = 0;
+          var stdout = new java.io.ByteArrayOutputStream();
+          var stderr = new java.io.ByteArrayOutputStream();
+          assertEquals(
+              0,
+              dev.elide.myna.cli.Main.run(
+                  new String[] {"generate", example, "--out", out.toString(), "--jni"},
+                  new java.io.PrintStream(stdout),
+                  new java.io.PrintStream(stderr)),
+              stderr.toString());
+          assertEquals(1, count[0], example + " CLI generate --jni");
+        } finally {
+          try (var files = Files.walk(out)) {
+            for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(file);
+          }
+        }
+      }
+    } finally {
+      Security.removeProvider(provider.getName());
     }
   }
 

@@ -12,28 +12,29 @@ public final class Generator {
   private Generator() {}
 
   public static SortedMap<String, String> generate(Module module, boolean strict) {
-    // Serialized and hashed at most once: validation and every backend share the one fingerprint.
-    var abi = new Fingerprint(module);
+    return generate(module, strict, new Fingerprint(module));
+  }
+
+  /**
+   * Validates and generates {@code module}, serializing and hashing it at most once: validation and
+   * every backend share {@code abi}, which must have been computed for exactly {@code module}.
+   */
+  public static SortedMap<String, String> generate(Module module, boolean strict, Fingerprint abi) {
     Validator.validate(module, strict, abi);
-    String fingerprint = abi.value();
     var outputs = new TreeMap<String, String>();
     outputs.put("seam.json", abi.json());
-    outputs.put("seam.abi", fingerprint + "\n");
-    var header = new CHeader();
-    String seamH = header.generate(module, fingerprint);
-    outputs.put(header.filename(module), seamH);
+    outputs.put("seam.abi", abi.value() + "\n");
+    var c = new CHeader();
+    CHeader.Generated header = c.header(module, abi);
+    outputs.put(c.filename(module), header.text());
+    for (Backend backend : List.of(new RustFfi(), new JavaFfm(), new NativeImage()))
+      outputs.put(backend.filename(module), backend.generate(module, abi));
     // The directives class embeds the seam.h just generated rather than building it again.
     var directives = new NativeImageDirectives();
-    outputs.put(directives.filename(module), directives.withHeader(module, seamH));
+    outputs.put(directives.filename(module), directives.withHeader(module, header));
     for (Backend backend :
-        List.of(
-            new RustFfi(),
-            new JavaFfm(),
-            new NativeImage(),
-            new NativeImageProperties(),
-            new NativeImageForeign(),
-            new Llvm()))
-      outputs.put(backend.filename(module), backend.generate(module, fingerprint));
+        List.of(new NativeImageProperties(), new NativeImageForeign(), new Llvm()))
+      outputs.put(backend.filename(module), backend.generate(module, abi));
     if (!module.returnedResources().isEmpty() || !module.callBorrows().isEmpty()) {
       var ownership = new NativeOwnership();
       outputs.put(ownership.filename(module), ownership.generate(module));
@@ -44,7 +45,7 @@ public final class Generator {
     }
     if (module.truffleConfig() != null) {
       var cells = new TruffleCells();
-      outputs.put(cells.filename(module), cells.generate(module, fingerprint));
+      outputs.put(cells.filename(module), cells.generate(module, abi));
     }
     return Collections.unmodifiableSortedMap(outputs);
   }

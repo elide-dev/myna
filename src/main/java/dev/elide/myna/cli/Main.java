@@ -7,7 +7,7 @@ import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
-import dev.elide.myna.serialize.SeamJson;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.validate.Validator;
 import java.io.*;
 import java.nio.file.*;
@@ -55,9 +55,10 @@ public final class Main {
       if (targets.indexOf(target) != targets.lastIndexOf(target))
         throw new IllegalArgumentException("duplicate target: " + target);
       Module retargeted = module.withTarget(target);
-      Validator.validate(retargeted, strict);
+      var abi = new Fingerprint(retargeted);
+      Validator.validate(retargeted, strict, abi);
       byFingerprint
-          .computeIfAbsent(SeamJson.fingerprint(retargeted), k -> new ArrayList<>())
+          .computeIfAbsent(abi.value(), k -> new ArrayList<>())
           .add(target + " (" + Seam.targetAbi(target) + ")");
     }
     out.println("valid " + module.name() + " " + sharedFingerprint(byFingerprint));
@@ -126,16 +127,21 @@ public final class Main {
         return validateTargets(module, targets, strict, out);
       }
       if (target != null) module = module.withTarget(target);
-      Validator.validate(module, strict);
+      // One fingerprint and one validation per command: generate validates inside the generator,
+      // except without --out, where the validation error still comes first.
+      var abi = new Fingerprint(module);
       if (args[0].equals("validate")) {
-        out.println("valid " + module.name() + " " + SeamJson.fingerprint(module));
+        Validator.validate(module, strict, abi);
+        out.println("valid " + module.name() + " " + abi.value());
         return 0;
       }
-      if (destination == null)
+      if (destination == null) {
+        Validator.validate(module, strict, abi);
         throw new IllegalArgumentException("generate requires --out DIRECTORY");
-      var outputs = new TreeMap<>(Generator.generate(module, strict));
-      String fingerprint = outputs.get("seam.abi").strip();
-      if (jni) outputs.putAll(StaticJni.generate(module, fingerprint));
+      }
+      var outputs = new TreeMap<>(Generator.generate(module, strict, abi));
+      String fingerprint = abi.value();
+      if (jni) outputs.putAll(StaticJni.generate(module, abi));
       if (check) {
         for (var item : outputs.entrySet()) {
           Path file = destination.resolve(item.getKey());

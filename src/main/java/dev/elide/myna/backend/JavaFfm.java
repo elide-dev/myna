@@ -5,6 +5,7 @@ package dev.elide.myna.backend;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import dev.elide.myna.validate.Validator;
 import java.util.*;
@@ -15,10 +16,11 @@ public final class JavaFfm implements Backend {
   }
 
   public String generate(Module m) {
-    return generate(m, SeamJson.fingerprint(m));
+    return generate(m, new Fingerprint(m));
   }
 
-  public String generate(Module m, String fingerprint) {
+  public String generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     String ffm = m.ffmClass();
     var functions = new ArrayList<FfmFunction>(m.functions().size());
     for (Function function : m.functions()) functions.add(prepare(m, function));

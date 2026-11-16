@@ -91,10 +91,12 @@ public final class Validator {
   }
 
   /**
-   * {@link #validate(Module, boolean)} given the generation's fingerprint, which validation reads
-   * only when a name it checks derives from it.
+   * {@link #validate(Module, boolean)} given the generation's fingerprint of exactly {@code
+   * module}, which validation reads only when a name it checks derives from it. Throws if {@code
+   * fingerprint} describes another module instance.
    */
   public static void validate(Module module, boolean strict, Fingerprint fingerprint) {
+    fingerprint.requireFor(module);
     identifier(module.name());
     if (module.javaPackage() != null)
       for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
