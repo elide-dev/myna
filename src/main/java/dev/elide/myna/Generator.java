@@ -19,13 +19,17 @@ public final class Generator {
     var outputs = new TreeMap<String, String>();
     outputs.put("seam.json", abi.json());
     outputs.put("seam.abi", fingerprint + "\n");
+    var header = new CHeader();
+    String seamH = header.generate(module, fingerprint);
+    outputs.put(header.filename(module), seamH);
+    // The directives class embeds the seam.h just generated rather than building it again.
+    var directives = new NativeImageDirectives();
+    outputs.put(directives.filename(module), directives.withHeader(module, seamH));
     for (Backend backend :
         List.of(
-            new CHeader(),
             new RustFfi(),
             new JavaFfm(),
             new NativeImage(),
-            new NativeImageDirectives(),
             new NativeImageProperties(),
             new NativeImageForeign(),
             new Llvm()))

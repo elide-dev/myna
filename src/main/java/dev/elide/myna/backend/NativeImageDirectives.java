@@ -30,14 +30,19 @@ public final class NativeImageDirectives implements Backend {
   }
 
   public String generate(Module m) {
-    return directives(m, new CHeader().generate(m));
+    return withHeader(m, new CHeader().generate(m));
   }
 
   public String generate(Module m, String fingerprint) {
-    return directives(m, new CHeader().generate(m, fingerprint));
+    return withHeader(m, new CHeader().generate(m, fingerprint));
   }
 
-  private static String directives(Module m, String header) {
+  /**
+   * The directives class embedding {@code header}, which must be the {@code seam.h} that {@link
+   * CHeader} generated for {@code m}: a generation passes the header it already wrote rather than
+   * building it a second time.
+   */
+  public String withHeader(Module m, String header) {
     String self = m.directivesClass();
     String delegate = m.nativeConfig() == null ? null : m.nativeConfig().cContext();
     List<String> pieces = pieces(header, PIECE);

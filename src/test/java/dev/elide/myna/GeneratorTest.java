@@ -798,6 +798,7 @@ class GeneratorTest {
       Validator.validate(module, true, fingerprint);
       assertEquals(SeamJson.canonical(module), fingerprint.json());
       assertEquals(SeamJson.fingerprint(module) + "\n", generated.get("seam.abi"));
+      String abi = fingerprint.value();
       for (dev.elide.myna.backend.Backend backend :
           List.of(
               new dev.elide.myna.backend.CHeader(),
@@ -807,11 +808,12 @@ class GeneratorTest {
               new dev.elide.myna.backend.NativeImageDirectives(),
               new dev.elide.myna.backend.NativeImageProperties(),
               new dev.elide.myna.backend.Llvm(),
-              new dev.elide.myna.backend.TruffleCells()))
+              new dev.elide.myna.backend.TruffleCells())) {
+        String expected = generated.get(backend.filename(module));
+        assertEquals(expected, backend.generate(module), example + " " + backend.filename(module));
         assertEquals(
-            generated.get(backend.filename(module)),
-            backend.generate(module),
-            example + " " + backend.filename(module));
+            expected, backend.generate(module, abi), example + " " + backend.filename(module));
+      }
     }
   }
 
