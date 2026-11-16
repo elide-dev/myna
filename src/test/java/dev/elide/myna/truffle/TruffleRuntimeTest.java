@@ -777,13 +777,24 @@ class TruffleRuntimeTest {
           b -> INTEROP.readBuffer(b, 0, new byte[4], 0, 4));
 
   /** Asserts that every message fails as the segment's own accessor does, with its message. */
+  /**
+   * Asserts that every message fails with a guest error whose cause is what the segment's own
+   * accessor throws for the same access, class and message.
+   */
   private static void assertMessagesFailLikeSegment(NativeBytes bytes) {
     RuntimeException expected =
         assertThrows(RuntimeException.class, () -> bytes.segment().get(ValueLayout.JAVA_BYTE, 0));
     for (BufferMessage message : BUFFER_MESSAGES) {
-      RuntimeException thrown = assertThrows(RuntimeException.class, () -> message.run(bytes));
-      assertSame(expected.getClass(), thrown.getClass());
-      assertEquals(expected.getMessage(), thrown.getMessage());
+      NativeCellException thrown =
+          assertThrows(NativeCellException.class, () -> message.run(bytes));
+      assertTrue(INTEROP.isException(thrown));
+      assertSame(expected.getClass(), thrown.getCause().getClass());
+      assertEquals(expected.getMessage(), thrown.getCause().getMessage());
+      assertEquals(
+          expected instanceof WrongThreadException
+              ? "native buffer is confined to another thread"
+              : "native buffer's arena is closed",
+          thrown.getMessage());
     }
   }
 
@@ -794,11 +805,18 @@ class TruffleRuntimeTest {
     NativeBytes bytes = NativeBytes.of(confined.allocate(16, 8), true);
     for (BufferMessage message : BUFFER_MESSAGES) message.run(bytes);
     AtomicReference<Throwable> failure = new AtomicReference<>();
+    AtomicReference<NativeBytes> madeElsewhere = new AtomicReference<>();
     Thread other =
         new Thread(() -> {
           try {
             assertMessagesFailLikeSegment(bytes);
-            assertThrows(WrongThreadException.class, () -> INTEROP.readBufferByte(bytes, 0));
+            // Made off the owner thread: the owner is not known, so messages ask the segment.
+            madeElsewhere.set(NativeBytes.of(bytes.segment(), true));
+            assertMessagesFailLikeSegment(madeElsewhere.get());
+            assertInstanceOf(
+                WrongThreadException.class,
+                assertThrows(NativeCellException.class, () -> INTEROP.readBufferByte(bytes, 0))
+                    .getCause());
           } catch (Throwable t) {
             failure.set(t);
           }
@@ -806,9 +824,14 @@ class TruffleRuntimeTest {
     other.start();
     other.join();
     assertNull(failure.get());
+    for (BufferMessage message : BUFFER_MESSAGES) message.run(madeElsewhere.get());
     confined.close();
+    assertMessagesFailLikeSegment(madeElsewhere.get());
     assertMessagesFailLikeSegment(bytes);
-    assertThrows(IllegalStateException.class, () -> INTEROP.readBufferLong(bytes, LE, 8));
+    assertInstanceOf(
+        IllegalStateException.class,
+        assertThrows(NativeCellException.class, () -> INTEROP.readBufferLong(bytes, LE, 8))
+            .getCause());
     // Bounds come first, as for any buffer: an offset outside it is still an offset error.
     assertThrows(InvalidBufferOffsetException.class, () -> INTEROP.readBufferByte(bytes, 16));
 
@@ -829,7 +852,10 @@ class TruffleRuntimeTest {
     assertNull(failure.get());
     shared.close();
     assertMessagesFailLikeSegment(sharedBytes);
-    assertThrows(IllegalStateException.class, () -> INTEROP.readBufferByte(sharedBytes, 0));
+    assertInstanceOf(
+        IllegalStateException.class,
+        assertThrows(NativeCellException.class, () -> INTEROP.readBufferByte(sharedBytes, 0))
+            .getCause());
 
     // The global arena and address views have no scope to check, on any thread.
     NativeBytes global = NativeBytes.of(Arena.global().allocate(16, 8), true);

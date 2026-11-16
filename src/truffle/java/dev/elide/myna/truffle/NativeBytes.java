@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.truffle;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
@@ -20,15 +21,15 @@ import java.nio.ByteOrder;
  * reachable from guest code; this object does not own or free it.
  *
  * <p>Every buffer message checks the segment's scope before it touches the memory, in both
- * runtimes: once the arena is closed a message throws {@link IllegalStateException}, and on a
- * thread other than a confined arena's owner {@link WrongThreadException}, the exceptions (and
- * messages) of the segment's own accessors. A Native Image reads and writes through word
- * operations, which check nothing themselves, so this check is what keeps a guest from touching
- * freed memory there. It is a check, not a hold: a shared arena closed by another thread between
- * the check and the access is not detected, as it would be by a {@code MemorySegment} accessor on
- * HotSpot, so the caller still keeps a shared arena open while guest code can reach the buffer.
- * Memory viewed through {@link #of(long, long, boolean)} and the global arena have no scope to
- * check.
+ * runtimes, and fails with a guest error, a {@link NativeCellException} that guest code can catch:
+ * once the arena is closed, or on a thread other than a confined arena's owner. Its cause is the
+ * exception the segment's own accessors throw for the same access ({@link IllegalStateException},
+ * {@link WrongThreadException}). A Native Image reads and writes through word operations, which
+ * check nothing themselves, so this check is what keeps a guest from touching the memory of a
+ * closed confined arena there. It is a check, not a hold: it does not protect a shared arena closed
+ * by another thread (in compiled code one check may cover a whole loop of reads), so the caller
+ * keeps a shared arena open while guest code can reach the buffer. Memory viewed through {@link
+ * #of(long, long, boolean)} and the global arena have no scope to check.
  */
 @ExportLibrary(InteropLibrary.class)
 public final class NativeBytes implements TruffleObject {
@@ -60,6 +61,13 @@ public final class NativeBytes implements TruffleObject {
   /** Whether {@link #scope} is confined to one thread, so a message checks the thread as well. */
   private final boolean confined;
 
+  /**
+   * A confined arena's owner when it made this buffer (the usual case), so a message compares
+   * threads without loading the scope's owner; otherwise {@code null}, and a confined message asks
+   * the segment. The scope already holds its owner, so this retains nothing new.
+   */
+  private final Thread owner;
+
   /** A thread that is never started, so no arena is confined to it; created on first use. */
   private static Thread unowned;
 
@@ -71,6 +79,8 @@ public final class NativeBytes implements TruffleObject {
     this.scoped = size != 0 && !segment.scope().equals(Arena.global().scope()) ? segment : null;
     this.scope = scoped == null ? null : segment.scope();
     this.confined = scoped != null && !segment.isAccessibleBy(unowned());
+    Thread current = Thread.currentThread();
+    this.owner = confined && segment.isAccessibleBy(current) ? current : null;
   }
 
   /** Only a confined segment is inaccessible to some thread: no other scope has an owner. */
@@ -148,22 +158,37 @@ public final class NativeBytes implements TruffleObject {
    * Fails unless the current thread may access the memory now: its arena is open, and a confined
    * arena's owner is this thread. A global or address view has nothing to check ({@link #scope} is
    * {@code null}); a shared or automatic one loads its scope's state and branches; a confined one
-   * also compares the owner with the current thread. Compiled code makes no call and allocates
-   * nothing unless the check fails.
+   * also compares its owner with the current thread. Compiled code makes no call and allocates
+   * nothing unless the check fails, a branch it lays out as a slow path.
    */
   private void checkScope() {
     MemorySegment.Scope s = scope;
     if (s != null
-        && !(s.isAlive() && (!confined || segment.isAccessibleBy(Thread.currentThread()))))
+        && CompilerDirectives.injectBranchProbability(
+            CompilerDirectives.SLOWPATH_PROBABILITY, !(s.isAlive() && onOwner())))
       throw inaccessible(segment);
   }
 
-  /** The segment accessors' failure, in their order: the owner thread first, then liveness. */
+  /** Whether the current thread may access a live scope: any thread unless it is confined. */
+  private boolean onOwner() {
+    if (!confined) return true;
+    Thread known = owner;
+    Thread current = Thread.currentThread();
+    return known != null ? current == known : segment.isAccessibleBy(current);
+  }
+
+  /**
+   * The guest error for an access the segment refuses, with the segment accessors' own exception
+   * (the owner thread first, then liveness) as its cause.
+   */
   @TruffleBoundary
-  private static RuntimeException inaccessible(MemorySegment s) {
+  private static NativeCellException inaccessible(MemorySegment s) {
     if (!s.isAccessibleBy(Thread.currentThread()))
-      return new WrongThreadException("Attempted access outside owning thread");
-    return new IllegalStateException("Already closed");
+      return NativeCellException.memory(
+          "native buffer is confined to another thread",
+          new WrongThreadException("Attempted access outside owning thread"));
+    return NativeCellException.memory(
+        "native buffer's arena is closed", new IllegalStateException("Already closed"));
   }
 
   private void checkWrite(long offset, int width)

@@ -58,7 +58,8 @@ public final class CellsMain {
       try {
         interop.writeBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8, (Long) arguments[1]);
         result = interop.readBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, 8) + interop.readBufferByte(buffer, 0);
-      } catch (IllegalStateException | WrongThreadException e) {
+      } catch (NativeCellException e) {
+        // The guest error a closed or foreign scope raises: what a guest language's catch sees.
         result = describe(e);
       } catch (com.oracle.truffle.api.interop.InteropException e) {
         throw CompilerDirectives.shouldNotReachHere(e);
@@ -66,7 +67,9 @@ public final class CellsMain {
       return new Object[] {result, CompilerDirectives.inCompiledCode()};
     }
     @CompilerDirectives.TruffleBoundary
-    static String describe(RuntimeException e) { return e.getClass().getSimpleName() + ": " + e.getMessage(); }
+    static String describe(NativeCellException e) {
+      return e.getMessage() + " (" + e.getCause().getClass().getSimpleName() + ": " + e.getCause().getMessage() + ")";
+    }
   }
   /**
    * NativeBytes' scalar messages from compiled code check the arena scope before their word access
@@ -93,12 +96,12 @@ public final class CellsMain {
     });
     owner.start();
     NativeBytes foreign = NativeBytes.of(owned.take(), true);
-    expectScopeFailure(probe, foreign, "WrongThreadException: Attempted access outside owning thread", "another thread's confined arena", true);
+    expectScopeFailure(probe, foreign, "native buffer is confined to another thread (WrongThreadException: Attempted access outside owning thread)", "another thread's confined arena");
     done.countDown();
     owner.join();
     // Closed by its owner, this thread: the next message fails before its word access.
     confined.close();
-    expectScopeFailure(probe, bytes, "IllegalStateException: Already closed", "a closed confined arena", false);
+    expectScopeFailure(probe, bytes, "native buffer's arena is closed (IllegalStateException: Already closed)", "a closed confined arena");
     // The global arena has no scope to check, so the same compiled code still runs over it.
     java.lang.foreign.MemorySegment global = java.lang.foreign.Arena.global().allocate(16, 8);
     global.set(java.lang.foreign.ValueLayout.JAVA_BYTE, 0, (byte) 2);
@@ -107,17 +110,18 @@ public final class CellsMain {
     System.out.println("buffer messages checked the arena scope in compiled code: wrong thread, closed");
   }
   /**
-   * Every call fails as expected, without touching the memory. A wrong-thread failure is raised by
-   * compiled code; a closed arena's failure deoptimizes at the throw in this fork (the check itself
-   * is compiled: it chose the right exception), so for it {@code compiled} is not required.
+   * Every call fails as expected, without touching the memory, from compiled code: the guest error
+   * is caught in the same compiled root, so neither a failure nor its handler deoptimizes. Repeated
+   * calls also prove a failure does not invalidate the root.
    */
-  static void expectScopeFailure(NativeFunction probe, NativeBytes bytes, String expected, String what, boolean compiled) {
-    for (int call = 0; call < 3; call++) {
+  static void expectScopeFailure(NativeFunction probe, NativeBytes bytes, String expected, String what) {
+    for (int call = 0; call < 8; call++) {
       Object[] outcome = (Object[]) probe.call(bytes, 5L);
       if (!expected.equals(outcome[0])) throw new AssertionError(what + ": " + outcome[0]);
-      if (compiled && !(Boolean) outcome[1]) throw new AssertionError(what + ": the scope failure left compiled code");
+      if (!(Boolean) outcome[1]) throw new AssertionError(what + ": the scope failure left compiled code at call " + call);
     }
   }
+
   /** Creates and closes a resource many times inside one compiled root, to measure what a create allocates. */
   static final class Creates extends NativeCell {
     static final int CALLS = 1024;

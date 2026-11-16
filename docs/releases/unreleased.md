@@ -104,8 +104,9 @@ single buffers.
 | 11 | A module that names `abi=` gains `ABI_VERSION` (C `<MODULE>_ABI_VERSION`, Rust, `<Class>Constants`), and `<Class>Constants.java` is generated for it even without other constants. With `abi=`, a `const ABI_VERSION`, or a function, enum or flag set named `ABI_VERSION`, is rejected. | descriptors with `abi=`, including those that worked around its absence with `const ABI_VERSION` | use the generated `ABI_VERSION`; remove the const |
 | 12 | In an enum given `int` switch keys (a 64-bit carrier, or a narrowed field reference, with values that all fit an `int`), a value named `key`, or `<value>_key` beside `<value>`, is rejected. | such enums | rename the value |
 | 13 | Rust names that collided in `seam.rs` and failed in rustc are now rejected at validation: a const (upper-cased), a function and an enum or flag set newtype of the same name. | descriptors that did not compile in Rust | rename one |
+| 14 | `NativeBytes` buffer messages over a closed arena, or a confined arena's memory on another thread, throw `NativeCellException` (a guest error a guest `try`/`catch` handles), with the `IllegalStateException` or `WrongThreadException` the segment accessors throw as its cause. HotSpot previously let those raw host exceptions escape (an internal error to guest languages), and a Native Image did not check at all (#128). | hosts that caught `IllegalStateException`/`WrongThreadException` from `NativeBytes` messages | catch `NativeCellException`, or inspect `getCause()` |
 
-Not broken: FFM output (comments only), Truffle cell signatures and behaviour, leaf status of every
+Not broken: FFM output (comments only), Truffle cell signatures and behaviour (except row 14), leaf status of every
 import, export entry-point signatures at the C level.
 
 ### The header check
@@ -175,9 +176,10 @@ today. It is tracked upstream as elide-dev/graal#239; `@CField` is kept and a te
 - **#128**: in a Native Image, `NativeBytes`' scalar buffer messages (`read/writeBuffer{Byte,Short,Int,Long,Float,Double}`)
   read and wrote the segment with word operations and no scope check, so a guest could touch freed memory
   once a confined arena was closed. Every buffer message now checks the scope first, in both runtimes, and
-  throws what the segment's accessors throw (`IllegalStateException`, `WrongThreadException`). The check
-  covers confined arenas fully; for a shared arena closed by another thread it narrows the window but does
-  not hold the scope, so embedders still keep shared arenas open while guest code can reach the buffer.
+  fails with a `NativeCellException` whose cause is what the segment's accessors throw (breaking change
+  14). The check covers confined arenas fully. It does not protect a shared arena closed by another
+  thread: in compiled code one check may cover a whole loop of reads. Embedders keep shared arenas open
+  while guest code can reach the buffer.
 - **#123** (#125): `success=` values that the create's return scalar can never represent (so every create
   would fail at run time) are rejected at validation.
 
