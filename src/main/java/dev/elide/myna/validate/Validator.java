@@ -190,8 +190,11 @@ public final class Validator {
       nativeImageType(module, signature.name());
       signatures.add(signature.name());
     }
-    Set<String> pointable = new HashSet<>(types);
-    pointable.removeAll(groups);
+    Set<String> pointable = types;
+    if (!groups.isEmpty()) {
+      pointable = new HashSet<>(types);
+      pointable.removeAll(groups);
+    }
     for (Signature signature : module.callbacks()) {
       for (String generated : List.of(signature.name() + "Callback", signature.name() + "Upcalls"))
         require(
@@ -220,9 +223,12 @@ public final class Validator {
       long end = 0;
       int naturalAlignment = 1;
       Set<String> fields = new HashSet<>();
+      boolean addressNames = false;
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
+        addressNames |=
+            Character.isUpperCase(field.name().charAt(0)) || field.name().startsWith("addressOf");
         require(
             !WORD_METHODS.contains(field.name()),
             "field collides with a Native Image word method: " + field.name());
@@ -239,17 +245,22 @@ public final class Validator {
         end = field.offset() + size;
       }
       // The record's Native Image interface: one getter/setter name per field, one address
-      // accessor per field, all distinct (fields x and X would both make addressOfX).
-      Set<String> members = new HashSet<>(fields);
-      for (Field field : struct.fields()) {
-        String address =
-            "addressOf" + Character.toUpperCase(field.name().charAt(0)) + field.name().substring(1);
-        require(
-            members.add(address),
-            "field collides with the Native Image address accessor "
-                + address
-                + " of "
-                + field.name());
+      // accessor per field, all distinct (fields x and X would both make addressOfX). Only a field
+      // that starts upper-case or with addressOf can make such a collision.
+      if (addressNames) {
+        Set<String> members = new HashSet<>(fields);
+        for (Field field : struct.fields()) {
+          String address =
+              "addressOf"
+                  + Character.toUpperCase(field.name().charAt(0))
+                  + field.name().substring(1);
+          require(
+              members.add(address),
+              "field collides with the Native Image address accessor "
+                  + address
+                  + " of "
+                  + field.name());
+        }
       }
       require(
           struct.alignment() == naturalAlignment,
