@@ -16,8 +16,9 @@ through them. Run it again with `mise run check:trufflecheck` (see [Running the 
   - `trufflecheck-errorprone-0.1.1.jar`, sha256 `d2c57d8ba701f81ff07383ce4bbeed0905b653f256a6f860da10ecb608d21dde`.
     The copy on maven.elide.dev is byte-identical to the release asset.
   - `trufflecheck-profiles-0.1.1.tar.gz`, sha256 `c815ce50b4930e97a6e5678387d62aa6f6705032222b923489a907f5519a3882`.
-- **Provenance:** `gh attestation verify trufflecheck-errorprone-0.1.1.jar --repo elide-dev/trufflecheck` passed
-  (SLSA provenance v1). The signer was `elide-dev/trufflecheck/.github/workflows/release.yml@refs/heads/main` at
+- **Provenance:** `gh attestation verify trufflecheck-errorprone-0.1.1.jar --repo elide-dev/trufflecheck
+  --signer-workflow elide-dev/trufflecheck/.github/workflows/release.yml --predicate-type https://slsa.dev/provenance/v1`
+  passed. The signer was `elide-dev/trufflecheck/.github/workflows/release.yml@refs/heads/main` at
   source commit `e467e7ca0f4c1c17813e6710ec7461e8762d478c`, in run 43958808013. The profiles tarball also verifies.
 - **Analyzers,** pinned by sha256 in [`tools/trufflecheck.json`](../tools/trufflecheck.json):
   - Error Prone 2.51.0 (`error_prone_core-2.51.0-with-dependencies`, `9a6aee2a…`);
@@ -305,9 +306,18 @@ The check runs `scripts/trufflecheck.py` and writes its output to `build/truffle
 - the raw output of each tool: `errorprone-*.log`, `clippy-*.json` and `cargo-deny.json`.
 
 The run fails only on a tool error: a checksum mismatch, a failed attestation, a missing tool, or a check that crashes
-twice. Downloads are cached in `$TRUFFLECHECK_CACHE`. Without it, the cache is `/build/caches/trufflecheck` when
-`/build/caches` exists, and `$XDG_CACHE_HOME/trufflecheck` otherwise. The trufflecheck JAR's attestation is verified
-once per digest with `gh`, and the result is cached beside the JAR. Pass `--skip-rust` for the Java checks alone.
+twice. Provenance checks fail closed:
+
+- Every download is checked against its sha256 pin before anything runs.
+- Artifacts marked `attested` in `tools/trufflecheck.json` (the trufflecheck JAR and profiles) must also pass
+  `gh attestation verify`, with the release workflow and SLSA predicate pinned.
+- A missing `gh` or a failed verification stops the run. `--skip-attestation`, or
+  `TRUFFLECHECK_SKIP_ATTESTATION=1`, opts out. The run then prints a warning, and `summary.md` and `findings.json`
+  record that provenance wasn't verified.
+- Error Prone, NullAway and JSpecify come from Maven Central without GitHub attestations, so they rely on their
+  sha256 pins. Downloads are cached in `$TRUFFLECHECK_CACHE`. Without it, the cache is `/build/caches/trufflecheck` when
+`/build/caches` exists, and `$XDG_CACHE_HOME/trufflecheck` otherwise. Attestation results are cached beside each artifact,
+per digest and signer. Pass `--skip-rust` for the Java checks alone.
 
 trufflecheck is a pinned download rather than a git submodule. Myna needs only the Error Prone JAR and the profiles
 tarball. Both are release assets with build provenance, and the sha256 pins in `tools/trufflecheck.json` make the

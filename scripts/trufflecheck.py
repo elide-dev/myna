@@ -4,12 +4,16 @@
 
 Analyzer JARs and the trufflecheck profiles come from tools/trufflecheck.json, pinned by sha256 and cached in
 $TRUFFLECHECK_CACHE (default /build/caches/trufflecheck when /build/caches exists, else $XDG_CACHE_HOME/trufflecheck),
-as are the Truffle jars from tools/truffle.json when Elide's cache lacks them. The trufflecheck JAR's build provenance is checked once with `gh attestation verify` and the result is cached beside it.
+as are the Truffle jars from tools/truffle.json when Elide's cache lacks them. A sha256 mismatch always stops the run.
+Artifacts marked `attested` in tools/trufflecheck.json (the trufflecheck JAR and profiles) are also checked with
+`gh attestation verify` against the pinned release workflow, once per digest, and fail closed: a missing gh or a failed
+verification stops the run unless --skip-attestation (or TRUFFLECHECK_SKIP_ATTESTATION=1) opts out, which warns and is
+recorded in the report. Maven Central analyzers publish no attestation and rely on their sha256 pins.
 
 Areas: the Truffle runtime (src/truffle), generated Truffle cells (tests/truffle/cells.seam in both backends and
 examples/truffle.seam) with the binding classes they compile against, the generator/values/Feature Java, the Cargo
-workspace, and generated seam.rs files. Findings never fail the run; a missing tool or a checksum or attestation
-mismatch does. Reports land in build/trufflecheck: findings.json, summary.md and each tool's raw output.
+workspace, and generated seam.rs files. Findings never fail the run; a missing tool, a checksum mismatch or a failed
+attestation does. Reports land in build/trufflecheck: findings.json, summary.md and each tool's raw output.
 
 Needs the JVM jars (`mise run build:jvm`), GRAALVM_HOME, cargo, and gh for the one-time attestation check.
 """
@@ -28,6 +32,7 @@ import tarfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+SKIP_ATTESTATION = False
 PINS = json.loads((ROOT / 'tools/trufflecheck.json').read_text())
 TRUFFLE = json.loads((ROOT / 'tools/truffle.json').read_text())
 TARGET = {('Darwin', 'arm64'): 'aarch64-apple-darwin', ('Darwin', 'x86_64'): 'x86_64-apple-darwin',
@@ -68,37 +73,52 @@ def fetch(cache, url, digest):
 
 
 def attest(path):
-    """Verify the JAR's release-workflow provenance once per digest; the result is cached beside it."""
+    """Verify release-workflow provenance with the signer pinned; fails closed. Cached per digest and signer."""
+    spec = PINS['attestation']
     record = path.with_name(path.name + '.attestation.json')
     digest = sha256(path)
     if record.is_file():
         cached = json.loads(record.read_text())
-        if cached.get('sha256') == digest:
+        if cached.get('sha256') == digest and cached.get('signer_workflow') == spec['signer_workflow']:
             return cached
     if shutil.which('gh') is None:
-        return {'sha256': digest, 'verified': False, 'reason': 'gh is not installed'}
-    result = subprocess.run(['gh', 'attestation', 'verify', str(path), '--repo', PINS['repository'], '--format', 'json'],
-                            capture_output=True, text=True)
+        raise SystemExit(f'gh is required to verify {path.name}; pass --skip-attestation to run without provenance')
+    result = subprocess.run(['gh', 'attestation', 'verify', str(path), '--repo', PINS['repository'],
+                             '--signer-workflow', spec['signer_workflow'], '--predicate-type', spec['predicate_type'],
+                             '--format', 'json'], capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(f'attestation verification failed for {path.name}:\n{result.stderr}')
     verification = json.loads(result.stdout)[0]['verificationResult']
     certificate = verification['signature']['certificate']
-    outcome = {'sha256': digest, 'verified': True, 'repository': PINS['repository'],
-               'signer': certificate.get('buildSignerURI'), 'source_digest': certificate.get('sourceRepositoryDigest'),
-               'run': certificate.get('runInvocationURI'), 'predicate': verification['statement']['predicateType']}
+    outcome = {'file': path.name, 'sha256': digest, 'verified': True, 'repository': PINS['repository'],
+               'signer_workflow': spec['signer_workflow'], 'signer': certificate.get('buildSignerURI'),
+               'source_digest': certificate.get('sourceRepositoryDigest'), 'run': certificate.get('runInvocationURI'),
+               'predicate': verification['statement']['predicateType']}
     record.write_text(json.dumps(outcome, indent=2) + '\n')
     return outcome
 
 
-def profiles(cache):
+def profiles(cache, provenance):
     spec = PINS['profiles']
     archive = fetch(cache, spec['url'], spec['sha256'])
+    provenance.append(attested(archive, spec))
     root = cache / f'profiles-{PINS["version"]}'
     if not (root / 'profiles/jvm/errorprone.args').is_file():
         root.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive) as tar:
             tar.extractall(root, filter='data')
     return root / 'profiles'
+
+
+def attested(path, spec):
+    """Provenance for an artifact marked `attested` in tools/trufflecheck.json; others rely on their sha256 pin."""
+    if not spec.get('attested'):
+        return {'file': path.name, 'sha256': spec['sha256'], 'verified': False, 'reason': 'no attestation published; sha256 pin only'}
+    if SKIP_ATTESTATION:
+        print(f'WARNING: provenance of {path.name} NOT verified (--skip-attestation); only its sha256 pin was checked',
+              file=sys.stderr)
+        return {'file': path.name, 'sha256': spec['sha256'], 'verified': False, 'reason': 'skipped by --skip-attestation'}
+    return attest(path)
 
 
 def truffle_jars(cache):
@@ -299,7 +319,13 @@ def area(finding):
 
 
 def summary(out, findings, meta):
-    lines = ['# trufflecheck run', '', f'Commit `{meta["commit"]}`; trufflecheck {meta["version"]}.', '',
+    lines = ['# trufflecheck run', '', f'Commit `{meta["commit"]}`; trufflecheck {meta["version"]}.', '']
+    for item in meta['provenance']:
+        state = 'attested by ' + item['signer'] if item['verified'] else 'NOT attested: ' + item['reason']
+        lines.append(f'- `{item["file"]}` sha256 `{item["sha256"]}`: {state}')
+    if meta['attestation_skipped']:
+        lines.append('- **WARNING: run with --skip-attestation; provenance was not verified.**')
+    lines += ['',
              '| Area | Tool | Rule | Severity | Count |', '| :--- | :--- | :--- | :--- | ---: |']
     counts = Counter((f['area'], f['tool'], f['rule'], f['severity']) for f in findings)
     for (where, tool, rule, severity), count in sorted(counts.items()):
@@ -316,13 +342,18 @@ def summary(out, findings, meta):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--skip-rust', action='store_true', help='Run only the Java checks')
+    parser.add_argument('--skip-attestation', action='store_true',
+                        help='Run without gh attestation checks (also TRUFFLECHECK_SKIP_ATTESTATION=1); recorded in the report')
     args = parser.parse_args()
+    global SKIP_ATTESTATION
+    SKIP_ATTESTATION = args.skip_attestation or os.environ.get('TRUFFLECHECK_SKIP_ATTESTATION') == '1'
     out = ROOT / 'build/trufflecheck'
     out.mkdir(parents=True, exist_ok=True)
     cache = cache_dir()
+    # Every download is checked against its sha256 pin, and attested ones against their signer, before anything runs.
     analyzers = {name: fetch(cache, spec['url'], spec['sha256']) for name, spec in PINS['analyzers'].items()}
-    attestation = attest(analyzers['trufflecheck-errorprone'])
-    profile = profiles(cache)
+    provenance = [attested(analyzers[name], spec) for name, spec in PINS['analyzers'].items()]
+    profile = profiles(cache, provenance)
     flags = errorprone_args(profile / 'jvm/errorprone.args')
     truffle = truffle_jars(cache)
     home = Path(os.environ['GRAALVM_HOME'])
@@ -372,7 +403,8 @@ def main():
         deny, deny_version = cargo_deny(out, profile)
         findings += deny
     commit = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-    meta = {'commit': commit, 'version': PINS['version'], 'attestation': attestation, 'javac_exit': exits, 'crashed_checks': crashed,
+    meta = {'commit': commit, 'version': PINS['version'], 'provenance': provenance,
+            'attestation_skipped': SKIP_ATTESTATION, 'javac_exit': exits, 'crashed_checks': crashed,
             'cargo_deny': deny_version, 'analyzers': {n: PINS['analyzers'][n]['sha256'] for n in PINS['analyzers']},
             'profiles_sha256': PINS['profiles']['sha256'],
             'clippy': subprocess.run(['cargo', 'clippy', '--version'], capture_output=True, text=True).stdout.strip(),
