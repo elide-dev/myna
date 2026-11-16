@@ -6,22 +6,41 @@ import java.lang.invoke.MethodHandle;
 
 public final class ConstsFFM {
     private ConstsFFM() {}
-    public static final String ABI_FINGERPRINT = "4042a26e0a35c43498d917319faa3162850a13e4ac1e07d4b5704cdecc46afbe";
+    public static final String ABI_FINGERPRINT = "6d7151fad6c4bde0b28437f9cc6f7c7491c3812da85623bdd84a1a09c2e09f40";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
+    public static final StructLayout Node_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_INT.withName("tag"),
+        ValueLayout.JAVA_INT.withName("packed"),
+        ValueLayout.JAVA_LONG.withName("operand"));
+    // enum NodeTag: values in ConstsConstants.NodeTag
+    public static final long Node_tag_OFFSET = 0L;
+    // flags Packed: values in ConstsConstants.Packed
+    public static final long Node_packed_OFFSET = 4L;
+    // when tag=binary: enum BinaryOp: values in ConstsConstants.BinaryOp
+    // when tag=unary: enum UnaryOp: values in ConstsConstants.UnaryOp
+    // when tag=write: flags WriteFlags: values in ConstsConstants.WriteFlags
+    public static final long Node_operand_OFFSET = 8L;
     public static final StructLayout Record_LAYOUT = MemoryLayout.structLayout(
         ValueLayout.JAVA_INT.withName("status"),
         ValueLayout.JAVA_INT.withName("perms"),
         ValueLayout.JAVA_LONG.withName("wide"),
         ValueLayout.JAVA_LONG.withName("raw"));
+    /** A pointer to one Record: a read or return through it is a 24-byte segment in the global scope, and so is a null one, at address 0: test address() == 0 before reading, since a read through it is unchecked native access. */
+    public static final AddressLayout Record_POINTER = ValueLayout.ADDRESS.withTargetLayout(Record_LAYOUT);
     // enum Status: values in ConstsConstants.Status
     public static final long Record_status_OFFSET = 0L;
     // flags Perms: values in ConstsConstants.Perms
     public static final long Record_perms_OFFSET = 4L;
     // flags Wide: values in ConstsConstants.Wide
     public static final long Record_wide_OFFSET = 8L;
+    // enum Level: values in ConstsConstants.Level
     public static final long Record_raw_OFFSET = 16L;
+    public static final StructLayout Unary_LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_INT.withName("op"));
+    // enum UnaryOp: values in ConstsConstants.UnaryOp
+    public static final long Unary_op_OFFSET = 0L;
     // returns enum Status: values in ConstsConstants.Status
     public static final FunctionDescriptor blockingStatus_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
     public static MethodHandle blockingStatus(SymbolLookup lookup) {
@@ -43,7 +62,7 @@ public final class ConstsFFM {
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_set_level").orElseThrow(() -> new UnsatisfiedLinkError("consts_set_level")), setLevel_DESCRIPTOR, Linker.Option.critical(false));
     }
     // returns enum Status: values in ConstsConstants.Status
-    public static final FunctionDescriptor status_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+    public static final FunctionDescriptor status_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, Record_POINTER);
     public static MethodHandle status(SymbolLookup lookup) {
         return Linker.nativeLinker().downcallHandle(lookup.find("consts_status").orElseThrow(() -> new UnsatisfiedLinkError("consts_status")), status_DESCRIPTOR);
     }
@@ -107,6 +126,21 @@ public final class ConstsFFM {
             this.setLevel_address = lookup.find("consts_set_level").orElse(null);
             this.status_address = lookup.find("consts_status").orElse(null);
         }
+        /** The resolved address of consts_blocking_status, valid while the library arena is open. */
+        public MemorySegment blockingStatus_address() {
+            if (this.blockingStatus_address == null) throw new UnsatisfiedLinkError("consts_blocking_status");
+            return this.blockingStatus_address;
+        }
+        /** The resolved address of consts_set_level, valid while the library arena is open. */
+        public MemorySegment setLevel_address() {
+            if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");
+            return this.setLevel_address;
+        }
+        /** The resolved address of consts_status, valid while the library arena is open. */
+        public MemorySegment status_address() {
+            if (this.status_address == null) throw new UnsatisfiedLinkError("consts_status");
+            return this.status_address;
+        }
         public int blockingStatus(MemorySegment session) throws Throwable {
             if (this.blockingStatus_address == null) throw new UnsatisfiedLinkError("consts_blocking_status");
             return (int) ConstsFFM.blockingStatus_Downcall.HANDLE.invokeExact(this.blockingStatus_address, session);
@@ -137,6 +171,16 @@ public final class ConstsFFM {
             java.util.Objects.requireNonNull(lookup);
             this.setLevel_address = lookup.find("consts_set_level").orElse(null);
             this.status_address = lookup.find("consts_status").orElse(null);
+        }
+        /** The resolved address of consts_set_level, valid while the library arena is open. */
+        public MemorySegment setLevel_address() {
+            if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");
+            return this.setLevel_address;
+        }
+        /** The resolved address of consts_status, valid while the library arena is open. */
+        public MemorySegment status_address() {
+            if (this.status_address == null) throw new UnsatisfiedLinkError("consts_status");
+            return this.status_address;
         }
         public void setLevel(byte level, MemorySegment session) throws Throwable {
             if (this.setLevel_address == null) throw new UnsatisfiedLinkError("consts_set_level");

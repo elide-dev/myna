@@ -1,5 +1,5 @@
 # Named constants, enums and flag sets: declarations, references and the open-set rule.
-module constants target=x86_64-unknown-linux-gnu java_package=fixture.constants java_class=Consts truffle_cells=true
+module constants abi=3 target=x86_64-unknown-linux-gnu java_package=fixture.constants java_class=Consts truffle_cells=true
 opaque Session
 const MAGIC type=u32 value=0x3141514b
 const LIMIT type=u64 value=0xffffffffffffffff
@@ -23,11 +23,59 @@ flags Wide type=u64 c_bitfields=true
   bit first = 0
   bit last = 63
 end
+enum Kind type=u8
+  value plain = 0
+  value boxed = 5
+  value last = 255
+end
+# A kind code and a raw depth packed beside two one-bit flags.
+flags Packed type=u32 c_bitfields=true
+  bit open = 0
+  bit external = 2
+  range kind = 8..15 enum=Kind
+  range depth = 16..19
+end
+# One range over a whole u8 word, reaching its top bit.
+flags Octet type=u8
+  range code = 0..7
+end
+# A tagged record: the tag says how to read the operand.
+enum NodeTag type=u32
+  value read = 0
+  value binary = 1
+  value unary = 2
+  value write = 3
+end
+enum BinaryOp type=u64
+  value add = 0
+  value sub = 1
+end
+# A u32 code table, also read narrowed from the u64 operand below.
+enum UnaryOp type=u32
+  value negate = 0
+  value invert = 1
+end
+flags WriteFlags type=u64
+  bit volatile_store = 0
+  bit release = 1
+end
+struct Node size=16 align=8
+  field tag type=u32 offset=0 enum=NodeTag
+  field packed type=u32 offset=4 flags=Packed
+  field operand type=u64 offset=8
+    when tag=binary enum=BinaryOp
+    when tag=unary enum=UnaryOp
+    when tag=write flags=WriteFlags
+end
+# The same UnaryOp on a field of its own carrier.
+struct Unary size=4 align=4
+  field op type=u32 offset=0 enum=UnaryOp
+end
 struct Record size=24 align=8
   field status type=i32 offset=0 enum=Status
   field perms type=u32 offset=4 flags=Perms
   field wide type=u64 offset=8 flags=Wide
-  field raw type=u64 offset=16
+  field raw type=u64 offset=16 enum=Level
 end
 callback Listener return=i32 enum=Status
   param isolate type=isolate_thread

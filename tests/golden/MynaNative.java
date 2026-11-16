@@ -85,6 +85,41 @@ public final class MynaNative {
         static final CGlobalData<rotate_Leaf> rotate = CGlobalDataFactory.forSymbol("seam_rotate_myna_ref");
         static final CGlobalData<swapPair_Leaf> swapPair = CGlobalDataFactory.forSymbol("seam_swap_pair_myna_ref");
         static final CGlobalData<widen_Leaf> widen = CGlobalDataFactory.forSymbol("seam_widen");
+        static final CGlobalData<CFunctionPointer> forEach = CGlobalDataFactory.forSymbol("seam_for_each");
+        static final CGlobalData<CFunctionPointer> rotate$declared = CGlobalDataFactory.forSymbol("seam_rotate");
+        static final CGlobalData<CFunctionPointer> swapPair$declared = CGlobalDataFactory.forSymbol("seam_swap_pair");
+    }
+    /** The linked address of seam_for_each, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer forEach_address() {
+        return MynaSymbols.forEach.get();
+    }
+    /** The linked address of seam_inspect, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer inspect_address() {
+        return MynaSymbols.inspect.get();
+    }
+    /** The linked address of seam_low_signed, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer lowSigned_address() {
+        return MynaSymbols.lowSigned.get();
+    }
+    /** The linked address of seam_low_unsigned, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer lowUnsigned_address() {
+        return MynaSymbols.lowUnsigned.get();
+    }
+    /** The linked address of seam_reducer, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer reducer_address() {
+        return MynaSymbols.reducer.get();
+    }
+    /** The linked address of seam_rotate, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer rotate_address() {
+        return MynaSymbols.rotate$declared.get();
+    }
+    /** The linked address of seam_swap_pair, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer swapPair_address() {
+        return MynaSymbols.swapPair$declared.get();
+    }
+    /** The linked address of seam_widen, for a symbol handed to native code rather than called. */
+    public static CFunctionPointer widen_address() {
+        return MynaSymbols.widen.get();
     }
     /** Runtime address: never initialized in the build host. */
     private static final class inspect_Binding {

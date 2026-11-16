@@ -286,6 +286,12 @@ public final class Borrow {
       // Guest native memory read through its segment: closed, or confined to another thread.
       if (!(buffer instanceof NativeBytes)) throw e;
       throw unavailable("copy-in", e);
+    } catch (NativeCellException e) {
+      // NativeBytes refuses a closed or foreign scope itself, with the segment's exception as
+      // cause.
+      if (buffer instanceof NativeBytes && e.getCause() instanceof RuntimeException cause)
+        throw unavailable("copy-in", cause);
+      throw e;
     }
     return bytes;
   }
@@ -329,6 +335,18 @@ public final class Borrow {
       this.array = bytes;
       this.interopSource = source;
     }
+  }
+
+  /**
+   * Hands what this borrow must undo to the {@link Batch} that takes it over: the pin or the arena
+   * {@link Copy} of a pinned or arena-copied element, or {@code null} when there is nothing to undo
+   * apart from the scratch stack, which pops with the batch. The borrow is released as far as
+   * {@link #release()} is concerned. A batch lends read-only elements, which have no copy-back.
+   */
+  Object handOver() {
+    assert array == null : "a batch element has no copy-back";
+    released = true;
+    return kind == PINNED || kind == COPIED ? owner : null;
   }
 
   public long address() {
@@ -452,7 +470,7 @@ public final class Borrow {
    * A copy too large for the scratch stack, or one that did not fit: an arena of its own. A held
    * borrow's copy is one too, made by {@link #held}.
    */
-  private static final class Copy {
+  static final class Copy {
     /** The arena, or {@code null} for a held copy {@code malloc}ed in a Native Image. */
     final Arena arena;
 
@@ -478,6 +496,31 @@ public final class Borrow {
     /** The alignment of a copy: {@link Scratch#ALIGNMENT}, or a stricter {@code align} fact. */
     private static long alignment(long align) {
       return Math.max(align, Scratch.ALIGNMENT);
+    }
+
+    /** Room for a batch's arrays that the scratch stack cannot take. */
+    @TruffleBoundary
+    static Copy region(long size) {
+      Arena arena = Arena.ofConfined();
+      return new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+    }
+
+    /**
+     * A copy of guest native memory too large for the scratch stack, read through its segment: a
+     * scope-checked access. Returns {@code null}, allocating nothing, when the segment is closed or
+     * confined to another thread.
+     */
+    @TruffleBoundary
+    static Copy ofSegment(MemorySegment segment) {
+      Arena arena = Arena.ofConfined();
+      MemorySegment copy = arena.allocate(segment.byteSize(), Scratch.ALIGNMENT);
+      try {
+        MemorySegment.copy(segment, 0, copy, 0, segment.byteSize());
+      } catch (IllegalStateException | WrongThreadException e) {
+        arena.close();
+        return null;
+      }
+      return new Copy(arena, copy);
     }
 
     @TruffleBoundary
@@ -546,7 +589,7 @@ public final class Borrow {
   }
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
-  private static final class Pins {
+  static final class Pins {
     static void pin(Borrow borrow, byte[] array) {
       PinnedObject pin = PinnedObject.create(array);
       borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
@@ -598,7 +641,7 @@ public final class Borrow {
     static final long ALIGNMENT = 16;
 
     private final Thread thread = Thread.currentThread();
-    private MemorySegment block;
+    MemorySegment block;
     private long wanted = INITIAL;
 
     /** The address of {@link #block}, read by compiled code after a push. */
@@ -642,6 +685,45 @@ public final class Borrow {
         }
       }
       return end <= block.byteSize() ? block : null;
+    }
+
+    /** The current thread's stack. */
+    @TruffleBoundary
+    static Scratch current() {
+      return Scratches.CURRENT.get();
+    }
+
+    /**
+     * Reserves {@code size} bytes on the current thread's stack for a batch's arrays and returns
+     * that stack, whose {@link #top} is then the end of the region, or returns {@code null} when
+     * the region is larger than {@link #LARGEST} or does not fit. The region's bytes are left as
+     * they were.
+     */
+    @TruffleBoundary
+    static Scratch region(long size) {
+      if (size > LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      if (scratch.reserve(size) == null) return null;
+      scratch.top += reservation(size);
+      return scratch;
+    }
+
+    /**
+     * Copies guest native memory onto the current thread's stack through its segment, a
+     * scope-checked access, and returns that stack, whose {@link #top} is then the end of the copy.
+     * Returns {@code null}, pushing nothing, when the copy is too large or does not fit, and
+     * throws, pushing nothing, when the segment is closed or confined to another thread.
+     */
+    @TruffleBoundary
+    static Scratch pushSegment(MemorySegment segment) {
+      long size = segment.byteSize();
+      if (size > LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      MemorySegment block = scratch.reserve(size);
+      if (block == null) return null;
+      MemorySegment.copy(segment, 0, block, scratch.top, size);
+      scratch.top += reservation(size);
+      return scratch;
     }
 
     /**

@@ -15,6 +15,8 @@ public final class Dsl {
   public static Module parse(String source) {
     String name = null, target = null, javaPackage = null, javaClass = null;
     int abi = 1;
+    boolean abiDeclared = false;
+    boolean rustImplementation = false;
     NativeConfig nativeConfig = null;
     TruffleConfig truffleConfig = null;
     var opaque = new ArrayList<String>();
@@ -28,16 +30,21 @@ public final class Dsl {
     var flagSets = new ArrayList<FlagSet>();
     var enumValues = new ArrayList<EnumValue>();
     var flagBits = new ArrayList<FlagBit>();
+    var flagRanges = new ArrayList<FlagRange>();
     String[] header = null;
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
     var fields = new ArrayList<Field>();
     var lines = source.split("\\R");
+    String previous = null; // the directive of the previous non-blank line
+
     for (int i = 0; i < lines.length; i++) {
       String line = lines[i].split("#", 2)[0].strip();
       if (line.isEmpty()) continue;
       try {
         String[] words = line.split("\\s+");
+        String directive = previous;
+        previous = words[0];
         switch (words[0]) {
           case "module" -> {
             if (name != null
@@ -51,6 +58,7 @@ public final class Dsl {
             name = words[1];
             var opts = options(words, 2);
             target = take(opts, "target", null);
+            abiDeclared = opts.containsKey("abi");
             abi = Integer.parseInt(take(opts, "abi", "1"));
             javaPackage = take(opts, "java_package", null);
             javaClass = take(opts, "java_class", null);
@@ -62,6 +70,11 @@ public final class Dsl {
             if (context != null || library != null)
               nativeConfig =
                   new NativeConfig(context, library, requireStatic != null && bool(requireStatic));
+            String implementation = take(opts, "rust_implementation", null);
+            require(
+                implementation == null || implementation.equals("trait"),
+                "rust_implementation is trait: " + implementation);
+            rustImplementation = implementation != null;
             String cells = take(opts, "truffle_cells", null);
             String backend = take(opts, "truffle_backend", "native");
             String coercion = take(opts, "truffle_coercion", "strict");
@@ -109,7 +122,13 @@ public final class Dsl {
               }
             resources.add(
                 new Resource(
-                    words[1], create, destroy, threading.equals("shared"), handle, success));
+                    words[1],
+                    // Several constructors are a comma-separated list, each an import's name.
+                    List.of(create.split(",", -1)),
+                    destroy,
+                    threading.equals("shared"),
+                    handle,
+                    success));
             empty(opts);
           }
           case "borrow" -> {
@@ -125,7 +144,24 @@ public final class Dsl {
             require(
                 lifetime.equals("call") || (holder != null && !holder.isEmpty()),
                 "lifetime is call or resource:RESOURCE: " + lifetime);
-            borrows.add(new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
+            // A batch names an array of lengths and a count; a single buffer names its length.
+            if (opts.containsKey("lengths") || opts.containsKey("count")) {
+              String elements = opts.remove("elements_nullable");
+              require(
+                  elements == null || elements.equals("true") || elements.equals("false"),
+                  "elements_nullable is true or false: " + elements);
+              require(
+                  holder == null, "a batch borrow has lifetime=call: " + words[1] + " " + words[2]);
+              borrows.add(
+                  BufferBorrow.batch(
+                      words[1],
+                      words[2],
+                      takeRequired(opts, "lengths"),
+                      takeRequired(opts, "count"),
+                      "true".equals(elements)));
+            } else
+              borrows.add(
+                  new BufferBorrow(words[1], words[2], takeRequired(opts, "length"), holder));
             empty(opts);
           }
           case "opaque" -> {
@@ -153,6 +189,7 @@ public final class Dsl {
             fields.clear();
             enumValues.clear();
             flagBits.clear();
+            flagRanges.clear();
           }
           case "value" -> {
             require(header != null && header[0].equals("enum"), "value requires an enum block");
@@ -164,6 +201,21 @@ public final class Dsl {
             require(words.length == 4 && words[2].equals("="), "expected: bit NAME = INDEX");
             require(words[3].matches("[0-9]{1,9}"), "invalid bit index: " + words[3]);
             flagBits.add(new FlagBit(words[1], Integer.parseInt(words[3])));
+          }
+          case "range" -> {
+            require(header != null && header[0].equals("flags"), "range requires a flags block");
+            require(
+                words.length >= 4 && words[2].equals("="),
+                "expected: range NAME = LOW..HIGH [enum=ENUM]");
+            require(
+                words[3].matches("[0-9]{1,9}\\.\\.[0-9]{1,9}"), "invalid bit range: " + words[3]);
+            String[] bounds = words[3].split("\\.\\.");
+            var opts = options(words, 4);
+            String enumName = take(opts, "enum", null);
+            empty(opts);
+            flagRanges.add(
+                new FlagRange(
+                    words[1], Integer.parseInt(bounds[0]), Integer.parseInt(bounds[1]), enumName));
           }
           case "param" -> {
             require(
@@ -191,8 +243,24 @@ public final class Dsl {
             var opts = options(words, 2);
             var type = Seam.type(takeRequired(opts, "type"));
             long offset = Long.parseLong(takeRequired(opts, "offset"));
-            fields.add(new Field(words[1], type, offset, group(opts)));
+            fields.add(new Field(words[1], type, offset, group(opts), take(opts, "count", null)));
             empty(opts);
+          }
+          case "when" -> {
+            require(
+                header != null
+                    && header[0].equals("struct")
+                    && ("field".equals(directive) || "when".equals(directive)),
+                "when must directly follow a field or another when");
+            String[] tag = words.length >= 2 ? words[1].split("=", 2) : new String[0];
+            require(
+                tag.length == 2 && !tag[0].isEmpty() && !tag[1].isEmpty(),
+                "expected: when FIELD=VALUE enum=ENUM|flags=FLAGS");
+            var opts = options(words, 2);
+            var group = group(opts);
+            require(group != null, "when requires enum= or flags=");
+            empty(opts);
+            fields.add(fields.removeLast().withCase(new FieldCase(tag[0], tag[1], group)));
           }
           case "end" -> {
             require(header != null && words.length == 1, "unexpected end");
@@ -215,7 +283,7 @@ public final class Dsl {
             } else if (header[0].equals("flags")) {
               var type = integerScalar(takeRequired(options, "type"));
               boolean bitfields = bool(take(options, "c_bitfields", "false"));
-              flagSets.add(new FlagSet(header[1], type, flagBits, bitfields));
+              flagSets.add(new FlagSet(header[1], type, flagBits, bitfields, flagRanges));
               empty(options);
             } else if (header[0].equals("struct")) {
               structs.add(
@@ -286,7 +354,9 @@ public final class Dsl {
         truffleConfig,
         constants,
         enums,
-        flagSets);
+        flagSets,
+        abiDeclared,
+        rustImplementation);
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */

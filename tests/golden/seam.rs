@@ -2,6 +2,8 @@
 pub const ABI_FINGERPRINT: &str = "9e33817b743fbb450bd61ab362d1d891db5ba16ab29f8dccf7b0b1740ffd4d18";
 pub const BINDING_ABI_VERSION: u32 = 2;
 const _: () = assert!(core::mem::size_of::<*const ()>() == 8);
+/// The module's `abi=` version.
+pub const ABI_VERSION: i32 = 1;
 #[repr(C)]
 pub struct Buffer { _private: [u8; 0] }
 pub type Reducer = Option<unsafe extern "C" fn(i64, i64) -> i64>;

@@ -127,12 +127,64 @@ end
                       run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                           "fixture.callbacks.CallbackMain", library).stdout)
 
+    def test_rust_implementation_trait(self):
+        """The ownership fixture's imports implemented only against the generated trait, called from C."""
+        with tempfile.TemporaryDirectory(prefix="myna-rust-implementation-") as tmp:
+            work = Path(tmp)
+            source = work / "implementation.seam"
+            source.write_text((ROOT / "tests/ownership/ownership.seam").read_text()
+                .replace("java_class=NativeApi", "java_class=NativeApi rust_implementation=trait"))
+            generated = work / "generated"
+            run(BINARY, "generate", source, "--out", generated, "--target", TARGET)
+            os.environ["SEAM_GENERATED"] = str(generated)
+            # Release and debug builds: the debug one checks every caller contract it can.
+            for name, flags in (("release", ("-Copt-level=2",)), ("debug", ("-Copt-level=0", "-Cdebug-assertions=on"))):
+                library = work / f"libimplementation_{name}.a"
+                run("rustc", "--edition=2024", "--crate-type=staticlib", "-Dwarnings", *flags,
+                    ROOT / "tests/ownership/implementation.rs", "-o", library)
+                app = work / f"implemented_{name}"
+                run("cc", "-std=c11", "-Wall", "-Werror", f"-I{generated}", ROOT / "tests/ownership/implemented.c",
+                    library, "-lpthread", "-ldl", "-lm", "-o", app)
+                self.assertIn("Rust implementation trait passed", run(app).stdout)
+                # Contract violations: debug builds abort on each; release builds avoid undefined
+                # behavior, and abort only where no result is safe to make up.
+                for violation, released in (("length", "checksum 0"), ("null-buffer", "checksum 0"),
+                                            ("destroy", "destroy returned"), ("query", None),
+                                            ("err-success", None)):
+                    result = run(app, violation, ok=False)
+                    if name == "release" and released is not None:
+                        self.assertEqual(result.returncode, 0, (violation, result.stderr))
+                        self.assertIn(released, result.stdout)
+                    else:
+                        self.assertNotEqual(result.returncode, 0, (name, violation, result.stdout))
+                        # Either form of the abort a panic in an extern "C" function makes.
+                        self.assertRegex(result.stderr, "cannot unwind|aborting")
+            # A shared resource is used and destroyed from any thread, so its type must be Send + Sync.
+            local = work / "local.rs"
+            local.write_text((ROOT / "tests/ownership/implementation.rs").read_text()
+                .replace("pub struct Ticket {\n    _live: Live,\n}",
+                         "pub struct Ticket {\n    _live: Live,\n    _local: std::marker::PhantomData<std::rc::Rc<()>>,\n}")
+                .replace("Ticket { _live: live()? }", "Ticket { _live: live()?, _local: std::marker::PhantomData }"))
+            self.assertIn("_local: std::marker::PhantomData }", local.read_text())
+            rejected = run("rustc", "--edition=2024", "--crate-type=lib", "--emit=metadata", local,
+                           "-o", work / "local.rmeta", ok=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("cannot be sent between threads safely", rejected.stderr)
+
     def test_explicit_ffm_library_binding(self):
         from ffm_binding import build_binding_fixture
         _, classes, library = build_binding_fixture()
         self.assertIn("Explicit FFM library lifetime and buffer borrowing passed",
                       run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                           "FfmBindingMain", library).stdout)
+
+    def test_ffm_struct_pointers_are_sized(self):
+        from ffm_pointers import build_pointers_fixture
+        _, generated, classes, library = build_pointers_fixture()
+        self.assertIn("public static final AddressLayout Node_POINTER", (generated / "PointersFFM.java").read_text())
+        self.assertIn("FFM struct pointers passed",
+                      run("java", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                          "PointersMain", library).stdout)
 
     def test_generate_compile_and_check(self):
         self.assertTrue(BINARY.is_file(), "run scripts/build.sh first")

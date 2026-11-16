@@ -6,6 +6,7 @@ import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.serialize.SeamJson;
 import java.util.*;
 
@@ -63,7 +64,8 @@ public final class NativeImage implements Backend {
 
   /** {@code @CConst} reaches the C headers Native Image writes for entry points. */
   private static boolean readOnlyPointer(Parameter p) {
-    return p.type() instanceof Pointer && p.access() == Access.READ;
+    return p.type() instanceof Pointer
+        && (p.access() == Access.READ || p.access() == Access.CSTRING);
   }
 
   private static boolean unsignedSmall(Type t) {
@@ -88,6 +90,12 @@ public final class NativeImage implements Backend {
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
+    // Every import's address is a linked CGlobalData symbol, read at run time.
+    if (m.functions().stream().anyMatch(f -> f.direction() == Direction.IMPORT)) {
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalData");
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalDataFactory");
+      imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
+    }
     if (m.functions().stream().anyMatch(Seam::nativeLeaf)) {
       imports.add("com.oracle.svm.shared.AlwaysInline");
       imports.add("com.oracle.svm.shared.Uninterruptible");
@@ -109,7 +117,11 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.constant.CEnumLookup");
       imports.add("org.graalvm.nativeimage.c.constant.CEnumValue");
     }
-    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty()))
+    if (m.functions().stream().anyMatch(f -> !typedWrappers(f).isEmpty())
+        || m.structs().stream()
+            .flatMap(st -> st.fields().stream())
+            .flatMap(f -> f.cases().stream())
+            .anyMatch(c -> c.group().kind() == GroupKind.ENUM))
       imports.add("com.oracle.svm.shared.AlwaysInline");
     if (m.structs().stream()
         .flatMap(st -> st.fields().stream())
@@ -125,6 +137,14 @@ public final class NativeImage implements Backend {
       imports.add("org.graalvm.nativeimage.c.struct.CStruct");
       imports.add("org.graalvm.nativeimage.c.struct.CField");
       imports.add("org.graalvm.nativeimage.c.struct.CFieldAddress");
+    }
+    for (Struct st : m.structs()) {
+      var views = Views.of(m, st);
+      if (!views.isEmpty()) imports.add("com.oracle.svm.shared.AlwaysInline");
+      if (views.stream().anyMatch(v -> !(v.element() instanceof Named)))
+        imports.add("org.graalvm.word.WordFactory");
+      if (views.stream().anyMatch(Views::pointerElements))
+        imports.add("org.graalvm.nativeimage.c.type.WordPointer");
     }
     for (Struct st : m.structs())
       for (Field f : st.fields()) {
@@ -178,7 +198,12 @@ public final class NativeImage implements Backend {
   private static void leafBindings(Module m, StringBuilder out) {
     var leaves =
         m.functions().stream().map(f -> ByValue.lower(m, f)).filter(Seam::nativeLeaf).toList();
-    if (leaves.isEmpty()) return;
+    var others =
+        m.functions().stream()
+            .filter(f -> f.direction() == Direction.IMPORT)
+            .filter(f -> leaves.stream().noneMatch(l -> l.name().equals(f.name())))
+            .toList();
+    if (leaves.isEmpty() && others.isEmpty()) return;
     for (Function f : leaves) {
       out.append("    public interface ")
           .append(leafType(f))
@@ -205,7 +230,35 @@ public final class NativeImage implements Backend {
           .append(" = CGlobalDataFactory.forSymbol(")
           .append(SeamJson.quote(f.symbol()))
           .append(");\n");
+    for (Function f : others)
+      out.append("        static final CGlobalData<CFunctionPointer> ")
+          .append(f.name())
+          .append(" = CGlobalDataFactory.forSymbol(")
+          .append(SeamJson.quote(f.symbol()))
+          .append(");\n");
+    // A by-value leaf calls its reference shim; its address is still the declared symbol, which a
+    // native caller invokes with the declared signature. Seam identifiers have no '$'.
+    for (Function f : m.functions())
+      if (f.direction() == Direction.IMPORT && ByValue.applies(f) && Seam.nativeLeaf(f))
+        out.append("        static final CGlobalData<CFunctionPointer> ")
+            .append(f.name())
+            .append("$declared = CGlobalDataFactory.forSymbol(")
+            .append(SeamJson.quote(f.symbol()))
+            .append(");\n");
     out.append("    }\n");
+    // The linked address of each import, read at run time: never a value in the image heap.
+    for (Function f : m.functions()) {
+      if (f.direction() != Direction.IMPORT) continue;
+      out.append("    /** The linked address of ")
+          .append(f.symbol())
+          .append(", for a symbol handed to native code rather than called. */\n")
+          .append("    public static CFunctionPointer ")
+          .append(f.name())
+          .append("_address() {\n        return MynaSymbols.")
+          .append(f.name())
+          .append(ByValue.applies(f) && Seam.nativeLeaf(f) ? "$declared" : "")
+          .append(".get();\n    }\n");
+    }
     for (Function f : leaves)
       out.append("    /** Runtime address: never initialized in the build host. */\n")
           .append("    private static final class ")
@@ -251,6 +304,11 @@ public final class NativeImage implements Backend {
   }
 
   public String generate(Module m) {
+    return generate(m, new Fingerprint(m));
+  }
+
+  public String generate(Module m, Fingerprint abi) {
+    String fingerprint = abi.valueFor(m);
     var out =
         new StringBuilder(
             "// Generated by myna. Unsigned integer carriers preserve their raw bits.\n"
@@ -276,17 +334,20 @@ public final class NativeImage implements Backend {
         .append(m.nativeClass())
         .append("() {}\n");
     out.append("    public static final String ABI_FINGERPRINT = ")
-        .append(SeamJson.quote(SeamJson.fingerprint(m)))
+        .append(SeamJson.quote(fingerprint))
         .append(";\n");
     out.append("    public static final int BINDING_ABI_VERSION = ")
         .append(Seam.BINDING_ABI_VERSION)
         .append(";\n");
-    constants(m, out);
+    constants(m, fingerprint, out);
     for (EnumGroup e : m.enums()) cEnum(m, e, out);
     leafBindings(m, out);
     for (String opaque : m.opaqueTypes())
       out.append("    public interface ").append(opaque).append(" extends PointerBase {}\n");
-    for (Struct st : m.structs()) struct(m, st, out);
+    for (Struct st : m.structs()) {
+      struct(m, st, out);
+      caseAccessors(m, st, out);
+    }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
       out.append("    public interface ")
@@ -416,7 +477,7 @@ public final class NativeImage implements Backend {
    * code). Narrow macros have type {@code int} in C and need {@code AllowNarrowingCast}; the value
    * keeps its raw bits, as the literal {@code (byte) 0xc8} does.
    */
-  private static void constants(Module m, StringBuilder out) {
+  private static void constants(Module m, String fingerprint, StringBuilder out) {
     out.append(
             "    /**\n"
                 + "     * The seam.h check. Only this generation's header defines the macro, and"
@@ -426,7 +487,7 @@ public final class NativeImage implements Backend {
                 + "     * Never called; it costs the image nothing.\n"
                 + "     */\n")
         .append("    @CConstant(")
-        .append(SeamJson.quote(Names.seamAbiCheck(m, SeamJson.fingerprint(m))))
+        .append(SeamJson.quote(Names.seamAbiCheck(m, fingerprint)))
         .append(") static native int seamHeaderCheck();\n");
     for (Constant c : m.constants())
       out.append("    /** const ")
@@ -487,11 +548,28 @@ public final class NativeImage implements Backend {
             .append('.')
             .append(set.name())
             .append('.')
-            .append(Names.lowerCamel(set.bits().get(0).name()))
+            .append(
+                Names.lowerCamel(
+                    set.bits().isEmpty() ? set.ranges().get(0).name() : set.bits().get(0).name()))
             .append('(')
             .append(f.name())
             .append("()) */\n");
       }
+      if (!f.cases().isEmpty())
+        out.append("        /** ")
+            .append(
+                String.join(
+                    "; ",
+                    f.cases().stream()
+                        .map(c ->
+                            "when "
+                                + c.tagField()
+                                + "="
+                                + c.value()
+                                + (c.group().kind() == GroupKind.ENUM ? " enum=" : " flags=")
+                                + c.group().name())
+                        .toList()))
+            .append(" */\n");
       out.append("        @CField")
           .append(field)
           .append(carrier)
@@ -511,9 +589,140 @@ public final class NativeImage implements Backend {
           .append(f.name().substring(1))
           .append("();\n");
       FlagSet bits = bitfields(m, f);
-      if (bits != null) bitfieldAccessors(f, bits, out);
+      if (bits != null) bitfieldAccessors(m, f, bits, carrier, out);
     }
+    if (Views.elementStructs(m).contains(st.name()))
+      out.append("        /** Element {@code index} of the C array this record starts. */\n")
+          .append("        ")
+          .append(st.name())
+          .append(" addressOf(long index);\n");
     out.append("    }\n");
+    for (Views v : Views.of(m, st)) viewAccessor(m, v, out);
+  }
+
+  /**
+   * {@code <Struct>_<field>At(record, i)}: element {@code i} of a counted view, the element record
+   * through its {@code addressOf(long)} or the scalar through its C pointer's {@code read}. SVM
+   * rejects methods without C-interface annotations in a {@code @CStruct} interface, default and
+   * static ones included, so the helper is a static method of the class. The bound is an {@code
+   * assert}, which compiles out unless the image is built with assertions enabled; the helper is
+   * always inlined, so it costs the pointer load and the scaled access.
+   */
+  private static void viewAccessor(Module m, Views v, StringBuilder out) {
+    String record = "record." + v.pointer().name() + "()";
+    String count = "record." + v.count().name() + "()";
+    String bound =
+        switch (v.countType()) {
+          case U32 -> "i < Integer.toUnsignedLong(" + count + ")";
+          case U16 -> "i < Short.toUnsignedLong(" + count + ")";
+          case U8 -> "i < Byte.toUnsignedLong(" + count + ")";
+          default -> "Long.compareUnsigned(i, " + count + ") < 0"; // u64, usize
+        };
+    String element;
+    String access;
+    if (v.element() instanceof Scalar e) {
+      element = Types.java(e);
+      access = record + ".read(WordFactory.signed(i))";
+      if (e == Scalar.USIZE || e == Scalar.ISIZE) access += ".rawValue()";
+    } else if (v.element() instanceof Pointer) {
+      // The field's carrier is a plain word; read it as a word array of the element's interface.
+      element = javaType(m, v.element());
+      access = "((WordPointer) " + record + ").read(WordFactory.signed(i))";
+    } else {
+      element = javaType(m, v.pointer().type());
+      access = record + ".addressOf(i)";
+    }
+    out.append("    /** Element i of ")
+        .append(v.label())
+        .append("; asserts 0 <= i < ")
+        .append(v.count().name())
+        .append(". Not for {@code @Uninterruptible} code; use {@code ")
+        .append(access)
+        .append("} there. */\n")
+        .append("    @AlwaysInline(\"Myna counted view element\")\n    public static ")
+        .append(element)
+        .append(' ')
+        .append(v.struct().name())
+        .append('_')
+        .append(v.pointer().name())
+        .append("At(")
+        .append(v.struct().name())
+        .append(" record, long i) {\n        assert i >= 0L && ")
+        .append(bound)
+        .append(" : \"")
+        .append(v.label())
+        .append(": index out of bounds\";\n        return ")
+        .append(access)
+        .append(";\n    }\n");
+  }
+
+  /**
+   * One static accessor per tagged field and enum its {@code when} lines name: the field as that
+   * {@code @CEnum}, null for an unlisted value, like an import's {@code <name>Enum}. The tag is not
+   * checked. Flag cases keep the raw {@code @CField}, tested with {@code <Class>Constants}.
+   */
+  private static void caseAccessors(Module m, Struct st, StringBuilder out) {
+    var done = new HashSet<String>();
+    for (Field f : st.fields())
+      for (FieldCase c : f.cases()) {
+        if (c.group().kind() != GroupKind.ENUM) continue;
+        String accessor = Names.javaCaseAccessor(f.name(), c.group().name());
+        if (!done.add(accessor)) continue;
+        out.append("    /** {@code ")
+            .append(st.name())
+            .append('.')
+            .append(f.name())
+            .append("} as enum ")
+            .append(c.group().name())
+            .append(", its meaning when ")
+            .append(
+                String.join(
+                    " or ",
+                    f.cases().stream()
+                        .filter(o -> o.group().equals(c.group()))
+                        .map(o -> o.tagField() + " is " + o.value())
+                        .toList()))
+            .append(": null for an unlisted value. */\n")
+            .append("    @AlwaysInline(\"Myna tagged field accessor\")\n    public static ")
+            .append(c.group().name())
+            .append(' ')
+            .append(accessor)
+            .append('(')
+            .append(st.name())
+            .append(" record) {\n");
+        EnumGroup narrow = m.narrowed(c.group(), f.type());
+        if (narrow == null)
+          out.append("        return ")
+              .append(c.group().name())
+              .append(".of(record.")
+              .append(f.name())
+              .append("());\n    }\n");
+        else
+          // A raw value the enum's narrower carrier cannot hold is null, as an unlisted one is.
+          out.append("        ")
+              .append(javaType(m, f.type()))
+              .append(" raw = record.")
+              .append(f.name())
+              .append("();\n        return ")
+              .append(fitsCarrier(narrow.type()))
+              .append(" ? ")
+              .append(c.group().name())
+              .append(".of((")
+              .append(Types.java(narrow.type()))
+              .append(") raw) : null;\n    }\n");
+      }
+  }
+
+  /** True when the carrier holds {@code raw}, a wider field's value as its Java type. */
+  private static String fitsCarrier(Scalar carrier) {
+    return switch (carrier) {
+      case U8 -> "(raw >>> 8) == 0";
+      case U16 -> "(raw >>> 16) == 0";
+      case U32 -> "(raw >>> 32) == 0";
+      case I8 -> "raw == (byte) raw";
+      case I16 -> "raw == (short) raw";
+      default -> "raw == (int) raw";
+    };
   }
 
   /** The {@code c_bitfields=true} flag set annotating a field, or null. */
@@ -530,21 +739,36 @@ public final class NativeImage implements Backend {
    * struct that {@code seam.h} unions with the field. They read and write the same bits as the
    * masks in {@code <Class>Constants}, at one shift more per read than a mask test (spec 7a.9).
    */
-  private static void bitfieldAccessors(Field f, FlagSet set, StringBuilder out) {
-    for (FlagBit b : set.bits()) {
-      String camel = Names.lowerCamel(b.name());
-      String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
-      String annotation =
-          "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + b.name()) + ") ";
-      out.append(annotation)
-          .append("boolean ")
-          .append(accessor)
-          .append("();\n")
-          .append(annotation)
-          .append("void ")
-          .append(accessor)
-          .append("(boolean value);\n");
+  private static void bitfieldAccessors(
+      Module m, Field f, FlagSet set, String carrier, StringBuilder out) {
+    for (FlagBit b : set.bits()) bitfieldAccessor(f, b.name(), "boolean", out);
+    // A range is typed as <Class>Constants types it: the enum's Java carrier with enum=, else the
+    // flag carrier's. SVM reads the unsigned bit-field zero-extended and narrows it to that type,
+    // so a value with the type's top bit set reads negative, as the literals of an unsigned carrier
+    // are; a write stores the value's low bits.
+    for (FlagRange r : set.ranges()) {
+      String type = carrier;
+      if (r.enumName() != null)
+        type = Types.java(enumGroup(m, new GroupRef(GroupKind.ENUM, r.enumName())).type());
+      bitfieldAccessor(f, r.name(), type, out);
     }
+  }
+
+  private static void bitfieldAccessor(Field f, String member, String type, StringBuilder out) {
+    String camel = Names.lowerCamel(member);
+    String accessor = f.name() + Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
+    String annotation = "        @CBitfield(" + SeamJson.quote(f.name() + "Bits." + member) + ") ";
+    out.append(annotation)
+        .append(type)
+        .append(' ')
+        .append(accessor)
+        .append("();\n")
+        .append(annotation)
+        .append("void ")
+        .append(accessor)
+        .append('(')
+        .append(type)
+        .append(" value);\n");
   }
 
   private static EnumGroup enumGroup(Module m, GroupRef ref) {

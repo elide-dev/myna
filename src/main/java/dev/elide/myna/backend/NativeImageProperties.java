@@ -22,6 +22,21 @@ public final class NativeImageProperties implements Backend {
     boolean hasLiterals = module.functions().stream().anyMatch(f -> f.callback() != null);
     String result =
         "# Myna binding ABI 2: preserve symbolic metadata / runtime-address separation.\n";
+    boolean imports =
+        module.functions().stream().anyMatch(f -> f.direction() == Seam.Direction.IMPORT);
+    if (leaves.isEmpty() && imports)
+      // The import addresses are CGlobalData symbols, as the leaves' are.
+      return result
+          + "JavaArgs ="
+          + " --add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.c=ALL-UNNAMED\n"
+          + "Args = --initialize-at-build-time="
+          + type
+          + ","
+          + type
+          + "$MynaSymbols"
+          + (hasLiterals ? "," + type + "$Literals" : "")
+          + truffle(module, " ")
+          + "\n";
     if (leaves.isEmpty()) {
       if (!hasLiterals) return result + truffle(module, "Args = ");
       return result
