@@ -470,7 +470,7 @@ handed it to the guest.
 
 A create declared with `borrow FUNCTION PARAMETER length=PARAMETER lifetime=resource:NAME` keeps
 that buffer until the resource it makes is destroyed (see
-[ownership](ownership.md#borrows-held-by-a-resource-truffle-cells-only) for the declaration). The
+[ownership](ownership.md#borrows-held-by-a-resource) for the declaration). The
 cell lends it through a `HeldBytesCoercion` instead of a `BytesCoercion`, because nothing that ends
 with the call can be used for it: no pin and no scratch-stack copy.
 

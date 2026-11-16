@@ -82,7 +82,13 @@ public final class NativeOwnership implements Backend {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
         // A held borrow outlives the call, which only a Truffle cell can express.
-        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) {
+          if (JavaFfm.heldWrapper(m, create)) {
+            heldConstructor(m, r, create, "NativeBuffer", out);
+            heldConstructor(m, r, create, "byte[]", out);
+          }
+          continue;
+        }
         if (m.callBorrows().stream().anyMatch(b -> b.function().equals(name))) {
           // The buffer wrappers of the import lend each buffer for the call only.
           String target = m.ownershipClass() + "." + name;
@@ -117,7 +123,19 @@ public final class NativeOwnership implements Backend {
                   + "        }\n"
                   + "    }\n");
     }
-    if (!m.callBorrows().isEmpty())
+    // Call buffers, and the NativeBuffer overloads of constructors with held buffers.
+    boolean held =
+        m.ownedResources().stream()
+            .flatMap(r -> r.creates().stream())
+            .anyMatch(name ->
+                m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))
+                    && JavaFfm.heldWrapper(
+                        m,
+                        m.functions().stream()
+                            .filter(f -> f.name().equals(name))
+                            .findFirst()
+                            .orElseThrow()));
+    if (!m.callBorrows().isEmpty() || held)
       out.append(
 """
         /**
@@ -303,6 +321,211 @@ public final class NativeOwnership implements Backend {
     }
 
 """;
+
+  /**
+   * A constructor whose create keeps its buffer until the resource is destroyed: the bytes are
+   * copied into unmanaged memory that the owner's destructor frees after the native destroy
+   * returns, and that a create that makes nothing frees at once. One copy per create.
+   */
+  private static void heldConstructor(
+      Module m, Resource r, Function create, String carrier, StringBuilder out) {
+    CallBorrows call = CallBorrows.of(m, create);
+    BufferBorrow held = call.borrows().getFirst();
+    boolean outPointer = m.outPointer(r);
+    boolean array = carrier.equals("byte[]");
+    var params = new ArrayList<String>();
+    var args = new ArrayList<String>();
+    String source = null;
+    for (int i = 0; i < create.parameters().size(); i++) {
+      Parameter p = create.parameters().get(i);
+      if (call.length(p) != null) {
+        args.add(call.narrow(held) ? "(int) length" : "length");
+        continue;
+      }
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        args.add("org.graalvm.word.WordFactory.pointer(slot.rawValue())");
+        continue;
+      }
+      if (call.buffer(p) != null) {
+        source = "arg" + i;
+        params.add(carrier + " arg" + i);
+        args.add("org.graalvm.word.WordFactory.pointer(copy.rawValue())");
+        continue;
+      }
+      params.add(NativeImage.qualifiedCarrier(m, p.type()) + " arg" + i);
+      args.add("arg" + i);
+    }
+    boolean nullable = call.nullable(held);
+    String status = NativeImage.qualifiedCarrier(m, create.returns());
+    String pad = "            ";
+    out.append(
+            "        /** Copies the held buffer into memory the resource owns until it is"
+                + " destroyed. */\n")
+        .append("        public static <T> T ")
+        .append(r.wrapperName(create.name()))
+        .append("(ResourceFactory<T> factory")
+        .append(outPointer ? ", Failure<? extends T> onFailure" : "")
+        .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+        .append(") {\n")
+        .append(pad)
+        .append("java.util.Objects.requireNonNull(factory);\n");
+    if (outPointer) out.append(pad).append("java.util.Objects.requireNonNull(onFailure);\n");
+    if (!nullable)
+      out.append(pad).append("java.util.Objects.requireNonNull(").append(source).append(");\n");
+    // The copy: from the array, or from the consumer's buffer while it is acquired.
+    // raw is what malloc returned and what is freed; copy is raw rounded up to an align fact above
+    // malloc's alignment, as the declaration promises the callee.
+    long align = call.align(held);
+    boolean rounded = align > PINNED_ALIGNMENT;
+    out.append(pad)
+        .append("long length;\n")
+        .append(pad)
+        .append("org.graalvm.word.Pointer raw;\n")
+        .append(pad)
+        .append("org.graalvm.word.Pointer copy;\n");
+    String copyInto =
+        "                raw = org.graalvm.nativeimage.UnmanagedMemory.malloc("
+            + "org.graalvm.word.WordFactory.unsigned(Math.max(length, 1)"
+            + (rounded ? " + " + align : "")
+            + "));\n"
+            + (rounded
+                ? "                copy = org.graalvm.word.WordFactory.pointer((raw.rawValue() + "
+                    + (align - 1)
+                    + ") & -"
+                    + align
+                    + "L);\n"
+                : "                copy = raw;\n");
+    if (nullable)
+      out.append(pad)
+          .append("if (")
+          .append(source)
+          .append(" == null) {\n")
+          .append(pad)
+          .append("    length = 0;\n")
+          .append(pad)
+          .append("    raw = org.graalvm.word.WordFactory.nullPointer();\n")
+          .append(pad)
+          .append("    copy = raw;\n")
+          .append(pad)
+          .append("} else {\n");
+    else out.append(pad).append("{\n");
+    if (array)
+      out.append("                length = ")
+          .append(source)
+          .append(".length;\n")
+          .append(copyInto)
+          .append("                for (int i = 0; i < length; i++) copy.writeByte(i, ")
+          .append(source)
+          .append("[i]);\n");
+    else
+      out.append("                ")
+          .append(source)
+          .append(".acquire(false);\n")
+          .append("                try {\n")
+          .append("                    length = ")
+          .append(source)
+          .append(".byteSize();\n")
+          .append("                    long from = ")
+          .append(source)
+          .append(".address();\n")
+          .append(
+              "                    if (length < 0 || (from == 0 && length != 0)) throw new"
+                  + " IllegalArgumentException(\"invalid buffer extent\");\n")
+          // Checked before anything is allocated or copied.
+          .append(
+              call.narrow(held)
+                  ? "                    if (length > "
+                      + call.maxLength(held)
+                      + ") throw new IllegalArgumentException(\"buffer length exceeds ABI"
+                      + " range\");\n"
+                  : "")
+          .append(copyInto.replace("                ", "                    "))
+          .append(
+              "                    for (long i = 0; i < length; i++)\n"
+                  + "                        copy.writeByte(org.graalvm.word.WordFactory.signed(i),"
+                  + " org.graalvm.word.WordFactory.<org.graalvm.word.Pointer>pointer(from)"
+                  + ".readByte(org.graalvm.word.WordFactory.signed(i)));\n")
+          .append("                } finally {\n")
+          .append("                    ")
+          .append(source)
+          .append(".release(false);\n")
+          .append("                    java.lang.ref.Reference.reachabilityFence(")
+          .append(source)
+          .append(");\n")
+          .append("                }\n");
+    out.append(pad).append("}\n");
+    String invoke = m.nativeClass() + "." + create.name() + "(" + String.join(", ", args) + ")";
+    if (outPointer) {
+      var succeeded = new ArrayList<String>();
+      boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
+      for (long value : r.success())
+        succeeded.add(
+            Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
+      out.append(pad)
+          .append("org.graalvm.word.Pointer slot = org.graalvm.nativeimage.StackValue.get(8);\n")
+          .append(pad)
+          .append("slot.writeLong(0, 0L);\n")
+          .append(pad)
+          .append(status)
+          .append(" status = ")
+          .append(invoke)
+          .append(";\n")
+          .append(pad)
+          .append("long address = slot.readLong(0);\n")
+          .append(pad)
+          .append("if (!(")
+          .append(String.join(" || ", succeeded))
+          .append(") || address == 0) {\n")
+          .append(pad)
+          .append("    if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);\n")
+          .append(pad)
+          .append("    return onFailure.failed(status);\n")
+          .append(pad)
+          .append("}\n");
+    } else
+      out.append(pad)
+          .append("long address = ")
+          .append(invoke)
+          .append(".rawValue();\n")
+          .append(pad)
+          .append("if (address == 0) {\n")
+          .append(pad)
+          .append("    if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);\n")
+          .append(pad)
+          .append("    return null;\n")
+          .append(pad)
+          .append("}\n");
+    out.append(pad)
+        .append("// The copy is freed after the native destroy, never before it.\n")
+        .append(pad)
+        .append("long kept = raw.rawValue();\n")
+        .append(pad)
+        .append("// A destroy that throws leaves the copy to leak with the resource.\n")
+        .append(pad)
+        .append("NativeDestructor destructor = handle -> {\n")
+        .append(pad)
+        .append("    DESTRUCTOR.destroy(handle);\n")
+        .append(pad)
+        .append(
+            "    if (kept != 0) org.graalvm.nativeimage.UnmanagedMemory.free("
+                + "org.graalvm.word.WordFactory.pointer(kept));\n")
+        .append(pad)
+        .append("};\n")
+        .append(pad)
+        .append("try {\n")
+        .append(pad)
+        .append("    return java.util.Objects.requireNonNull(factory.adopt(address, destructor, ")
+        .append(r.shared() ? "null" : "java.lang.Thread.currentThread()")
+        .append("));\n")
+        .append(pad)
+        .append("} catch (RuntimeException | Error failure) {\n")
+        .append(pad)
+        .append("    destructor.destroy(address);\n")
+        .append(pad)
+        .append("    throw failure;\n")
+        .append(pad)
+        .append("}\n        }\n");
+  }
 
   /** What an absent buffer passes: the null pointer, in the buffer's own word carrier. */
   private static final String NULL_POINTER = "org.graalvm.word.WordFactory.nullPointer()";

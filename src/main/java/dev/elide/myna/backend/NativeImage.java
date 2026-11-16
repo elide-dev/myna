@@ -89,6 +89,12 @@ public final class NativeImage implements Backend {
   /** Only the imports a module uses, so checked-in output compiles cleanly under linters. */
   private static Set<String> imports(Module m) {
     var imports = new TreeSet<String>();
+    // Every import's address is a linked CGlobalData symbol, read at run time.
+    if (m.functions().stream().anyMatch(f -> f.direction() == Direction.IMPORT)) {
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalData");
+      imports.add("com.oracle.svm.guest.staging.c.CGlobalDataFactory");
+      imports.add("org.graalvm.nativeimage.c.function.CFunctionPointer");
+    }
     if (m.functions().stream().anyMatch(Seam::nativeLeaf)) {
       imports.add("com.oracle.svm.shared.AlwaysInline");
       imports.add("com.oracle.svm.shared.Uninterruptible");
@@ -191,7 +197,12 @@ public final class NativeImage implements Backend {
   private static void leafBindings(Module m, StringBuilder out) {
     var leaves =
         m.functions().stream().map(f -> ByValue.lower(m, f)).filter(Seam::nativeLeaf).toList();
-    if (leaves.isEmpty()) return;
+    var others =
+        m.functions().stream()
+            .filter(f -> f.direction() == Direction.IMPORT)
+            .filter(f -> leaves.stream().noneMatch(l -> l.name().equals(f.name())))
+            .toList();
+    if (leaves.isEmpty() && others.isEmpty()) return;
     for (Function f : leaves) {
       out.append("    public interface ")
           .append(leafType(f))
@@ -218,7 +229,35 @@ public final class NativeImage implements Backend {
           .append(" = CGlobalDataFactory.forSymbol(")
           .append(SeamJson.quote(f.symbol()))
           .append(");\n");
+    for (Function f : others)
+      out.append("        static final CGlobalData<CFunctionPointer> ")
+          .append(f.name())
+          .append(" = CGlobalDataFactory.forSymbol(")
+          .append(SeamJson.quote(f.symbol()))
+          .append(");\n");
+    // A by-value leaf calls its reference shim; its address is still the declared symbol, which a
+    // native caller invokes with the declared signature. Seam identifiers have no '$'.
+    for (Function f : m.functions())
+      if (f.direction() == Direction.IMPORT && ByValue.applies(f) && Seam.nativeLeaf(f))
+        out.append("        static final CGlobalData<CFunctionPointer> ")
+            .append(f.name())
+            .append("$declared = CGlobalDataFactory.forSymbol(")
+            .append(SeamJson.quote(f.symbol()))
+            .append(");\n");
     out.append("    }\n");
+    // The linked address of each import, read at run time: never a value in the image heap.
+    for (Function f : m.functions()) {
+      if (f.direction() != Direction.IMPORT) continue;
+      out.append("    /** The linked address of ")
+          .append(f.symbol())
+          .append(", for a symbol handed to native code rather than called. */\n")
+          .append("    public static CFunctionPointer ")
+          .append(f.name())
+          .append("_address() {\n        return MynaSymbols.")
+          .append(f.name())
+          .append(ByValue.applies(f) && Seam.nativeLeaf(f) ? "$declared" : "")
+          .append(".get();\n    }\n");
+    }
     for (Function f : leaves)
       out.append("    /** Runtime address: never initialized in the build host. */\n")
           .append("    private static final class ")

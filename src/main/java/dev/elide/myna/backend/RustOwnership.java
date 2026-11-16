@@ -22,35 +22,62 @@ final class RustOwnership {
     if (batches) out.append(LEND_BATCH);
     for (Resource r : m.ownedResources()) {
       String n = r.name();
+      // A resource whose constructor keeps a buffer carries that buffer's lifetime: the borrow
+      // checker then keeps the bytes alive, and unmoved, until the resource is dropped.
+      boolean holds = holds(m, r);
+      String typed = holds ? n + "<'_>" : n;
       out.append("    pub struct ")
           .append(n)
+          .append(holds ? "<'held>" : "")
           .append(" {\n")
           .append("        pointer: core::ptr::NonNull<super::")
           .append(n)
           .append(">,\n")
-          .append("        _thread: core::marker::PhantomData<*mut ()>,\n    }\n");
+          .append("        _thread: core::marker::PhantomData<*mut ()>,\n")
+          .append(
+              holds
+                  ? "        /// The buffers its constructor lent until the resource is"
+                      + " destroyed.\n        _held: core::marker::PhantomData<&'held [u8]>,\n"
+                  : "")
+          .append("    }\n");
       if (r.shared())
         out.append(
                 "    // Explicit shared resource contract includes destruction on any thread.\n"
                     + "    unsafe impl core::marker::Send for ")
-            .append(n)
+            .append(typed)
             .append(" {}\n    unsafe impl core::marker::Sync for ")
-            .append(n)
+            .append(typed)
             .append(" {}\n");
-      out.append("    impl ").append(n).append(" {\n");
-      for (String name : r.creates()) constructor(m, r, name, out);
+      out.append(holds ? "    impl<'held> " + n + "<'held>" : "    impl " + n).append(" {\n");
+      var constructors = new StringBuilder();
+      for (String name : r.creates()) constructor(m, r, name, constructors);
+      out.append(
+          holds
+              ? constructors
+                  .toString()
+                  .replace(
+                      "_thread: core::marker::PhantomData }",
+                      "_thread: core::marker::PhantomData, _held: core::marker::PhantomData }")
+              : constructors);
       out.append(
               "        /// # Safety\n"
                   + "        /// Transfer sole ownership of a live allocation from this resource's"
                   + " allocator.\n"
                   + "        /// No outstanding borrows; obey the descriptor's thread and"
-                  + " destruction contracts.\n")
+                  + " destruction contracts.\n"
+                  + (holds
+                      ? "        /// Any buffer the resource holds stays valid and unmodified for"
+                          + " `'held`, and the\n"
+                          + "        /// owner is dropped, never leaked, before `'held` ends.\n"
+                      : ""))
           .append("        pub unsafe fn from_raw(pointer: *mut super::")
           .append(n)
           .append(
               ") -> Option<Self> {\n"
                   + "            core::ptr::NonNull::new(pointer).map(|pointer| Self { pointer,"
-                  + " _thread: core::marker::PhantomData })\n"
+                  + " _thread: core::marker::PhantomData"
+                  + (holds ? ", _held: core::marker::PhantomData" : "")
+                  + " })\n"
                   + "        }\n")
           .append("        pub fn into_raw(self) -> *mut super::")
           .append(n)
@@ -65,7 +92,7 @@ final class RustOwnership {
           .append(n)
           .append("Borrow { owner: self }\n        }\n    }\n")
           .append("    impl core::ops::Drop for ")
-          .append(n)
+          .append(typed)
           .append(" {\n        fn drop(&mut self) { unsafe { super::")
           .append(r.destroy())
           .append("(self.pointer.as_ptr()); } }\n    }\n")
@@ -73,6 +100,7 @@ final class RustOwnership {
           .append(n)
           .append("Borrow<'owner> { owner: &'owner ")
           .append(n)
+          .append(holds ? "<'owner>" : "")
           .append(" }\n")
           .append("    impl ")
           .append(n)
@@ -87,6 +115,20 @@ final class RustOwnership {
     var aligns = new TreeSet<Long>();
     for (CallBorrows call : CallBorrows.of(m))
       for (BufferBorrow b : call.borrows()) if (call.align(b) > 1) aligns.add(call.align(b));
+    // A constructor with held buffers lends its buffers itself, under the same policy.
+    for (Resource r : m.ownedResources())
+      for (String name : r.creates())
+        for (BufferBorrow b : m.borrows())
+          if (b.function().equals(name) && !b.batch() && holds(m, r)) {
+            CallBorrows call =
+                CallBorrows.of(
+                    m,
+                    m.functions().stream()
+                        .filter(f -> f.name().equals(name))
+                        .findFirst()
+                        .orElseThrow());
+            if (call.align(b) > 1) aligns.add(call.align(b));
+          }
     for (long align : aligns)
       out.append("    #[repr(align(")
           .append(align)
@@ -304,8 +346,12 @@ final class RustOwnership {
   private static void constructor(Module m, Resource r, String name, StringBuilder out) {
     Function create =
         m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
-    // A held borrow outlives the call, which only a Truffle cell can express.
-    if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) return;
+    // A held borrow outlives the call: the constructor lends its buffers itself, held ones for the
+    // resource's lifetime.
+    if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) {
+      heldConstructor(m, r, create, out);
+      return;
+    }
     // A constructor with call buffers or C strings calls the import's wrapper, which lends them.
     boolean buffers =
         m.callBorrows().stream().anyMatch(b -> b.function().equals(name))
@@ -427,6 +473,180 @@ final class RustOwnership {
               ").map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
                   + "        }\n");
     }
+  }
+
+  /**
+   * Whether some constructor of {@code r} keeps a buffer until the resource is destroyed ({@code
+   * lifetime=resource:}), which gives the Rust owner a lifetime.
+   */
+  static boolean holds(Module m, Resource r) {
+    return m.borrows().stream().anyMatch(b -> b.held() && r.createdBy(b.function()));
+  }
+
+  /**
+   * A constructor with held borrows. It lends every buffer itself: a held one as {@code &'held
+   * [u8]}, which the resource's lifetime then keeps borrowed, and any call buffer for the call
+   * only, under the align policy of every wrapper. Rust does not guarantee that a destructor runs,
+   * so the owner-returning constructor is an {@code unsafe fn} that requires the owner to be
+   * dropped before {@code 'held} ends; the safe form, {@code with_NAME}, makes the resource, lends
+   * it to a closure as {@code &Self}, which can neither forget nor convert it, and destroys it
+   * afterwards, on unwind too. A batch has no such form, so a constructor that also takes one gets
+   * no wrapper.
+   */
+  private static void heldConstructor(Module m, Resource r, Function create, StringBuilder out) {
+    CallBorrows call = CallBorrows.of(m, create);
+    if (call.batched()) return;
+    boolean outPointer = m.outPointer(r);
+    var parameters = new ArrayList<String>();
+    var names = new ArrayList<String>();
+    var arguments = new ArrayList<String>();
+    var lets = new StringBuilder();
+    var alignments = new StringBuilder();
+    boolean pointers = false;
+    for (Parameter p : create.parameters()) {
+      BufferBorrow buffer = call.buffer(p);
+      BufferBorrow length = call.length(p);
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        arguments.add("&mut slot");
+      } else if (buffer != null) {
+        boolean shared = p.access() == Access.READ;
+        String pointer = shared ? ".as_ptr()" : ".as_mut_ptr()";
+        String slice = (shared ? "&" : "&mut ") + (buffer.held() ? "'held " : "") + "[u8]";
+        long align = CallBorrows.align(p);
+        names.add(p.name());
+        if (align > 1) {
+          String at = call.nullable(buffer) ? p.name() + ".0" : p.name() + pointer;
+          String len = call.nullable(buffer) ? p.name() + ".1" : p.name() + ".len()";
+          alignments
+              .append("            debug_assert!(")
+              .append(len)
+              .append(" == 0 || (")
+              .append(at)
+              .append(" as usize) & ")
+              .append(align - 1)
+              .append(" == 0, \"")
+              .append(create.name())
+              .append('.')
+              .append(p.name())
+              .append(" requires ")
+              .append(align)
+              .append("-byte alignment\");\n");
+        }
+        if (call.nullable(buffer)) {
+          parameters.add(p.name() + ": Option<" + slice + ">");
+          lets.append("            let ")
+              .append(p.name())
+              .append(" = ")
+              .append(p.name())
+              .append(".map_or((core::ptr::")
+              .append(shared ? "null" : "null_mut")
+              .append("(), 0), |")
+              .append(p.name())
+              .append("| (")
+              .append(lent(p.name(), pointer, align, shared))
+              .append(", ")
+              .append(p.name())
+              .append(".len()));\n");
+          arguments.add(p.name() + ".0");
+        } else {
+          parameters.add(p.name() + ": " + slice);
+          arguments.add(lent(p.name(), pointer, align, shared));
+        }
+      } else if (length != null) {
+        arguments.add(
+            length.parameter()
+                + (call.nullable(length) ? ".1" : ".len()")
+                + ".try_into().expect(\"buffer length exceeds ABI range\")");
+      } else if (CallBorrows.cstring(p)) {
+        names.add(p.name());
+        parameters.add(
+            p.name() + ": " + (p.nullable() ? "Option<&::core::ffi::CStr>" : "&::core::ffi::CStr"));
+        arguments.add(
+            p.nullable()
+                ? p.name() + ".map_or(core::ptr::null(), |text| text.as_ptr().cast())"
+                : p.name() + ".as_ptr().cast()");
+      } else {
+        names.add(p.name());
+        parameters.add(p.name() + ": " + Types.rust(p, "super::"));
+        arguments.add(p.name());
+        pointers |= p.type() instanceof Pointer;
+      }
+    }
+    String wrapper = r.wrapperName(create.name());
+    String pointerSafety =
+        pointers
+            ? "        /// Every pointer argument other than a borrowed buffer must satisfy the raw"
+                + " function's requirements, for as long\n"
+                + "        /// as the created resource depends on it.\n"
+            : "";
+    out.append("        /// # Safety\n")
+        .append(
+            "        /// The owner must be dropped, never leaked (`mem::forget`, or `into_raw`"
+                + " without a\n"
+                + "        /// matching `from_raw`), before `'held` ends: the native side may"
+                + " read the held\n"
+                + "        /// buffers until its destroy returns. `with_")
+        .append(wrapper)
+        .append("` guarantees it.\n")
+        .append(pointerSafety)
+        .append("        pub unsafe fn ")
+        .append(wrapper)
+        .append('(')
+        .append(String.join(", ", parameters));
+    String invoke = "unsafe { super::" + create.name() + "(" + String.join(", ", arguments) + ") }";
+    String status = null;
+    if (outPointer) {
+      status = Types.rust(create.returns(), create.returnsGroup(), "super::");
+      String raw = create.returnsGroup() == null ? "status" : "status.0";
+      var succeeded = new ArrayList<String>();
+      for (long value : r.success()) succeeded.add(raw + " == " + value);
+      out.append(") -> Result<Self, ")
+          .append(status)
+          .append("> {\n")
+          .append(lets)
+          .append(alignments)
+          .append("            let mut slot: *mut super::")
+          .append(r.name())
+          .append(" = core::ptr::null_mut();\n            let status = ")
+          .append(invoke)
+          .append(";\n            if !(")
+          .append(String.join(" || ", succeeded))
+          .append(") {\n                return Err(status);\n            }\n")
+          .append(
+              "            core::ptr::NonNull::new(slot).map(|pointer| Self { pointer, _thread:"
+                  + " core::marker::PhantomData }).ok_or(status)\n"
+                  + "        }\n");
+    } else
+      out.append(") -> Option<Self> {\n")
+          .append(lets)
+          .append(alignments)
+          .append("            core::ptr::NonNull::new(")
+          .append(invoke)
+          .append(
+              ").map(|pointer| Self { pointer, _thread: core::marker::PhantomData })\n"
+                  + "        }\n");
+    // The safe form: the closure sees the resource only by reference, and it is destroyed after.
+    var scoped = new ArrayList<>(parameters);
+    scoped.add("scope: impl FnOnce(&Self) -> T");
+    out.append(
+            "        /// Makes the resource, lends it to `scope`, and destroys it afterwards, on"
+                + " unwind too.\n")
+        .append(
+            pointers
+                ? "        /// # Safety\n" + pointerSafety + "        pub unsafe fn with_"
+                : "        pub fn with_")
+        .append(wrapper)
+        .append("<T>(")
+        .append(String.join(", ", scoped))
+        .append(") -> ")
+        .append(outPointer ? "Result<T, " + status + ">" : "Option<T>")
+        .append(" {\n            let owner = unsafe { Self::")
+        .append(wrapper)
+        .append('(')
+        .append(String.join(", ", names))
+        .append(") }?;\n            ")
+        .append(outPointer ? "Ok" : "Some")
+        .append("(scope(&owner))\n        }\n");
   }
 
   /**

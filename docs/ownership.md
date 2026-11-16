@@ -67,7 +67,7 @@ buffer, a Native Image constructor whose buffers may all be absent must name the
 `null` means: `Parsed.parse(factory, (byte[]) null)`. A wrapper adds nothing to the create but the call borrow's own work: no allocation beyond
 it and no change to leaf status or transitions. A call borrow on any other function that returns a
 pointer stays rejected. A create that keeps its buffer past the call declares a
-[held borrow](#borrows-held-by-a-resource-truffle-cells-only) instead.
+[held borrow](#borrows-held-by-a-resource) instead.
 
 `threading=confined` requires access and destruction on the creating/adopting thread. `threading=shared` explicitly permits access and destruction from other threads, with the native implementation providing any necessary synchronization. It does not request reference counting or shared ownership. These are strong contracts, not properties inferred from the function signatures.
 
@@ -153,7 +153,7 @@ import checksum symbol=buffer_checksum return=u64 error=no_failure nounwind=true
 end
 ```
 
-`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid. A create that keeps its input until the resource it makes is released declares a [borrow held by that resource](#borrows-held-by-a-resource-truffle-cells-only) instead.
+`borrow` declares a complete buffer contract: the implementation uses only the supplied byte extent, handles every permitted scalar argument without additional memory-safety preconditions, does not free or retain the buffer, and stops using it before returning. Read borrows prohibit mutation through any alias during the call; write and read/write borrows require exclusive access during the call. For asynchronous operations or retained callbacks, this declaration is invalid. A create that keeps its input until the resource it makes is released declares a [borrow held by that resource](#borrows-held-by-a-resource) instead.
 
 Each buffer is a borrowed `ptr<u8>` with `read`, `write` or `read_write` access and a 32/64-bit signed or unsigned byte length (`usize`, which is `size_t`, counts as 64-bit unsigned); the function returns a scalar or void. A buffer declared `nullable=false` is always present; any other buffer is a [nullable buffer](#nullable-buffers) that may be absent. `nocapture=true` and, for read access, `readonly=true` require approved provenance even in relaxed mode. An `align=N@explicit_contract` fact on a buffer, call or held, is a caller contract: `seam.ll` emits the attribute as it does for any parameter, so the caller must pass an address divisible by `N`, at most 4096. LLVM's `align` does not depend on the extent, so every wrapper lends a present empty buffer a dummy aligned to `N` (an aligned arena allocation in FFM, an `_Alignas` local in the JNI shim, a rounded stack value in Native Image, an aligned static in Rust), and the assertion checks only what the caller lends. Debug builds check it at no release cost: the FFM, Native Image and JNI `ByteBuffer` wrappers use a Java `assert` (off on HotSpot without `-ea`, folded away in a Native Image built without assertions), and the Rust wrappers use `debug_assert!`, each a single AND of the address. Truffle cells do not trust the guest: native memory at a misaligned address is copied to an aligned copy (and written back when writable) instead of lent in place, heap copies start on 16 bytes or on `N` if larger, and a held borrow's copy likewise. The Native Image `byte[]` overloads pin an array, whose data is only 8-aligned, so with `N` above 8 they copy into aligned unmanaged memory (written back, then freed) instead. Additional `dereferenceable` or `noalias` requirements on a buffer are rejected.
 
@@ -462,9 +462,9 @@ trait](#implementing-imports-in-rust) such a constructor returns `Result<Box<Sel
 drops the out-parameter: on `Ok` the entry point writes the box into the slot and returns the first
 `success=` value (a null slot, which only a nullable parameter allows, drops the box instead); on
 `Err(status)` it returns that status, aborting in every build if it is a success value. The destroy
-takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a held borrow gets no Native Image, FFM or Rust wrapper.
+takes `Box<Self::R>` and other handles are `&Self::R`, as for any resource. A constructor with a [held borrow](#borrows-held-by-a-resource) is wrapped as described there.
 
-## Borrows held by a resource (Truffle cells only)
+## Borrows held by a resource
 
 Some creates keep their input. A decoder that adopts its input region records pointers into it in
 the result it initializes, and reads them until that result is released:
@@ -491,24 +491,53 @@ end
 until that resource is destroyed. The contract is the create's: on a listed status it may read the
 buffer's `length` bytes at any time until its `destroy` returns, and it never writes them, frees
 them, or uses them after that; on any other status it has kept nothing. The other rules of a
-`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, no alignment or
-extent preconditions), with three differences:
+`borrow` apply unchanged (a borrowed `ptr<u8>`, a length of its own, `readonly`, an `align` fact as
+a caller contract and no extent preconditions), with three differences:
 
-- the function must be the create of `NAME`, a create that reports a status and writes its resource
-  through a parameter (`handle=…`), and it must have a Truffle cell, since only a cell's owner can
-  end a borrow after its call;
+- the function must be a constructor of `NAME`. For a resource the Rust, FFM and Native Image owners
+  wrap (one whose create returns its pointer, or writes it through a `ptr<ptr<R>>` out-parameter),
+  any constructor may hold. For a struct handle (`handle=PARAMETER.FIELD` or a struct initialized in
+  place) the create must have a Truffle cell, since only a cell's owner wraps it. A Truffle cell
+  holds a buffer only beside the struct or slot of a `handle=` create, so a create that returns its
+  pointer and holds a buffer opts out of cells with `truffle_cell=false@explicit_contract`;
 - the buffer is read-only (`access=read`): nothing could be written back once the call has returned;
 - the buffer is captured, so it must not be declared `nocapture`.
 
 A held borrow may sit beside call borrows on the same create, as `key` does above: those still end
 with the call. The validator rejects a held borrow anywhere else with the rule it breaks.
 
-Only Truffle cells project the held lifetime. A Native Image, FFM, static JNI or Rust wrapper ends
-every borrow when its call returns, which would free or unpin a buffer the native side still reads,
-so those backends generate no call-buffer wrapper for a function with a held buffer, including its
-call borrows; its raw binding is generated as for any other import, and the caller of that binding
-keeps the buffer alive until the release. A function whose borrows all end with the call keeps its
-wrappers. See [Truffle native cells](truffle-cells.md#borrows-held-by-a-resource) for what the cell
+Each owner keeps a held buffer alive in its own way:
+
+- **Rust**: the owner carries the buffer's lifetime, `Doc<'held>`, and takes `data: &'held [u8]`,
+  so the borrow checker keeps the bytes alive and unmodified while the owner exists. Rust does not
+  guarantee that a destructor runs (`mem::forget`, `into_raw`), and the native side may read the
+  buffer until its destroy returns, so:
+  - the safe form is closure-scoped: `Doc::with_create(&bytes, |doc: &Doc| ...)` makes the resource,
+    lends it to the closure by reference, which can neither forget nor move it, and destroys it
+    afterwards, on unwind too. It returns `Option<T>`, or `Result<T, Status>` for an out-pointer
+    create;
+  - `Doc::create(&bytes)` returns the owner as an `unsafe fn`, whose `# Safety` requires dropping
+    it, never leaking it, before `'held` ends; `from_raw` adds the same for held buffers.
+
+  Call borrows beside a held buffer are lent for the call only, and a C string as `&CStr`. Every
+  buffer follows the align policy of other borrows: an empty slice under an `align` fact is lent an
+  aligned static, and a non-empty one's alignment is `debug_assert!`ed. A constructor that also
+  takes a batch gets no Rust wrapper. Owners of resources without held borrows keep their plain
+  type.
+- **FFM and Native Image**: the constructor copies the bytes, once, into native memory the owner
+  holds: an arena in FFM (shared or confined as the resource is), unmanaged memory in Native Image.
+  The owner's destructor frees it after the native destroy returns, through the same destructor the
+  factory receives, never a cleaner; a create that makes nothing frees it at once. A destroy that
+  throws (a missing symbol, a closed library arena) leaves the copy to leak with the resource, since
+  the native side may still read it. Native Image rounds the copy up to an `align` fact above
+  malloc's alignment, as FFM's arena allocates it. The caller's
+  segment, `NativeBuffer` or array may then change or close immediately. These wrappers exist for a
+  constructor with exactly one held buffer and no other buffer, batch or C string; any other keeps
+  only its raw binding.
+- A writable held buffer is not declarable (above): the native side would write into memory no Java
+  caller could observe safely after the call.
+- Static JNI generates no wrapper for a function with a held buffer; its raw binding remains, and
+  its caller keeps the buffer alive until the release. See [Truffle native cells](truffle-cells.md#borrows-held-by-a-resource) for what the cell
 does with each kind of guest value.
 
 ## Truffle cells
@@ -517,7 +546,7 @@ With `truffle_cells=true`, the same declarations project into guest-callable cel
 
 ## Adoption priorities and remaining work
 
-Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows such a create keeps until its resource is destroyed (Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
+Implemented now: native resource construction/destruction contracts, several constructors per resource, scalar and pointer constructor arguments, call-scoped buffers on a constructor, destructors that accept null, creates that report a status and write their resource through a parameter, and borrows a create keeps until its resource is destroyed (Rust, FFM, Native Image and, for `handle=` creates, Truffle cells), Rust RAII and ownership transfer, owner-bound opaque borrows, confined/shared thread contracts, pluggable Native Image ownership, and zero-copy off-heap and pinned-array call borrows, several per function, beside pass-through pointers, and nullable where a buffer may be absent, and batches of read buffers with a parallel array of lengths. FFM additionally projects these declarations into consumer-owned resource factories and scoped `MemorySegment` borrows; static JNI projects call borrows into direct-buffer overloads. See the [adapter guide](jvm-roadmap.md). Ownership metadata is serialized and fingerprinted. No ownership label silently becomes an LLVM optimizer attribute.
 
 Next, in adoption order:
 

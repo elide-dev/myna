@@ -1973,7 +1973,7 @@ class OwnershipTest {
    * beside any borrow, and no other backend can end a borrow after its call.
    */
   @Test
-  void heldBorrowsNeedACellThatReportsAStatus() {
+  void heldBorrowsOnOwnedResourcesAreWrappedEverywhere() throws Exception {
     String open =
         "module held target=aarch64-apple-darwin java_class=Api\n"
             + "opaque Doc\n"
@@ -1991,32 +1991,75 @@ class OwnershipTest {
             + "  param doc type=ptr<Doc> nullable=false ownership=transferred_to_callee"
             + " access=read_write\n"
             + "end\n";
-    assertEquals(
-        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
-            + " lifetime=resource:Doc",
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(open), true))
-            .getMessage());
+    // A create that returns its resource is wrapped everywhere: Rust by lifetime, Java by a copy.
+    var output = Generator.generate(Dsl.parse(open), true);
+    String rust = output.get("seam.rs");
+    assertTrue(rust.contains("    pub struct Doc<'held> {\n"), rust);
+    assertTrue(rust.contains("        _held: core::marker::PhantomData<&'held [u8]>,\n"), rust);
+    assertTrue(rust.contains("    impl<'held> Doc<'held> {\n"), rust);
+    assertTrue(
+        rust.contains("        pub unsafe fn create(data: &'held [u8]) -> Option<Self> {\n"), rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_create<T>(data: &'held [u8], scope: impl FnOnce(&Self) -> T) ->"
+                + " Option<T> {\n"),
+        rust);
+    assertTrue(rust.contains("    impl core::ops::Drop for Doc<'_> {\n"), rust);
+    assertTrue(
+        rust.contains("    pub struct DocBorrow<'owner> { owner: &'owner Doc<'owner> }\n"), rust);
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0) throws Throwable {\n"),
+        ffm);
+    assertTrue(ffm.contains("            Arena kept = Arena.ofConfined();\n"), ffm);
+    // The copy is freed only after a destroy that returned: one that throws leaks it.
+    assertTrue(
+        ffm.contains("                binding.docClose(handle);\n                kept.close();\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains("public static <T> T create(ResourceFactory<T> factory, byte[] arg0) {"),
+        java);
+    assertTrue(
+        java.contains(
+            "public static <T> T create(ResourceFactory<T> factory, NativeBuffer arg0) {"),
+        java);
+    assertTrue(
+        java.contains(
+            "org.graalvm.nativeimage.UnmanagedMemory.free(org.graalvm.word.WordFactory.pointer(kept));"),
+        java);
+    // A module whose only borrows are held still declares NativeBuffer, and compiles.
+    assertTrue(java.contains("public interface NativeBuffer {"), java);
+    compileJava(
+        Generator.generate(
+            Dsl.parse(open.replace("aarch64-apple-darwin", "x86_64-unknown-linux-gnu")), true),
+        "Api.java",
+        "ApiDirectives.java",
+        "ApiOwnership.java");
+    // Resources without held borrows keep their unparameterized owner.
+    assertTrue(
+        Generator.generate(Dsl.parse(CREATES), true)
+            .get("seam.rs")
+            .contains("    pub struct Session {\n"));
+    // A Truffle cell holds a buffer only beside the struct or slot of a handle= create.
     String cells = open.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
     assertEquals(
-        "a held borrow needs a create that reports a status and writes its resource through a"
-            + " parameter (handle=...): docOpen data lifetime=resource:Doc",
+        "a Truffle cell holds a buffer only for a create that writes its resource through a"
+            + " parameter (handle=...); opt docOpen out with truffle_cell=false@explicit_contract:"
+            + " docOpen data lifetime=resource:Doc",
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
             .getMessage());
-    // A module that generates cells, but not for this create.
     String noCell =
         cells.replace(
             " native_leaf=false@explicit_contract\n  param data",
             " native_leaf=false@explicit_contract truffle_cell=false@explicit_contract\n"
                 + "  param data");
     assertNotEquals(cells, noCell);
-    assertEquals(
-        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
-            + " lifetime=resource:Doc",
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(noCell), true))
-            .getMessage());
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(noCell), true));
+    // A struct handle is still a Truffle cell's alone.
     String optedOut =
         HELD.replace(
             "import layoutCompile return=i32 error=no_failure",
@@ -2024,6 +2067,141 @@ class OwnershipTest {
                 + " truffle_cell=false@explicit_contract");
     assertThrows(
         IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(optedOut), true));
+  }
+
+  /** Held buffers on both owned forms, nullable and narrow, beside call buffers and C strings. */
+  /**
+   * Compiles generated Java files with javac: the test classpath carries the Native Image SDK, and
+   * the running GraalVM's SVM jars the pinned-fork classes the Native Image class imports.
+   */
+  static void compileJava(java.util.Map<String, String> output, String... files) throws Exception {
+    Path dir = Files.createTempDirectory("myna-compile");
+    var sources = new java.util.ArrayList<String>();
+    for (String file : files) {
+      String text = output.get(file);
+      assertNotNull(text, file);
+      var pkg = java.util.regex.Pattern.compile("package ([\\w.]+);").matcher(text);
+      String path = pkg.find() ? pkg.group(1).replace('.', '/') + "/" : "";
+      Path source = dir.resolve(path + file);
+      Files.createDirectories(source.getParent());
+      Files.writeString(source, text);
+      sources.add(source.toString());
+    }
+    var classpath = new StringBuilder(System.getProperty("java.class.path"));
+    Path svm = Path.of(System.getProperty("java.home"), "lib", "svm");
+    for (String jar : List.of("svm-guest-staging.jar", "svm-shared.jar", "svm-guest.jar"))
+      classpath.append(java.io.File.pathSeparator).append(svm.resolve(jar));
+    var args =
+        new java.util.ArrayList<>(
+            List.of(
+                "-proc:none",
+                "-nowarn",
+                "-cp",
+                classpath.toString(),
+                "-d",
+                dir.resolve("classes").toString()));
+    args.addAll(sources);
+    var errors = new java.io.ByteArrayOutputStream();
+    int status =
+        javax.tools.ToolProvider.getSystemJavaCompiler()
+            .run(null, null, errors, args.toArray(String[]::new));
+    assertEquals(0, status, errors.toString());
+  }
+
+  static String heldShapes() throws Exception {
+    return Files.readString(Path.of("tests/ownership/held_shapes.seam"));
+  }
+
+  @Test
+  void heldBuffersInEveryShapeOfConstructor() throws Exception {
+    String HELD_SHAPES = heldShapes();
+    var output = Generator.generate(Dsl.parse(HELD_SHAPES), true);
+    assertEquals(output, Generator.generate(Dsl.parse(HELD_SHAPES), false));
+    String rust = output.get("seam.rs");
+    // A nullable held buffer, a narrow length and a pointer nothing vouches for.
+    assertTrue(
+        rust.contains(
+            "        pub unsafe fn docOpen(data: Option<&'held [u8]>, hint: *const u64) ->"
+                + " Option<Self> {\n"
+                + "            let data = data.map_or((core::ptr::null(), 0), |data|"
+                + " (data.as_ptr(), data.len()));\n"),
+        rust);
+    // Call buffers and C strings beside a held one are lent for the call only.
+    assertTrue(
+        rust.contains(
+            "        pub unsafe fn docMixed(title: Option<&::core::ffi::CStr>, data: &'held [u8],"
+                + " scratch: Option<&mut [u8]>) -> Option<Self> {\n"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_docMixed<T>(title: Option<&::core::ffi::CStr>, data: &'held [u8],"
+                + " scratch: Option<&mut [u8]>, scope: impl FnOnce(&Self) -> T) -> Option<T> {\n"
+                + "            let owner = unsafe { Self::docMixed(title, data, scratch) }?;\n"
+                + "            Some(scope(&owner))\n"),
+        rust);
+    assertTrue(
+        rust.contains("        pub unsafe fn create(data: &'held [u8]) -> Result<Self, u8> {\n"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_create<T>(data: &'held [u8], scope: impl FnOnce(&Self) -> T) ->"
+                + " Result<T, u8> {\n"),
+        rust);
+    String ffm = output.get("ApiFFM.java");
+    // Java wraps a constructor whose only borrow is one held buffer.
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T docOpen(LibraryBinding binding, ResourceFactory<T>"
+                + " factory, MemorySegment arg0, MemorySegment arg2) throws Throwable {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("            long length = arg0 == null ? 0 : arg0.byteSize();\n"), ffm);
+    assertTrue(ffm.contains("if (length > 4294967295L) throw new IllegalArgumentException"), ffm);
+    assertTrue(ffm.contains("            Arena kept = Arena.ofShared();\n"), ffm);
+    assertFalse(ffm.contains(" docMixed(LibraryBinding"), ffm);
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " Failure<? extends T> onFailure, MemorySegment arg0) throws Throwable {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "            if (!(Byte.toUnsignedInt(status) == 0) || address.address() == 0) {\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains(
+                "public static <T> T docOpen(ResourceFactory<T> factory, byte[] arg0,"
+                    + " org.graalvm.word.PointerBase arg2) {")
+            || java.contains(
+                "public static <T> T docOpen(ResourceFactory<T> factory, byte[] arg0,"),
+        java);
+    assertTrue(java.contains("            if (arg0 == null) {\n"), java);
+    assertTrue(
+        java.contains("if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);"),
+        java);
+    // An align fact above malloc's rounds the copy up, and the Rust owner lends an aligned empty.
+    assertTrue(
+        java.contains("copy = org.graalvm.word.WordFactory.pointer((raw.rawValue() + 31) & -32L);"),
+        java);
+    assertTrue(
+        rust.contains(
+            "if data.is_empty() { EMPTY_32.0.as_ptr() as *const u8 } else { data.as_ptr() }"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "debug_assert!(data.len() == 0 || (data.as_ptr() as usize) & 31 == 0, \"winOpen.data"
+                + " requires 32-byte alignment\");"),
+        rust);
+    // The generated Java compiles: FFM alone, Native Image against the SDK and SVM jars.
+    compileJava(output, "ApiFFM.java");
+    compileJava(output, "Api.java", "ApiDirectives.java", "ApiOwnership.java");
+    assertTrue(
+        java.contains(
+            "public static <T> T create(ResourceFactory<T> factory, Failure<? extends T> onFailure,"
+                + " NativeBuffer arg0) {"),
+        java);
+    assertFalse(java.contains(" docMixed(ResourceFactory"), java);
   }
 
   static Stream<Arguments> borrowRejections() {

@@ -453,7 +453,10 @@ public final class JavaFfm implements Backend {
         Function create =
             m.functions().stream().filter(f -> f.name().equals(name)).findFirst().orElseThrow();
         // A held borrow outlives the call, which only a Truffle cell can express.
-        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) continue;
+        if (m.borrows().stream().anyMatch(b -> b.held() && b.function().equals(name))) {
+          heldConstructor(m, r, create, status, out);
+          continue;
+        }
         // A constructor with call borrows takes each buffer as a segment and calls the binding's
         // buffer wrapper, which lends it for the call only.
         boolean buffers = m.callBorrows().stream().anyMatch(b -> b.function().equals(name));
@@ -537,6 +540,160 @@ public final class JavaFfm implements Backend {
       }
       out.append("    }\n");
     }
+  }
+
+  /**
+   * Whether a constructor with a held borrow gets a Java wrapper: exactly one held buffer, which is
+   * read-only, and no other buffer, batch or C string. The wrapper copies those bytes into memory
+   * the resource owns until it is destroyed.
+   */
+  static boolean heldWrapper(Module m, Function create) {
+    var borrows = m.borrows().stream().filter(b -> b.function().equals(create.name())).toList();
+    return borrows.size() == 1
+        && borrows.getFirst().held()
+        && create.parameters().stream().noneMatch(CallBorrows::cstring);
+  }
+
+  /**
+   * A constructor whose create keeps its buffer until the resource is destroyed. The caller's
+   * segment is copied into an arena the owner holds, which the owner's destructor closes after the
+   * native destroy returns; a create that makes nothing closes it at once. One copy per create.
+   */
+  private static void heldConstructor(
+      Module m, Resource r, Function create, String status, StringBuilder out) {
+    if (!heldWrapper(m, create)) return;
+    CallBorrows call = CallBorrows.of(m, create);
+    BufferBorrow held = call.borrows().getFirst();
+    boolean outPointer = m.outPointer(r);
+    var params = new ArrayList<String>();
+    var args = new ArrayList<String>();
+    String source = null;
+    int index = 0;
+    for (Parameter p : create.parameters()) {
+      String arg = "arg" + index++;
+      if (call.length(p) != null) {
+        args.add(call.narrow(held) ? "(int) length" : "length");
+        continue;
+      }
+      if (outPointer && p.name().equals(r.handleParameter())) {
+        args.add("slot");
+        continue;
+      }
+      if (call.buffer(p) != null) {
+        source = arg;
+        params.add("MemorySegment " + arg);
+        args.add("copy");
+        continue;
+      }
+      params.add(Types.ffmCarrier(p.type()) + " " + arg);
+      args.add(arg);
+    }
+    boolean nullable = call.nullable(held);
+    long align = Math.max(1, call.align(held));
+    String arena = r.shared() ? "Arena.ofShared()" : "Arena.ofConfined()";
+    out.append(
+            "        /** Copies the held buffer into memory the resource owns until it is"
+                + " destroyed. */\n")
+        .append("        public static <T> T ")
+        .append(r.wrapperName(create.name()))
+        .append("(LibraryBinding binding, ResourceFactory<T> factory")
+        .append(outPointer ? ", Failure<? extends T> onFailure" : "")
+        .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+        .append(") throws Throwable {\n")
+        .append("            java.util.Objects.requireNonNull(factory);\n");
+    if (outPointer) out.append("            java.util.Objects.requireNonNull(onFailure);\n");
+    if (!nullable)
+      out.append("            java.util.Objects.requireNonNull(").append(source).append(");\n");
+    // As for call buffers, null or a native segment of length zero at address zero is absent.
+    if (nullable)
+      out.append("            if (")
+          .append(source)
+          .append(" != null && ")
+          .append(source)
+          .append(".isNative() && ")
+          .append(source)
+          .append(".address() == 0 && ")
+          .append(source)
+          .append(".byteSize() == 0) ")
+          .append(source)
+          .append(" = null;\n");
+    out.append("            long length = ")
+        .append(nullable ? source + " == null ? 0 : " : "")
+        .append(source)
+        .append(".byteSize();\n");
+    if (call.narrow(held))
+      out.append("            if (length > ")
+          .append(call.maxLength(held))
+          .append(") throw new IllegalArgumentException(\"buffer length exceeds ABI range\");\n");
+    out.append("            Arena kept = ")
+        .append(arena)
+        .append(";\n            MemorySegment address;\n");
+    if (outPointer) out.append("            ").append(status).append(" status;\n");
+    out.append("            try {\n")
+        .append("                MemorySegment copy = ")
+        .append(nullable ? source + " == null ? MemorySegment.NULL : " : "")
+        .append("kept.allocate(Math.max(length, 1), ")
+        .append(align)
+        .append(");\n")
+        .append("                if (length != 0) MemorySegment.copy(")
+        .append(source)
+        .append(", 0, copy, 0, length);\n");
+    if (outPointer) {
+      var succeeded = new ArrayList<String>();
+      boolean charUnsigned = Seam.targetAbi(m.targetTriple()).charUnsigned();
+      for (long value : r.success())
+        succeeded.add(
+            Types.statusMatches((Scalar) create.returns(), charUnsigned, "status", value));
+      out.append("                try (Arena out = Arena.ofConfined()) {\n")
+          .append("                    MemorySegment slot = out.allocate(ValueLayout.ADDRESS);\n")
+          .append("                    status = binding.")
+          .append(create.name())
+          .append('(')
+          .append(String.join(", ", args))
+          .append(");\n")
+          .append("                    address = slot.get(ValueLayout.ADDRESS, 0);\n")
+          .append("                }\n")
+          .append("            } catch (Throwable failure) {\n")
+          .append("                kept.close();\n                throw failure;\n            }\n")
+          .append("            if (!(")
+          .append(String.join(" || ", succeeded))
+          .append(") || address.address() == 0) {\n")
+          .append("                kept.close();\n")
+          .append("                return onFailure.failed(status);\n            }\n");
+    } else
+      out.append("                address = binding.")
+          .append(create.name())
+          .append('(')
+          .append(String.join(", ", args))
+          .append(");\n")
+          .append("            } catch (Throwable failure) {\n")
+          .append("                kept.close();\n                throw failure;\n            }\n")
+          .append("            if (address.address() == 0) {\n")
+          .append("                kept.close();\n                return null;\n            }\n");
+    out.append(
+            "            // The copy is freed after the native destroy, never before it.\n"
+                + "            // A destroy that throws leaves the copy to leak with the resource:"
+                + " the native\n"
+                + "            // side may still read it.\n"
+                + "            NativeDestructor destructor = handle -> {\n"
+                + "                binding.")
+        .append(r.destroy())
+        .append(
+            "(handle);\n                kept.close();\n"
+                + "            };\n"
+                + "            try {\n"
+                + "                return java.util.Objects.requireNonNull(factory.adopt(address,"
+                + " destructor, ")
+        .append(r.shared() ? "null" : "Thread.currentThread()")
+        .append(
+            "));\n"
+                + "            } catch (Throwable failure) {\n"
+                + "                try { destructor.destroy(address); }\n"
+                + "                catch (Throwable cleanup) { if (cleanup != failure)"
+                + " failure.addSuppressed(cleanup); }\n"
+                + "                throw failure;\n"
+                + "            }\n"
+                + "        }\n");
   }
 
   /** Instance addresses retain their lookup scope; only the address-free adapters are static. */

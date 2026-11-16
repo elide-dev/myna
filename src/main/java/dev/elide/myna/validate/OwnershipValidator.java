@@ -466,13 +466,24 @@ final class OwnershipValidator {
             + String.join(",", r.creates())
             + ": "
             + form);
+    // A resource the Rust, Native Image and FFM owners wrap (a returned pointer or an out-pointer)
+    // keeps the buffer there: Rust by lifetime, Java by a copy the owner frees. A struct handle is
+    // wrapped by Truffle cells only.
+    boolean owned = m.ownedResources().contains(r);
+    boolean cell = m.truffleConfig() != null && Seam.truffleCell(m, f);
     require(
-        m.truffleConfig() != null && Seam.truffleCell(m, f),
-        "a held borrow is generated for Truffle cells only; " + f.name() + " needs one: " + form);
+        owned || cell,
+        "a held borrow on a struct handle is generated for Truffle cells only; "
+            + f.name()
+            + " needs one: "
+            + form);
+    // A cell's owner keeps its held buffers beside the struct or slot it writes the handle into.
     require(
-        r.handle() != null,
-        "a held borrow needs a create that reports a status and writes its resource through a"
-            + " parameter (handle=...): "
+        !cell || r.handle() != null,
+        "a Truffle cell holds a buffer only for a create that writes its resource through a"
+            + " parameter (handle=...); opt "
+            + f.name()
+            + " out with truffle_cell=false@explicit_contract: "
             + form);
     require(p.access() == Access.READ, "a held buffer is read-only (access=read): " + form);
     require(

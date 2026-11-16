@@ -170,6 +170,24 @@ class NativeImageIntegrationTests(unittest.TestCase):
         self.assertIn("Truffle reader runtime compilation passed", run(truffle_app, cwd=work).stdout)
 
 
+    def test_import_addresses_are_declared_symbols(self):
+        """NAME_address() of a by-value import is its declared symbol, leaf or not, called from C."""
+        work = ROOT / "build/addresses-test"
+        fixture = ROOT / "tests/addresses"
+        generated = work / "generated"
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        run(BINARY, "generate", fixture / "addresses.seam", "--out", generated, "--target", TARGET)
+        run("cc", "-O2", "-fPIC", "-Wall", "-Werror", "-I", generated, "-c", fixture / "native.c", "-o", work / "native.o")
+        classes = work / "classes"
+        compile_native(classes, generated, generated / "AddressApi.java", generated / "AddressApiDirectives.java",
+                       fixture / "AddressesMain.java")
+        shutil.copytree(generated / "META-INF", classes / "META-INF", dirs_exist_ok=True)
+        app = work / "addresses-app"
+        native_image("-O1", "-cp", classes, "-H:+UnlockExperimentalVMOptions", f"-H:NativeLinkerOption={work / 'native.o'}",
+                     "-H:-UnlockExperimentalVMOptions", "fixture.addresses.AddressesMain", "-o", app)
+        self.assertIn("Native Image import addresses passed", run(app).stdout)
+
     def test_records_are_cstructs(self):
         """Records are @CStruct interfaces: StackValue and SizeOf agree with SIZE, every carrier keeps
         its raw bits in both directions, and each @CField accessor is the single access at the
@@ -346,6 +364,39 @@ class NativeImageIntegrationTests(unittest.TestCase):
         rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("cannot move out of `owner` because it is borrowed", rejected.stderr)
+        # A resource whose create keeps its buffer cannot outlive that buffer, nor let it change.
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let doc = { let bytes = vec![1u8, 2]; unsafe { seam::ownership::Doc::create(&bytes) }.unwrap() }; '
+            'drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("`bytes` does not live long enough", rejected.stderr)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let mut bytes = vec![1u8, 2]; let doc = unsafe { seam::ownership::Doc::create(&bytes) }.unwrap(); '
+            'bytes[0] = 9; drop(doc); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("cannot borrow `bytes` as mutable because it is also borrowed as immutable", rejected.stderr)
+        # Safe code cannot leak a held owner: the owner form is unsafe, and the closure of the safe
+        # form sees the resource only by reference, so it can neither forget nor move it out.
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let bytes = vec![1u8]; core::mem::forget(seam::ownership::Doc::create(&bytes)); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("error[E0133]", rejected.stderr)
+        invalid.write_text('mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n'
+            'fn main() { let bytes = vec![1u8]; let _ = seam::ownership::Doc::with_create(&bytes, |doc| core::mem::forget(*doc)); }\n')
+        rejected = run("rustc", "--edition=2024", "--emit=metadata", invalid, "-o", work / "invalid.rmeta", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("cannot move out of `*doc`", rejected.stderr)
+        # Held buffers in every constructor shape compile, align facts included.
+        shapes = work / "held_shapes"
+        run(BINARY, "generate", ROOT / "tests/ownership/held_shapes.seam", "--out", shapes, "--target", TARGET)
+        check = work / "held_shapes.rs"
+        check.write_text('#[allow(dead_code, non_snake_case)] mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam.rs")); }\n')
+        os.environ["SEAM_GENERATED"] = str(shapes)
+        run("rustc", "--edition=2024", "--crate-type=lib", "--emit=metadata", "-Dwarnings", check, "-o", work / "shapes.rmeta")
+        os.environ["SEAM_GENERATED"] = str(generated)
         # Confined resources must not accidentally implement Send.
         confined = work / "confined.seam"
         confined.write_text((ROOT / "tests/ownership/ownership.seam").read_text()

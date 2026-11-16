@@ -70,6 +70,14 @@ fn fold(hash: u64, bytes: &[u8]) -> u64 {
 fn fold_batch<L: seam::BatchLength>(hash: u64, batch: seam::BufferBatch<'_, L>) -> u64 {
     batch.iter().fold(mix(hash, batch.len() as u64), fold)
 }
+pub struct HeldDoc {
+    data: *const u8,
+    length: u64,
+    _live: Live,
+}
+// The held bytes are read-only, as the descriptor declares, and shared by contract.
+unsafe impl Send for HeldDoc {}
+unsafe impl Sync for HeldDoc {}
 pub struct Bundle {
     value: u64,
     _live: Live,
@@ -84,6 +92,7 @@ impl seam::OwnershipDemoImplementation for Demo {
     type Ticket = Ticket;
     type Surface = Surface;
     type Bundle = Bundle;
+    type Doc = HeldDoc;
     fn checksum(bytes: &[u8]) -> u64 {
         sum(bytes)
     }
@@ -171,6 +180,17 @@ impl seam::OwnershipDemoImplementation for Demo {
     }
     fn bundleValue(bundle: &Bundle) -> u64 {
         bundle.value
+    }
+    fn docOpen(data: *const u8, length: u64) -> Option<Box<HeldDoc>> {
+        // A held buffer stays raw in the trait: the caller keeps it alive until docClose.
+        Some(Box::new(HeldDoc { data, length, _live: live()? }))
+    }
+    fn docClose(doc: Box<HeldDoc>) {
+        drop(doc);
+    }
+    fn docSum(doc: &HeldDoc) -> u64 {
+        // SAFETY: the bytes the create kept stay valid until the document is closed.
+        sum(unsafe { core::slice::from_raw_parts(doc.data, doc.length as usize) })
     }
     fn liveCount() -> i64 {
         LIVE.load(Ordering::SeqCst)

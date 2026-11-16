@@ -189,11 +189,42 @@ public final class OwnershipMain {
     verifyNullableBuffers(empty);
     verifyConstructors(empty);
     verifyBatches(empty);
+    verifyHeld();
+    // The linked address of an import, read at run time, the same each time.
+    check(NativeApi.docSum_address().rawValue() != 0);
+    check(NativeApi.docSum_address().rawValue() == NativeApi.docSum_address().rawValue());
+    check(NativeApi.ticketCreate_address().rawValue() != NativeApi.docSum_address().rawValue());
     verifySurfaces();
     // A C string: NUL-terminated for the call; an embedded NUL is refused.
     check(NativeApiOwnership.titleLength("h\u00e9llo") == 6);
     rejects(() -> NativeApiOwnership.titleLength("ab\0cd"));
     System.out.println("Native Image consumer ownership and off-heap buffers passed");
+  }
+
+  /**
+   * A create that keeps its input: the wrapper copies it into unmanaged memory the owner's
+   * destructor frees after the destroy, so the caller's bytes may change at once.
+   */
+  private static void verifyHeld() {
+    check(NativeApi.liveCount() == 0);
+    byte[] bytes = {4, 5, 6};
+    Owner doc = NativeApiOwnership.Doc.create(Owner::new, bytes);
+    bytes[0] = 0;
+    check(NativeApi.docSum(WordFactory.pointer(doc.address())) == 15);
+    Buffer buffer = new Buffer("held");
+    buffer.pointer.write(0, (byte) 1);
+    buffer.pointer.write(1, (byte) 2);
+    buffer.pointer.write(2, (byte) 3);
+    Buffer.EVENTS.setLength(0);
+    Owner fromBuffer = NativeApiOwnership.Doc.create(Owner::new, buffer);
+    check(Buffer.EVENTS.toString().equals("+heldr -heldr ") && buffer.leases == 0);
+    buffer.pointer.write(0, (byte) 9);
+    check(NativeApi.docSum(WordFactory.pointer(fromBuffer.address())) == 6);
+    buffer.dispose();
+    check(NativeApi.liveCount() == 2);
+    doc.registration.clean();
+    fromBuffer.registration.clean();
+    check(NativeApi.liveCount() == 0);
   }
 
   /**
