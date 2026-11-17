@@ -40,6 +40,24 @@ class PublicationTest(unittest.TestCase):
             self.assertNotIn("secret", str(result.exception))
             self.assertNotIn("private provider detail", str(result.exception))
 
+    def test_final_failure_reports_bounded_redacted_body(self):
+        body = b'{"error":"payload_too_large","limit":33554432,"echo":"Bearer secret","token":"lease-secret"}' + b"x" * 4096
+        failure = urllib.error.HTTPError("https://build.elide.cloud/test", 413, "too large", {}, io.BytesIO(body))
+        with patch.object(publisher.HTTP, "open", side_effect=failure):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 413: .*payload_too_large.*33554432") as result:
+                publisher.request("https://build.elide.cloud", "/v1/symbols/build/app.debug", "secret", {})
+        message = str(result.exception)
+        self.assertNotIn("secret", message)
+        self.assertIn("[truncated]", message)
+        self.assertLess(len(message), publisher.ERROR_BODY_BYTES + 200)
+
+    def test_retried_failures_report_only_the_last_body(self):
+        responses = [urllib.error.HTTPError("https://build.elide.cloud/test", 503, "unavailable", {}, io.BytesIO(f"attempt {n}".encode()))
+                     for n in range(3)]
+        with patch.object(publisher.HTTP, "open", side_effect=responses), patch.object(publisher.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, r"HTTP 503: attempt 2$"):
+                publisher.request("https://build.elide.cloud", "/v1/symbols/build/app.debug", "secret", {})
+
     def test_successful_receipt_survives_later_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

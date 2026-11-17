@@ -24,7 +24,11 @@ case "$(uname -s)" in
   Linux)
     original=$("$llvm/llvm-readelf" --notes "$binary" | sed -n 's/.*Build ID: //p')
     test -n "$original"
-    "$llvm/llvm-objcopy" --only-keep-debug "$binary" "$output/$name.debug"
+    # Compress DWARF (ELF SHF_COMPRESSED, zlib) as the sidecar is written: the
+    # 0.19.0 applicator's sidecar was 175 MB raw and 66 MB compressed. zlib, not
+    # zstd, so older gdb, lldb and elfutils debuginfod clients can still read it.
+    # The debuglink below hashes these final bytes, so its CRC matches.
+    "$llvm/llvm-objcopy" --only-keep-debug --compress-debug-sections=zlib "$binary" "$output/$name.debug"
     case "$("$llvm/llvm-readelf" --sections "$output/$name.debug")" in
       *".debug_info"*) ;;
       *) echo "Missing DWARF in $name sidecar" >&2; exit 1 ;;

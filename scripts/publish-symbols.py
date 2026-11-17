@@ -20,6 +20,25 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 HTTP = urllib.request.build_opener(NoRedirect)
 
+ERROR_BODY_BYTES = 2048
+SECRET = re.compile(r"(?i)(bearer\s+|(?:token|api_key|secret|password)[\"']?\s*[:=]\s*[\"']?)[^\s\"',;&]+")
+
+def error_detail(error, *secrets):
+    """A bounded, printable excerpt of an error response body, with credentials removed."""
+    try:
+        body = error.read(ERROR_BODY_BYTES + 1)
+    except Exception:
+        return ""
+    text = body[:ERROR_BODY_BYTES].decode("utf-8", "replace")
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[redacted]")
+    text = SECRET.sub(r"\1[redacted]", text)
+    text = "".join(c if c.isprintable() or c in "\n\t" else "?" for c in text).strip()
+    if len(body) > ERROR_BODY_BYTES:
+        text += " [truncated]"
+    return f": {text}" if text else ""
+
 def request(origin, path, token=None, body=None, method="POST", raw=False):
     headers = {"User-Agent": "myna-symbol-publisher/1", "Content-Type": "application/octet-stream" if raw else "application/json"}
     if token:
@@ -34,10 +53,13 @@ def request(origin, path, token=None, body=None, method="POST", raw=False):
                 return json.loads(content) if content else {}
         except urllib.error.HTTPError as error:
             code = error.code
+            final = not replayable or code not in (408, 429, 502, 503, 504) or attempt == 2
+            # Never print request headers or credentials. The first 2 KB of the final
+            # response body, with tokens redacted, is what makes a failure diagnosable.
+            detail = error_detail(error, token) if final else ""
             error.close()
-            if not replayable or code not in (408, 429, 502, 503, 504) or attempt == 2:
-                # Never print request headers, credentials or provider response bodies.
-                raise RuntimeError(f"Symbol service {path}: HTTP {code}") from None
+            if final:
+                raise RuntimeError(f"Symbol service {path}: HTTP {code}{detail}") from None
         except (urllib.error.URLError, TimeoutError):
             if not replayable or attempt == 2:
                 raise RuntimeError(f"Symbol service {path}: network request failed") from None
@@ -60,6 +82,9 @@ def publish(paths, revision=None, target=None, receipt_file=Path("build/reports/
     if not re.fullmatch(r"[0-9a-f]{40}", revision) or target not in (
             "linux-x86_64", "linux-aarch64", "darwin-arm64"):
         raise ValueError("Expected a full source commit and a supported symbol target")
+    for path in paths:
+        if not path.is_file() or path.suffix not in (".debug", ".dsym"):
+            raise ValueError(f"Not a symbol sidecar: {path}")
     origin = "https://build.elide.cloud"
     lease = request(origin, "/v1/leases", access_token(), {"project": "myna", "sharing": "org", "writable": True})
     token = lease["token"]
@@ -69,8 +94,6 @@ def publish(paths, revision=None, target=None, receipt_file=Path("build/reports/
     build = revision + "-" + target
     receipts = []
     for path in paths:
-        if not path.is_file() or path.suffix not in (".debug", ".dsym"):
-            raise ValueError(f"Not a symbol sidecar: {path}")
         digest = hashlib.sha256()
         with path.open("rb") as source:
             for chunk in iter(lambda: source.read(1024 * 1024), b""):

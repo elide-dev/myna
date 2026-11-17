@@ -6,7 +6,23 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import struct
+import zlib
 from support import ROOT, run
+
+SHF_COMPRESSED = 0x800
+
+def elf_sections(path):
+    """Map each ELF64 little-endian section name to (flags, contents)."""
+    data = path.read_bytes()
+    assert data[:6] == b"\x7fELF\x02\x01", f"{path} is not ELF64 little-endian"
+    shoff, = struct.unpack_from("<Q", data, 0x28)
+    shentsize, shnum, shstrndx = struct.unpack_from("<HHH", data, 0x3A)
+    headers = [struct.unpack_from("<IIQQQQ", data, shoff + i * shentsize) for i in range(shnum)]
+    names = headers[shstrndx]
+    names = data[names[4]:names[4] + names[5]]
+    return {names[h[0]:names.index(b"\0", h[0])].decode(): (h[2], data[h[4]:h[4] + h[5]] if h[1] != 8 else b"")
+            for h in headers}
 
 if platform.system() == "Linux":
     work = ROOT / "build/symbol-tests"
@@ -23,9 +39,17 @@ if platform.system() == "Linux":
             assert hashlib.sha256(binary.read_bytes()).digest() == before, "Rejected binary was modified"
         else:
             assert result.returncode == 0, result.stdout + result.stderr
-            assert (work / "symbols/identified.debug").is_file()
+            sidecar = work / "symbols/identified.debug"
+            assert sidecar.is_file()
+            flags, _ = elf_sections(sidecar)[".debug_info"]
+            assert flags & SHF_COMPRESSED, "Sidecar DWARF must be compressed"
+            # The debuglink is the sidecar's basename, NUL padding to 4 bytes, then the CRC32
+            # of the final (compressed) sidecar bytes; compressing after linking breaks it.
+            link = elf_sections(binary)[".gnu_debuglink"][1]
+            assert link[:link.index(b"\0")] == sidecar.name.encode()
+            assert struct.unpack_from("<I", link, len(link) - 4)[0] == zlib.crc32(sidecar.read_bytes())
             run(binary)
-    print("ELF matching-ID and missing-ID checks passed")
+    print("ELF matching-ID, missing-ID, compressed-DWARF and debuglink CRC checks passed")
 
 if platform.system() == "Darwin":
     # Mach-O images hold no DWARF, so line-only source edits keep the linker's UUID while
