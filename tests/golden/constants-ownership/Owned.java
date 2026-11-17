@@ -18,14 +18,14 @@ import org.graalvm.word.PointerBase;
 @CContext(OwnedDirectives.class)
 public final class Owned {
     private Owned() {}
-    public static final String ABI_FINGERPRINT = "db1131847a802043558af025069ae4fadcab2ffb194a8308febb20f8e1807e31";
+    public static final String ABI_FINGERPRINT = "3fc31c71f052a52010d14a96cb33e218e0baeb4213f95d783b1a99b70a234b32";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_OWNED_SEAM_ABI_db1131847a802043558af025069ae4fadcab2ffb194a8308febb20f8e1807e31") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_OWNED_SEAM_ABI_3fc31c71f052a52010d14a96cb33e218e0baeb4213f95d783b1a99b70a234b32") static native int seamHeaderCheck();
     /** enum Status: i32. The raw carrier keeps unlisted values; {@code of} maps them to null. */
     @CEnum("constants_owned_status_t")
     public enum Status {
