@@ -75,6 +75,22 @@ class CliTest {
   }
 
   @Test
+  void draftFormatsReportTheFingerprintToPin() throws Exception {
+    // shapes.seam declares two draft formats; doc.seam pins all of its formats.
+    Result validate = run("validate", "tests/formats/shapes.seam");
+    assertEquals(0, validate.code(), validate.err());
+    var lines = validate.out().lines().toList();
+    assertEquals(3, lines.size(), validate.out());
+    assertTrue(lines.get(0).startsWith("valid shapes "), lines.get(0));
+    assertTrue(lines.get(1).matches("draft format Only pinned=[0-9a-f]{16}"), lines.get(1));
+    assertTrue(lines.get(2).matches("draft format Other pinned=[0-9a-f]{16}"), lines.get(2));
+    Result generate =
+        run("generate", "tests/formats/shapes.seam", "--out", temp.resolve("s").toString());
+    assertTrue(generate.out().contains(lines.get(1) + "\n"), generate.out());
+    assertEquals(1, run("validate", "tests/formats/doc.seam").out().lines().count());
+  }
+
+  @Test
   void generateValidateCheckAndOverwrite() throws Exception {
     Path out = temp.resolve("generated");
     assertEquals(0, run("validate", "examples/buffer.seam").code());
