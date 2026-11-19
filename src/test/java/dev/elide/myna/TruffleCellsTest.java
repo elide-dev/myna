@@ -253,7 +253,9 @@ class TruffleCellsTest {
             "seam.h",
             "seam.json",
             "seam.ll",
-            "seam.rs"),
+            "seam.rs",
+            "seam_impl.rs",
+            "seam_types.rs"),
         generate(example()).keySet());
   }
 

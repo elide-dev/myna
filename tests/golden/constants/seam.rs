@@ -285,6 +285,15 @@ macro_rules! assert_implementations {
     };
     ($($seam:ident)::+) => {
         const _: () = {
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "2740ef0ce6ebbca7f4403d35ff1ff54eb7ca536a55922f4a55a720275d2cf620".as_bytes());
+            assert!(records.len() == checks.len(), "records and checks come from different ABIs");
+            let mut i = 0;
+            while i < records.len() {
+                assert!(records[i] == checks[i], "records and checks come from different ABIs");
+                i += 1;
+            }
+        };
+        const _: () = {
             let _: unsafe extern "C" fn(*const $($seam)::+::Session) -> $($seam)::+::Status = consts_blocking_status;
             let _: unsafe extern "C" fn($($seam)::+::Level, *const $($seam)::+::Session) = consts_set_level;
             let _: unsafe extern "C" fn(*const $($seam)::+::Record) -> $($seam)::+::Status = consts_status;

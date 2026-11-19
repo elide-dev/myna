@@ -164,7 +164,7 @@ The initial frontend is a strict, line-oriented text DSL with `#` comments. See 
 
 Generation produces:
 
-- `seam.h` and `seam.rs` for C and Rust consumers.
+- `seam.h` and `seam.rs` for C and Rust consumers. With imports, `seam.rs` is also split into `seam_types.rs` (records) and `seam_impl.rs` (implementer checks), for workspaces that keep the records in their own crate.
 - A direct Native Image API, its image-build C context, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiConstants.java` (when the descriptor declares a `const`, `enum` or `flags`, or names `abi=` on the module line; see [constants](docs/dsl.md#constants-enums-and-flag-sets)), `FastApiDirectives.java` (supplies `seam.h` to the image build, where `FastApi`'s fingerprinted `@CConstant` checks it automatically; see [the C context](docs/dsl.md#native-image-c-context-library-linkage-and-handwritten-callbacks)), `FastApiFFM.java`, and `FastApiForeignFeature.java`; `truffle_cells=true` adds `FastApiTruffle.java`, one Truffle cell per import (see [Truffle native cells](docs/truffle-cells.md)).
 - `seam.json` with optimizer-fact provenance and `seam.abi` with the descriptor's SHA-256 fingerprint.
 - `META-INF/native-image/` initialization metadata to package with the compiled Java bindings.

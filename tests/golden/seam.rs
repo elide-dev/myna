@@ -189,6 +189,15 @@ macro_rules! assert_implementations {
     };
     ($($seam:ident)::+) => {
         const _: () = {
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "01ce64cce46830865939f0f5dbb6a251ce4b3ecfa2e7f7c8988d660dfa1b45e5".as_bytes());
+            assert!(records.len() == checks.len(), "records and checks come from different ABIs");
+            let mut i = 0;
+            while i < records.len() {
+                assert!(records[i] == checks[i], "records and checks come from different ABIs");
+                i += 1;
+            }
+        };
+        const _: () = {
             let _: unsafe extern "C" fn($($seam)::+::Visitor, *mut core::ffi::c_void, i64) -> i32 = seam_for_each;
             let _: unsafe extern "C" fn(*const i64) -> i64 = seam_inspect;
             let _: unsafe extern "C" fn(i32) -> i8 = seam_low_signed;
@@ -208,6 +217,15 @@ pub(crate) use assert_implementations;
 #[allow(unused_macros)]
 macro_rules! native_image_shims {
     ($($seam:ident)::+) => {
+        const _: () = {
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "01ce64cce46830865939f0f5dbb6a251ce4b3ecfa2e7f7c8988d660dfa1b45e5".as_bytes());
+            assert!(records.len() == checks.len(), "records and checks come from different ABIs");
+            let mut i = 0;
+            while i < records.len() {
+                assert!(records[i] == checks[i], "records and checks come from different ABIs");
+                i += 1;
+            }
+        };
         #[unsafe(no_mangle)]
         #[allow(non_snake_case)]
         pub unsafe extern "C" fn seam_rotate_myna_ref(value: *const $($seam)::+::Triple, times: i32, result: *mut $($seam)::+::Triple) {

@@ -89,7 +89,8 @@ final class RustImplementation {
     return m.functions().stream().filter(f -> f.direction() == Direction.IMPORT).toList();
   }
 
-  static String generate(Module m) {
+  /** The trait and its support module: records, which the implementing crate names by path. */
+  static String items(Module m) {
     var imports = imports(m);
     if (!m.rustImplementation() || imports.isEmpty()) return "";
     String trait = m.rustImplementationTrait();
@@ -143,6 +144,15 @@ final class RustImplementation {
     }
     out.append("}\n");
     support(out);
+    return out.toString();
+  }
+
+  /** {@code define_implementations!}, or nothing without the trait. */
+  static String macro(Module m, String fingerprint) {
+    var imports = imports(m);
+    if (!m.rustImplementation() || imports.isEmpty()) return "";
+    String trait = m.rustImplementationTrait();
+    var out = new StringBuilder();
     out.append("\n/// Defines every import's `extern \"C\"` entry point from a type implementing `")
         .append(trait)
         .append(
@@ -151,6 +161,7 @@ final class RustImplementation {
                 + "    ($implementation:ty) => {\n");
     for (Function f : imports) entry(shape(m, f), trait, "", out);
     out.append("    };\n    ($implementation:ty, $($seam:ident)::+) => {\n");
+    RustFfi.sameAbi(fingerprint, "        ", out);
     for (Function f : imports) entry(shape(m, f), trait, "$($seam)::+::", out);
     out.append("    };\n}\n#[allow(unused_imports)]\npub(crate) use define_implementations;\n");
     return out.toString();

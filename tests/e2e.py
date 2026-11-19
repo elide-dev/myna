@@ -171,6 +171,59 @@ end
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("cannot be sent between threads safely", rejected.stderr)
 
+    def test_rust_records_and_checks_in_separate_crates(self):
+        """myna#166: the records in one crate, the implementation and its checks in another."""
+        with tempfile.TemporaryDirectory(prefix="myna-rust-split-") as tmp:
+            work = Path(tmp)
+            source = work / "implementation.seam"
+            text = (ROOT / "tests/ownership/ownership.seam").read_text().replace(
+                "java_class=NativeApi", "java_class=NativeApi rust_implementation=trait")
+            source.write_text(text)
+            generated = work / "generated"
+            run(BINARY, "generate", source, "--out", generated, "--target", TARGET)
+            records, checks = (generated / "seam_types.rs").read_text(), (generated / "seam_impl.rs").read_text()
+            # seam.rs is exactly the two parts, and the checks define no item of their own.
+            self.assertEqual((generated / "seam.rs").read_text(), records + checks.split("\n", 2)[2])
+            for item in ("pub struct", "pub trait", "pub mod", "pub const", "pub type", "extern \"C\" {"):
+                self.assertNotIn(item, checks)
+            crate = work / "records.rs"
+            crate.write_text("#![allow(dead_code, non_snake_case)]\n"
+                             f"pub mod seam {{ include!({json.dumps(str(generated / 'seam_types.rs'))}); }}\n")
+            run("rustc", "--edition=2024", "--crate-type=rlib", "--crate-name=records", "-Dwarnings",
+                crate, "-o", work / "librecords.rlib")
+            implementation = (ROOT / "tests/ownership/implementation.rs").read_text()
+            head = ("#[allow(dead_code, non_snake_case, unused_imports)]\nmod seam {\n"
+                    "    include!(concat!(env!(\"SEAM_GENERATED\"), \"/seam.rs\"));\n}\n")
+            tail = "seam::define_implementations!(Demo, seam);\n// The same entry points also satisfy the ABI pins.\nseam::assert_implementations!(seam);\n"
+            self.assertIn(head, implementation)
+            self.assertIn(tail, implementation)
+            split = work / "implementation.rs"
+            split.write_text(implementation
+                .replace(head, "use records::seam;\nmod checks {\n"
+                         "    include!(concat!(env!(\"SEAM_GENERATED\"), \"/seam_impl.rs\"));\n}\n")
+                .replace(tail, "checks::define_implementations!(Demo, records::seam);\n"
+                         "checks::assert_implementations!(records::seam);\n"))
+            os.environ["SEAM_GENERATED"] = str(generated)
+            library = work / "libimplementation.a"
+            run("rustc", "--edition=2024", "--crate-type=staticlib", "-Dwarnings", "-Copt-level=2",
+                "-L", work, "--extern", f"records={work / 'librecords.rlib'}", split, "-o", library)
+            app = work / "implemented"
+            run("cc", "-std=c11", "-Wall", "-Werror", f"-I{generated}", ROOT / "tests/ownership/implemented.c",
+                library, "-lpthread", "-ldl", "-lm", "-o", app)
+            self.assertIn("Rust implementation trait passed", run(app).stdout)
+            # Records generated from another descriptor fail the checks' ABI comparison at compile time.
+            other = work / "other"
+            source.write_text(text.replace("java_class=NativeApi", "java_class=NativeApi abi=9"))
+            run(BINARY, "generate", source, "--out", other, "--target", TARGET)
+            crate.write_text(crate.read_text().replace(str(generated), str(other)))
+            run("rustc", "--edition=2024", "--crate-type=rlib", "--crate-name=records", crate,
+                "-o", work / "librecords.rlib")
+            rejected = run("rustc", "--edition=2024", "--crate-type=lib", "--emit=metadata", "-L", work,
+                           "--extern", f"records={work / 'librecords.rlib'}", split,
+                           "-o", work / "implementation.rmeta", ok=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("records and checks come from different ABIs", rejected.stderr)
+
     def test_explicit_ffm_library_binding(self):
         from ffm_binding import build_binding_fixture
         _, classes, library = build_binding_fixture()

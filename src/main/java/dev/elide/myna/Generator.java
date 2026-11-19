@@ -40,7 +40,12 @@ public final class Generator {
     var c = new CHeader();
     CHeader.Generated header = c.header(module, abi);
     outputs.put(c.filename(module), header.text());
-    for (Backend backend : List.of(new RustFfi(), new JavaFfm(), new NativeImage()))
+    // seam.rs, and the same text split into records and implementer checks for a workspace
+    // that defines the records in one crate and implements the imports in another.
+    RustFfi.Parts rust = new RustFfi().parts(module, abi);
+    outputs.put("seam.rs", rust.records() + rust.checks());
+    outputs.putAll(rust.files());
+    for (Backend backend : List.of(new JavaFfm(), new NativeImage()))
       outputs.put(backend.filename(module), backend.generate(module, abi));
     // The directives class embeds the seam.h just generated rather than building it again.
     var directives = new NativeImageDirectives();
