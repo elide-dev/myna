@@ -119,6 +119,15 @@ macro_rules! assert_implementations {
     };
     ($($seam:ident)::+) => {
         const _: () = {
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "754802920c9364c2b1943f18107628367b73aac401cf851a1fd3d9c9b52af6cd".as_bytes());
+            assert!(records.len() == checks.len(), "records and checks come from different ABIs");
+            let mut i = 0;
+            while i < records.len() {
+                assert!(records[i] == checks[i], "records and checks come from different ABIs");
+                i += 1;
+            }
+        };
+        const _: () = {
             let _: unsafe extern "C" fn() -> *mut $($seam)::+::Program = views_empty;
             let _: unsafe extern "C" fn() -> *mut $($seam)::+::Program = views_program;
         };

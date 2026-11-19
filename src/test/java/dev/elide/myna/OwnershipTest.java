@@ -367,7 +367,7 @@ class OwnershipTest {
     String rust = actual.get("seam.rs");
     assertEquals(
         expected.get("seam.rs").substring(expected.get("seam.rs").indexOf("pub mod ownership")),
-        rust.substring(rust.indexOf("pub mod ownership")));
+        rust.substring(rust.indexOf("pub mod ownership")).replace(now, was));
     assertTrue(rust.contains("output: &mut [u8]"), rust);
     assertTrue(rust.contains("output.as_mut_ptr()"), rust);
     String java = actual.get("ApiOwnership.java");
@@ -811,9 +811,9 @@ class OwnershipTest {
     assertFalse(before.get("seam.json").contains("rustImplementation"));
     assertTrue(after.get("seam.json").contains("\"rustImplementation\": \"trait\""));
     assertNotEquals(before.get("seam.abi"), after.get("seam.abi"));
-    // Only seam.rs and the fingerprint it carries change.
+    // Only the Rust files and the fingerprint they carry change.
     for (var entry : before.entrySet())
-      if (!entry.getKey().equals("seam.rs")
+      if (!entry.getKey().endsWith(".rs")
           && !entry.getKey().equals("seam.json")
           && !entry.getKey().equals("seam.abi"))
         assertEquals(

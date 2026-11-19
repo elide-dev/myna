@@ -119,6 +119,24 @@ The caller's contract is checked where it can be. With debug assertions on, the 
 
 A release build never builds a slice, a reference or a `Box` from such arguments. It reads an empty slice for a bad buffer or length, and returns from a destroy given null. A null pointer for a non-nullable resource argument of any other import aborts in every build, because no result would be safe to make up: the `::core::panic!` cannot leave the `extern "C"` function.
 
+#### Records and implementation in separate crates
+
+For a module with imports, `myna generate` also writes `seam.rs` in two parts. `seam_types.rs` holds the records: every type, constant, declaration, wrapper and trait. `seam_impl.rs` holds only the implementer macros: `assert_implementations!`, `define_implementations!` and, where by-value imports need them, `native_image_shims!`. `seam.rs` is exactly `seam_types.rs` followed by the macros, so existing builds are unchanged. The macros name every record through the path argument, so a workspace can keep the records in a small shared crate and implement the imports in another, with no type defined twice:
+
+```rust
+// crate `records`
+pub mod seam { include!(concat!(env!("SEAM_GENERATED"), "/seam_types.rs")); }
+
+// crate `implementation`, depending on `records`
+mod checks { include!(concat!(env!("SEAM_GENERATED"), "/seam_impl.rs")); }
+struct Demo;
+impl records::seam::OwnershipDemoImplementation for Demo { /* ... */ }
+checks::define_implementations!(Demo, records::seam);
+checks::assert_implementations!(records::seam);
+```
+
+Each macro form that takes a path also compares that module's `ABI_FINGERPRINT` with the one its macros were generated from, at compile time. Records and macros generated from different descriptors fail to compile with `records and checks come from different ABIs` instead of linking mismatched entry points. The path is plain identifiers separated by `::`, such as `records::seam` or `crate::seam`; a leading `::` is not accepted. The [end-to-end test](../tests/e2e.py) builds the ownership fixture this way, as two crates under a C caller.
+
 `Box` is named unqualified in the trait and the macro: in a `no_std` crate with `alloc`, bring `alloc::boxed::Box` into scope where `seam.rs` is included and where the macro is invoked. Held borrows and resources with a `handle=` keep their raw form. A follow-up will map [batch borrows](https://github.com/elide-dev/myna/issues/132) once they exist. The generated items are named after the module and `myna_implementation`, and the generated code names `Box`, so no declaration may take any of these names. The option is serialized as `"rustImplementation": "trait"` and fingerprinted; modules without it generate exactly what they did. The [implementation fixture](../tests/ownership/implementation.rs) implements the ownership fixture's imports this way and runs under a [C caller](../tests/ownership/implemented.c).
 
 ### Native Image: consumer-implemented lifecycle

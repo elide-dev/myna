@@ -62,30 +62,6 @@ pub type PermissionsFn = unsafe extern "C" fn(*const u8, u64, Perms) -> Perms;
 pub type TicketCreateFn = unsafe extern "C" fn() -> *mut Ticket;
 pub type TicketDestroyFn = unsafe extern "C" fn(*mut Ticket);
 
-/// Pins each import's implementation, in scope under its symbol name, to this ABI.
-/// Pass this module's path when the declared types are not in scope.
-#[allow(unused_macros)]
-macro_rules! assert_implementations {
-    () => {
-        const _: () = {
-            let _: unsafe extern "C" fn(*const u8, u64, Status) -> Status = owned_check;
-            let _: unsafe extern "C" fn(*const u8, u64, Perms) -> Perms = owned_permissions;
-            let _: unsafe extern "C" fn() -> *mut Ticket = owned_ticket_create;
-            let _: unsafe extern "C" fn(*mut Ticket) = owned_ticket_destroy;
-        };
-    };
-    ($($seam:ident)::+) => {
-        const _: () = {
-            let _: unsafe extern "C" fn(*const u8, u64, $($seam)::+::Status) -> $($seam)::+::Status = owned_check;
-            let _: unsafe extern "C" fn(*const u8, u64, $($seam)::+::Perms) -> $($seam)::+::Perms = owned_permissions;
-            let _: unsafe extern "C" fn() -> *mut $($seam)::+::Ticket = owned_ticket_create;
-            let _: unsafe extern "C" fn(*mut $($seam)::+::Ticket) = owned_ticket_destroy;
-        };
-    };
-}
-#[allow(unused_imports)]
-pub(crate) use assert_implementations;
-
 /// Ownership APIs. Native implementations must uphold the descriptor's lifecycle contracts.
 pub mod ownership {
     pub struct Ticket {
@@ -128,3 +104,36 @@ pub mod ownership {
         unsafe { super::permissions(bytes.as_ptr(), bytes.len().try_into().expect("buffer length exceeds ABI range"), wanted) }
     }
 }
+
+/// Pins each import's implementation, in scope under its symbol name, to this ABI.
+/// Pass this module's path when the declared types are not in scope.
+#[allow(unused_macros)]
+macro_rules! assert_implementations {
+    () => {
+        const _: () = {
+            let _: unsafe extern "C" fn(*const u8, u64, Status) -> Status = owned_check;
+            let _: unsafe extern "C" fn(*const u8, u64, Perms) -> Perms = owned_permissions;
+            let _: unsafe extern "C" fn() -> *mut Ticket = owned_ticket_create;
+            let _: unsafe extern "C" fn(*mut Ticket) = owned_ticket_destroy;
+        };
+    };
+    ($($seam:ident)::+) => {
+        const _: () = {
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "3fc31c71f052a52010d14a96cb33e218e0baeb4213f95d783b1a99b70a234b32".as_bytes());
+            assert!(records.len() == checks.len(), "records and checks come from different ABIs");
+            let mut i = 0;
+            while i < records.len() {
+                assert!(records[i] == checks[i], "records and checks come from different ABIs");
+                i += 1;
+            }
+        };
+        const _: () = {
+            let _: unsafe extern "C" fn(*const u8, u64, $($seam)::+::Status) -> $($seam)::+::Status = owned_check;
+            let _: unsafe extern "C" fn(*const u8, u64, $($seam)::+::Perms) -> $($seam)::+::Perms = owned_permissions;
+            let _: unsafe extern "C" fn() -> *mut $($seam)::+::Ticket = owned_ticket_create;
+            let _: unsafe extern "C" fn(*mut $($seam)::+::Ticket) = owned_ticket_destroy;
+        };
+    };
+}
+#[allow(unused_imports)]
+pub(crate) use assert_implementations;
