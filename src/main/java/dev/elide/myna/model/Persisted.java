@@ -131,18 +131,58 @@ public final class Persisted {
     }
   }
 
-  /** Every persisted-format declaration of a module, each list sorted by name. */
+  /**
+   * Every persisted-format declaration of a module, each list sorted by name. {@code lines} maps a
+   * declaration ({@code "node Name"}, {@code "kind Name"}, ...) or a member ({@code "node Name
+   * member name"}) to its 1-based descriptor line, for diagnostics only: it is not part of
+   * equality, the canonical JSON or any fingerprint, and is empty for a module not parsed from a
+   * descriptor.
+   */
   public record Declarations(
       List<Family> families,
       List<Format> formats,
       List<Node> nodes,
       List<Element> elements,
       List<Kind> kinds,
-      List<Union> unions) {
+      List<Union> unions,
+      Map<String, Integer> lines) {
     public static final Declarations EMPTY =
         new Declarations(List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
+    /** Declarations without source lines. */
+    public Declarations(
+        List<Family> families,
+        List<Format> formats,
+        List<Node> nodes,
+        List<Element> elements,
+        List<Kind> kinds,
+        List<Union> unions) {
+      this(families, formats, nodes, elements, kinds, unions, Map.of());
+    }
+
+    /** The descriptor line of {@code declaration}, or 0 when unknown. */
+    public int line(String declaration) {
+      return lines.getOrDefault(declaration, 0);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof Declarations d
+          && families.equals(d.families)
+          && formats.equals(d.formats)
+          && nodes.equals(d.nodes)
+          && elements.equals(d.elements)
+          && kinds.equals(d.kinds)
+          && unions.equals(d.unions);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(families, formats, nodes, elements, kinds, unions);
+    }
+
     public Declarations {
+      lines = lines.isEmpty() ? Map.of() : Map.copyOf(lines);
       families = sorted(families, Comparator.comparing(Family::name));
       formats = sorted(formats, Comparator.comparing(Format::name));
       nodes = sorted(nodes, Comparator.comparing(Node::name));

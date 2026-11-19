@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.validate;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Persisted.*;
 import dev.elide.myna.model.PersistedLayout;
 import dev.elide.myna.model.Seam.*;
@@ -78,6 +79,26 @@ final class PersistedValidator {
   private static final Set<String> RESERVED_HEADER_WORDS =
       Set.of("validate", "validate_structural", "peek", "root", "bytes", "header_word", "raw");
 
+  /** Constants of a family's Rust module that a format's spec constant must not take. */
+  private static final Set<String> RESERVED_RUST_CONSTANTS =
+      Set.of(
+          "WIRE_RULES",
+          "NONE",
+          "UNTAGGED",
+          "NO_UNION",
+          "REFERENCED",
+          "K_FIELD",
+          "K_BYTES",
+          "K_STRING",
+          "K_REF",
+          "K_REFS",
+          "K_SCALARS",
+          "K_ELEMENTS",
+          "K_UNION",
+          "NODES",
+          "ELEMENTS",
+          "UNIONS");
+
   /** Rust writer methods beside the per-node ones. */
   private static final Set<String> RESERVED_WRITER_METHODS = Set.of("new", "string", "default");
 
@@ -111,96 +132,182 @@ final class PersistedValidator {
     if (d.isEmpty()) return;
     var families = new HashSet<String>();
     var familySnakes = new HashSet<String>();
-    for (Family f : d.families()) {
-      typeName(f.name(), "family");
-      require(families.add(f.name()), "duplicate family: " + f.name());
-      require(
-          familySnakes.add(PersistedLayout.snake(f.name())),
-          "family names collide in Rust: " + f.name());
-    }
+    for (Family f : d.families())
+      at(
+          d,
+          "family",
+          f.name(),
+          () -> {
+            typeName(f.name(), "family");
+            require(families.add(f.name()), "duplicate family: " + f.name());
+            require(
+                familySnakes.add(PersistedLayout.snake(f.name())),
+                "family names collide in Rust: " + f.name());
+          });
     // Every declaration names a declared family.
-    for (Format f : d.formats()) family(families, f.family(), "format " + f.name());
-    for (Node n : d.nodes()) family(families, n.family(), "node " + n.name());
-    for (Element e : d.elements()) family(families, e.family(), "element " + e.name());
-    for (Kind k : d.kinds()) family(families, k.family(), "kind " + k.name());
-    for (Union u : d.unions()) family(families, u.family(), "union " + u.name());
+    for (Format f : d.formats())
+      at(d, "format", f.name(), () -> family(families, f.family(), "format " + f.name()));
+    for (Node n : d.nodes())
+      at(d, "node", n.name(), () -> family(families, n.family(), "node " + n.name()));
+    for (Element e : d.elements())
+      at(d, "element", e.name(), () -> family(families, e.family(), "element " + e.name()));
+    for (Kind k : d.kinds())
+      at(d, "kind", k.name(), () -> family(families, k.family(), "kind " + k.name()));
+    for (Union u : d.unions())
+      at(d, "union", u.name(), () -> family(families, u.family(), "union " + u.name()));
     var magics = new HashMap<Long, String>();
     var javaNames = new HashMap<String, String>();
-    for (Format f : d.formats()) {
-      String other = magics.putIfAbsent(f.magic(), f.name());
-      require(other == null, "formats " + other + " and " + f.name() + " share a magic");
-    }
+    for (Format f : d.formats())
+      at(
+          d,
+          "format",
+          f.name(),
+          () -> {
+            String other = magics.putIfAbsent(f.magic(), f.name());
+            require(other == null, "formats " + other + " and " + f.name() + " share a magic");
+          });
     for (PersistedLayout layout : PersistedLayout.of(module)) family(layout, javaNames);
   }
 
+  /**
+   * Runs {@code check} for one declaration ({@code what} is node, kind, ...), prefixing a failure
+   * with the declaration's descriptor line, and with the declaration when the message does not
+   * already name it.
+   */
+  private static void at(Declarations d, String what, String name, Runnable check) {
+    try {
+      check.run();
+    } catch (IllegalArgumentException e) {
+      String message = e.getMessage();
+      if (message.startsWith("line ")) throw e;
+      if (!message.contains(name)) message = what + " " + name + ": " + message;
+      int line = d.line(what + " " + name);
+      throw new IllegalArgumentException(line > 0 ? "line " + line + ": " + message : message, e);
+    }
+  }
+
   private static void family(PersistedLayout layout, Map<String, String> javaNames) {
+    var d = layout.module.persisted();
     String family = layout.family.name();
     // Nodes, kinds, elements, unions and formats share one type namespace per family.
     var types = new HashSet<String>();
-    for (Node n : layout.nodes) declareType(types, n.name(), "node");
-    for (Kind k : layout.kinds) declareType(types, k.name(), "kind");
-    for (Element e : layout.elements) declareType(types, e.name(), "element");
-    for (Union u : layout.unions) declareType(types, u.name(), "union");
-    for (Format f : layout.formats) declareType(types, f.name(), "format");
+    for (Node n : layout.nodes) at(d, "node", n.name(), () -> declareType(types, n.name(), "node"));
+    for (Kind k : layout.kinds) at(d, "kind", k.name(), () -> declareType(types, k.name(), "kind"));
+    for (Element e : layout.elements)
+      at(d, "element", e.name(), () -> declareType(types, e.name(), "element"));
+    for (Union u : layout.unions)
+      at(d, "union", u.name(), () -> declareType(types, u.name(), "union"));
+    for (Format f : layout.formats)
+      at(d, "format", f.name(), () -> declareType(types, f.name(), "format"));
     // Java classes are one package per module.
-    javaClass(javaNames, family + "Nodes", family);
-    javaClass(javaNames, family + "Writer", family);
-    javaClass(javaNames, family + "Exception", family);
-    for (Format f : layout.formats) javaClass(javaNames, f.name() + "Reader", f.name());
-
+    at(
+        d,
+        "family",
+        family,
+        () -> {
+          javaClass(javaNames, family + "Nodes", family);
+          javaClass(javaNames, family + "Writer", family);
+          javaClass(javaNames, family + "Exception", family);
+        });
     var tags = new HashMap<Integer, String>();
     var writerMethods = new HashSet<>(RESERVED_WRITER_METHODS);
-    for (Format f : layout.formats) writerMethods.add("finish_" + PersistedLayout.snake(f.name()));
-    for (Node n : layout.nodes) {
-      require(n.tag() >= 1 && n.tag() <= 0xFFFF, "node " + n.name() + ": tag must be 1..65535");
-      String other = tags.putIfAbsent(n.tag(), n.name());
-      require(other == null, "nodes " + other + " and " + n.name() + " share tag " + n.tag());
-      String method = PersistedLayout.snake(n.name());
-      require(
-          writerMethods.add(method), "node " + n.name() + ": writer method collides: " + method);
-      Validator.identifier(javaMethod(n.name()));
-      members(layout, "node " + n.name(), n.members(), true);
-    }
-    for (Element e : layout.elements) {
-      String where = "element " + e.name();
-      if (e.tag() != null)
-        require(e.tag() >= 0 && e.tag() <= 0xFFFF, where + ": tag must be 0..65535");
-      else require(!e.members().isEmpty(), where + ": an untagged element needs a member");
-      members(layout, where, e.members(), false);
-    }
-    for (Kind k : layout.kinds) {
-      require(!k.nodes().isEmpty(), "kind " + k.name() + " lists no nodes");
-      var seen = new HashSet<String>();
-      for (String n : k.nodes()) {
-        require(layout.node(n) != null, "kind " + k.name() + ": unknown node " + n);
-        require(seen.add(n), "kind " + k.name() + " lists " + n + " twice");
-      }
-    }
-    for (Union u : layout.unions) {
-      require(!u.elements().isEmpty(), "union " + u.name() + " lists no elements");
-      var seen = new HashMap<Integer, String>();
-      var names = new HashSet<String>();
-      for (String name : u.elements()) {
-        Element e = layout.element(name);
-        require(e != null, "union " + u.name() + ": unknown element " + name);
-        require(names.add(name), "union " + u.name() + " lists " + name + " twice");
-        require(e.tag() != null, "union " + u.name() + ": element " + name + " has no tag");
-        String other = seen.putIfAbsent(e.tag(), name);
-        require(
-            other == null,
-            "union " + u.name() + ": elements " + other + " and " + name + " share tag " + e.tag());
-      }
-    }
+    var formatConstants = new HashSet<>(RESERVED_RUST_CONSTANTS);
+    for (Format f : layout.formats)
+      at(
+          d,
+          "format",
+          f.name(),
+          () -> {
+            javaClass(javaNames, f.name() + "Reader", f.name());
+            String finish = "finish_" + PersistedLayout.snake(f.name());
+            require(writerMethods.add(finish), "writer method collides: " + finish);
+            // The format's Rust spec constant shares the family module with the shared core's.
+            String constant = Names.upperSnake(f.name());
+            require(formatConstants.add(constant), "Rust constant collides: " + constant);
+          });
+    for (Node n : layout.nodes)
+      at(
+          d,
+          "node",
+          n.name(),
+          () -> {
+            require(
+                n.tag() >= 1 && n.tag() <= 0xFFFF, "node " + n.name() + ": tag must be 1..65535");
+            String other = tags.putIfAbsent(n.tag(), n.name());
+            require(other == null, "nodes " + other + " and " + n.name() + " share tag " + n.tag());
+            String method = PersistedLayout.rustWriterMethod(n.name());
+            require(
+                writerMethods.add(method),
+                "node " + n.name() + ": writer method collides: " + method);
+            members(layout, "node", n.name(), n.members(), true);
+          });
+    for (Element e : layout.elements)
+      at(
+          d,
+          "element",
+          e.name(),
+          () -> {
+            String where = "element " + e.name();
+            if (e.tag() != null)
+              require(e.tag() >= 0 && e.tag() <= 0xFFFF, where + ": tag must be 0..65535");
+            else require(!e.members().isEmpty(), where + ": an untagged element needs a member");
+            members(layout, "element", e.name(), e.members(), false);
+          });
+    for (Kind k : layout.kinds)
+      at(
+          d,
+          "kind",
+          k.name(),
+          () -> {
+            require(!k.nodes().isEmpty(), "kind " + k.name() + " lists no nodes");
+            var seen = new HashSet<String>();
+            for (String n : k.nodes()) {
+              require(layout.node(n) != null, "kind " + k.name() + ": unknown node " + n);
+              require(seen.add(n), "kind " + k.name() + " lists " + n + " twice");
+            }
+          });
+    for (Union u : layout.unions)
+      at(
+          d,
+          "union",
+          u.name(),
+          () -> {
+            require(!u.elements().isEmpty(), "union " + u.name() + " lists no elements");
+            var seen = new HashMap<Integer, String>();
+            var names = new HashSet<String>();
+            for (String name : u.elements()) {
+              Element e = layout.element(name);
+              require(e != null, "union " + u.name() + ": unknown element " + name);
+              require(names.add(name), "union " + u.name() + " lists " + name + " twice");
+              require(e.tag() != null, "union " + u.name() + ": element " + name + " has no tag");
+              String other = seen.putIfAbsent(e.tag(), name);
+              require(
+                  other == null,
+                  "union "
+                      + u.name()
+                      + ": elements "
+                      + other
+                      + " and "
+                      + name
+                      + " share tag "
+                      + e.tag());
+            }
+          });
     // An element is used tagged through unions or untagged through element=, never both.
     for (Node n : layout.nodes)
       for (Member m : n.members())
         if (m.kind() == MemberKind.ELEMENT_LIST) {
           Element e = layout.element(m.target());
-          require(
-              e.tag() == null,
-              "node " + n.name() + ": element " + e.name() + " is tagged; use union=");
+          at(
+              d,
+              "node " + n.name() + " member",
+              m.name(),
+              () ->
+                  require(
+                      e.tag() == null,
+                      "node " + n.name() + ": element " + e.name() + " is tagged; use union="));
         }
-    for (Format f : layout.formats) format(layout, f);
+    for (Format f : layout.formats) at(d, "format", f.name(), () -> format(layout, f));
   }
 
   private static void format(PersistedLayout layout, Format f) {
@@ -223,7 +330,7 @@ final class PersistedValidator {
       require(
           f.headerWord().matches(MEMBER_NAME) && !RESERVED_HEADER_WORDS.contains(f.headerWord()),
           where + ": invalid or reserved header word name: " + f.headerWord());
-      Validator.identifier(f.headerWord());
+      lowerName(where + ": header word", f.headerWord());
     }
     var roots = new HashSet<String>();
     for (String r : f.roots()) {
@@ -255,14 +362,33 @@ final class PersistedValidator {
   }
 
   private static void members(
-      PersistedLayout layout, String where, List<Member> members, boolean node) {
+      PersistedLayout layout, String what, String owner, List<Member> members, boolean node) {
+    var d = layout.module.persisted();
     var generated = new HashSet<String>();
-    for (Member m : members) {
+    for (Member m : members)
+      at(
+          d,
+          what + " " + owner + " member",
+          m.name(),
+          () -> member(layout, what + " " + owner, m, node, generated));
+  }
+
+  private static void member(
+      PersistedLayout layout, String where, Member m, boolean node, Set<String> generated) {
+    {
       String name = m.name();
       require(
-          name.matches(MEMBER_NAME) && !RESERVED_MEMBERS.contains(name),
-          where + ": invalid or reserved member name: " + name);
-      Validator.identifier(name);
+          name.matches(MEMBER_NAME),
+          where + ": a member name is lowercase letters, digits and underscores: " + name);
+      require(
+          !RESERVED_MEMBERS.contains(name),
+          where
+              + ": member name "
+              + name
+              + " is taken by a generated accessor ("
+              + String.join(", ", RESERVED_MEMBERS.stream().sorted().toList())
+              + ")");
+      lowerName(where + ": member", name);
       for (String g : generatedNames(m))
         require(generated.add(g), where + ": member " + name + " collides with generated " + g);
       String at = where + " member " + name;
@@ -331,11 +457,6 @@ final class PersistedValidator {
     };
   }
 
-  /** The Java writer method for a node: its name with a lowercase first letter. */
-  static String javaMethod(String node) {
-    return Character.toLowerCase(node.charAt(0)) + node.substring(1);
-  }
-
   private static void family(Set<String> families, String family, String where) {
     require(families.contains(family), where + ": unknown family " + family);
   }
@@ -344,8 +465,38 @@ final class PersistedValidator {
     require(
         name.matches(TYPE_NAME) && !RESERVED_TYPES.contains(name) && !name.endsWith("Id"),
         "invalid or reserved " + what + " name: " + name);
-    Validator.identifier(name);
+    // Derived names (a writer method, the family's Rust module) escape keywords, so only the name
+    // itself must not be one; Self is the only upper camel case keyword and is reserved above.
   }
+
+  /**
+   * A member or header word, which Rust uses as written and Java in lower camel case: neither may
+   * be a keyword of its language. Formats emit no C, so C and C++ keywords are allowed.
+   */
+  private static void lowerName(String where, String name) {
+    require(
+        !PersistedLayout.RUST_KEYWORDS.contains(name), where + " " + name + " is a Rust keyword");
+    String java = Names.lowerCamel(name.toUpperCase(Locale.ROOT));
+    require(
+        !PersistedLayout.JAVA_KEYWORDS.contains(java),
+        where + " " + name + " is the Java keyword " + java);
+    require(
+        !OBJECT_METHODS.contains(java),
+        where + " " + name + " would override java.lang.Object." + java + "()");
+  }
+
+  /** Methods of {@code java.lang.Object} a Java accessor named after a member would override. */
+  private static final Set<String> OBJECT_METHODS =
+      Set.of(
+          "getClass",
+          "hashCode",
+          "equals",
+          "toString",
+          "clone",
+          "finalize",
+          "wait",
+          "notify",
+          "notifyAll");
 
   private static void declareType(Set<String> types, String name, String what) {
     typeName(name, what);

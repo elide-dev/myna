@@ -372,7 +372,8 @@ class PersistedFormatsTest {
       {"tag=1 sharing=interned", "tag=0 sharing=interned", "tag must be 1..65535"},
       {"tag=1 sharing=interned", "tag=2 sharing=interned", "nodes Leaf and Root share tag 2"},
       {"node Leaf family", "node Default family", "writer method collides: default"},
-      {"node Leaf family", "node Int family", "invalid or reserved identifier: int"},
+      {"node Leaf family", "node String family", "invalid or reserved node name: String"},
+      {"format Fmt family", "format WireRules family", "Rust constant collides: WIRE_RULES"},
       {
         "element El family=F\n  string s\nend",
         "element El family=F\nend",
@@ -401,12 +402,16 @@ class PersistedFormatsTest {
       {"max_work=64", "max_work=0", "max_work must be 1..2147483646"},
       {"header cap", "header Cap", "invalid or reserved header word name: Cap"},
       {"header cap", "header root", "invalid or reserved header word name: root"},
-      {"header cap", "header int", "invalid or reserved identifier: int"},
+      {"header cap", "header int", "header word int is the Java keyword int"},
+      {"header cap", "header fn", "header word fn is a Rust keyword"},
       {"  root Root\n", "  root Nope\n", "root Nope is not a node or kind of family F"},
       {"  root Root\n", "  root Root,Root\n", "root Root is listed twice"},
-      {"string name", "string Name", "invalid or reserved member name: Name"},
-      {"string name", "string index", "invalid or reserved member name: index"},
-      {"string name", "string int", "invalid or reserved identifier: int"},
+      {"string name", "string Name", "lowercase letters, digits and underscores: Name"},
+      {"string name", "string index", "member name index is taken by a generated accessor"},
+      {"string name", "string int", "member int is the Java keyword int"},
+      {"string name", "string type", "member type is a Rust keyword"},
+      {"string name", "string for_", "member for_ is the Java keyword for"},
+      {"string name", "string to_string", "would override java.lang.Object.toString()"},
       {"string name", "string name\n  field name_id type=u8", "collides with generated name_id"},
       {"field f type=u32 flags=G", "field f type=char", "unsupported field type char"},
       {
@@ -458,5 +463,115 @@ class PersistedFormatsTest {
             end
             """;
     assertTrue(reject(twoFamilies).contains("generated Java class FmtReader is claimed twice"));
+    // Format names that differ only in case share a Rust writer method and spec constant.
+    String twoFormats =
+        BASE
+            + """
+            format FMT family=F version=1 magic=0x9 draft=true
+              limit max_bytes=1024
+              limit max_nodes=16
+              limit max_strings=16
+              limit max_depth=8
+              limit max_work=64
+              root Root
+            end
+            """;
+    assertTrue(reject(twoFormats).contains("writer method collides: finish_fmt"), twoFormats);
+  }
+
+  @Test
+  void validationErrorsNameTheDeclarationAndLine() {
+    // HEAD is line 1, so BASE line n is descriptor line n + 1.
+    String member = reject(base("string name", "string type"));
+    assertTrue(member.startsWith("line 37: node Root: member type is a Rust keyword"), member);
+    String kind = reject(base("nodes=Leaf", "nodes=Nope"));
+    assertTrue(kind.startsWith("line 26: kind K: unknown node Nope"), kind);
+    String format = reject(base("max_depth=8", "max_depth=0"));
+    assertTrue(format.startsWith("line 10: format Fmt: max_depth must be 1..32767"), format);
+    // A message that does not name the declaration gets it as a prefix.
+    String type = reject(base("union U family", "union Raw family"));
+    assertTrue(type.startsWith("line 25: invalid or reserved union name: Raw"), type);
+    String duplicate = reject(base("kind K family", "kind Leaf family"));
+    assertTrue(duplicate.startsWith("line 26: duplicate name in family: Leaf"), duplicate);
+    // Declarations built without a descriptor have no lines; equality ignores them.
+    var parsed = parse(BASE).persisted();
+    assertTrue(parsed.line("node Root") > 0);
+    var bare =
+        new Persisted.Declarations(
+            parsed.families(),
+            parsed.formats(),
+            parsed.nodes(),
+            parsed.elements(),
+            parsed.kinds(),
+            parsed.unions());
+    assertEquals(0, bare.line("node Root"));
+    assertEquals(parsed, bare);
+    assertEquals(parsed.hashCode(), bare.hashCode());
+    assertNotEquals(parsed, Persisted.Declarations.EMPTY);
+    assertNotEquals(parsed, "node Root");
+  }
+
+  @Test
+  void namesOnlyAvoidRustAndJavaKeywords() throws Exception {
+    // C and C++ keywords are fine; derived names that are keywords get a trailing underscore.
+    String body =
+        base("node Root family", "node Return family")
+            .replace("root Root", "root Return")
+            .replace("string name", "string inline\n  string template")
+            .replace("kind K family", "kind Type family")
+            .replace("node=K", "node=Type")
+            .replace("family F\n", "family Type\n")
+            .replace("family=F", "family=Type");
+    var outputs = Generator.generate(parse(body), true);
+    String rust = outputs.get("formats.rs");
+    assertTrue(rust.contains("pub mod type_ {"), rust);
+    assertTrue(rust.contains("pub fn return_(&mut self"), rust);
+    assertTrue(rust.contains("inline: StrId"), rust);
+    String java = outputs.get("TypeWriter.java");
+    assertTrue(java.contains("public int return_("), java);
+    assertEquals("int_", PersistedLayout.javaWriterMethod("Int"));
+    assertEquals("int", PersistedLayout.rustWriterMethod("Int"));
+    assertEquals("self_", PersistedLayout.rustModule("Self"));
+  }
+
+  @Test
+  void targetSetsKeepNamesThatDifferOnlyInCase() {
+    // Node URL and kind Url (of Leaf) normalize alike; each reference keeps its own set.
+    String body =
+        base(
+                "kind K family=F nodes=Leaf",
+                "kind K family=F nodes=Leaf\nkind Url family=F nodes=Leaf")
+            .replace("ref leaf node=Leaf", "ref leaf node=Url\n  ref url node=URL")
+            .replace(
+                "node Root family",
+                "node URL family=F tag=3 sharing=interned\n"
+                    + "  field v type=u8\n"
+                    + "end\n"
+                    + "node Root family");
+    String java = Generator.generate(parse(body), true).get("FWriter.java");
+    assertTrue(java.contains("TARGETS_Url = {1};"), java);
+    assertTrue(java.contains("TARGETS_URL = {3};"), java);
+    assertTrue(java.contains("nodeRef(leaf, TARGETS_Url, false)"), java);
+  }
+
+  @Test
+  void formatsOnlyModulesSkipTheCallBoundary() {
+    var only = Generator.generate(parse(BASE), true);
+    assertEquals(
+        Set.of(
+            "seam.json",
+            "seam.abi",
+            "seam.rs",
+            "MynaNativeConstants.java",
+            "formats.rs",
+            "FNodes.java",
+            "FWriter.java",
+            "FException.java",
+            "FmtReader.java"),
+        only.keySet());
+    var mixed = Generator.generate(parse("opaque Buffer\n" + BASE), true);
+    assertTrue(mixed.containsKey("seam.h"), mixed.keySet().toString());
+    assertTrue(mixed.containsKey("seam.ll"));
+    assertTrue(mixed.containsKey("formats.rs"));
   }
 }

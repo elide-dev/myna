@@ -30,16 +30,28 @@ final class PersistedDsl {
   private List<String> roots = new ArrayList<>();
   private String headerWord;
 
-  /** A {@code format}, {@code node} or {@code element} block starts. */
-  void open() {
+  /** The source line of each declaration and member; see {@link Persisted.Declarations#lines}. */
+  private final Map<String, Integer> lines = new HashMap<>();
+
+  /** A {@code format}, {@code node} or {@code element} block starts on {@code line}. */
+  void open(String[] header, int line) {
+    lines.putIfAbsent(header[0] + " " + header[1], line);
     members = new ArrayList<>();
     limits = new LinkedHashMap<>();
     roots = new ArrayList<>();
     headerWord = null;
   }
 
-  /** One persisted-format line; {@code header} is the open block's header line, or null. */
-  void line(String[] words, String[] header) {
+  /**
+   * One persisted-format line, source line {@code line}; {@code header} is the open block's header
+   * line, or null.
+   */
+  void line(String[] words, String[] header, int line) {
+    if (words.length >= 2) {
+      if (header == null) lines.putIfAbsent(words[0] + " " + words[1], line);
+      else if (header[0].equals("node") || header[0].equals("element"))
+        lines.putIfAbsent(header[0] + " " + header[1] + " member " + words[1], line);
+    }
     switch (words[0]) {
       case "family" -> {
         require(header == null && words.length == 2, "expected family NAME outside a block");
@@ -119,7 +131,7 @@ final class PersistedDsl {
   }
 
   Persisted.Declarations declarations() {
-    return new Persisted.Declarations(families, formats, nodes, elements, kinds, unions);
+    return new Persisted.Declarations(families, formats, nodes, elements, kinds, unions, lines);
   }
 
   static Persisted.Format format(

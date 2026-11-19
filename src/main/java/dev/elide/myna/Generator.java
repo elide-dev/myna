@@ -25,6 +25,18 @@ public final class Generator {
     var outputs = new TreeMap<String, String>();
     outputs.put("seam.json", abi.json());
     outputs.put("seam.abi", abi.value() + "\n");
+    if (module.formatsOnly()) {
+      // No call boundary: the records and the formats, nothing to link or bind.
+      var rust = new RustFfi();
+      outputs.put(rust.filename(module), rust.generate(module, abi));
+      if (JavaConstants.applies(module)) {
+        var constants = new JavaConstants();
+        outputs.put(constants.filename(module), constants.generate(module));
+      }
+      outputs.put(RustFormats.FILENAME, new RustFormats().generate(module));
+      outputs.putAll(new JavaFormats().generate(module));
+      return Collections.unmodifiableSortedMap(outputs);
+    }
     var c = new CHeader();
     CHeader.Generated header = c.header(module, abi);
     outputs.put(c.filename(module), header.text());

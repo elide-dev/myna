@@ -977,6 +977,23 @@ public final class Seam {
       return out.append("Implementation").toString();
     }
 
+    /**
+     * Whether the module declares persisted formats and no call boundary: no opaque, struct,
+     * callback, function, resource or borrow, and no Truffle cells. Such a module generates only
+     * its records ({@code seam.rs}, the constants class), {@code seam.json}, {@code seam.abi} and
+     * the format files, without the C header, LLVM contracts or Native Image and FFM bindings.
+     */
+    public boolean formatsOnly() {
+      return !persisted.families().isEmpty()
+          && opaqueTypes.isEmpty()
+          && structs.isEmpty()
+          && callbacks.isEmpty()
+          && functions.isEmpty()
+          && resources.isEmpty()
+          && borrows.isEmpty()
+          && truffleConfig == null;
+    }
+
     /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
     public boolean declaresConstants() {
       return abiDeclared || !constants.isEmpty() || !enums.isEmpty() || !flagSets.isEmpty();

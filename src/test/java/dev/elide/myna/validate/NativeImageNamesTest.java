@@ -27,6 +27,7 @@ class NativeImageNamesTest {
     var pattern = java.util.regex.Pattern.compile("(?m)^import ([\\w.]+)\\.(\\w+);$");
     for (Path seam : seams) {
       var module = Dsl.parse(Files.readString(seam));
+      if (module.formatsOnly()) continue; // no Native Image bindings
       var matcher =
           pattern.matcher(
               dev.elide.myna.Generator.generate(module, true).get(module.nativeClass() + ".java"));

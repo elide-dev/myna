@@ -200,7 +200,7 @@ public final class Dsl {
             header = words;
             options = options(words, 2);
             if (persisted == null) persisted = new PersistedDsl();
-            persisted.open();
+            persisted.open(words, i + 1);
           }
           case "value" -> {
             require(header != null && header[0].equals("enum"), "value requires an enum block");
@@ -252,7 +252,7 @@ public final class Dsl {
                 && header != null
                 && (header[0].equals("node") || header[0].equals("element"))
                 && words.length >= 3) {
-              persisted.line(words, header);
+              persisted.line(words, header, i + 1);
               continue;
             }
             require(
@@ -356,7 +356,7 @@ public final class Dsl {
             require(PersistedDsl.DIRECTIVES.contains(words[0]), "unknown directive: " + words[0]);
             require(name != null, "missing module");
             if (persisted == null) persisted = new PersistedDsl();
-            persisted.line(words, header);
+            persisted.line(words, header, i + 1);
           }
         }
       } catch (IllegalArgumentException e) {

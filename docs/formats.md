@@ -124,6 +124,16 @@ Floats are stored and compared as raw bits, so NaN payloads and the sign of zero
 `[a-z][a-z0-9_]*`; names a generated accessor already uses (`index`, `tag`, `bytes`, …, or another member's name
 with an accessor suffix such as `_id` or `_count`) are rejected.
 
+Formats generate only Rust and Java, so only those languages' keywords matter: C and C++ keywords such as
+`inline` or `template` are fine. A member or header word is used as written in Rust and in lower camel case in
+Java, so it may be neither a Rust keyword (`type`) nor, in Java form, a Java keyword (`int`) or a
+`java.lang.Object` method (`to_string`). Names derived from a type name instead get a trailing underscore when
+they are a keyword: node `Return` has the writer method `return_` in both languages, and family `Type` the Rust
+module `type_`.
+
+Validation errors give the declaration and its descriptor line, for example
+`line 37: node Root: member type is a Rust keyword`.
+
 ## Wire format
 
 All integers are little-endian and fixed-width. A file is `header | strings | body | index`, and nothing else:
@@ -244,16 +254,23 @@ fixed keys only. It changes only when the set of byte sequences a reader accepts
 So a rename, a limit change or a Myna upgrade leaves files already on disk valid. `pinned=` holds the expected
 value. Generation fails when it differs, with a message giving the computed value and saying to bump `version=`
 and update the pin, so a layout change cannot ship under an old version by accident. A format without `pinned=`
-must say `draft=true`; generation reports the value to pin. A reader accepts exactly one `(version, fingerprint)`
+must say `draft=true`; `myna validate` and `myna generate` then print the value to pin after the module line,
+as `draft format DocFile pinned=0123456789abcdef`. A reader accepts exactly one `(version, fingerprint)`
 pair; a consumer that reads two versions declares two formats with the same family and dispatches on `peek`.
 
 The module's `seam.json` records families and formats (with their names) only when the module declares a family,
 so every other module keeps its `seam.abi`.
 
+A module that declares families and no call boundary (no opaque, struct, callback, function, resource or borrow,
+and no Truffle cells) generates only `seam.json`, `seam.abi`, its records (`seam.rs` and, with enums, flags or
+constants, the Java constants class) and the format files below. The C header, LLVM contracts and the Native
+Image and FFM classes are omitted, so the output can be vendored as is.
+
 ## Generated Rust
 
 `formats.rs` holds one `pub mod` per family (`doc` for `Doc`), needing only `core` and `alloc`, so it builds in
-`no_std` crates. Include it as a module file: `#[path = "generated/formats.rs"] mod formats;`.
+`no_std` crates. Include it as a module file: `#[path = "generated/formats.rs"] mod formats;`. The file allows
+`dead_code` and `unreachable_pub`, so it can be a private module of a crate that denies them.
 
 - Per format, a `Copy` type (`doc::DocFile<'a>`) with `MAGIC`, `VERSION`, `FINGERPRINT` and the five limits as
   constants. It has:
@@ -272,7 +289,9 @@ so every other module keeps its `seam.abi`.
 - `tag::*` constants, `ErrorKind` (with `code()` and `class()`), `Class`, `FormatError { kind, offset, node }`.
 - `write::DocWriter`:
   - `string(&str) -> StrId` interns a string;
-  - one method per node (`style(face, align, size_bits, parent)`) returns its id or a `WriteError`;
+  - one method per node (`style(face, align, size_bits, parent)`) returns its id or a `WriteError`. Every list
+    takes an `impl IntoIterator`: of ids for `refs`, of elements or the union's enum for element lists, and of
+    values or references (`&[u16]` works) for scalar lists. Enum and flag fields take their raw carriers;
   - `finish_doc_file(&self, root, capability) -> Result<Vec<u8>, WriteError>` writes the canonical bytes.
 
   Ids are typed per node (`StyleId`), per kind (`BlockId`, with `From` from each member's id) and for `any`

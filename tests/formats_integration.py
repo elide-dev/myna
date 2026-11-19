@@ -189,7 +189,7 @@ class FormatsTests(unittest.TestCase):
         shutil.copy(generated / "formats.rs", rust / "formats.rs")
         shutil.copy(FIXTURE / "check.rs", rust / "check.rs")
         cls.rust = cls.work / "check"
-        run("rustc", "--edition=2024", "-Dwarnings", "-C", "opt-level=1", "-C", "debug-assertions",
+        run("rustc", "--edition=2024", "-Dwarnings", "-Wunreachable-pub", "-C", "opt-level=1", "-C", "debug-assertions",
             "-C", "overflow-checks", rust / "check.rs", "-o", cls.rust)
         classes = cls.work / "classes"
         run("javac", "-Xlint:all", "-Werror", "-d", classes, *sorted(generated.glob("Doc*.java")),

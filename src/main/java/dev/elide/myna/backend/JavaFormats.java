@@ -715,7 +715,7 @@ public final class JavaFormats {
   private void writerNode(StringBuilder out, PersistedLayout l, Node n) {
     var params = new ArrayList<String>();
     for (Member m : n.members()) params.add(paramType(l, m) + " " + javaName(m.name()));
-    String method = Character.toLowerCase(n.name().charAt(0)) + n.name().substring(1);
+    String method = PersistedLayout.javaWriterMethod(n.name());
     out.append("\n  /** Adds a {@code ")
         .append(n.name())
         .append("} node")

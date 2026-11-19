@@ -277,4 +277,55 @@ public final class PersistedLayout {
   public static String snake(String camel) {
     return Names.lowerSnake(camel);
   }
+
+  /**
+   * Rust keywords, strict and reserved, through edition 2024. Formats emit only Rust and Java, so
+   * these and {@link #JAVA_KEYWORDS} are the only keywords their names must avoid.
+   */
+  public static final Set<String> RUST_KEYWORDS =
+      Set.of(
+          ("as async await break const continue crate dyn else enum extern false fn for if impl in"
+               + " let loop match mod move mut pub ref return self Self static struct super trait"
+               + " true type unsafe use where while abstract become box do final macro override"
+               + " priv typeof unsized virtual yield try gen")
+              .split(" "));
+
+  /** Java keywords, literals and the restricted identifiers a generated name could hit. */
+  public static final Set<String> JAVA_KEYWORDS =
+      Set.of(
+          ("abstract assert boolean break byte case catch char class const continue default do"
+                  + " double else enum extends final finally float for goto if implements import"
+                  + " instanceof int interface long native new package private protected public"
+                  + " return short static strictfp super switch synchronized this throw throws"
+                  + " transient try void volatile while true false null var yield record sealed"
+                  + " permits")
+              .split(" "));
+
+  /**
+   * A Rust name derived from a declared type name (a family module or a writer method): {@code
+   * Return} becomes {@code return_} rather than the keyword.
+   */
+  public static String rustEscape(String derived) {
+    return RUST_KEYWORDS.contains(derived) ? derived + "_" : derived;
+  }
+
+  /** {@link #rustEscape} for Java: a node {@code Return} has the writer method {@code return_}. */
+  public static String javaEscape(String derived) {
+    return JAVA_KEYWORDS.contains(derived) ? derived + "_" : derived;
+  }
+
+  /** The Rust writer method of a node. */
+  public static String rustWriterMethod(String node) {
+    return rustEscape(snake(node));
+  }
+
+  /** The Java writer method of a node: its name with a lowercase first letter. */
+  public static String javaWriterMethod(String node) {
+    return javaEscape(Character.toLowerCase(node.charAt(0)) + node.substring(1));
+  }
+
+  /** The Rust module of a family. */
+  public static String rustModule(String family) {
+    return rustEscape(snake(family));
+  }
 }

@@ -84,3 +84,20 @@ node Root family=Shapes tag=3 sharing=unique
   field f type=f32
   ref anything node=any
 end
+
+# Names that are keywords in a language formats do not emit (C++ inline, template), names whose
+# derived writer method is a keyword (return_), and a node and a kind whose names differ only in
+# case: each keeps its own target set.
+kind Url family=Shapes nodes=Leaf
+kind Type family=Shapes nodes=URL
+node URL family=Shapes tag=4 sharing=interned
+  field inline type=u8
+end
+node Return family=Shapes tag=5 sharing=unique
+  ref leaf node=Url
+  ref url node=URL
+  ref typed node=Type
+end
+node Template family=Shapes tag=6 sharing=unique
+  string friend
+end

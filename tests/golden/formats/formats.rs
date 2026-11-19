@@ -2,7 +2,7 @@
 //! Persisted formats of module `formats_fixture`.
 //!
 //! Each family is a `no_std` module that needs only `core` and `alloc`.
-#![allow(dead_code, clippy::all)]
+#![allow(dead_code, unreachable_pub, clippy::all)]
 
 /// Family `Doc`.
 pub mod doc {
@@ -1905,11 +1905,12 @@ pub mod doc {
 
             /// Adds a `RawText` node.
             #[allow(clippy::too_many_arguments)]
-            pub fn raw_text(&mut self, units: &[u16]) -> Result<RawTextId, WriteError> {
+            pub fn raw_text(&mut self, units: impl IntoIterator<Item = impl core::borrow::Borrow<u16>>) -> Result<RawTextId, WriteError> {
+                let units: Vec<u16> = units.into_iter().map(|__x| *core::borrow::Borrow::borrow(&__x)).collect();
                 let mut __enc = Enc::new(3);
                 __enc.u32(count(units.len(), 1048576)?);
                 __enc.pad();
-                for &__x in units {
+                for __x in units {
                     __enc.u16(__x);
                 }
                 __enc.pad();
@@ -1952,7 +1953,9 @@ pub mod doc {
 
             /// Adds a `Meta` node, or returns the equal one already added.
             #[allow(clippy::too_many_arguments)]
-            pub fn meta(&mut self, a: i8, b: u16, c: i16, d: i32, e: i64, f: f64, g: bool, samples: &[i64], blob: &[u8], marker: Option<AnyId>) -> Result<MetaId, WriteError> {
+            pub fn meta(&mut self, a: i8, b: u16, c: i16, d: i32, e: i64, f: f64, g: bool, samples: impl IntoIterator<Item = impl core::borrow::Borrow<i64>>, blob: impl IntoIterator<Item = impl core::borrow::Borrow<u8>>, marker: Option<AnyId>) -> Result<MetaId, WriteError> {
+                let samples: Vec<i64> = samples.into_iter().map(|__x| *core::borrow::Borrow::borrow(&__x)).collect();
+                let blob: Vec<u8> = blob.into_iter().map(|__x| *core::borrow::Borrow::borrow(&__x)).collect();
                 let mut __enc = Enc::new(6);
                 __enc.u8(a as u8);
                 __enc.u16(b);
@@ -1968,11 +1971,11 @@ pub mod doc {
                     None => __enc.u32(NONE),
                 }
                 __enc.pad();
-                for &__x in samples {
+                for __x in samples {
                     __enc.u64(__x as u64);
                 }
                 __enc.pad();
-                for &__x in blob {
+                for __x in blob {
                     __enc.u8(__x);
                 }
                 __enc.pad();
