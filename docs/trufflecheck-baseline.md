@@ -26,7 +26,7 @@ through them. Run it again with `mise run check:trufflecheck` (see [Running the 
   - NullAway 0.14.3 (`440d3217…`) with `dataflow-nullaway` 4.3.1 (`dc7b9ced…`);
   - JSpecify 1.0.1 (`070d75f2…`).
 
-  Truffle and the SDK are the existing `tools/truffle.json` pins (Elide GraalVM 25.5.5-elide.28).
+  Truffle and the SDK are the existing `tools/truffle.json` pins (Elide GraalVM 25.5.5-elide.31).
 - **Compilers and tools:** javac 25.0.4 from the pinned Elide GraalVM; clippy 0.1.101 (nightly-2026-10-09); and
   cargo-deny 0.20.2, now pinned in `mise.toml`.
 - **Java:** the complete `profiles/jvm/errorprone.args` (every trufflecheck rule at its default severity, plus
