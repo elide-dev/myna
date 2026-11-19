@@ -456,7 +456,14 @@ public final class Dsl {
         flagSets,
         abiDeclared,
         rustImplementation,
-        new Persisted.Declarations(families, formats, nodes, elementDecls, kinds, unions));
+        families.isEmpty()
+                && formats.isEmpty()
+                && nodes.isEmpty()
+                && elementDecls.isEmpty()
+                && kinds.isEmpty()
+                && unions.isEmpty()
+            ? Persisted.Declarations.EMPTY
+            : new Persisted.Declarations(families, formats, nodes, elementDecls, kinds, unions));
   }
 
   private static Persisted.Format format(

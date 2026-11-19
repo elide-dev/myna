@@ -143,12 +143,23 @@ public final class Persisted {
         new Declarations(List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
     public Declarations {
-      families = families.stream().sorted(Comparator.comparing(Family::name)).toList();
-      formats = formats.stream().sorted(Comparator.comparing(Format::name)).toList();
-      nodes = nodes.stream().sorted(Comparator.comparing(Node::name)).toList();
-      elements = elements.stream().sorted(Comparator.comparing(Element::name)).toList();
-      kinds = kinds.stream().sorted(Comparator.comparing(Kind::name)).toList();
-      unions = unions.stream().sorted(Comparator.comparing(Union::name)).toList();
+      families = sorted(families, Comparator.comparing(Family::name));
+      formats = sorted(formats, Comparator.comparing(Format::name));
+      nodes = sorted(nodes, Comparator.comparing(Node::name));
+      elements = sorted(elements, Comparator.comparing(Element::name));
+      kinds = sorted(kinds, Comparator.comparing(Kind::name));
+      unions = sorted(unions, Comparator.comparing(Union::name));
+    }
+
+    /**
+     * {@code items} sorted and unmodifiable; most modules declare none, so that path allocates
+     * nothing.
+     */
+    private static <T> List<T> sorted(List<T> items, Comparator<T> order) {
+      if (items.isEmpty()) return List.of();
+      var copy = new ArrayList<>(items);
+      copy.sort(order);
+      return List.copyOf(copy);
     }
 
     public boolean isEmpty() {
