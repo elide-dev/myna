@@ -488,6 +488,7 @@ public final class Validator {
     ConstantsValidator.validate(module, fingerprint);
     OwnershipValidator.validate(module);
     ViewsValidator.validate(module);
+    PersistedValidator.validate(module);
   }
 
   /**

@@ -1,0 +1,16 @@
+bad-enum BadValue
+bad-flags BadValue
+field-too-long FieldTooLong
+too-deep TooDeep
+too-much-work TooMuchWork
+too-many-strings TooManyStrings
+too-many-nodes TooManyNodes
+too-large TooLarge
+bad-root BadRoot
+java shared-unique SharedUnique
+java shared-unique-one-parent SharedUnique
+java shared-unique-twice SharedUnique
+java bad-ref-kind BadRefKind
+java bad-ref BadRef
+java bad-string BadString
+java bad-utf8 BadUtf8

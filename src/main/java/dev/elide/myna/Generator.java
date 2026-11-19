@@ -49,6 +49,9 @@ public final class Generator {
       var constants = new JavaConstants();
       outputs.put(constants.filename(module), constants.generate(module));
     }
+    if (RustFormats.applies(module))
+      outputs.put(RustFormats.FILENAME, new RustFormats().generate(module));
+    if (JavaFormats.applies(module)) outputs.putAll(new JavaFormats().generate(module));
     if (module.truffleConfig() != null) {
       var cells = new TruffleCells();
       outputs.put(cells.filename(module), cells.generate(module, abi));

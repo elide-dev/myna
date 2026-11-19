@@ -1,6 +1,6 @@
 # Copyright the Myna contributors.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-# libFuzzer targets for untrusted value tapes, built by cargo-fuzz with ASan
+# libFuzzer targets for untrusted value tapes and persisted formats, built by cargo-fuzz with ASan
 # (see `mise run test:rust-fuzz`); a separate workspace, excluded from the main one.
 [package]
 name = "myna-values-fuzz"
@@ -28,6 +28,13 @@ bench = false
 [[bin]]
 name = "utf8_to_utf16"
 path = "fuzz_targets/utf8_to_utf16.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "formats_reader"
+path = "fuzz_targets/formats_reader.rs"
 test = false
 doc = false
 bench = false

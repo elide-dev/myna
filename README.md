@@ -169,6 +169,7 @@ Generation produces:
 - `seam.json` with optimizer-fact provenance and `seam.abi` with the descriptor's SHA-256 fingerprint.
 - `META-INF/native-image/` initialization metadata to package with the compiled Java bindings.
 - `seam.ll`, consumed by `myna apply` to annotate compiled LLVM objects and archives.
+- For declared [persisted formats](docs/formats.md): `formats.rs` and `<Family>Nodes`, `<Family>Writer`, `<Family>Exception` and `<Format>Reader` Java classes, a canonical writer and a validating reader for versioned on-disk node streams in each language.
 
 Strict mode rejects unapproved facts. `--relaxed` preserves them in JSON and omits them from LLVM. Unsupported shapes and contradictory contracts always fail. Explicit contracts are obligations of the implementation; validation cannot prove an arbitrary native implementation obeys them.
 
@@ -197,6 +198,7 @@ Individual integration tests can run against existing builds:
 
 ```sh
 MYNA_BIN=build/dist/myna mise run test:e2e
+MYNA_BIN=build/dist/myna mise run test:formats
 mise run test:llvm
 mise run test:native-image
 ```

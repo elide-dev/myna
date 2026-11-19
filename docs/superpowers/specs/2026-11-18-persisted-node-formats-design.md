@@ -12,6 +12,23 @@ The maintainer accepted the remaining recommendations (section 8, items 1, 7 to 
 and the fingerprint answer was posted on myna#167. The design is accepted for implementation; section 9 lists
 what implementation must still establish.
 
+**Implemented** in the change that adds `docs/formats.md`, which is the reference wherever details differ from
+this design. The differences:
+
+- The fixed part of a node is zero-padded to 4 before the payloads. Payloads start aligned, and the format
+  keeps no other padding rule.
+- Stage 1 validates the whole index before the first node. Within a node it checks members in wire order: the
+  fixed part, then each payload. It does not group checks by category as section 4 lists them. Both readers use
+  the same order, so `(kind, offset, node)` agree.
+- Java `check` returns `null` or `int[] {kind, offset, node}`, because the three values do not fit one `long`.
+  Error offsets are file-relative.
+- Enum and flag fields are their raw carriers in both writers and both readers, checked as closed sets. The
+  typed wrappers of `seam.rs` and `<Class>Constants` name the values.
+- Writers check depth and work at `finish`, per format, rather than at node creation: limits belong to formats
+  and a family may have several.
+- The Rust fuzz target checks the reader and a bounded recursive walk. Round trips of every golden file through
+  both writers, and reader parity over 1600 seeded corruptions, run in `tests/formats_integration.py` instead.
+
 <!-- Decisions recorded 2026-11-18:
      1. The first consumer is an existing set of hand-written codecs in another project, not the
         truffledata slab.

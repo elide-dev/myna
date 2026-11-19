@@ -23,6 +23,7 @@ fi
 scripts/test-jvm.sh
 scripts/build.sh --llvm
 scripts/python.sh tests/e2e.py
+scripts/python.sh tests/formats_integration.py
 mise run test:llvm-coverage
 scripts/python.sh tests/native_image_integration.py
 scripts/python.sh tests/truffle_integration.py

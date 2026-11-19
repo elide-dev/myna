@@ -1,7 +1,8 @@
 #!/bin/sh
 # Copyright the Myna contributors.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-# Fuzz the Rust value-tape reader (myna_tape_text_v1) and UTF-8 bridge with
+# Fuzz the Rust value-tape reader (myna_tape_text_v1), UTF-8 bridge and generated
+# persisted-format reader (tests/formats, seeded from its golden files) with
 # cargo-fuzz: libFuzzer plus AddressSanitizer (-Zsanitizer) on the project's
 # pinned nightly Rust. These binaries never enter Myna's LLVM/ThinLTO bitcode.
 # An expected-failure canary must be reported by ASan before any campaign counts.
@@ -39,7 +40,9 @@ if ! grep -q "AddressSanitizer: heap-buffer-overflow" "$work/asan-canary.log"; t
   exit 1
 fi
 
-for target in tape_text utf8_to_utf16; do
+mkdir -p "$work/formats_reader/corpus"
+cp tests/formats/golden/*.bin "$work/formats_reader/corpus/"
+for target in tape_text utf8_to_utf16 formats_reader; do
   mkdir -p "$work/$target/corpus"
   if ! fuzz_run "$target" "$work/$target/corpus" -- -seed=1729 -max_len=4096 \
       -max_total_time="$seconds" -timeout=10 -rss_limit_mb=2048 -malloc_limit_mb=256 \

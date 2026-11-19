@@ -1,0 +1,86 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Generated-code shapes the main fixture does not reach; compiled in both languages, not run.
+module shapes target=x86_64-unknown-linux-gnu java_package=fixture.shapes java_class=Shapes
+
+enum E type=u8
+  value a = 0
+  value b = 2
+end
+
+enum Wide type=i16
+  value neg = -1
+  value one = 1
+end
+
+flags G type=u32
+  bit x = 0
+  range r = 4..5
+end
+
+flags Big type=u64
+  bit high = 63
+end
+
+family Shapes
+
+format Only family=Shapes version=7 magic=0xfeedface draft=true
+  limit max_bytes=4096
+  limit max_nodes=64
+  limit max_strings=64
+  limit max_depth=16
+  limit max_work=1024
+  root Root
+end
+
+format Other family=Shapes version=1 magic=0x1 draft=true
+  limit max_bytes=4096
+  limit max_nodes=64
+  limit max_strings=0
+  limit max_depth=16
+  limit max_work=1024
+  header flavor
+  root Owners
+end
+
+element Pair family=Shapes
+  string s
+  ref owned node=Owned optional=true
+  field w type=i16 enum=Wide
+end
+
+element Tagged family=Shapes tag=5
+  ref owned node=Owned
+  field e type=u8 enum=E
+  field g type=u32 flags=G
+end
+
+element Empty family=Shapes tag=0
+end
+
+union Choice family=Shapes elements=Tagged,Empty
+
+kind Owners family=Shapes nodes=Owned,Root
+kind Leaves family=Shapes nodes=Leaf
+
+node Leaf family=Shapes tag=1 sharing=interned
+  field v type=i32
+  field big type=u64 flags=Big
+end
+
+node Owned family=Shapes tag=2 sharing=unique
+  ref leaf node=Leaves
+end
+
+node Root family=Shapes tag=3 sharing=unique
+  ref first node=Owners optional=true
+  field data type=bytes
+  refs owned node=Owned
+  list pairs element=Pair max=8
+  list choices union=Choice
+  list xs type=i8
+  list ys type=u32
+  list zs type=u64
+  field f type=f32
+  ref anything node=any
+end
