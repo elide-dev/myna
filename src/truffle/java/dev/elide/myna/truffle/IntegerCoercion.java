@@ -48,6 +48,12 @@ public final class IntegerCoercion extends Coercion {
   public long execute(Object value) {
     if (value instanceof Integer i) return narrow(i, value);
     if (value instanceof Long l) return narrow(l, value);
+    // Host code passes raw java.math.BigInteger (the only lossless boxed Java type for u64/usize
+    // magnitudes in [2^63, 2^64)) straight into a cell. Truffle interop does not recognize a plain
+    // BigInteger (fitsInLong=false, fitsInBigInteger=false in both 25.5.5-elide.28 and upstream),
+    // so route it through big() directly rather than letting it fall through every interop probe
+    // in slow() and be rejected. Stays behind big()'s @TruffleBoundary like the interop path.
+    if (value instanceof BigInteger b) return big(b, value);
     return slow(value);
   }
 
@@ -94,6 +100,13 @@ public final class IntegerCoercion extends Coercion {
   /** Big-integer arithmetic stays out of compiled code. */
   @CompilerDirectives.TruffleBoundary
   private long big(BigInteger big, Object value) {
+    // A BigInteger that fits in a long takes the same path a boxed Long would: narrow it to the
+    // carrier, applying STRICT range checks or WRAP truncation as for Integer/Long. This branch is
+    // dead for the interop path, where slow() only reaches big() when fitsInLong is false
+    // (bitLength() >= 64); it makes a raw host BigInteger behave identically to a Truffle interop
+    // number of the same magnitude, and lets STRICT signed/unsigned-narrower carriers accept a
+    // BigInteger whose value is in range (e.g. BigInteger.valueOf(3) on a STRICT i64).
+    if (big.bitLength() < 64) return narrow(big.longValue(), value);
     if (policy == CoercionPolicy.STRICT) {
       if (unsigned && bits == 64 && big.signum() >= 0 && big.bitLength() <= 64)
         return big.longValue();

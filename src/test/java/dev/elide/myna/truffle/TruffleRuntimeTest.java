@@ -466,6 +466,171 @@ class TruffleRuntimeTest {
         IllegalArgumentException.class, () -> new IntegerCoercion("f", "p", 12, false, null));
   }
 
+  /**
+   * A raw {@link BigInteger} argument from host code — the only lossless boxed Java type for
+   * u64/usize magnitudes in [2^63, 2^64) — is not recognized by Truffle interop: {@code fitsInLong}
+   * and {@code fitsInBigInteger} both answer {@code false} for a plain {@code BigInteger} in both
+   * the vendored {@code 25.5.5-elide.28} and upstream Truffle, so before the {@code instanceof
+   * BigInteger} fast path it fell through every interop probe in {@code slow()} and was always
+   * rejected. This drives the coercion with bare {@link BigInteger} receivers (not the {@link
+   * ForeignNumber} interop fakes every other big-integer test uses) and asserts they now behave
+   * exactly as a {@link ForeignNumber} of the same magnitude does, in both policies and on every
+   * carrier.
+   */
+  @Test
+  void rawBigIntegerArgumentsRouteThroughBigLikeInteropNumbers() {
+    var i8 = new IntegerCoercion("f", "p", 8, false, CoercionPolicy.STRICT);
+    var u8 = new IntegerCoercion("f", "p", 8, true, CoercionPolicy.STRICT);
+    var u16 = new IntegerCoercion("f", "p", 16, true, CoercionPolicy.WRAP);
+    var i32 = new IntegerCoercion("f", "p", 32, false, CoercionPolicy.WRAP);
+    var u32 = new IntegerCoercion("f", "p", 32, true, CoercionPolicy.STRICT);
+    var i64 = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.STRICT);
+    var u64 = new IntegerCoercion("f", "p", 64, true, CoercionPolicy.STRICT);
+    var u64wrap = new IntegerCoercion("f", "p", 64, true, CoercionPolicy.WRAP);
+    var i8wrap = new IntegerCoercion("f", "p", 8, false, CoercionPolicy.WRAP);
+    var u8wrap = new IntegerCoercion("f", "p", 8, true, CoercionPolicy.WRAP);
+    var i16wrap = new IntegerCoercion("f", "p", 16, false, CoercionPolicy.WRAP);
+    var u32wrap = new IntegerCoercion("f", "p", 32, true, CoercionPolicy.WRAP);
+    var i64wrap = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.WRAP);
+    // The headline regressions: a raw BigInteger is accepted in both policies instead of being
+    // thrown out as "got BigInteger <n>". WRAP wraps it; STRICT accepts it where it fits.
+    assertEquals(3, i32.execute(BigInteger.valueOf(3)));
+    assertEquals(3L, i64wrap.execute(BigInteger.valueOf(3)));
+    assertEquals(3L, u64wrap.execute(BigInteger.valueOf(3)));
+    assertEquals(3L, i64.execute(BigInteger.valueOf(3)));
+    assertEquals(3L, u64.execute(BigInteger.valueOf(3)));
+    // SMALL BigInteger (fits a long): STRICT narrows it like a boxed Long, accepting in-range
+    // values and rejecting out-of-range ones, on every carrier.
+    assertEquals(-1, i8.execute(BigInteger.valueOf(-1)));
+    assertEquals(127, i8.execute(BigInteger.valueOf(127)));
+    assertEquals(255, u8.execute(BigInteger.valueOf(255)));
+    assertEquals(Long.MIN_VALUE, i64.execute(BigInteger.valueOf(Long.MIN_VALUE)));
+    assertEquals(Long.MAX_VALUE, i64.execute(BigInteger.valueOf(Long.MAX_VALUE)));
+    var i8oob = assertThrows(NativeCellException.class, () -> i8.execute(BigInteger.valueOf(128)));
+    assertEquals(
+        "f: parameter p expects i8 in [-128, 127], got BigInteger 128", i8oob.getMessage());
+    assertThrows(NativeCellException.class, () -> u8.execute(BigInteger.valueOf(256)));
+    assertThrows(NativeCellException.class, () -> u8.execute(BigInteger.valueOf(-1)));
+    assertThrows(NativeCellException.class, () -> u32.execute(BigInteger.valueOf(4294967296L)));
+    assertThrows(NativeCellException.class, () -> i64.execute(BigInteger.ONE.shiftLeft(63)));
+    assertThrows(NativeCellException.class, () -> u64.execute(BigInteger.valueOf(-1)));
+    // BIG BigInteger (beyond the long range): the big() contract the ForeignNumber fakes pin.
+    // STRICT u64 takes the full unsigned [0, 2^64) range; every other STRICT carrier rejects;
+    // WRAP truncates to the carrier width in two's complement, on every carrier.
+    var p2_63p1 = new BigInteger("9223372036854775809"); // 2^63 + 1
+    var p2_64m1 = new BigInteger("18446744073709551615"); // 2^64 - 1
+    var p2_64 = new BigInteger("18446744073709551616"); // 2^64
+    var p2_64p1 = new BigInteger("18446744073709551617"); // 2^64 + 1
+    var p2_1024 = BigInteger.ONE.shiftLeft(1024);
+    var n2_63p1 = new BigInteger("-9223372036854775809"); // -2^63 - 1
+    assertEquals(-9223372036854775807L, u64.execute(p2_63p1));
+    assertEquals(-1L, u64.execute(p2_64m1));
+    assertEquals(Long.MIN_VALUE, u64.execute(BigInteger.ONE.shiftLeft(63)));
+    assertThrows(NativeCellException.class, () -> i64.execute(p2_63p1));
+    assertThrows(NativeCellException.class, () -> u64.execute(p2_64));
+    assertThrows(NativeCellException.class, () -> u64.execute(p2_64p1));
+    var bigReject = assertThrows(NativeCellException.class, () -> u32.execute(p2_63p1));
+    assertEquals(
+        "f: parameter p expects u32 in [0, 4294967295], got BigInteger 9223372036854775809",
+        bigReject.getMessage());
+    assertEquals(-9223372036854775807L, i64wrap.execute(p2_63p1));
+    assertEquals(-9223372036854775807L, u64wrap.execute(p2_63p1));
+    assertEquals(1, i8wrap.execute(p2_63p1));
+    assertEquals(1, u8wrap.execute(p2_63p1));
+    assertEquals(1, i16wrap.execute(p2_63p1));
+    assertEquals(1, u16.execute(p2_63p1));
+    assertEquals(1, i32.execute(p2_63p1));
+    assertEquals(1, u32wrap.execute(p2_63p1));
+    assertEquals(1, i64wrap.execute(p2_64p1));
+    assertEquals(0L, i64wrap.execute(p2_1024));
+    assertEquals(9223372036854775807L, i64wrap.execute(n2_63p1));
+    assertEquals(-1, i8wrap.execute(n2_63p1));
+    assertEquals(255, u8wrap.execute(n2_63p1));
+    // Parity: a raw BigInteger and a ForeignNumber of the same magnitude coerce identically —
+    // either both return the same long, or both throw — across every carrier/policy and every
+    // magnitude on both sides of the long boundary. This is the gap that let the bug hide: every
+    // other big-integer test wraps its values in ForeignNumber, so interop answered true where a
+    // raw BigInteger answered false in production.
+    IntegerCoercion[] coercions = {
+      i8, u8, u16, i32, u32, i64, u64, u64wrap, i8wrap, u8wrap, i16wrap, u32wrap, i64wrap
+    };
+    BigInteger[] magnitudes = {
+      BigInteger.valueOf(3),
+      BigInteger.valueOf(-1),
+      BigInteger.valueOf(127),
+      BigInteger.valueOf(128),
+      BigInteger.valueOf(255),
+      BigInteger.valueOf(Long.MAX_VALUE),
+      BigInteger.valueOf(Long.MIN_VALUE),
+      BigInteger.ONE.shiftLeft(63),
+      p2_63p1,
+      p2_64m1,
+      p2_64,
+      p2_64p1,
+      p2_1024,
+      n2_63p1,
+      BigInteger.ONE.negate().shiftLeft(70)
+    };
+    for (var coercion : coercions) {
+      for (var magnitude : magnitudes) {
+        Long rawResult = null;
+        NativeCellException rawError = null;
+        try {
+          rawResult = coercion.execute(magnitude);
+        } catch (NativeCellException expected) {
+          rawError = expected;
+        }
+        Long fakeResult = null;
+        NativeCellException fakeError = null;
+        try {
+          fakeResult = coercion.execute(new ForeignNumber(magnitude));
+        } catch (NativeCellException expected) {
+          fakeError = expected;
+        }
+        assertEquals(
+            fakeError != null,
+            rawError != null,
+            "throw/return mismatch on "
+                + magnitude
+                + ": raw="
+                + (rawError != null ? "threw" : rawResult)
+                + " fake="
+                + (fakeError != null ? "threw" : fakeResult));
+        if (rawError == null) {
+          assertEquals(
+              fakeResult,
+              rawResult,
+              "value mismatch on " + magnitude + ": raw=" + rawResult + " fake=" + fakeResult);
+        }
+      }
+    }
+    // A monomorphic site that only ever passes a raw BigInteger never dispatches through the
+    // interop library, so it stays free of the InteropLibrary child node — the property
+    // Coercion documents: "a monomorphic call site that only ever passes Java boxed primitives
+    // never dispatches through it".
+    var mono = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.STRICT);
+    var beforeList = new ArrayList<Node>();
+    mono.getChildren().forEach(beforeList::add);
+    assertTrue(beforeList.isEmpty());
+    assertEquals(5L, mono.execute(BigInteger.valueOf(5)));
+    assertEquals(5L, mono.execute(BigInteger.valueOf(5)));
+    assertThrows(NativeCellException.class, () -> mono.execute(p2_63p1));
+    var afterList = new ArrayList<Node>();
+    mono.getChildren().forEach(afterList::add);
+    assertTrue(afterList.isEmpty());
+    // Mixed: a site that has inserted the interop library for a ForeignNumber still routes a
+    // raw BigInteger through big() (and the slow path still serves a ForeignNumber afterwards),
+    // so both receiver kinds coexist on one call site.
+    var mixed = new IntegerCoercion("f", "p", 64, false, CoercionPolicy.WRAP);
+    assertEquals(3L, mixed.execute(big("3"))); // ForeignNumber inserts the interop library
+    assertEquals(3L, mixed.execute(BigInteger.valueOf(3))); // then a raw BigInteger
+    assertEquals(-9223372036854775807L, mixed.execute(p2_63p1));
+    assertEquals(-9223372036854775807L, mixed.execute(big("9223372036854775809")));
+    var mixedAfter = new ArrayList<Node>();
+    mixed.getChildren().forEach(mixedAfter::add);
+    assertEquals(1, mixedAfter.size());
+  }
+
   @Test
   void booleanAndFloatingCoercions() {
     var flag = new BooleanCoercion("f", "flag");
