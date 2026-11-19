@@ -26,14 +26,14 @@ import org.graalvm.word.PointerBase;
 @CContext(ConstsDirectives.class)
 public final class Consts {
     private Consts() {}
-    public static final String ABI_FINGERPRINT = "2740ef0ce6ebbca7f4403d35ff1ff54eb7ca536a55922f4a55a720275d2cf620";
+    public static final String ABI_FINGERPRINT = "191a4a2bfde2610618a4e5696d60bca8626f9759d536c00fcb14df5646c1cf33";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("CONSTANTS_SEAM_ABI_2740ef0ce6ebbca7f4403d35ff1ff54eb7ca536a55922f4a55a720275d2cf620") static native int seamHeaderCheck();
+    @CConstant("CONSTANTS_SEAM_ABI_191a4a2bfde2610618a4e5696d60bca8626f9759d536c00fcb14df5646c1cf33") static native int seamHeaderCheck();
     /** const FLOOR: i64, from seam.h. */
     @CConstant("CONSTANTS_FLOOR") public static native long floor();
     /** const LIMIT: u64, from seam.h. */

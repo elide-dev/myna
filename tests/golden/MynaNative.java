@@ -26,14 +26,14 @@ import org.graalvm.word.PointerBase;
 @CContext(MynaNativeDirectives.class)
 public final class MynaNative {
     private MynaNative() {}
-    public static final String ABI_FINGERPRINT = "01ce64cce46830865939f0f5dbb6a251ce4b3ecfa2e7f7c8988d660dfa1b45e5";
+    public static final String ABI_FINGERPRINT = "c4bc9bbc703b5fcd5bf9e03067ee311fc364dc593ce14fdbcfe3f7cccd08938b";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("BUFFER_SEAM_ABI_01ce64cce46830865939f0f5dbb6a251ce4b3ecfa2e7f7c8988d660dfa1b45e5") static native int seamHeaderCheck();
+    @CConstant("BUFFER_SEAM_ABI_c4bc9bbc703b5fcd5bf9e03067ee311fc364dc593ce14fdbcfe3f7cccd08938b") static native int seamHeaderCheck();
     public interface inspect_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
