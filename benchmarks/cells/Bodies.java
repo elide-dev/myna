@@ -166,6 +166,8 @@ public abstract class Bodies extends NativeCell {
       case "glue-ffm-leaf" -> new Glue(name, new FfmCellsTruffle.leaf_Cell());
       case "glue-ffm-step" -> new Glue(name, new FfmCellsTruffle.step_Cell());
       case "typed-leaf" -> new TypedLeaf(name);
+      case "typed-leaf-literal" -> new ConstantLeaf(name, false);
+      case "typed-leaf-constant" -> new ConstantLeaf(name, true);
       case "typed-step" -> new TypedStep(name);
       case "typed-ffm-leaf" -> new TypedFfmLeaf(name);
       case "typed-ffm-step" -> new TypedFfmStep(name);
@@ -199,6 +201,9 @@ public abstract class Bodies extends NativeCell {
       case "glue-ffm-slab-mixed" -> new GlueSlab(name, new FfmCellsTruffle.slab_Cell(), false, true);
       case "interop-slab-native" -> new InteropSlab(name, CellsTruffle.slab());
       case "interop-slab-step-native" -> new InteropSlab(name, CellsTruffle.slabStep());
+      case "buffer-native" -> new BufferMessages(name, Arena.global().allocate(16, 8));
+      case "buffer-shared" -> new BufferMessages(name, Arena.ofShared().allocate(16, 8));
+      case "buffer-confined" -> new BufferMessages(name, Arena.ofConfined().allocate(16, 8));
       case "nfi-leaf" -> new Nfi(name, false);
       case "nfi-text" -> new Nfi(name, true);
       default -> throw new IllegalArgumentException(name);
@@ -413,6 +418,38 @@ public abstract class Bodies extends NativeCell {
     @Override
     long run(int count, long x, Object extra) {
       for (int i = 0; i < count; i++) x = cell.executeLong(new Object[] {x});
+      return x;
+    }
+  }
+
+  /**
+   * Typed glue adding a guest constant to each result: the literal {@code 0}, or {@code
+   * constants.Mode.zero} read through interop with constant member names, as guest code reads it.
+   * When the read folds, both compile to the typed leaf loop.
+   */
+  static final class ConstantLeaf extends Bodies {
+    @Node.Child private CellsTruffle.leaf_Cell cell = new CellsTruffle.leaf_Cell();
+    @Node.Child private InteropLibrary groups = InteropLibrary.getFactory().createDispatched(1);
+    @Node.Child private InteropLibrary values = InteropLibrary.getFactory().createDispatched(1);
+    @Node.Child private InteropLibrary numbers = InteropLibrary.getFactory().createDispatched(1);
+    private final Object constants = CellsTruffle.constants();
+    private final boolean read;
+
+    ConstantLeaf(String name, boolean read) {
+      super(name);
+      this.read = read;
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      try {
+        for (int i = 0; i < count; i++) {
+          long zero = read ? numbers.asLong(values.readMember(groups.readMember(constants, "Mode"), "zero")) : 0L;
+          x = cell.executeLong(new Object[] {x}) + zero;
+        }
+      } catch (InteropException e) {
+        throw failure(e);
+      }
       return x;
     }
   }
@@ -942,6 +979,37 @@ public abstract class Bodies extends NativeCell {
       try {
         for (int i = 0; i < count; i++)
           x = (Long) interop.execute(function, data, (long) SLAB_SIZE, aux, context, output, 3, -1, 7L, 11L, x);
+      } catch (InteropException e) {
+        throw failure(e);
+      }
+      return x;
+    }
+  }
+
+  /**
+   * NativeBytes' scalar buffer messages, the path a guest's own reads and writes take: each step
+   * writes the recurrence's value through {@code writeBufferLong} and reads it back through {@code
+   * readBufferLong}, over a segment of the global arena (no scope to check), of a shared arena and of
+   * an arena confined to the measuring thread.
+   */
+  static final class BufferMessages extends Bodies {
+    @Node.Child private InteropLibrary interop = InteropLibrary.getFactory().createDispatched(1);
+
+    // Not final: a guest value, which partial evaluation must not fold to a constant.
+    private Object buffer;
+
+    BufferMessages(String name, MemorySegment segment) {
+      super(name);
+      this.buffer = NativeBytes.of(segment, true);
+    }
+
+    @Override
+    long run(int count, long x, Object extra) {
+      try {
+        for (int i = 0; i < count; i++) {
+          interop.writeBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, (i & 1) * 8, x);
+          x = interop.readBufferLong(buffer, java.nio.ByteOrder.LITTLE_ENDIAN, (i & 1) * 8) * 1664525L + 1013904223L;
+        }
       } catch (InteropException e) {
         throw failure(e);
       }

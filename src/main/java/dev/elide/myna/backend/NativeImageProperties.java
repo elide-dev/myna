@@ -22,6 +22,21 @@ public final class NativeImageProperties implements Backend {
     boolean hasLiterals = module.functions().stream().anyMatch(f -> f.callback() != null);
     String result =
         "# Myna binding ABI 2: preserve symbolic metadata / runtime-address separation.\n";
+    boolean imports =
+        module.functions().stream().anyMatch(f -> f.direction() == Seam.Direction.IMPORT);
+    if (leaves.isEmpty() && imports)
+      // The import addresses are CGlobalData symbols, as the leaves' are.
+      return result
+          + "JavaArgs ="
+          + " --add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.c=ALL-UNNAMED\n"
+          + "Args = --initialize-at-build-time="
+          + type
+          + ","
+          + type
+          + "$MynaSymbols"
+          + (hasLiterals ? "," + type + "$Literals" : "")
+          + truffle(module, " ")
+          + "\n";
     if (leaves.isEmpty()) {
       if (!hasLiterals) return result + truffle(module, "Args = ");
       return result
@@ -51,7 +66,8 @@ public final class NativeImageProperties implements Backend {
   /**
    * Partial evaluation inlines only methods of build-time-initialized classes, so the cells (which
    * hold no addresses: the bindings they call keep theirs in run-time classes) initialize at build
-   * time, like every Truffle node class.
+   * time, like every Truffle node class. So do the enum name classes: their {@code TruffleString}s
+   * are image-heap constants holding only text.
    */
   private static String truffle(Module module, String prefix) {
     if (module.truffleConfig() == null) return "";
@@ -62,6 +78,9 @@ public final class NativeImageProperties implements Backend {
         + type
         + cells.stream()
             .map(f -> "," + type + "$" + f.name() + "_Cell")
+            .collect(Collectors.joining())
+        + module.enums().stream()
+            .map(e -> "," + type + "$" + e.name() + "Names")
             .collect(Collectors.joining())
         + (prefix.equals(" ") ? "" : "\n");
   }

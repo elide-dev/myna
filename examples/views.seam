@@ -1,0 +1,24 @@
+# Counted element views: a pointer field names the integer field of the same record that counts
+# its elements. The carrier, layout and C ABI do not change.
+module views target=x86_64-unknown-linux-gnu java_package=fixture.views java_class=Views
+struct Function size=16 align=8
+  field id type=u32 offset=0
+  field arity type=u16 offset=4
+  field entry type=u64 offset=8
+end
+struct Program size=48 align=8
+  field functions type=ptr<Function> offset=0 count=functionCount
+  field functionCount type=u64 offset=8
+  field text type=ptr<u16> offset=16 count=textLength
+  field textLength type=u32 offset=24
+  field version type=u32 offset=28
+  field roots type=ptr<ptr<Function>> offset=32 count=rootCount
+  field rootCount type=usize offset=40
+end
+# A program in static storage: two functions, three UTF-16 code units and two roots, an array of
+# pointers to the functions in reverse order.
+import program symbol=views_program return=ptr<Program> error=no_failure
+end
+# The empty program: every pointer null, every count zero.
+import empty symbol=views_empty return=ptr<Program> error=no_failure
+end

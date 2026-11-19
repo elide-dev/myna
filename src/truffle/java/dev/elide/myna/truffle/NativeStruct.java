@@ -175,4 +175,19 @@ public final class NativeStruct {
       throw failure;
     }
   }
+
+  /**
+   * Copies the struct to the guest's buffer for a create that failed, and returns {@code failure}
+   * for the caller to throw. The copy is best effort: if the buffer no longer takes it, that error
+   * is added to {@code failure} as suppressed, so the create's own status is never lost.
+   */
+  @TruffleBoundary
+  public NativeCellException copyToAfterFailure(Object guest, NativeCellException failure) {
+    try {
+      copyTo(guest);
+    } catch (RuntimeException copyFailure) {
+      failure.addSuppressed(copyFailure);
+    }
+    return failure;
+  }
 }

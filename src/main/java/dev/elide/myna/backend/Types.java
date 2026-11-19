@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.backend;
 
+import dev.elide.myna.model.Names;
 import dev.elide.myna.model.Seam.*;
+import dev.elide.myna.model.Seam.Module;
+import java.math.BigInteger;
 
 final class Types {
   private Types() {}
@@ -25,8 +28,18 @@ final class Types {
     };
   }
 
+  /** The C type, spelled with the group's typedef when the value belongs to an enum or flags. */
+  static String c(Module m, Type type, GroupRef group) {
+    return group == null ? c(type) : Names.cTypedef(m, group.name());
+  }
+
+  static String c(Module m, Parameter p) {
+    return p.group() == null ? c(p) : Names.cTypedef(m, p.group().name());
+  }
+
   static String c(Parameter p) {
-    if (p.type() instanceof Pointer ptr && p.access() == Access.READ)
+    if (p.type() instanceof Pointer ptr
+        && (p.access() == Access.READ || p.access() == Access.CSTRING))
       return c(ptr.pointee()) + " const *";
     return c(p.type());
   }
@@ -49,19 +62,44 @@ final class Types {
     return rust(type);
   }
 
+  /** The Rust type, spelled as the group's newtype when the value belongs to an enum or flags. */
+  static String rust(Type type, GroupRef group) {
+    return group == null ? rust(type) : group.name();
+  }
+
+  static String rust(Type type, GroupRef group, String q) {
+    return group == null ? rust(type, q) : q + group.name();
+  }
+
   static String rust(Parameter p, String q) {
+    if (p.group() != null) return q + p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee(), q);
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee(), q);
     return rust(p.type(), q);
   }
 
   static String rust(Parameter p) {
+    if (p.group() != null) return p.group().name();
     if (p.type() instanceof Pointer ptr)
-      return (p.access() == Access.READ ? "*const " : "*mut ") + rust(ptr.pointee());
+      return (p.access() == Access.READ || p.access() == Access.CSTRING ? "*const " : "*mut ")
+          + rust(ptr.pointee());
     return rust(p.type());
   }
 
-  /** Native Image word carriers; typed C pointers where the pointee has one. */
+  /**
+   * The Native Image carrier: a pointer to a declared struct or opaque type is that type's typed
+   * pointer interface, nested in the Native Image class; every other type is {@link #java(Type)}.
+   */
+  static String nativeImage(Type type) {
+    return type instanceof Pointer p && p.pointee() instanceof Named n ? n.name() : java(type);
+  }
+
+  /**
+   * Word carriers; typed C pointers where the pointee has one. A pointer to a pointer is a plain
+   * word ({@code CCharPointerPointer} for C strings), and so is a pointer to a declared type here:
+   * {@link #nativeImage(Type)} gives that one its interface.
+   */
   static String java(Type type) {
     if (type instanceof FunctionPointer f) return f.signature();
     if (type == Isolate.THREAD) return "IsolateThread";
@@ -90,6 +128,29 @@ final class Types {
       case F32 -> "float";
       case F64 -> "double";
     };
+  }
+
+  /**
+   * A status in its Java carrier compared against a declared {@code success=} value: unsigned
+   * results widen unsigned (a {@code u8} status of 200 is 200, not -56), in the carrier the literal
+   * then takes ({@code L} when the comparison is on longs).
+   */
+  static String statusMatches(Scalar type, boolean charUnsigned, String status, long value) {
+    String widened =
+        switch (type) {
+          case U8 -> "Byte.toUnsignedInt(" + status + ")";
+          case CHAR -> charUnsigned ? "Byte.toUnsignedInt(" + status + ")" : status;
+          case U16 -> "Short.toUnsignedInt(" + status + ")";
+          case U32 -> "Integer.toUnsignedLong(" + status + ")";
+          default -> status;
+        };
+    boolean longs =
+        type == Scalar.U32
+            || type == Scalar.I64
+            || type == Scalar.U64
+            || type == Scalar.USIZE
+            || type == Scalar.ISIZE;
+    return widened + " == " + value + (longs ? "L" : "");
   }
 
   static String ffmCarrier(Type type) {
@@ -133,6 +194,26 @@ final class Types {
     return switch (s) {
       case CHAR, I8, I16 -> "signext";
       default -> "zeroext";
+    };
+  }
+
+  /**
+   * A Java compile-time constant of an integer scalar in its same-width signed carrier ({@link
+   * #java(Type)}): hex of the raw bits when {@code hex} (unsigned consts, flag masks) or when a
+   * decimal would not fit the signed carrier, decimal otherwise. {@code byte} and {@code short}
+   * values are a cast of an {@code int} literal, which is still a constant expression usable as a
+   * {@code case} label.
+   */
+  static String javaLiteral(Scalar type, BigInteger value, boolean hex) {
+    int bits = type == Scalar.USIZE || type == Scalar.ISIZE ? 64 : type.bytes * 8;
+    BigInteger raw = value.signum() < 0 ? value.add(BigInteger.ONE.shiftLeft(bits)) : value;
+    // A narrow value is a cast of an int literal, which holds every u8/u16 value in decimal.
+    boolean fits = bits < 32 || value.bitLength() < bits;
+    String text = hex || !fits ? "0x" + raw.toString(16) : value.toString();
+    return switch (java(type)) {
+      case "long" -> text + "L";
+      case "byte", "short" -> "(" + java(type) + ") " + text;
+      default -> text;
     };
   }
 }

@@ -45,6 +45,7 @@ public final class FfmCellsMain {
         Arena confined = Arena.ofConfined(); Arena shared = Arena.ofShared()) {
       context.enter();
       try {
+        CellChecks.guestConstants(CellApiTruffle.constants(), true);
         MemorySegment global = Arena.global().allocate(4), globalOut = Arena.global().allocate(4);
         MemorySegment mine = confined.allocate(4), mineOut = confined.allocate(4), common = shared.allocate(4);
         global.fill((byte) 1);
@@ -55,12 +56,30 @@ public final class FfmCellsMain {
         allocates("checksum of a shared segment", new CellApiTruffle.checksum_Cell(), 4, NativeBytes.of(common, false));
         allocates("checksum of a copied heap array", new CellApiTruffle.checksum_Cell(), 4, new HeapBytes(new byte[] {1, 1, 1, 1}, false));
         allocates("strlen of a string", new CellApiTruffle.strlen_Cell(), 11, "hello world");
+        allocates("utf16Probe of aligned native bytes", new CellApiTruffle.utf16Probe_Cell(), 0, NativeBytes.of(global, false), 4L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a scoped segment", new CellApiTruffle.utf16Probe_Cell(), 0, NativeBytes.of(mine, false), 4L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a copied heap array", new CellApiTruffle.utf16Probe_Cell(), 0, new HeapBytes(new byte[4], false), 4L, 1, NativePointer.NULL, 0L);
+        allocates("utf16Probe of a string", new CellApiTruffle.utf16Probe_Cell(), 0, "hello world", 11L, 0, NativePointer.NULL, 0L);
         // Every pattern of two lent buffers: neither with a scope to check, either, both.
         allocates("transfer, no scope", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(global, false), NativeBytes.of(globalOut, true), NativePointer.NULL);
         allocates("transfer, output scoped", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(global, false), NativeBytes.of(mineOut, true), NativePointer.NULL);
         allocates("transfer, input scoped", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), NativeBytes.of(globalOut, true), NativePointer.NULL);
         allocates("transfer, both scoped", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), NativeBytes.of(mineOut, true), NativePointer.NULL);
         allocates("transfer, scoped and copied", new CellApiTruffle.transfer_Cell(), 4, NativeBytes.of(mine, false), new HeapBytes(new byte[4], true), NativePointer.NULL);
+        // A batch costs what its elements' lending does: heap arrays and strings copied onto the
+        // scratch stack, a confined segment lent in place under the leaf digest, and a shared one
+        // copied straight onto the stack through its segment, none of which allocates.
+        byte[] one = {1, 2, 3}, two = {4};
+        allocates("digest of three small heap arrays", new CellApiTruffle.digest_Cell(),
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, one, two, new byte[64]),
+            BufferArray.of(new HeapBytes(one, false), new HeapBytes(two, false), new HeapBytes(new byte[64], false)));
+        byte[] ones = {1, 1, 1, 1};
+        allocates("digest of global, confined and shared segments", new CellApiTruffle.digest_Cell(),
+            CellChecks.foldBatch(CellChecks.FNV_OFFSET, ones, ones, ones),
+            BufferArray.of(NativeBytes.of(global, false), NativeBytes.of(mine, false), NativeBytes.of(common, false)));
+        allocates("merge of a string batch and a nullable batch with a confined segment", new CellApiTruffle.merge_Cell(),
+            CellChecks.foldBatch(CellChecks.foldBatch(CellChecks.FNV_OFFSET, "abc".getBytes(), one), null, ones),
+            BufferArray.of("abc", new HeapBytes(one, false)), BufferArray.of(null, NativeBytes.of(mine, false)));
         // A mapped file's segment is checked like any other.
         java.nio.file.Path file = java.nio.file.Files.createTempFile("myna-cells", ".bin");
         try (var channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ, java.nio.file.StandardOpenOption.WRITE);
@@ -76,18 +95,42 @@ public final class FfmCellsMain {
       }
     }
   }
-  public static void main(String[] args) throws Exception {
+  /**
+   * A call borrow's align fact is the caller's contract: the FFM wrapper asserts it, and only where
+   * assertions are enabled (HotSpot with -ea). The cell copies instead; see CellChecks.alignment.
+   */
+  static void debugAlignment(String library) throws Throwable {
+    boolean enabled = false;
+    assert enabled = true;
+    var binding = new CellApiFFM.LibraryBinding(java.nio.file.Path.of(library), Arena.global());
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(64, 16);
+      if (binding.addressOfBorrow(base.asSlice(16, 16)) != base.address() + 16) throw new AssertionError("aligned borrow");
+      AssertionError fired = null;
+      long address = 0;
+      try { address = binding.addressOfBorrow(base.asSlice(1, 16)); } catch (AssertionError e) { fired = e; }
+      if (enabled != (fired != null)) throw new AssertionError("assertions " + enabled + " but the wrapper " + (fired == null ? "accepted" : "refused") + " a misaligned buffer");
+      if (fired != null && !"addressOfBorrow.bytes requires 16-byte alignment".equals(fired.getMessage())) throw fired;
+      if (fired == null && address != base.address() + 1) throw new AssertionError("misaligned borrow passes through " + address);
+      System.out.println("wrapper assertions " + (enabled ? "enabled: fired" : "disabled: silent"));
+    }
+  }
+  public static void main(String[] args) throws Throwable {
     System.load(args[0]);
     CellChecks.run(CellApiTruffle::function);
     CellChecks.scopes(CellApiTruffle::function);
+    CellChecks.batchScopes(CellApiTruffle::function);
+    debugAlignment(args[0]);
     // The static entry still takes raw addresses, whose validity is the caller's to keep.
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment bytes = arena.allocate(4);
       bytes.fill((byte) 5);
       if (CellApiTruffle.checksum_Cell.invoke(bytes.address(), 4) != 20) throw new AssertionError("invoke checksum");
     }
-    if (CellApiTruffle.CELLS.length != 33) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
+    if (CellApiTruffle.CELLS.length != 55) throw new AssertionError("cells: " + CellApiTruffle.CELLS.length);
     // Only an image compiles at run time here; on HotSpot the fixture runs without a compiler.
+    // The same guest code as the image runs compiled; here interpreted, for the result.
+    if (!ImageInfo.inImageRuntimeCode()) CellChecks.guestConstants(CellApiTruffle.constants(), false);
     if (ImageInfo.inImageRuntimeCode()) compiledAllocations();
     System.out.println("Truffle FFM cells passed");
   }

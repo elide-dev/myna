@@ -1,7 +1,10 @@
 // Copyright the Myna contributors.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package fixture.cells;
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.strings.TruffleString;
 import dev.elide.myna.truffle.*;
 import java.lang.foreign.Arena;
@@ -63,6 +66,117 @@ public final class CellChecks {
     // A string in another encoding, as Python passes one, and one made from a Java string.
     check(call(cells, "strlen", TruffleString.fromIntArrayUTF32Uncached(new int[] {'p', 0xe9, 0x20ac, 0x1f600})).equals(10L), "strlen of a UTF-32 guest string");
     check(call(cells, "strlen", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "strlen of a UTF-8 guest string");
+    // access=cstring: the same lending, and a string with an embedded NUL is refused.
+    check(call(cells, "titleLength", "h\u00e9llo").equals(6L), "titleLength of a host string");
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.UTF_8)).equals(6L), "titleLength of a guest string");
+    rejects(cells, "titleLength", "ab\0cd");
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("evil.so\0.txt", TruffleString.Encoding.UTF_8));
+    // Strings only: bytes, even NUL-terminated ones, are not a C string parameter's to take.
+    rejects(cells, "titleLength", new HeapBytes(new byte[] {'a', 0}, false));
+    rejects(cells, "titleLength", NativeVoid.INSTANCE);
+    // A NUL in a wide or a non-ASCII Latin-1 guest string is found in the bytes they encode to.
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("\u3053\0\u3093", TruffleString.Encoding.UTF_16));
+    rejects(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9\0llo", TruffleString.Encoding.ISO_8859_1));
+    check(call(cells, "titleLength", TruffleString.fromJavaStringUncached("h\u00e9llo", TruffleString.Encoding.ISO_8859_1)).equals(6L), "titleLength of a Latin-1 guest string");
+    // A nullable C string takes null, which reaches native code as the null pointer.
+    check(call(cells, "titleOrEmpty", NativeVoid.INSTANCE).equals(0L), "titleOrEmpty of null");
+    check(call(cells, "titleOrEmpty", "abc").equals(3L), "titleOrEmpty of a string");
+    rejects(cells, "titleOrEmpty", "a\0b");
+  }
+  /**
+   * TruffleData's UTF-16 session decode (#120): a UTF-16 heap input and a writable heap text_out,
+   * lent together (the second copy stacks on the first) at every length and odd output size.
+   */
+  static void utf16Inputs(Function<String, NativeFunction> cells) throws Exception {
+    for (int length : new int[] {0, 2, 6, 254, 256, 258, 4096, 20_000, 40_000}) {
+      for (int extra : new int[] {0, 1, 3}) {
+        for (boolean writable : new boolean[] {false, true}) {
+          byte[] data = new byte[length], out = new byte[length + extra];
+          check(call(cells, "utf16Probe", new HeapBytes(data, writable), (long) length, 1, new HeapBytes(out, true), (long) out.length).equals(0),
+              "utf16Probe: input of " + length + " bytes, output of " + out.length);
+        }
+      }
+    }
+  }
+  /**
+   * TruffleData's JSON cells, as its json/cells tests call them (#120): a session decode with a
+   * heap, native or guest-string input and an absent or present text_out, a flags word per input
+   * encoding, and decode_adopted's held input with padding. The natives refuse a misaligned
+   * text_out or UTF-16 input, a text_out without WANT_TEXT, and a misaligned result.
+   */
+  static void truffleData(Function<String, NativeFunction> cells) throws Exception {
+    final long WANT_TEXT = 1, UTF16 = 2;
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result = arena.allocate(88, 8);
+      Object session = call(cells, "tdSessionCreate");
+      for (int length : new int[] {2, 6, 254, 258, 4096, 20_000}) {
+        byte[] heap = new byte[length];
+        MemorySegment segment = arena.allocate(length + 8, 16);
+        for (Object data : new Object[] {new HeapBytes(heap, false), new HeapBytes(heap, true), NativeBytes.of(segment.asSlice(0, length), false)}) {
+          for (int extra : new int[] {0, 1, 2, 5}) {
+            // UTF-16 input with a text_out of any size: both are 2-byte aligned wherever lent.
+            Object out = new HeapBytes(new byte[length + extra], true);
+            check(call(cells, "tdSessionDecode", session, data, UTF16 | WANT_TEXT, out, NativeBytes.of(result, true)).equals(0),
+                "tdSessionDecode: " + data + " with text of " + (length + extra));
+          }
+          check(call(cells, "tdSessionDecode", session, data, UTF16, null, NativeBytes.of(result, true)).equals(0), "tdSessionDecode without text_out: " + data);
+          // A present empty text_out without WANT_TEXT is the argument status, as in api.cc.
+          check(call(cells, "tdSessionDecode", session, data, UTF16, new HeapBytes(new byte[0], true), NativeBytes.of(result, true)).equals(3), "empty text_out without WANT_TEXT");
+        }
+        // decode_adopted: held input, capacity = length + padding.
+        byte[] padded = new byte[length + 64];
+        Object owner = call(cells, "tdDecodeAdopted", new HeapBytes(padded, false), (long) length, 1L << 20, NativeBytes.of(result, true));
+        check(owner instanceof NativeResource, "decode_adopted of " + length + " bytes: " + owner);
+        ((NativeResource) owner).close();
+      }
+      // A guest string is lent as the UTF-8 of its text, never as UTF-16 units.
+      check(call(cells, "tdSessionDecode", session, guest("ab"), 0, null, NativeBytes.of(result, true)).equals(0), "guest string, UTF-8");
+      check(call(cells, "tdSessionDecode", session, guest("abc"), UTF16, null, NativeBytes.of(result, true)).equals(3), "a guest string is not UTF-16 input (odd UTF-8 length)");
+      ((NativeResource) session).close();
+    }
+  }
+
+  /** Native buffers at odd offsets reach the same decode: the align facts make the cell copy them. */
+  static void utf16NativeInputs(Function<String, NativeFunction> cells) throws Exception {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 16);
+      for (int offset = 0; offset < 4; offset++) {
+        for (int outOffset = 0; outOffset < 4; outOffset++) {
+          NativeBytes data = NativeBytes.of(base.asSlice(offset, 64), false);
+          NativeBytes out = NativeBytes.of(base.asSlice(128 + outOffset, 64), true);
+          check(call(cells, "utf16Probe", data, 64L, 1, out, 64L).equals(0), "utf16Probe: native input at offset " + offset + ", output at " + outOffset);
+        }
+      }
+    }
+  }
+  /** A borrow derives its byte count; the other cells take it as an argument. */
+  static Object addressOf(Function<String, NativeFunction> cells, String name, Object buffer, long length) throws Exception {
+    return name.equals("addressOfBorrow") ? call(cells, name, buffer) : call(cells, name, buffer, length);
+  }
+  /** The address a call received: every lent copy is 16-byte aligned and align facts are honored. */
+  static void alignment(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    byte[][] arrays = {new byte[1], new byte[3], new byte[255], new byte[4097], large, new byte[40_000]};
+    for (byte[] array : arrays) {
+      for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+        long want = name.equals("addressOfWide") ? 64 : 16;
+        long at = (Long) addressOf(cells, name, new HeapBytes(array, false), array.length);
+        check(at % want == 0, name + " of " + array.length + " heap bytes at " + Long.toHexString(at));
+      }
+      long text = (Long) call(cells, "addressOf", "x".repeat(Math.min(array.length, 1000)), 1L);
+      check(text % 16 == 0, "addressOf a string at " + Long.toHexString(text));
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment base = arena.allocate(256, 64);
+      for (int offset : new int[] {0, 1, 8, 16, 33}) {
+        NativeBytes slice = NativeBytes.of(base.asSlice(offset, 32), false);
+        for (String name : new String[] {"addressOf", "addressOfWide", "addressOfBorrow"}) {
+          long want = name.equals("addressOfWide") ? 64 : 16;
+          long at = (Long) addressOf(cells, name, slice, 32);
+          check(at % want == 0, name + " of native memory at offset " + offset + ": " + Long.toHexString(at));
+          check(((base.address() + offset) % want == 0) == (at == slice.address()), name + " lends aligned memory in place and copies the rest, offset " + offset);
+        }
+      }
+    }
   }
   /**
    * What only FFM cells do: a buffer lent from a caller's segment reaches the downcall as that
@@ -157,6 +271,296 @@ public final class CellChecks {
     check(Long.valueOf(16).equals(result.get()), "hold read its buffer: " + result.get());
     shared.close();
     rejects(cells, "hold", NativeBytes.of(data, false), NativePointer.of(gate.address()));
+    heldBorrowRefusesClosedSegment(cells);
+    heldBorrowRefusesForeignThreadConfinedSegment(cells);
+  }
+  /**
+   * A misaligned writable buffer is lent as a copy and written back after the call. Guest code that
+   * closes the buffer's arena meanwhile gets a NativeCellException at write-back and nothing is
+   * written: the write-back is a scope-checked segment copy in every runtime, never the raw word
+   * stores a Native Image compiles buffer messages to. The buffer views memory that stays allocated
+   * under an arena of its own, so the check can see that nothing reached it.
+   *
+   * <p>A confined arena can be closed only by its owner, here between the coercion's execute and
+   * release on this thread, where a callback would close it. A shared arena is closed from this
+   * thread while another one is inside holdFill. Prints which arenas were checked: an image without
+   * shared arena support says so, and the integration test records it.
+   */
+  /**
+   * A constructor whose writable buffer cannot be written back after the call returned a resource:
+   * the cell destroys that resource, since the guest never receives its owner, and reports the
+   * write-back failure. A shared arena closed while the call runs makes the write-back fail, as in
+   * copyBackAfterClose; without shared arenas only the successful path is checked.
+   */
+  static void constructorWriteBack(Function<String, NativeFunction> cells) throws Exception {
+    MemorySegment gate = Arena.global().allocate(8, 4);
+    try (Arena open = Arena.ofConfined()) {
+      MemorySegment base = open.allocate(32, 16);
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      Object filled = call(cells, "fillText", NativeBytes.of(base.asSlice(3, 8), true), NativePointer.of(gate.address()));
+      check(filled instanceof NativeResource r && r.type().equals("Parsed"), "fillText owner");
+      check(call(cells, "parsedValue", filled).equals(8L), "fillText value");
+      for (int i = 0; i < 32; i++) check(base.get(ValueLayout.JAVA_BYTE, i) == (i >= 3 && i < 11 ? 0x5a : 0), "fillText wrote back byte " + i);
+      call(cells, "parsedRelease", filled);
+    }
+    check(call(cells, "counterLive").equals(0L), "fillText released");
+    Arena arena;
+    try {
+      arena = Arena.ofShared();
+    } catch (UnsupportedOperationException | Error unsupported) {
+      return;
+    }
+    MemorySegment backing = Arena.global().allocate(64, 64);
+    NativeBytes slice = NativeBytes.of(backing.reinterpret(64, arena, null).asSlice(3, 8), true);
+    gate.set(ValueLayout.JAVA_LONG, 0, 0L);
+    var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+    Thread caller = new Thread(() -> {
+      try { result.set(call(cells, "fillText", slice, NativePointer.of(gate.address()))); } catch (Throwable failure) { result.set(failure); }
+    });
+    caller.start();
+    while (gate.get(ValueLayout.JAVA_INT, 0) == 0 && caller.isAlive()) Thread.sleep(1);
+    check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "fillText never reached native code: " + result.get());
+    arena.close();
+    gate.set(ValueLayout.JAVA_INT, 4, 1);
+    caller.join();
+    check(result.get() instanceof NativeCellException failure && failure.getMessage().contains("closed before write-back"),
+        "fillText wrote back into a closed shared arena: " + result.get());
+    // The resource the call made was destroyed rather than lost with its owner.
+    check(call(cells, "counterLive").equals(0L), "fillText leaked its resource after a failed write-back");
+    System.out.println("constructor write-back failure destroyed its resource");
+  }
+
+  static void copyBackAfterClose(Function<String, NativeFunction> cells) throws Exception {
+    MemorySegment backing = Arena.global().allocate(64, 64);
+    for (Object coercion : new Object[] {
+        new AlignedBytesCoercion("f", "bytes", false, true, true, false, 8),
+        new OverAlignedBytesCoercion("f", "bytes", false, true, true, false, 64)}) {
+      backing.fill((byte) 0);
+      Arena guest = Arena.ofConfined();
+      NativeBytes slice = NativeBytes.of(backing.reinterpret(64, guest, null).asSlice(3, 8), true);
+      Borrow lent = coercion instanceof AlignedBytesCoercion a ? a.execute(slice) : ((OverAlignedBytesCoercion) coercion).execute(slice);
+      check(lent.address() != slice.address(), "a misaligned slice is copied");
+      MemorySegment.ofAddress(lent.address()).reinterpret(8).fill((byte) 0x5a);
+      guest.close();
+      try {
+        lent.release();
+        throw new AssertionError("write-back reached a closed confined arena");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("closed before write-back"), expected.getMessage());
+      }
+      for (int i = 0; i < 64; i++) check(backing.get(ValueLayout.JAVA_BYTE, i) == 0, "write-back wrote byte " + i + " of a closed arena");
+    }
+    String shared;
+    Arena arena;
+    try {
+      arena = Arena.ofShared();
+    } catch (UnsupportedOperationException | Error unsupported) {
+      arena = null;
+    }
+    if (arena == null) {
+      shared = "shared arenas unsupported";
+    } else {
+      backing.fill((byte) 0);
+      NativeBytes slice = NativeBytes.of(backing.reinterpret(64, arena, null).asSlice(3, 8), true);
+      MemorySegment gate = Arena.global().allocate(8, 4);
+      var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread caller = new Thread(() -> {
+        try { result.set(call(cells, "holdFill", slice, NativePointer.of(gate.address()))); } catch (Throwable failure) { result.set(failure); }
+      });
+      caller.start();
+      while (gate.get(ValueLayout.JAVA_INT, 0) == 0 && caller.isAlive()) Thread.sleep(1);
+      check(gate.get(ValueLayout.JAVA_INT, 0) == 1, "holdFill never reached native code: " + result.get());
+      // Native code holds the copy, not the guest's segment, so nothing keeps the arena open.
+      arena.close();
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      caller.join();
+      check(result.get() instanceof NativeCellException failure && failure.getMessage().contains("closed before write-back"),
+          "holdFill wrote back into a closed shared arena: " + result.get());
+      for (int i = 0; i < 64; i++) check(backing.get(ValueLayout.JAVA_BYTE, i) == 0, "write-back wrote byte " + i + " of a closed shared arena");
+      shared = "shared";
+    }
+    // With the arena open the same call writes its result back.
+    try (Arena open = Arena.ofConfined()) {
+      MemorySegment base = open.allocate(32, 16);
+      MemorySegment gate = Arena.global().allocate(8, 4);
+      gate.set(ValueLayout.JAVA_INT, 4, 1);
+      check(call(cells, "holdFill", NativeBytes.of(base.asSlice(3, 8), true), NativePointer.of(gate.address())).equals(8L), "holdFill");
+      for (int i = 0; i < 32; i++) check(base.get(ValueLayout.JAVA_BYTE, i) == (i >= 3 && i < 11 ? 0x5a : 0), "holdFill wrote back byte " + i);
+    }
+    System.out.println("copy-back after close refused: confined, " + shared);
+  }
+  // The fixture's batch digest (tests/truffle/native.c): the count, then each element's length and
+  // bytes, or NULL_ELEMENT for an absent one; the empty batch folds in ABSENT.
+  static final long FNV_OFFSET = 0xcbf29ce484222325L;
+  static long mix(long hash, long value) { return (hash ^ value) * 0x100000001b3L; }
+  static long foldBatch(long hash, byte[]... buffers) {
+    if (buffers.length == 0) return mix(hash, 1L << 32);
+    hash = mix(hash, buffers.length);
+    for (byte[] buffer : buffers) {
+      if (buffer == null) { hash = mix(hash, -2L); continue; }
+      hash = mix(hash, buffer.length);
+      for (byte b : buffer) hash = mix(hash, b & 0xff);
+    }
+    return hash;
+  }
+  /** Where the scratch stack's top is: a probe borrow lands there, and is released at once. */
+  static long scratchTop() {
+    Borrow probe = Borrow.ofString("probe", true);
+    long at = probe.address();
+    probe.release();
+    return at;
+  }
+  /**
+   * Batches (#132): a guest array of buffers or strings, each element lent as a single buffer is,
+   * and null or an empty array for the empty batch. Every path leaves the scratch stack balanced.
+   */
+  static void batches(Function<String, NativeFunction> cells, byte[] large) throws Exception {
+    byte[] a = {1, 2, 3}, none = {}, b = {(byte) 255}, text = "h\u00e9".getBytes(StandardCharsets.UTF_8);
+    // Many elements spill the arrays into an arena, and their copies past the scratch block too;
+    // the block then grows to that high-water mark on its next use, so the top is measured after.
+    Object[] many = new Object[1100];
+    byte[][] manyBytes = new byte[many.length][];
+    for (int i = 0; i < many.length; i++) {
+      manyBytes[i] = new byte[] {(byte) i, (byte) (i >> 8)};
+      many[i] = new HeapBytes(manyBytes[i], false);
+    }
+    long previous = -1, top = scratchTop();
+    for (int round = 0; round < 8 && top != previous; round++) {
+      check(call(cells, "digest", BufferArray.of(many)).equals(foldBatch(FNV_OFFSET, manyBytes)), "digest of 1100 elements");
+      previous = top;
+      top = scratchTop();
+    }
+    check(previous == top, "scratch stack balanced after 1100 elements");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment native1 = arena.allocateFrom(ValueLayout.JAVA_BYTE, b);
+      // Three buffers of different sizes, one empty, plus a string: the native side folds exactly
+      // those bytes.
+      check(call(cells, "digest", BufferArray.of(new HeapBytes(a, false), new HeapBytes(none, false), NativeBytes.of(native1, false), "h\u00e9"))
+          .equals(foldBatch(FNV_OFFSET, a, none, b, text)), "digest of a batch");
+      check(call(cells, "digest", BufferArray.of(NativeBytes.of(Arena.global().allocate(0), false)))
+          .equals(foldBatch(FNV_OFFSET, none)), "digest of an empty native element");
+      // The empty batch, as null, an interop null or an empty array, passes null arrays.
+      long empty = foldBatch(FNV_OFFSET);
+      check(cells.apply("digest").call((Object) null).equals(empty), "digest of host null");
+      check(call(cells, "digest", NativeVoid.INSTANCE).equals(empty), "digest of interop null");
+      check(call(cells, "digest", BufferArray.of()).equals(empty), "digest of an empty array");
+      // A large element is pinned in a Native Image.
+      check(call(cells, "digest", BufferArray.of(new HeapBytes(large, false), new HeapBytes(a, false)))
+          .equals(foldBatch(FNV_OFFSET, large, a)), "digest with a large element");
+      // Two batches; the second's elements may be absent, and its lengths are signed 64-bit.
+      check(call(cells, "merge", BufferArray.of(new HeapBytes(a, false), "h\u00e9"), BufferArray.of(NativeBytes.of(native1, false), null, new HeapBytes(none, false)))
+          .equals(foldBatch(foldBatch(FNV_OFFSET, a, text), b, null, none)), "merge of two batches");
+      check(call(cells, "merge", null, BufferArray.of()).equals(foldBatch(foldBatch(FNV_OFFSET))), "merge of two empty batches");
+      check(scratchTop() == top, "scratch stack balanced after batches");
+      // An absent element where none may be, a value that is no buffer, or a closed segment fails
+      // the call; the elements lent before it are released.
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), null));
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), "ok", 42));
+      rejects(cells, "digest", BufferArray.of(new HeapBytes(large, false), 42));
+      rejects(cells, "digest", new HeapBytes(a, false));
+      check(scratchTop() == top, "scratch stack balanced after refused batches");
+    }
+    System.out.println("batches passed");
+  }
+  /**
+   * FFM cells copy a batch element of scoped native memory through its segment, since no downcall
+   * holds its scope: a live confined segment is read, a closed one is refused, and the stack stays
+   * balanced. (Native Image cells lend native memory in place, as for a single buffer.)
+   */
+  public static void batchScopes(Function<String, NativeFunction> cells) throws Exception {
+    long top = scratchTop();
+    byte[] a = {1, 2, 3};
+    Arena closing = Arena.ofConfined();
+    MemorySegment live = closing.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 7, (byte) 8);
+    check(call(cells, "digest", BufferArray.of(NativeBytes.of(live, false))).equals(foldBatch(FNV_OFFSET, new byte[] {7, 8})), "digest of a confined element");
+    closing.close();
+    rejects(cells, "digest", BufferArray.of(new HeapBytes(a, false), NativeBytes.of(live, false)));
+    check(scratchTop() == top, "scratch stack balanced after a closed element");
+    // digest is a leaf, so a confined element is lent in place; a host proxy array whose get(1)
+    // closes element 0's arena fails the call before native code runs, as a recheck right before
+    // the downcall finds the arena closed.
+    try (org.graalvm.polyglot.Context context = org.graalvm.polyglot.Context.newBuilder()
+        .option("engine.WarnInterpreterOnly", "false").build()) {
+      var digest = context.asValue(cells.apply("digest"));
+      Arena racing = Arena.ofConfined();
+      NativeBytes first = NativeBytes.of(racing.allocateFrom(ValueLayout.JAVA_BYTE, (byte) 1), false);
+      var closingArray = new org.graalvm.polyglot.proxy.ProxyArray() {
+        public Object get(long index) {
+          if (index == 0) return first;
+          racing.close();
+          return new HeapBytes(a, false);
+        }
+        public void set(long index, org.graalvm.polyglot.Value value) { throw new UnsupportedOperationException(); }
+        public long getSize() { return 2; }
+      };
+      try {
+        digest.execute(closingArray);
+        throw new AssertionError("a batch element closed during coercion reached native code");
+      } catch (org.graalvm.polyglot.PolyglotException expected) {
+        check(expected.getMessage().contains("was closed before the call"), "recheck message: " + expected.getMessage());
+      }
+    }
+    check(scratchTop() == top, "scratch stack balanced after a recheck failure");
+    System.out.println("batch scopes passed");
+  }
+  /** The refusal a cell raises for {@code args}, which it must refuse. */
+  static NativeCellException refusal(Function<String, NativeFunction> cells, String name, Object... args) throws Exception {
+    try { call(cells, name, args); } catch (NativeCellException expected) { return expected; }
+    throw new AssertionError(name + " accepted " + java.util.Arrays.toString(args));
+  }
+  /**
+   * A borrow held by the resource a create makes passes its segment to the create call too, so the
+   * linker refuses a closed one before native code runs, as it refuses a call borrow's (#120):
+   * the same error, nothing adopted, and the next create still works.
+   */
+  static void heldBorrowRefusesClosedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena results = Arena.ofConfined()) {
+      Object out = NativeBytes.of(results.allocate(24), true);
+      Arena arena = Arena.ofShared();
+      MemorySegment input = arena.allocate(8);
+      input.fill((byte) 1);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      Object owner = call(cells, "adopt", bytes, null, out);
+      check(call(cells, "adoptedSum", owner).equals(8L), "adopted a live shared segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+      arena.close();
+      NativeCellException held = refusal(cells, "adopt", bytes, null, out);
+      NativeCellException borrowed = refusal(cells, "checksum", bytes);
+      check(held.getMessage().equals(borrowed.getMessage()), "held: " + held.getMessage() + ", call: " + borrowed.getMessage());
+      check(call(cells, "counterLive").equals(live), "a closed segment was adopted");
+      // A call borrow of the same create is refused the same way.
+      refusal(cells, "adopt", new HeapBytes(new byte[] {1}, false), bytes, out);
+      check(call(cells, "counterLive").equals(live), "a closed key was read");
+      Object after = call(cells, "adopt", new HeapBytes(new byte[] {2}, false), null, out);
+      check(call(cells, "adoptedSum", after).equals(2L), "adopt after a refused create");
+      check(call(cells, "adoptedRelease", after) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
+  }
+  /** A held borrow of a segment confined to another thread is refused by the create call. */
+  static void heldBorrowRefusesForeignThreadConfinedSegment(Function<String, NativeFunction> cells) throws Exception {
+    long live = (Long) call(cells, "counterLive");
+    try (Arena confined = Arena.ofConfined()) {
+      MemorySegment input = confined.allocate(8);
+      input.fill((byte) 3);
+      NativeBytes bytes = NativeBytes.of(input, false);
+      var outcome = new java.util.concurrent.atomic.AtomicReference<Object>();
+      Thread other = new Thread(() -> {
+        try (Arena results = Arena.ofConfined()) {
+          outcome.set(call(cells, "adopt", bytes, null, NativeBytes.of(results.allocate(24), true)));
+        } catch (Throwable failure) { outcome.set(failure); }
+      });
+      other.start();
+      other.join();
+      check(outcome.get() instanceof NativeCellException, "a segment confined to another thread was adopted: " + outcome.get());
+      check(call(cells, "counterLive").equals(live), "another thread's segment reached native code");
+      // The owner thread still lends it, and the resource keeps it until its release.
+      Object owner = call(cells, "adopt", bytes, null, NativeBytes.of(confined.allocate(24), true));
+      check(call(cells, "adoptedSum", owner).equals(24L), "the owner thread adopts its segment");
+      check(call(cells, "adoptedRelease", owner) == NativeVoid.INSTANCE, "released");
+    }
+    check(call(cells, "counterLive").equals(live), "every adoption released");
   }
   /**
    * Two borrows with lengths of their own beside a pointer that passes through: the guest gives
@@ -356,6 +760,8 @@ public final class CellChecks {
       }
     }
     check(cells.apply("rawLength").call((Object) null).equals(0L), "nullable host null");
+    batches(cells, new byte[600]);
+    copyBackAfterClose(cells);
     check(call(cells, "add", 40, 2).equals(42), "add");
     check(call(cells, "add", 40L, 2.0).equals(42), "add from long and double");
     rejects(cells, "add", 1);
@@ -438,6 +844,10 @@ public final class CellChecks {
       check(call(cells, "sumBytes", NativeBytes.of(raw, false), 4L, NativePointer.of(bias.address())).equals(120L), "sumBytes native with bias");
       check(call(cells, "sumBytes", NativePointer.of(raw.address()), 2L, NativePointer.NULL).equals(10L), "sumBytes bare pointer");
     }
+    utf16Inputs(cells);
+    truffleData(cells);
+    utf16NativeInputs(cells);
+    alignment(cells, large);
     transfers(cells, large);
     decodes(cells);
     guestStrings(cells);
@@ -513,6 +923,58 @@ public final class CellChecks {
       check(call(cells, "counterDestroy", parent) == NativeVoid.INSTANCE, "parent destroyed after its stepper");
       rejects(cells, "stepperCreate", parent, NativeBytes.of(step, false));
       check(call(cells, "counterLive").equals(0L), "both destroyed");
+    }
+    // Two constructors of one resource, each with the owner semantics of a single create, each
+    // lending its guest buffer for the call only: the resource keeps what it computed.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment source = arena.allocate(3);
+      source.set(ValueLayout.JAVA_BYTE, 0, (byte) 1);
+      source.set(ValueLayout.JAVA_BYTE, 1, (byte) 2);
+      source.set(ValueLayout.JAVA_BYTE, 2, (byte) 3);
+      Object parsed = call(cells, "parseText", NativeBytes.of(source, false));
+      check(parsed instanceof NativeResource r && r.type().equals("Parsed"), "parseText owner");
+      source.set(ValueLayout.JAVA_BYTE, 0, (byte) 100);
+      check(call(cells, "parsedValue", parsed).equals(6L), "parsed keeps its own value");
+      byte[] request = {4, 5};
+      Object analyzed = call(cells, "analyzeText", new HeapBytes(request, false), 3);
+      check(analyzed instanceof NativeResource r && r.type().equals("Parsed"), "analyzeText owner");
+      check(call(cells, "parsedValue", analyzed).equals(27L), "analyzed value");
+      Object fromText = call(cells, "analyzeText", "ab", 1);
+      check(call(cells, "parsedValue", fromText).equals(195L), "analyzed text");
+      check(call(cells, "counterLive").equals(3L), "three parsed live");
+      // An absent source reaches native code as null, which parseText reports as failure.
+      check(call(cells, "parseText", NativeVoid.INSTANCE) == NativeVoid.INSTANCE, "absent source is null");
+      check(call(cells, "analyzeText", new HeapBytes(request, false), 0) == NativeVoid.INSTANCE, "failed analyze is null");
+      rejects(cells, "analyzeText", NativeVoid.INSTANCE, 1);
+      check(call(cells, "counterLive").equals(3L), "failures leave nothing live");
+      for (Object owner : new Object[] {parsed, analyzed, fromText})
+        check(call(cells, "parsedRelease", owner) == NativeVoid.INSTANCE, "parsed released");
+      check(call(cells, "parsedRelease", parsed) == NativeVoid.INSTANCE, "second release is a no-op");
+      rejects(cells, "parsedValue", parsed);
+      rejects(cells, "parsedRelease", NativeVoid.INSTANCE);
+      check(call(cells, "counterLive").equals(0L), "parsed destroyed once each");
+    }
+    constructorWriteBack(cells);
+    // Status plus out-pointer: the guest lends an 8-byte buffer for the slot and receives a copy;
+    // a success status adopts the handle, any other is a guest error naming it, after the error
+    // buffer received its message.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment slot = arena.allocate(8);
+      byte[] message = new byte[32];
+      Object window = call(cells, "windowOpen", 9, NativeBytes.of(slot, true), new HeapBytes(message, true));
+      check(window instanceof NativeResource r && r.type().equals("Window"), "windowOpen owner");
+      check(call(cells, "windowWidth", window).equals(9L), "window width");
+      check(slot.get(ValueLayout.JAVA_LONG, 0) != 0, "the guest's slot received the handle");
+      try {
+        call(cells, "windowOpen", -1, NativeBytes.of(slot, true), new HeapBytes(message, true));
+        throw new AssertionError("a failed windowOpen made an owner");
+      } catch (NativeCellException expected) {
+        check(expected.getMessage().contains("status 3"), expected.getMessage());
+      }
+      check(new String(message, 0, 14, StandardCharsets.US_ASCII).equals("negative width"), "window message");
+      check(call(cells, "counterLive").equals(1L), "one window live");
+      check(call(cells, "windowClose", window) == NativeVoid.INSTANCE, "window closed");
+      check(call(cells, "counterLive").equals(0L), "window destroyed");
     }
     // Creates that report a status and write the resource through a parameter. The guest passes
     // a buffer for the struct, as a C caller would, and reads its fields from it afterwards; the
@@ -598,5 +1060,89 @@ public final class CellChecks {
     INTEROP.invokeMember(other, "close");
     check(call(cells, "counterLive").equals(0L), "closed through the member");
     check(new String("ok".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8).equals("ok"), "sanity");
+  }
+  /**
+   * Guest code over the seam's constants: each iteration reads {@code constants.Status.ok} through
+   * interop, as a guest language does with constant member names, compares it with the result of
+   * {@code add} and names that result through {@code StatusNames}. Compiled, the reads fold to the
+   * number and the name to a constant, so the loop allocates nothing and never deoptimizes.
+   */
+  static final class GuestConstants extends NativeCell {
+    static final int CALLS = 4096;
+    private final Object constants;
+    @Node.Child private InteropLibrary groups = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary values = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary numbers = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary octets = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private InteropLibrary bytes = InteropLibrary.getFactory().createDispatched(2);
+    @Node.Child private CellApiTruffle.add_Cell add = new CellApiTruffle.add_Cell();
+    @Node.Child private CellApiTruffle.lowByte_Cell lowByte = new CellApiTruffle.lowByte_Cell();
+    GuestConstants(Object constants) { super("guest:constants", 2); this.constants = constants; }
+    @Override public Object execute(Object[] arguments) {
+      long matches = 0, named = 0, folded = 0, unsigned = 0;
+      try {
+        for (int i = 0; i < CALLS; i++) {
+          Object status = groups.readMember(constants, "Status");
+          int ok = numbers.asInt(values.readMember(status, "ok"));
+          int result = add.executeInt(arguments);
+          if (result == ok) matches++;
+          if (CellApiTruffle.StatusNames.name(result) != null) named++;
+          // A read that folded is a compilation constant; the boundary lookup's result is not.
+          if (CompilerDirectives.isCompilationConstant(ok)) folded++;
+          // u8 255 from a cell and from constants() are the same int.
+          int top = bytes.asInt(octets.readMember(groups.readMember(constants, "Octet"), "top"));
+          if (lowByte.executeInt(new Object[] {0x1ffL}) == top) unsigned++;
+        }
+      } catch (InteropException e) {
+        throw CompilerDirectives.shouldNotReachHere(e);
+      }
+      return new Object[] {matches, named, CompilerDirectives.inCompiledCode(), folded, unsigned};
+    }
+  }
+  /**
+   * The guest constants loop over {@code add(2, -2)}. With {@code compiled}, it must reach compiled
+   * code, stay there for the rest of the run (no deoptimization), and allocate nothing beyond the
+   * host call's own result array. Without, it runs interpreted (HotSpot with no compiler) for the
+   * functional result only.
+   */
+  public static void guestConstants(Object constants, boolean compiled) throws Exception {
+    // Functional checks first, through the uncached library a host or guest without caches uses.
+    Object status = INTEROP.readMember(constants, "Status");
+    check(INTEROP.readMember(status, "ok").equals(0), "constants.Status.ok");
+    check(INTEROP.readMember(status, "five").equals(5), "constants.Status.five");
+    check(INTEROP.readMember(constants, "LIMIT").equals(-2L), "u64 const is its raw long bits");
+    check(INTEROP.readMember(INTEROP.readMember(constants, "Mode"), "high").equals(128), "u8 bit 7 is the int 128");
+    Object top = INTEROP.readMember(INTEROP.readMember(constants, "Octet"), "top");
+    check(top.equals(255), "u8 255 is the int 255");
+    // An unsigned result with its high bit set equals its constant, as a guest compares them.
+    check(CellApiTruffle.lowByte().call(0x1ffL).equals(top), "lowByte result equals constants.Octet.top");
+    check(CellApiTruffle.OctetNames.name(255).toJavaStringUncached().equals("top"), "OctetNames.name(int)");
+    check(CellApiTruffle.OctetNames.name((byte) -1).toJavaStringUncached().equals("top"), "OctetNames.name(byte)");
+    check(CellApiTruffle.StatusNames.name(5).toJavaStringUncached().equals("five"), "StatusNames.name(5)");
+    check(CellApiTruffle.StatusNames.name(1) == null, "an unlisted value has no name");
+    NativeFunction loop = new GuestConstants(constants).function();
+    var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+    long thread = Thread.currentThread().threadId();
+    boolean reached = false;
+    for (int i = 0; i < 20 && !(compiled && reached); i++) reached = (Boolean) ((Object[]) loop.call(2, -2))[2];
+    if (compiled && !reached) throw new AssertionError("guest constants loop did not run in compiled code");
+    long before = bean.getThreadAllocatedBytes(thread);
+    Object[] outcome = (Object[]) loop.call(2, -2);
+    long allocated = bean.getThreadAllocatedBytes(thread) - before;
+    check(outcome[0].equals((long) GuestConstants.CALLS), "guest constants matches: " + outcome[0]);
+    check(outcome[1].equals((long) GuestConstants.CALLS), "guest constants names: " + outcome[1]);
+    check(outcome[4].equals((long) GuestConstants.CALLS), "unsigned cell results equal their constant: " + outcome[4]);
+    if (compiled) {
+      if (!(Boolean) outcome[2]) throw new AssertionError("guest constants loop left compiled code");
+      // The uncached boundary lookup also allocates nothing and never deoptimizes: only this
+      // tells a folded read from an unfolded one.
+      if (!outcome[3].equals((long) GuestConstants.CALLS)) throw new AssertionError("constants.Status.ok folded in " + outcome[3] + " of " + GuestConstants.CALLS + " compiled iterations");
+      if (allocated > 1024) throw new AssertionError("guest constants loop allocated " + allocated + " bytes over " + GuestConstants.CALLS + " iterations");
+      for (int i = 0; i < 1_000; i++)
+        if (!(Boolean) ((Object[]) loop.call(2, -2))[2]) throw new AssertionError("guest constants loop deoptimized at " + i);
+      System.out.println("guest constants folded and allocated " + allocated + " bytes over " + GuestConstants.CALLS + " compiled iterations");
+    } else {
+      System.out.println("guest constants read and named");
+    }
   }
 }

@@ -32,7 +32,7 @@ from truffle_integration import truffle_jars
 WORKLOAD = 'truffle-cells-v1'
 SIZES = (16, 256, 1024, 4096, 65536)
 SCALAR = ['control', 'direct-leaf', 'direct-step', 'direct-ffm-leaf', 'direct-ffm-step', 'glue-leaf', 'glue-step',
-          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
+          'glue-ffm-leaf', 'glue-ffm-step', 'typed-leaf', 'typed-leaf-literal', 'typed-leaf-constant', 'typed-step', 'typed-ffm-leaf', 'typed-ffm-step', 'interop-leaf', 'interop-step', 'nfi-leaf', 'direct-text', 'glue-text', 'nfi-text',
           'hand-step', 'glue-boundary-step']
 # String arguments: Java strings and guest (Truffle) strings, by what their UTF-8 encoding needs.
 TEXTS = {'-utf8': 'h\u00e9llo w\u00f6rld', '-wide': '\u3053\u3093\u306b\u3061\u306f\u4e16\u754c'}
@@ -66,7 +66,10 @@ FFM_SLAB = ['direct-ffm-slab', 'direct-ffm-slab-shared', 'direct-ffm-slab-mixed'
 # calls pass raw addresses; the cells lend native memory in place or copy a heap array.
 CREATES = [f'{kind}-{PIN_SIZE}' for kind in ('direct-create-adopt', 'glue-create-adopt-native', 'glue-create-adopt-copy',
                                              'direct-create-scan', 'glue-create-scan-native', 'glue-create-scan-copy')]
-CASES = SCALAR + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB + CREATES
+# NativeBytes' scalar buffer messages (a write and a read per step of the recurrence) over a global,
+# a shared and a confined segment: the cost of the scope check the messages make before raw access.
+BUFFERS = ['buffer-native', 'buffer-shared', 'buffer-confined']
+CASES = SCALAR + BUFFERS + STRINGS + SLAB + BORROWS + PINS + FFM_SUMS + FFM_SLAB + CREATES
 MODULES = ('truffle-api', 'truffle-runtime', 'truffle-compiler', 'polyglot', 'collections', 'nativeimage', 'word',
            'jniutils', 'nativebridge', 'truffle-nfi', 'truffle-nfi-libffi')
 
@@ -131,9 +134,10 @@ def build():
     library = WORK / ('libcellsbench.dylib' if sys.platform == 'darwin' else 'libcellsbench.so')
     execute(cc, '-dynamiclib' if sys.platform == 'darwin' else '-shared', WORK / 'kernel.o', WORK / 'cells.o', '-o', library)
     java_sources = [SOURCE / 'CellBench.java', SOURCE / 'Bodies.java', SOURCE / 'BenchLanguage.java',
-                    *(generated / 'native' / n for n in ('Cells.java', 'CellsTruffle.java')),
-                    *(generated / 'boundary' / n for n in ('BoundaryCells.java', 'BoundaryCellsTruffle.java')),
-                    *(generated / 'ffm' / n for n in ('FfmCells.java', 'FfmCellsFFM.java', 'FfmCellsTruffle.java', 'FfmCellsForeignFeature.java'))]
+                    *(generated / 'native' / n for n in ('Cells.java', 'CellsTruffle.java', 'CellsDirectives.java')),
+                    *(generated / 'boundary' / n for n in ('BoundaryCells.java', 'BoundaryCellsTruffle.java', 'BoundaryCellsDirectives.java')),
+                    *(generated / 'ffm' / n for n in ('FfmCells.java', 'FfmCellsFFM.java', 'FfmCellsTruffle.java', 'FfmCellsForeignFeature.java',
+                                                      'FfmCellsDirectives.java'))]
     sdk = [home / 'lib/svm' / name for name in ('svm-shared.jar', 'svm-guest-staging.jar', 'svm-guest.jar')]
     # The benchmark language (NFI loader) is the one DSL-processed source; generated cells stay DSL-free.
     execute('javac', '-processorpath', jars['truffle-dsl-processor'],

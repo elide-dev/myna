@@ -36,14 +36,14 @@ def compile_native(classes, generated, *sources, classpath=(), options=()):
     module.compile_bindings(classes, [generated], sources, classpath, options)
 
 
-def native_image(*args, timeout=300):
+def native_image(*args, timeout=300, ok=True):
     # Keep the direct driver's argument dump inside ignored build output.
     work = ROOT / "build"
     work.mkdir(exist_ok=True)
     return run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image",
                "-J--enable-native-access=ALL-UNNAMED",
                "-H:+UnlockExperimentalVMOptions", "-H:-CheckToolchain", f"-H:CCompilerPath={os.environ['CC']}",
-               "-H:-UnlockExperimentalVMOptions", *args, cwd=work, timeout=timeout)
+               "-H:-UnlockExperimentalVMOptions", *args, cwd=work, timeout=timeout, ok=ok)
 
 
 class XmlResult(unittest.TextTestResult):

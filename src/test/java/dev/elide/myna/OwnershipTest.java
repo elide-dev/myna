@@ -182,7 +182,7 @@ class OwnershipTest {
     assertTrue(
         java.contains(
             """
-                public static int transfer(org.graalvm.word.PointerBase arg0, NativeBuffer arg1, NativeBuffer arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
+                public static int transfer(Api.Session arg0, NativeBuffer arg1, NativeBuffer arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
                     arg1.acquire(false);
                     try {
                         long length1 = arg1.byteSize();
@@ -215,7 +215,7 @@ class OwnershipTest {
         java.contains(
             """
                 /** Array convenience path; caller prevents conflicting concurrent array access. */
-                public static int transfer(org.graalvm.word.PointerBase arg0, byte[] arg1, byte[] arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
+                public static int transfer(Api.Session arg0, byte[] arg1, byte[] arg4, org.graalvm.nativeimage.c.type.CIntPointer arg5, byte arg6) {
                     long length1 = arg1.length;
                     long length4 = arg4.length;
                     org.graalvm.nativeimage.PinnedObject pin1 = length1 == 0 ? null : org.graalvm.nativeimage.PinnedObject.create(arg1);
@@ -276,7 +276,7 @@ class OwnershipTest {
         "(NativeBuffer arg0, org.graalvm.nativeimage.c.type.VoidPointer arg2,"
             + " org.graalvm.nativeimage.c.type.WordPointer arg3,"
             + " org.graalvm.nativeimage.c.type.CCharPointerPointer arg4,"
-            + " org.graalvm.word.PointerBase arg5) {\n";
+            + " NativeApi.Ticket arg5) {\n";
     assertTrue(java.contains("    public static long checksum" + signature), java);
     assertTrue(
         java.contains("return NativeApi.checksum(pointer, length, arg2, arg3, arg4, arg5);"), java);
@@ -287,7 +287,7 @@ class OwnershipTest {
                 "(byte[] arg0, org.graalvm.nativeimage.c.type.VoidPointer arg2,"
                     + " org.graalvm.nativeimage.c.type.WordPointer arg3,"
                     + " org.graalvm.nativeimage.c.type.CCharPointerPointer arg4,"
-                    + " org.graalvm.word.PointerBase arg5) {\n",
+                    + " NativeApi.Ticket arg5) {\n",
                 "(byte[] arg0) {\n")
             .replace("(pointer, length, arg2, arg3, arg4, arg5);", "(pointer, length);"));
   }
@@ -490,12 +490,12 @@ class OwnershipTest {
   @Test
   void resourceCreatesPassPointerArgumentsThrough() throws Exception {
     var output = Generator.generate(Dsl.parse(CREATES), true);
-    // Native Image: the raw binding's word carriers, by their qualified names.
+    // Native Image: the raw binding's carriers, by their qualified names.
     String java = output.get("ApiOwnership.java");
     assertTrue(
         java.contains(
             """
-                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, org.graalvm.nativeimage.c.type.CCharPointer arg1) {
+                    public static <T> T create(ResourceFactory<T> factory, Api.Limits arg0, org.graalvm.nativeimage.c.type.CCharPointer arg1) {
                         java.util.Objects.requireNonNull(factory);
                         long address = Api.sessionCreate(arg0, arg1).rawValue();
                         if (address == 0) return null;
@@ -506,7 +506,7 @@ class OwnershipTest {
     assertTrue(
         java.contains(
             """
-                    public static <T> T create(ResourceFactory<T> factory, org.graalvm.word.PointerBase arg0, long arg1, short arg2) {
+                    public static <T> T create(ResourceFactory<T> factory, Api.Session arg0, long arg1, short arg2) {
                         java.util.Objects.requireNonNull(factory);
                         long address = Api.streamCreate(arg0, arg1, arg2).rawValue();
             """),
@@ -579,6 +579,751 @@ class OwnershipTest {
     assertEquals(output, Generator.generate(Dsl.parse(CREATES), false));
   }
 
+  /** Two constructors of one resource, each with a call-scoped buffer, and a nullable release. */
+  static final String CONSTRUCTORS =
+      "module constructors target=aarch64-apple-darwin java_class=Api\n"
+          + "opaque Parsed\n"
+          + "resource Parsed representation=native threading=shared create=parse,analyze"
+          + " destroy=release\n"
+          + "borrow parse source length=length lifetime=call\n"
+          + "borrow analyze request length=length lifetime=call\n"
+          + "import parse return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param source type=ptr<u8> nullable=true ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u64\n"
+          + "end\n"
+          + "import analyze return=ptr<Parsed> error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param request type=ptr<u8> nullable=false ownership=borrowed access=read"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "  param length type=u32\n"
+          + "  param options type=ptr<u64> nullable=true ownership=borrowed access=read\n"
+          + "end\n"
+          + "import release return=void error=no_failure nounwind=true@explicit_contract"
+          + " native_leaf=false@explicit_contract\n"
+          + "  param parsed type=ptr<Parsed> nullable=true ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  @Test
+  void severalConstructorsAreNamedAfterTheirImportsAndLendTheirBuffers() {
+    var module = Dsl.parse(CONSTRUCTORS);
+    var output = Generator.generate(module, true);
+    assertEquals(output, Generator.generate(Dsl.parse(CONSTRUCTORS), false));
+    assertEquals(List.of("parse", "analyze"), module.resources().getFirst().creates());
+    // seam.json lists several constructors; one keeps its string form.
+    assertTrue(
+        output.get("seam.json").contains("\"create\":[\"parse\",\"analyze\"],\"destroy\""),
+        output.get("seam.json"));
+    var single =
+        Dsl.parse(
+            CONSTRUCTORS
+                .replace("create=parse,analyze", "create=parse")
+                .replace("borrow analyze request length=length lifetime=call\n", ""));
+    assertTrue(SeamJson.canonical(single).contains("\"create\":\"parse\","));
+    assertNotEquals(SeamJson.fingerprint(module), SeamJson.fingerprint(single));
+    // A nullable release carries no nonnull fact; a constructor's buffer keeps its own facts.
+    String ll = output.get("seam.ll");
+    assertTrue(ll.contains("declare void @release(ptr %parsed) nounwind"), ll);
+    assertTrue(
+        ll.contains("declare ptr @parse(ptr captures(none) readonly %source, i64 %length)"), ll);
+    // Rust: one associated function per constructor, lending each slice through the buffer
+    // wrapper of its import; only the one that passes another pointer through is unsafe.
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            """
+                    pub fn parse(source: Option<&[u8]>) -> Option<Self> {
+                        core::ptr::NonNull::new(self::parse(source)).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+                    /// # Safety
+                    /// Every pointer argument other than a borrowed buffer must satisfy the raw function's requirements, for as long
+                    /// as the created resource depends on it.
+                    pub unsafe fn analyze(request: &[u8], options: *const u64) -> Option<Self> {
+                        core::ptr::NonNull::new(unsafe { self::analyze(request, options) }).map(|pointer| Self { pointer, _thread: core::marker::PhantomData })
+                    }
+            """),
+        rust);
+    assertTrue(
+        rust.contains("    pub fn parse(source: Option<&[u8]>) -> *mut super::Parsed {\n"), rust);
+    assertFalse(rust.contains("fn create("), rust);
+    // Native Image: one static per constructor and carrier, over the import's buffer wrappers.
+    String java = output.get("ApiOwnership.java");
+    for (String buffer : new String[] {"NativeBuffer", "byte[]"}) {
+      assertTrue(
+          java.contains(
+              "        public static <T> T parse(ResourceFactory<T> factory, "
+                  + buffer
+                  + " arg0) {\n"
+                  + "            java.util.Objects.requireNonNull(factory);\n"
+                  + "            long address = ApiOwnership.parse(arg0).rawValue();\n"
+                  + "            if (address == 0) return null;\n"
+                  + "            return adoptUnsafe(address, factory);\n"),
+          java);
+      assertTrue(
+          java.contains(
+              "        public static <T> T analyze(ResourceFactory<T> factory, "
+                  + buffer
+                  + " arg0, org.graalvm.nativeimage.c.type.CLongPointer arg2) {\n"),
+          java);
+    }
+    assertTrue(java.contains("    public static Api.Parsed parse(NativeBuffer arg0) {\n"), java);
+    assertFalse(java.contains(" create("), java);
+    // FFM: one static per constructor, taking a segment for each buffer.
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T parse(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.parse(arg0);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T analyze(LibraryBinding binding, ResourceFactory<T>"
+                + " factory, MemorySegment arg0, MemorySegment arg2) throws Throwable {\n"
+                + "            java.util.Objects.requireNonNull(factory);\n"
+                + "            MemorySegment address = binding.analyze(arg0, arg2);\n"),
+        ffm);
+    // One constructor keeps the name create, and its call buffers too.
+    var one = Generator.generate(single, true);
+    assertTrue(one.get("seam.rs").contains("pub fn create(source: Option<&[u8]>) -> Option<Self>"));
+    assertTrue(
+        one.get("ApiOwnership.java")
+            .contains("public static <T> T create(ResourceFactory<T> factory, NativeBuffer arg0)"));
+    assertTrue(
+        one.get("ApiFFM.java")
+            .contains(
+                "public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                    + " MemorySegment arg0)"));
+    // Truffle: every constructor's cell returns an owner and lends its buffer for the call.
+    String cells =
+        Generator.generate(
+                Dsl.parse(
+                    CONSTRUCTORS.replace("java_class=Api", "java_class=Api truffle_cells=true")),
+                true)
+            .get("ApiTruffle.java");
+    for (String name : new String[] {"parse", "analyze"}) {
+      int start = cells.indexOf("class " + name + "_Cell");
+      String cell = cells.substring(start, cells.indexOf("public static final class", start + 1));
+      assertTrue(cell.contains("new NativeResource(\"Parsed\", created, DESTRUCTOR"), cell);
+      assertTrue(cell.contains("@Node.Child private BytesCoercion coerce_"), cell);
+      assertTrue(cell.contains(".release();"), cell);
+    }
+  }
+
+  @Test
+  void createCellsDestroyWhatTheyMadeWhenAWriteBackFails() {
+    // A writable call buffer on a constructor: its write-back runs after the owner exists.
+    String writable =
+        CONSTRUCTORS
+            .replace("java_class=Api", "java_class=Api truffle_cells=true")
+            .replace(
+                "  param request type=ptr<u8> nullable=false ownership=borrowed access=read"
+                    + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
+                "  param request type=ptr<u8> nullable=false ownership=borrowed access=read_write"
+                    + " nocapture=true@explicit_contract\n");
+    String cells = Generator.generate(Dsl.parse(writable), true).get("ApiTruffle.java");
+    String analyze =
+        cells.substring(
+            cells.indexOf("class analyze_Cell"),
+            cells.indexOf("public static final class", cells.indexOf("class analyze_Cell") + 1));
+    assertTrue(analyze.contains("NativeResource owner$ = null;\n"), analyze);
+    assertTrue(
+        analyze.contains("NativeResource resource = owner$ = new NativeResource(\"Parsed\""),
+        analyze);
+    assertTrue(
+        analyze.contains(
+            """
+                            try {
+                                borrow_request.release();
+                            } catch (RuntimeException failure) {
+                                throw NativeResource.closeAfterFailure(owner$, failure);
+                            }
+            """),
+        analyze);
+    // A read-only buffer cannot fail its release: that cell is unchanged.
+    String parse =
+        cells.substring(
+            cells.indexOf("class parse_Cell"),
+            cells.indexOf("public static final class", cells.indexOf("class parse_Cell") + 1));
+    assertFalse(parse.contains("owner$"), parse);
+    // The same for a create that reports a status through a handle.
+    String handles =
+        Generator.generate(
+                Dsl.parse(
+                    HANDLES.replace(
+                        "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
+                            + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
+                        "  param schema type=ptr<u8> nullable=false ownership=borrowed"
+                            + " access=read_write nocapture=true@explicit_contract\n")),
+                true)
+            .get("ApiTruffle.java");
+    assertTrue(
+        handles.contains("NativeResource resource = owner$ = new NativeResource(\"Layout\""),
+        handles);
+    assertTrue(
+        handles.contains("throw NativeResource.closeAfterFailure(owner$, failure);"), handles);
+  }
+
+  @Test
+  void callBorrowsOnPointerResultsNeedADeclaredConstructor() {
+    // Without the resource, nothing ties the returned pointer to a fresh allocation.
+    String plain =
+        CONSTRUCTORS.replace(
+            "resource Parsed representation=native threading=shared create=parse,analyze"
+                + " destroy=release\n",
+            "");
+    assertEquals(
+        "call borrow cannot return a pointer: analyze request",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(plain), true))
+            .getMessage());
+    // A constructor of another resource is no constructor of this one.
+    String other =
+        CONSTRUCTORS
+            .replace("create=parse,analyze", "create=parse")
+            .replace("import analyze return=ptr<Parsed>", "import analyze return=ptr<u64>");
+    assertEquals(
+        "call borrow cannot return a pointer: analyze request",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(other), true))
+            .getMessage());
+    // Several constructors are named after their imports, so none may shadow an owner's member.
+    String shadow = CONSTRUCTORS.replace("analyze", "borrow");
+    assertEquals(
+        "a resource constructor's wrapper is named after its import, which borrow shadows:"
+            + " Parsed create=parse,borrow",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(shadow), true))
+            .getMessage());
+  }
+
+  @Test
+  void rustImplementationTraitIsOptIn() throws Exception {
+    String plain = Files.readString(Path.of("tests/ownership/ownership.seam"));
+    String opted =
+        plain.replace("java_class=NativeApi", "java_class=NativeApi rust_implementation=trait");
+    var before = Generator.generate(Dsl.parse(plain), true);
+    var after = Generator.generate(Dsl.parse(opted), true);
+    assertFalse(before.get("seam.rs").contains("Implementation"));
+    assertFalse(before.get("seam.json").contains("rustImplementation"));
+    assertTrue(after.get("seam.json").contains("\"rustImplementation\": \"trait\""));
+    assertNotEquals(before.get("seam.abi"), after.get("seam.abi"));
+    // Only seam.rs and the fingerprint it carries change.
+    for (var entry : before.entrySet())
+      if (!entry.getKey().equals("seam.rs")
+          && !entry.getKey().equals("seam.json")
+          && !entry.getKey().equals("seam.abi"))
+        assertEquals(
+            entry.getValue().replace(SeamJson.fingerprint(Dsl.parse(plain)), ""),
+            after.get(entry.getKey()).replace(SeamJson.fingerprint(Dsl.parse(opted)), ""),
+            entry.getKey());
+    String rust = after.get("seam.rs");
+    String trait = rust.substring(rust.indexOf("pub trait OwnershipDemoImplementation {"));
+    trait = trait.substring(0, trait.indexOf("\n}\n") + 1);
+    for (String line :
+        List.of(
+            "    type Parsed: Send + Sync;",
+            "    type Ticket: Send + Sync;",
+            "    fn checksum(bytes: &[u8]) -> u64;",
+            "    fn decode(data: &[u8], text: Option<&mut [u8]>) -> u64;",
+            "    fn increment(bytes: &mut [u8]);",
+            "    fn tally(bytes: Option<&[u8]>) -> u64;",
+            "    fn transfer(input: &[u8], output: &mut [u8], copied: *mut u64) -> u64;",
+            "    fn analyze(request: &[u8], scale: u8) -> Option<Box<Self::Parsed>>;",
+            "    fn parse(source: Option<&[u8]>) -> Option<Box<Self::Parsed>>;",
+            "    fn release(parsed: Option<Box<Self::Parsed>>);",
+            "    fn parsedValue(parsed: &Self::Parsed) -> u64;",
+            "    fn ticketCreate() -> Option<Box<Self::Ticket>>;",
+            "    fn ticketDestroy(ticket: Box<Self::Ticket>);",
+            "    fn liveCount() -> i64;"))
+      assertTrue(trait.contains(line + "\n"), line + "\n" + trait);
+    assertTrue(
+        rust.contains(
+            """
+                    pub unsafe extern "C" fn buffer_decode(data: *const u8, length: u64, text: *mut u8, capacity: u32) -> u64 {
+                        let data = unsafe { myna_implementation::slice(data, myna_implementation::signed(length as i64)) };
+                        let text = unsafe { myna_implementation::optional_mut(text, capacity as usize) };
+                        <$implementation as OwnershipDemoImplementation>::decode(data, text)
+                    }
+            """),
+        rust);
+    assertTrue(
+        rust.contains(
+            """
+                    pub unsafe extern "C" fn ticket_destroy(ticket: *mut $($seam)::+::Ticket) {
+                        if ticket.is_null() {
+                            ::core::debug_assert!(false, "ticketDestroy: null Ticket");
+                            return;
+                        }
+            """),
+        rust);
+    // A signed length is checked before it becomes a slice's.
+    String signed =
+        Generator.generate(
+                Dsl.parse(
+                    opted.replace(
+                        "param count type=u64\nend\nborrow increment",
+                        "param count type=i64\nend\nborrow increment")),
+                true)
+            .get("seam.rs");
+    assertTrue(signed.contains("myna_implementation::signed(count as i64)"), signed);
+    // The generated items cannot be shadowed, and the option takes one value.
+    assertEquals(
+        "rust_implementation=trait names OwnershipDemoImplementation, which a declaration"
+            + " shadows",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Generator.generate(
+                        Dsl.parse(
+                            opted.replace(
+                                "opaque Ticket\n",
+                                "opaque Ticket\nopaque OwnershipDemoImplementation\n")),
+                        true))
+            .getMessage());
+    assertEquals(
+        "rust_implementation=trait names Box, which a declaration shadows",
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Generator.generate(
+                        Dsl.parse(opted.replace("opaque Ticket\n", "opaque Ticket\nopaque Box\n")),
+                        true))
+            .getMessage());
+    // Shared resources must be Send + Sync; a confined one has no bound.
+    assertTrue(trait.contains("    type Parsed: Send + Sync;\n"), trait);
+    assertTrue(
+        Generator.generate(Dsl.parse(opted.replace("threading=shared", "threading=confined")), true)
+            .get("seam.rs")
+            .contains("    type Parsed;\n"));
+    // A 64-bit length is guarded, and a null resource argument aborts rather than dereferenced.
+    assertTrue(
+        rust.contains(
+            "myna_implementation::slice(bytes, myna_implementation::signed(count as i64))"),
+        rust);
+    assertTrue(
+        rust.contains("if parsed.is_null() { ::core::panic!(\"parsedValue: null Parsed\") }\n"),
+        rust);
+    assertTrue(
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    Dsl.parse(
+                        plain.replace(
+                            "java_class=NativeApi",
+                            "java_class=NativeApi rust_implementation=yes")))
+            .getMessage()
+            .endsWith("rust_implementation is trait: yes"));
+    assertEquals(
+        Dsl.parse(opted).rustImplementation(),
+        Dsl.parse(opted).withTarget("x86_64-unknown-linux-gnu").rustImplementation());
+  }
+
+  @Test
+  void usizeLengthsAndResolvedAddresses() {
+    // usize is size_t: a 64-bit unsigned length in every wrapper.
+    var output =
+        Generator.generate(
+            Dsl.parse(TRANSFER.replace("param count type=u64", "param count type=usize")), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains("pub unsafe fn transfer(session: *mut super::Session, input: &[u8]"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("ApiOwnership.java").contains("long length1 = arg1.byteSize();"),
+        output.get("ApiOwnership.java"));
+    // FFM: the address each binding resolved, without a second lookup.
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public MemorySegment transfer_address() {\n"
+                + "            if (this.transfer_address == null) throw new"
+                + " UnsatisfiedLinkError(\"transfer\");\n"
+                + "            return this.transfer_address;\n"
+                + "        }\n"),
+        ffm);
+    // An import named like an accessor, taking nothing, would collide with it.
+    String clash = TRANSFER + "import transfer_address return=i32 error=no_failure\nend\n";
+    assertEquals(
+        "FFM address accessor transfer_address() collides with the import of that name",
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(clash), true))
+            .getMessage());
+  }
+
+  /** A status-plus-out-pointer create: handle=out names a ptr<ptr<R>> parameter. */
+  static final String OUT_POINTER =
+      "module surfaces target=aarch64-apple-darwin java_class=Api\n"
+          + "opaque Surface\n"
+          + "resource Surface representation=native threading=confined create=open"
+          + " destroy=close handle=out success=0\n"
+          + "borrow open error length=capacity lifetime=call\n"
+          + "import open return=i32 error=no_failure nounwind=true@explicit_contract\n"
+          + "  param width type=i32\n"
+          + "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n"
+          + "  param error type=ptr<u8> nullable=true ownership=borrowed access=write"
+          + " nocapture=true@explicit_contract\n"
+          + "  param capacity type=usize\n"
+          + "end\n"
+          + "import close return=void error=no_failure nounwind=true@explicit_contract\n"
+          + "  param surface type=ptr<Surface> nullable=false ownership=transferred_to_callee"
+          + " access=read_write\n"
+          + "end\n";
+
+  @Test
+  void outPointerCreatesAreOwnedEverywhere() {
+    var output = Generator.generate(Dsl.parse(OUT_POINTER), true);
+    assertEquals(output, Generator.generate(Dsl.parse(OUT_POINTER), false));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " Failure<? extends T> onFailure, int arg0, MemorySegment arg2) throws Throwable"
+                + " {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("public interface Failure<T> { T failed(int status) throws Throwable; }"));
+    assertTrue(ffm.contains("                status = binding.open(arg0, slot, arg2);\n"), ffm);
+    assertTrue(ffm.contains("            if (!(status == 0)) return onFailure.failed(status);\n"));
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains(
+            "            int status = ApiOwnership.open(arg0,"
+                + " org.graalvm.word.WordFactory.pointer(slot.rawValue()), arg2);\n"),
+        java);
+    assertTrue(java.contains("public interface Failure<T> { T failed(int status); }"), java);
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            "        pub fn create(width: i32, error: Option<&mut [u8]>) -> Result<Self, i32> {\n"
+                + "            let mut slot: *mut super::Surface = core::ptr::null_mut();\n"
+                + "            let status = unsafe { self::open(width, &mut slot, error) };\n"),
+        rust);
+    // No Truffle cell needed, unlike a struct handle.
+    assertFalse(output.containsKey("ApiTruffle.java"));
+  }
+
+  @Test
+  void outPointerStatusesCompareUnsignedAndANullSlotIsAFailure() {
+    // A u8 status of 200 is 200, not -56, in its signed Java carrier.
+    String narrow =
+        OUT_POINTER
+            .replace("import open return=i32", "import open return=u8")
+            .replace("success=0", "success=200");
+    var output = Generator.generate(Dsl.parse(narrow), true);
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "            if (!(Byte.toUnsignedInt(status) == 200)) return"
+                + " onFailure.failed(status);\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("            if (address.address() == 0) return onFailure.failed(status);\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains("if (!(Byte.toUnsignedInt(status) == 200)) return onFailure.failed(status);"),
+        java);
+    assertTrue(
+        java.contains("            if (address == 0) return onFailure.failed(status);\n"), java);
+    // u16 and u32 widen too, u32 to a long.
+    for (String[] type :
+        new String[][] {
+          {"u16", "Short.toUnsignedInt(status) == 40000"},
+          {"u32", "Integer.toUnsignedLong(status) == 3000000000L"}
+        }) {
+      String wide =
+          OUT_POINTER
+              .replace("import open return=i32", "import open return=" + type[0])
+              .replace("success=0", "success=" + type[1].replaceAll(".* == |L", ""));
+      assertTrue(
+          Generator.generate(Dsl.parse(wide), true).get("ApiFFM.java").contains(type[1]), type[0]);
+    }
+    // The implementer trait: Ok fills the slot and returns the first success status.
+    String rust =
+        Generator.generate(
+                Dsl.parse(
+                    OUT_POINTER.replace(
+                        "java_class=Api", "java_class=Api rust_implementation=trait")),
+                true)
+            .get("seam.rs");
+    assertTrue(
+        rust.contains(
+            "    fn open(width: i32, error: Option<&mut [u8]>) -> Result<Box<Self::Surface>,"
+                + " i32>;\n"),
+        rust);
+    assertTrue(rust.contains("    fn close(surface: Box<Self::Surface>);\n"), rust);
+    assertTrue(
+        rust.contains("            unsafe { out.write(Box::into_raw(myna_owned).cast()) };\n"),
+        rust);
+    assertTrue(rust.contains("if status == 0 {\n"), rust);
+    assertTrue(rust.contains("    ::core::panic!(\"open: Err with a success status\");\n"), rust);
+  }
+
+  static Stream<Arguments> outPointerRejections() {
+    String out =
+        "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n";
+    return Stream.of(
+        Arguments.of(
+            out,
+            out.replace("access=write", "access=read_write"),
+            "a resource out-pointer must be a ptr<ptr<Surface>> parameter with access=write: open"
+                + " out"),
+        Arguments.of(
+            out,
+            out.replace("access=write", "access=write align=64@explicit_contract"),
+            "a resource out-pointer is an 8-byte slot; align promises more: open out"),
+        Arguments.of(
+            "import open return=i32",
+            "import open return=void",
+            "a resource create with an out-pointer returns an integer status: open"),
+        Arguments.of(
+            " handle=out success=0",
+            " handle=out",
+            "a resource create with a handle must list the results that mean success: Surface"
+                + " handle=out"),
+        Arguments.of(
+            "create=open destroy",
+            "create=open,reopen destroy",
+            "the out-pointer constructors of Surface return one status type: reopen differs from"
+                + " open"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("outPointerRejections")
+  void rejectsOutPointerShapesWithTheirReason(String from, String to, String message) {
+    String valid =
+        OUT_POINTER
+            + "import reopen return=i64 error=no_failure nounwind=true@explicit_contract\n"
+            + "  param out type=ptr<ptr<Surface>> nullable=true ownership=borrowed access=write\n"
+            + "end\n";
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(valid), true));
+    assertTrue(valid.contains(from), "mutation must affect fixture");
+    String changed = valid.replace(from, to);
+    assertEquals(
+        message,
+        assertThrows(
+                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), true))
+            .getMessage());
+  }
+
+  @Test
+  void batchesBesideCStringsAndOnOutPointerConstructors() throws Exception {
+    var module = Dsl.parse(Files.readString(Path.of("tests/ownership/combinations.seam")));
+    var output = Generator.generate(module, true);
+    String rust = output.get("seam.rs");
+    assertTrue(
+        rust.contains(
+            "        pub fn create(title: &::core::ffi::CStr, parts: &[&[u8]]) -> Result<Self,"
+                + " super::WinStatus> {\n"),
+        rust);
+    assertTrue(
+        rust.contains("pub fn create_with_scratch(title: &::core::ffi::CStr, parts: &[&[u8]],"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "    fn winBatch(title: &::core::ffi::CStr, parts: BufferBatch<'_, u64>) ->"
+                + " Result<Box<Self::Win>, WinStatus>;\n"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "    fn labelled(name: Option<&::core::ffi::CStr>, parts: BufferBatch<'_, u32>) ->"
+                + " u64;\n"),
+        rust);
+    String java = output.get("ComboOwnership.java");
+    assertTrue(
+        java.contains(
+            "public static <T> T create(ResourceFactory<T> factory, Failure<? extends T> onFailure,"
+                + " String arg0, byte[][] arg1)"),
+        java);
+    String ffm = output.get("ComboFFM.java");
+    assertTrue(
+        ffm.contains(
+            "public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " Failure<? extends T> onFailure, String arg0, MemorySegment[] arg1)"),
+        ffm);
+    Path dir = Files.createTempDirectory("myna-combinations");
+    Path file = dir.resolve("fixture/combo/ComboFFM.java");
+    Files.createDirectories(file.getParent());
+    Files.writeString(file, ffm);
+    assertEquals(
+        0,
+        javax.tools.ToolProvider.getSystemJavaCompiler()
+            .run(
+                null,
+                null,
+                null,
+                "-proc:none",
+                "-d",
+                dir.resolve("classes").toString(),
+                file.toString()),
+        ffm);
+  }
+
+  static final String CSTRING =
+      "module strings target=aarch64-apple-darwin java_class=Api\n"
+          + "import titleLength symbol=title_length return=u64 error=no_failure"
+          + " nounwind=true@explicit_contract\n"
+          + "  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring"
+          + " nocapture=true@explicit_contract readonly=true@explicit_contract\n"
+          + "end\n";
+
+  @Test
+  void cStringsPassCallbacksThroughAndTheFfmOutputCompiles() throws Exception {
+    String source =
+        CSTRING
+            .replace(
+                "module strings target=aarch64-apple-darwin java_class=Api\n",
+                "module strings target=aarch64-apple-darwin java_class=Api\n"
+                    + "callback Visit return=void\n  param value type=i64\nend\n")
+            .replace("end\n", "  param visit type=fn<Visit>\nend\n")
+            .replace(
+                "callback Visit return=void\n"
+                    + "  param value type=i64\n"
+                    + "  param visit type=fn<Visit>\n"
+                    + "end\n",
+                "callback Visit return=void\n  param value type=i64\nend\n");
+    var output = Generator.generate(Dsl.parse(source), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains(
+                "    pub fn titleLength(title: &::core::ffi::CStr, visit: super::Visit) -> u64"
+                    + " {\n"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("ApiOwnership.java").contains("public static long titleLength(String arg0, "),
+        output.get("ApiOwnership.java"));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public long titleLength(String arg0, MemorySegment arg1) throws Throwable"
+                + " {\n"),
+        ffm);
+    // The FFM output compiles as generated.
+    Path dir = Files.createTempDirectory("myna-cstring");
+    String pkg = Dsl.parse(source).javaPackageName();
+    Path file = dir.resolve(pkg.replace('.', '/') + "/ApiFFM.java");
+    Files.createDirectories(file.getParent());
+    Files.writeString(file, ffm);
+    var compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+    assertEquals(
+        0,
+        compiler.run(
+            null,
+            null,
+            null,
+            "-proc:none",
+            "-d",
+            dir.resolve("classes").toString(),
+            file.toString()),
+        ffm);
+  }
+
+  @Test
+  void cStringsAreLentNulTerminated() {
+    var output = Generator.generate(Dsl.parse(CSTRING), true);
+    assertTrue(
+        output
+            .get("seam.rs")
+            .contains("    pub fn titleLength(title: &::core::ffi::CStr) -> u64 {\n"),
+        output.get("seam.rs"));
+    assertTrue(
+        output.get("seam.ll").contains("@title_length(ptr captures(none) readonly %title)"),
+        output.get("seam.ll"));
+    assertTrue(output.get("seam.h").contains("uint64_t title_length(uint8_t const * title);"));
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "if (java.util.Objects.requireNonNull(arg0) != null && arg0.indexOf('\\0') >= 0) throw"
+                + " new IllegalArgumentException(\"titleLength title: embedded NUL in a C"
+                + " string\");\n"),
+        ffm);
+    assertTrue(ffm.contains("MemorySegment text0 = empty.allocateFrom(arg0);"), ffm);
+    assertTrue(
+        ffm.contains("        public long titleLength(String arg0) throws Throwable {\n"), ffm);
+    // Truffle cells lend a guest string NUL-terminated, read-only.
+    String cells =
+        Generator.generate(
+                Dsl.parse(CSTRING.replace("java_class=Api", "java_class=Api truffle_cells=true")),
+                true)
+            .get("ApiTruffle.java");
+    assertTrue(
+        cells.contains(
+            "this.coerce_title = new BytesCoercion(\"titleLength\", \"title\", false, false,"
+                + " false);"),
+        cells);
+    assertTrue(
+        cells.contains(
+            "coerce_title.execute(CStrings.strings(arguments[0], false, \"titleLength\","
+                + " \"title\", this))"),
+        cells);
+    assertTrue(
+        cells.contains(
+            "CStrings.checkLent(borrow_title.address(), borrow_title.length(), \"titleLength\","
+                + " \"title\", this);"),
+        cells);
+    // The implementer trait takes a CStr, and a null one aborts.
+    String trait =
+        Generator.generate(
+                Dsl.parse(
+                    CSTRING.replace("java_class=Api", "java_class=Api rust_implementation=trait")),
+                true)
+            .get("seam.rs");
+    assertTrue(trait.contains("    fn titleLength(title: &::core::ffi::CStr) -> u64;\n"), trait);
+    assertTrue(
+        trait.contains("if title.is_null() { ::core::panic!(\"titleLength: null title\") }"),
+        trait);
+    for (var rejection :
+        List.of(
+            List.of(
+                " readonly=true@explicit_contract",
+                "",
+                "access=cstring requires approved nocapture=true and readonly=true: titleLength"
+                    + " title"),
+            List.of(
+                "type=ptr<u8>",
+                "type=ptr<u16>",
+                "access=cstring requires a borrowed ptr<u8>: titleLength title"),
+            List.of(
+                "import titleLength",
+                "borrow titleLength title length=title lifetime=call\nimport titleLength",
+                "a C string has no length and is no borrow's buffer or length: titleLength"
+                    + " title"),
+            // A by-value record has no pass-through carrier in every wrapper.
+            List.of(
+                "end\n",
+                "  param pair type=Pair\nend\n",
+                "C string wrappers pass no by-value record beside their strings: titleLength"
+                    + " pair"),
+            List.of(
+                " readonly=true@explicit_contract",
+                " readonly=true@explicit_contract dereferenceable=16@explicit_contract",
+                "access=cstring takes no align, dereferenceable or truffle_buffer fact:"
+                    + " titleLength title"))) {
+      String changed =
+          CSTRING
+              .replace(rejection.get(0), rejection.get(1))
+              .replace(
+                  "module strings target=aarch64-apple-darwin java_class=Api\n",
+                  "module strings target=aarch64-apple-darwin java_class=Api\n"
+                      + "struct Pair size=16 align=8\n"
+                      + "  field a type=i64 offset=0\n"
+                      + "  field b type=i64 offset=8\n"
+                      + "end\n");
+      assertEquals(
+          rejection.get(2),
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> Generator.generate(Dsl.parse(changed), true))
+              .getMessage());
+    }
+  }
+
   static Stream<Arguments> createRejections() {
     String limits =
         "  param limits type=ptr<Limits> nullable=false ownership=borrowed access=read\n";
@@ -594,20 +1339,63 @@ class OwnershipTest {
             "resource create takes only scalar and pointer arguments: sessionCreate visit"),
         // The handle is the result: null means failure, and nothing else is a create.
         Arguments.of(
-            "return=ptr<Session>", "return=i32", "resource create must return ptr<resource>"),
+            "return=ptr<Session>",
+            "return=i32",
+            "resource create must return ptr<resource>: sessionCreate for Session"),
         Arguments.of(
             "return=ptr<Session>",
             "return=ptr<Stream>",
-            "resource create must return ptr<resource>"),
+            "resource create must return ptr<resource>: sessionCreate for Session"),
         Arguments.of(
             "return=ptr<Session>",
             "return=ptr<ptr<Session>>",
-            "resource create must return ptr<resource>"),
-        // A create returns a pointer, so none of its byte pointers can be a call borrow.
+            "resource create must return ptr<resource>: sessionCreate for Session"),
+        // A constructor's call borrows are byte buffers like any other.
         Arguments.of(
             "import sessionCreate",
             "borrow sessionCreate name length=limits lifetime=call\nimport sessionCreate",
-            "call borrow cannot return a pointer"),
+            "call buffer requires borrowed ptr<u8>: sessionCreate name"),
+        // Several constructors: each is a declared import, constructs one resource only, and is
+        // validated as a single create is.
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate,sessionOpen destroy",
+            "unknown resource lifecycle function: Session create=sessionCreate,sessionOpen:"
+                + " sessionOpen"),
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate, destroy",
+            "resource create lists the names of imports: Session create=sessionCreate,"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,sessionCreate destroy",
+            "lifecycle functions must be distinct per resource: sessionCreate is a lifecycle"
+                + " function of Session and Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,sessionDestroy destroy",
+            "lifecycle functions must be distinct per resource: sessionDestroy is a lifecycle"
+                + " function of Session and Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,streamCreate destroy",
+            "lifecycle functions must be distinct per resource: streamCreate is listed twice in"
+                + " the constructors of Stream"),
+        Arguments.of(
+            "create=streamCreate destroy",
+            "create=streamCreate,streamDestroy destroy",
+            "lifecycle functions must be distinct per resource: streamDestroy is both a"
+                + " constructor and the destroy of Stream"),
+        Arguments.of(
+            "create=sessionCreate destroy",
+            "create=sessionCreate,streamCreate destroy",
+            "resource create must return ptr<resource>: streamCreate for Session"),
+        // A destroy names itself and its parameter.
+        Arguments.of(
+            "  param session type=ptr<Session> nullable=false ownership=transferred_to_callee",
+            "  param session type=ptr<Session> nullable=false ownership=borrowed",
+            "resource destroy requires a transferred_to_callee read_write resource pointer:"
+                + " sessionDestroy session"),
         // Out-parameter handles and in-place results are not a form of resource.
         Arguments.of(
             "create=sessionCreate destroy=sessionDestroy",
@@ -805,6 +1593,99 @@ class OwnershipTest {
     assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
   }
 
+  /** A {@code success} value the declared return scalar's guest carrier can never represent. */
+  static String handlesReturn(String returnType, String success) {
+    return HANDLES
+        .replace(
+            "import layoutCompile return=i32 error=no_failure",
+            "import layoutCompile return=" + returnType + " error=no_failure")
+        .replace("handle=result.data success=0,2", "handle=result.data success=" + success);
+  }
+
+  static Stream<Arguments> successRangeChecks() {
+    String range =
+        "a resource create's success status is outside its return scalar's carrier range: Layout"
+            + " handle=result.data";
+    return Stream.of(
+        // In range for the declared carrier: accepted on aarch64-apple-darwin (signed char).
+        Arguments.of("i8", "-1", null),
+        Arguments.of("i8", "127", null),
+        Arguments.of("i8", "-128", null),
+        Arguments.of("i8", "0,2,127", null),
+        Arguments.of("u8", "0", null),
+        Arguments.of("u8", "255", null),
+        Arguments.of("u16", "65535", null),
+        Arguments.of("u32", "0", null),
+        Arguments.of("u32", "4294967295", null),
+        Arguments.of("i32", "0,2", null),
+        Arguments.of("i64", "-1", null),
+        Arguments.of("i64", "9223372036854775807", null),
+        Arguments.of("u64", "0", null),
+        Arguments.of("u64", "9223372036854775807", null),
+        Arguments.of("usize", "0", null),
+        Arguments.of("usize", "9223372036854775807", null),
+        Arguments.of("char", "0", null),
+        Arguments.of("char", "127", null),
+        Arguments.of("char", "-128", null),
+        // Out of range: the carrier can never take the value, so the guard always fails.
+        Arguments.of("i8", "128", range),
+        Arguments.of("i8", "-129", range),
+        Arguments.of("i8", "300", range),
+        Arguments.of("u8", "-1", range),
+        Arguments.of("u8", "256", range),
+        Arguments.of("u16", "65536", range),
+        Arguments.of("u16", "-1", range),
+        Arguments.of("u32", "-1", range),
+        Arguments.of("u32", "4294967296", range),
+        Arguments.of("i16", "32768", range),
+        Arguments.of("i16", "-32769", range),
+        Arguments.of("usize", "-1", range),
+        Arguments.of("char", "128", range),
+        Arguments.of("char", "-129", range),
+        Arguments.of("char", "256", range));
+  }
+
+  @ParameterizedTest
+  @MethodSource("successRangeChecks")
+  void checksSuccessStatusesAgainstTheReturnScalarCarrier(
+      String returnType, String success, String message) {
+    String source = handlesReturn(returnType, success);
+    if (message == null) {
+      assertDoesNotThrow(
+          () -> Generator.generate(Dsl.parse(source), true), returnType + " success=" + success);
+    } else {
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(Dsl.parse(source), true),
+              returnType + " success=" + success);
+      assertEquals(message, error.getMessage().replaceFirst("^line \\d+: ", ""));
+    }
+  }
+
+  /** The range check follows the target's {@code char} signedness, not a fixed rule. */
+  @ParameterizedTest
+  @CsvSource({"200, true", "-1, false", "255, true", "256, false", "-128, false"})
+  void successRangeCheckFollowsTargetCharSignedness(String success, boolean accepted) {
+    String source =
+        handlesReturn("char", success)
+            .replace("target=aarch64-apple-darwin", "target=aarch64-unknown-linux-gnu");
+    if (accepted) {
+      assertDoesNotThrow(
+          () -> Generator.generate(Dsl.parse(source), true), "char success=" + success);
+    } else {
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(Dsl.parse(source), true),
+              "char success=" + success);
+      assertEquals(
+          "a resource create's success status is outside its return scalar's carrier range: Layout"
+              + " handle=result.data",
+          error.getMessage().replaceFirst("^line \\d+: ", ""));
+    }
+  }
+
   /** A resource whose create returns it has no handle parameter or field. */
   @Test
   void returnedResourcesHaveNoHandle() {
@@ -821,7 +1702,7 @@ class OwnershipTest {
             "create=sessionCreate destroy=sessionDestroy",
             "create=sessionCreate destroy=sessionDestroy success=0");
     assertEquals(
-        "success applies to a resource create with a handle",
+        "success applies to a resource create with a handle: Session",
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true))
             .getMessage());
@@ -841,6 +1722,126 @@ class OwnershipTest {
                   + " nocapture=true@explicit_contract readonly=true@explicit_contract\n",
               "  param schema type=ptr<u8> nullable=false ownership=borrowed access=read"
                   + " readonly=true@explicit_contract\n");
+
+  /**
+   * An align fact on a borrow buffer is a caller contract. seam.ll promises it, Truffle cells copy
+   * a buffer that violates it, and every other wrapper asserts it in debug builds only: a Java
+   * {@code assert} or a Rust {@code debug_assert!}, a single AND of the address.
+   */
+  @Test
+  void alignOnCallBorrowsIsACallerContractCheckedInDebugBuilds() {
+    String aligned =
+        HANDLES.replace(
+            " readonly=true@explicit_contract\n  param length",
+            " readonly=true@explicit_contract align=8@explicit_contract\n  param length");
+    assertNotEquals(HANDLES, aligned);
+    var output = Generator.generate(Dsl.parse(aligned), true);
+    assertTrue(output.get("seam.ll").contains("align 8"), output.get("seam.ll"));
+    assertTrue(
+        output
+            .get("ApiTruffle.java")
+            .contains(
+                "new AlignedBytesCoercion(\"layoutCompile\", \"schema\", false, false, true,"
+                    + " false, 8)"),
+        output.get("ApiTruffle.java"));
+    // Every non-cell wrapper, on a function with no resource around it.
+    String plain =
+        TRANSFER.replace(
+            " readonly=true@explicit_contract\n",
+            " readonly=true@explicit_contract align=16@explicit_contract\n");
+    assertNotEquals(TRANSFER, plain);
+    var all = Generator.generate(Dsl.parse(plain), true);
+    var jniPlain = StaticJni.generate(Dsl.parse(plain));
+    assertTrue(
+        all.get("ApiFFM.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte alignment\";"),
+        all.get("ApiFFM.java"));
+    assertTrue(
+        all.get("ApiOwnership.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte" + " alignment\";"),
+        all.get("ApiOwnership.java"));
+    assertTrue(
+        jniPlain
+            .get("ApiJNI.java")
+            .contains("& 15L) == 0 : \"transfer.input requires 16-byte" + " alignment\";"),
+        jniPlain.get("ApiJNI.java"));
+    assertTrue(
+        all.get("seam.rs")
+            .contains(
+                "debug_assert!(input.len() == 0 || (input.as_ptr() as usize) & 15 == 0,"
+                    + " \"transfer.input requires 16-byte alignment\");"),
+        all.get("seam.rs"));
+    // A nullable buffer is an Option until it is consumed into its (pointer, length) pair under
+    // the same name; the assertion reads that pair, so it must come after the binding.
+    String nullable =
+        plain.replace(
+            "param input type=ptr<u8> nullable=false", "param input type=ptr<u8> nullable=true");
+    assertNotEquals(plain, nullable);
+    String rust = Generator.generate(Dsl.parse(nullable), true).get("seam.rs");
+    int binding = rust.indexOf("let input = input.map_or(");
+    int check =
+        rust.indexOf(
+            "debug_assert!(input.1 == 0 || (input.0 as usize) & 15 == 0,"
+                + " \"transfer.input requires 16-byte alignment\");");
+    assertTrue(binding >= 0 && check > binding, rust);
+    // Without the fact nothing is asserted anywhere.
+    var none = Generator.generate(Dsl.parse(TRANSFER), true);
+    for (String file : List.of("ApiFFM.java", "ApiOwnership.java", "seam.rs"))
+      assertFalse(none.get(file).contains("requires 16-byte"), file);
+    // Only align: an extent or noalias requirement on a buffer is still rejected.
+    var refused =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Generator.generate(
+                    Dsl.parse(
+                        aligned.replace(
+                            "align=8@explicit_contract",
+                            "align=8@explicit_contract dereferenceable=8@explicit_contract")),
+                    true));
+    assertTrue(refused.getMessage().contains("cannot impose extent or noalias"));
+  }
+
+  /** An align fact on a borrow buffer is a power of two, at most 4096. */
+  @Test
+  void alignOnBorrowsMustBeAPowerOfTwoWithinAPage() {
+    for (String bad : new String[] {"24", "3", "8192", "0"}) {
+      String source =
+          TRANSFER.replace(
+              " readonly=true@explicit_contract\n",
+              " readonly=true@explicit_contract align=" + bad + "@explicit_contract\n");
+      assertThrows(
+          IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(source), true), bad);
+    }
+    var message =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Generator.generate(
+                    Dsl.parse(
+                        TRANSFER.replace(
+                            " readonly=true@explicit_contract\n",
+                            " readonly=true@explicit_contract align=24@explicit_contract\n")),
+                    true));
+    assertTrue(message.getMessage().contains("power of two"), message.getMessage());
+  }
+
+  /** A held borrow takes the same fact; its cell copies a buffer that violates it. */
+  @Test
+  void alignOnHeldBorrowsReachesTheirCoercion() {
+    String aligned =
+        HELD.replace(
+            " readonly=true@explicit_contract\n  param length",
+            " readonly=true@explicit_contract align=32@explicit_contract\n  param length");
+    assertNotEquals(HELD, aligned);
+    var output = Generator.generate(Dsl.parse(aligned), true);
+    assertTrue(output.get("seam.ll").contains("align 32"));
+    assertTrue(
+        output
+            .get("ApiTruffle.java")
+            .contains("new HeldBytesCoercion(\"layoutCompile\", \"schema\", false, 32)"),
+        output.get("ApiTruffle.java"));
+  }
 
   /**
    * Only a Truffle cell's owner can end a borrow after its call, so the other backends leave a
@@ -948,11 +1949,11 @@ class OwnershipTest {
         Arguments.of(
             schema,
             schema.replace(" readonly=true@explicit_contract", ""),
-            "shared call buffer requires approved readonly=true"),
+            "shared call buffer requires approved readonly=true: layoutCompile schema"),
         Arguments.of(
             schema,
             schema.replace("ptr<u8>", "ptr<u16>"),
-            "call buffer requires borrowed ptr<u8>"));
+            "call buffer requires borrowed ptr<u8>: layoutCompile schema"));
   }
 
   @ParameterizedTest
@@ -972,7 +1973,7 @@ class OwnershipTest {
    * beside any borrow, and no other backend can end a borrow after its call.
    */
   @Test
-  void heldBorrowsNeedACellThatReportsAStatus() {
+  void heldBorrowsOnOwnedResourcesAreWrappedEverywhere() throws Exception {
     String open =
         "module held target=aarch64-apple-darwin java_class=Api\n"
             + "opaque Doc\n"
@@ -990,32 +1991,75 @@ class OwnershipTest {
             + "  param doc type=ptr<Doc> nullable=false ownership=transferred_to_callee"
             + " access=read_write\n"
             + "end\n";
-    assertEquals(
-        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
-            + " lifetime=resource:Doc",
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(open), true))
-            .getMessage());
+    // A create that returns its resource is wrapped everywhere: Rust by lifetime, Java by a copy.
+    var output = Generator.generate(Dsl.parse(open), true);
+    String rust = output.get("seam.rs");
+    assertTrue(rust.contains("    pub struct Doc<'held> {\n"), rust);
+    assertTrue(rust.contains("        _held: core::marker::PhantomData<&'held [u8]>,\n"), rust);
+    assertTrue(rust.contains("    impl<'held> Doc<'held> {\n"), rust);
+    assertTrue(
+        rust.contains("        pub unsafe fn create(data: &'held [u8]) -> Option<Self> {\n"), rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_create<T>(data: &'held [u8], scope: impl FnOnce(&Self) -> T) ->"
+                + " Option<T> {\n"),
+        rust);
+    assertTrue(rust.contains("    impl core::ops::Drop for Doc<'_> {\n"), rust);
+    assertTrue(
+        rust.contains("    pub struct DocBorrow<'owner> { owner: &'owner Doc<'owner> }\n"), rust);
+    String ffm = output.get("ApiFFM.java");
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " MemorySegment arg0) throws Throwable {\n"),
+        ffm);
+    assertTrue(ffm.contains("            Arena kept = Arena.ofConfined();\n"), ffm);
+    // The copy is freed only after a destroy that returned: one that throws leaks it.
+    assertTrue(
+        ffm.contains("                binding.docClose(handle);\n                kept.close();\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains("public static <T> T create(ResourceFactory<T> factory, byte[] arg0) {"),
+        java);
+    assertTrue(
+        java.contains(
+            "public static <T> T create(ResourceFactory<T> factory, NativeBuffer arg0) {"),
+        java);
+    assertTrue(
+        java.contains(
+            "org.graalvm.nativeimage.UnmanagedMemory.free(org.graalvm.word.WordFactory.pointer(kept));"),
+        java);
+    // A module whose only borrows are held still declares NativeBuffer, and compiles.
+    assertTrue(java.contains("public interface NativeBuffer {"), java);
+    compileJava(
+        Generator.generate(
+            Dsl.parse(open.replace("aarch64-apple-darwin", "x86_64-unknown-linux-gnu")), true),
+        "Api.java",
+        "ApiDirectives.java",
+        "ApiOwnership.java");
+    // Resources without held borrows keep their unparameterized owner.
+    assertTrue(
+        Generator.generate(Dsl.parse(CREATES), true)
+            .get("seam.rs")
+            .contains("    pub struct Session {\n"));
+    // A Truffle cell holds a buffer only beside the struct or slot of a handle= create.
     String cells = open.replace(" java_class=Api\n", " java_class=Api truffle_cells=true\n");
     assertEquals(
-        "a held borrow needs a create that reports a status and writes its resource through a"
-            + " parameter (handle=...): docOpen data lifetime=resource:Doc",
+        "a Truffle cell holds a buffer only for a create that writes its resource through a"
+            + " parameter (handle=...); opt docOpen out with truffle_cell=false@explicit_contract:"
+            + " docOpen data lifetime=resource:Doc",
         assertThrows(
                 IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(cells), true))
             .getMessage());
-    // A module that generates cells, but not for this create.
     String noCell =
         cells.replace(
             " native_leaf=false@explicit_contract\n  param data",
             " native_leaf=false@explicit_contract truffle_cell=false@explicit_contract\n"
                 + "  param data");
     assertNotEquals(cells, noCell);
-    assertEquals(
-        "a held borrow is generated for Truffle cells only; docOpen needs one: docOpen data"
-            + " lifetime=resource:Doc",
-        assertThrows(
-                IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(noCell), true))
-            .getMessage());
+    assertDoesNotThrow(() -> Generator.generate(Dsl.parse(noCell), true));
+    // A struct handle is still a Truffle cell's alone.
     String optedOut =
         HELD.replace(
             "import layoutCompile return=i32 error=no_failure",
@@ -1023,6 +2067,141 @@ class OwnershipTest {
                 + " truffle_cell=false@explicit_contract");
     assertThrows(
         IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(optedOut), true));
+  }
+
+  /** Held buffers on both owned forms, nullable and narrow, beside call buffers and C strings. */
+  /**
+   * Compiles generated Java files with javac: the test classpath carries the Native Image SDK, and
+   * the running GraalVM's SVM jars the pinned-fork classes the Native Image class imports.
+   */
+  static void compileJava(java.util.Map<String, String> output, String... files) throws Exception {
+    Path dir = Files.createTempDirectory("myna-compile");
+    var sources = new java.util.ArrayList<String>();
+    for (String file : files) {
+      String text = output.get(file);
+      assertNotNull(text, file);
+      var pkg = java.util.regex.Pattern.compile("package ([\\w.]+);").matcher(text);
+      String path = pkg.find() ? pkg.group(1).replace('.', '/') + "/" : "";
+      Path source = dir.resolve(path + file);
+      Files.createDirectories(source.getParent());
+      Files.writeString(source, text);
+      sources.add(source.toString());
+    }
+    var classpath = new StringBuilder(System.getProperty("java.class.path"));
+    Path svm = Path.of(System.getProperty("java.home"), "lib", "svm");
+    for (String jar : List.of("svm-guest-staging.jar", "svm-shared.jar", "svm-guest.jar"))
+      classpath.append(java.io.File.pathSeparator).append(svm.resolve(jar));
+    var args =
+        new java.util.ArrayList<>(
+            List.of(
+                "-proc:none",
+                "-nowarn",
+                "-cp",
+                classpath.toString(),
+                "-d",
+                dir.resolve("classes").toString()));
+    args.addAll(sources);
+    var errors = new java.io.ByteArrayOutputStream();
+    int status =
+        javax.tools.ToolProvider.getSystemJavaCompiler()
+            .run(null, null, errors, args.toArray(String[]::new));
+    assertEquals(0, status, errors.toString());
+  }
+
+  static String heldShapes() throws Exception {
+    return Files.readString(Path.of("tests/ownership/held_shapes.seam"));
+  }
+
+  @Test
+  void heldBuffersInEveryShapeOfConstructor() throws Exception {
+    String HELD_SHAPES = heldShapes();
+    var output = Generator.generate(Dsl.parse(HELD_SHAPES), true);
+    assertEquals(output, Generator.generate(Dsl.parse(HELD_SHAPES), false));
+    String rust = output.get("seam.rs");
+    // A nullable held buffer, a narrow length and a pointer nothing vouches for.
+    assertTrue(
+        rust.contains(
+            "        pub unsafe fn docOpen(data: Option<&'held [u8]>, hint: *const u64) ->"
+                + " Option<Self> {\n"
+                + "            let data = data.map_or((core::ptr::null(), 0), |data|"
+                + " (data.as_ptr(), data.len()));\n"),
+        rust);
+    // Call buffers and C strings beside a held one are lent for the call only.
+    assertTrue(
+        rust.contains(
+            "        pub unsafe fn docMixed(title: Option<&::core::ffi::CStr>, data: &'held [u8],"
+                + " scratch: Option<&mut [u8]>) -> Option<Self> {\n"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_docMixed<T>(title: Option<&::core::ffi::CStr>, data: &'held [u8],"
+                + " scratch: Option<&mut [u8]>, scope: impl FnOnce(&Self) -> T) -> Option<T> {\n"
+                + "            let owner = unsafe { Self::docMixed(title, data, scratch) }?;\n"
+                + "            Some(scope(&owner))\n"),
+        rust);
+    assertTrue(
+        rust.contains("        pub unsafe fn create(data: &'held [u8]) -> Result<Self, u8> {\n"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "        pub fn with_create<T>(data: &'held [u8], scope: impl FnOnce(&Self) -> T) ->"
+                + " Result<T, u8> {\n"),
+        rust);
+    String ffm = output.get("ApiFFM.java");
+    // Java wraps a constructor whose only borrow is one held buffer.
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T docOpen(LibraryBinding binding, ResourceFactory<T>"
+                + " factory, MemorySegment arg0, MemorySegment arg2) throws Throwable {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains("            long length = arg0 == null ? 0 : arg0.byteSize();\n"), ffm);
+    assertTrue(ffm.contains("if (length > 4294967295L) throw new IllegalArgumentException"), ffm);
+    assertTrue(ffm.contains("            Arena kept = Arena.ofShared();\n"), ffm);
+    assertFalse(ffm.contains(" docMixed(LibraryBinding"), ffm);
+    assertTrue(
+        ffm.contains(
+            "        public static <T> T create(LibraryBinding binding, ResourceFactory<T> factory,"
+                + " Failure<? extends T> onFailure, MemorySegment arg0) throws Throwable {\n"),
+        ffm);
+    assertTrue(
+        ffm.contains(
+            "            if (!(Byte.toUnsignedInt(status) == 0) || address.address() == 0) {\n"),
+        ffm);
+    String java = output.get("ApiOwnership.java");
+    assertTrue(
+        java.contains(
+                "public static <T> T docOpen(ResourceFactory<T> factory, byte[] arg0,"
+                    + " org.graalvm.word.PointerBase arg2) {")
+            || java.contains(
+                "public static <T> T docOpen(ResourceFactory<T> factory, byte[] arg0,"),
+        java);
+    assertTrue(java.contains("            if (arg0 == null) {\n"), java);
+    assertTrue(
+        java.contains("if (raw.isNonNull()) org.graalvm.nativeimage.UnmanagedMemory.free(raw);"),
+        java);
+    // An align fact above malloc's rounds the copy up, and the Rust owner lends an aligned empty.
+    assertTrue(
+        java.contains("copy = org.graalvm.word.WordFactory.pointer((raw.rawValue() + 31) & -32L);"),
+        java);
+    assertTrue(
+        rust.contains(
+            "if data.is_empty() { EMPTY_32.0.as_ptr() as *const u8 } else { data.as_ptr() }"),
+        rust);
+    assertTrue(
+        rust.contains(
+            "debug_assert!(data.len() == 0 || (data.as_ptr() as usize) & 31 == 0, \"winOpen.data"
+                + " requires 32-byte alignment\");"),
+        rust);
+    // The generated Java compiles: FFM alone, Native Image against the SDK and SVM jars.
+    compileJava(output, "ApiFFM.java");
+    compileJava(output, "Api.java", "ApiDirectives.java", "ApiOwnership.java");
+    assertTrue(
+        java.contains(
+            "public static <T> T create(ResourceFactory<T> factory, Failure<? extends T> onFailure,"
+                + " NativeBuffer arg0) {"),
+        java);
+    assertFalse(java.contains(" docMixed(ResourceFactory"), java);
   }
 
   static Stream<Arguments> borrowRejections() {
@@ -1045,14 +2224,20 @@ class OwnershipTest {
         Arguments.of(
             "length=capacity",
             "length=output",
-            "borrow must identify distinct buffer and length parameters"),
+            "borrow must identify distinct buffer and length parameters: transfer output"
+                + " length=output"),
         Arguments.of(
             "length=capacity",
             "length=absent",
-            "borrow must identify distinct buffer and length parameters"),
+            "borrow must identify distinct buffer and length parameters: transfer output"
+                + " length=absent"),
         // Out of scope: a result that could point into a borrowed buffer.
-        Arguments.of("return=i32", "return=ptr<Session>", "call borrow cannot return a pointer"),
-        Arguments.of("return=i32", "return=ptr<u8>", "call borrow cannot return a pointer"),
+        Arguments.of(
+            "return=i32",
+            "return=ptr<Session>",
+            "call borrow cannot return a pointer: transfer input"),
+        Arguments.of(
+            "return=i32", "return=ptr<u8>", "call borrow cannot return a pointer: transfer input"),
         // Parameters with no pass-through carrier in every backend.
         Arguments.of(
             "  param flags type=u8\n",
@@ -1070,19 +2255,21 @@ class OwnershipTest {
             output.replace("nullable=false", "nullable=true nonnull=true@explicit_contract"),
             "nonnull contradicts nullable=true"),
         Arguments.of(
-            output, output.replace("ptr<u8>", "ptr<i8>"), "call buffer requires borrowed ptr<u8>"),
+            output,
+            output.replace("ptr<u8>", "ptr<i8>"),
+            "call buffer requires borrowed ptr<u8>: transfer output"),
         Arguments.of(
             output,
             output.replace("ownership=borrowed", "ownership=owned_by_caller"),
-            "call buffer requires borrowed ptr<u8>"),
+            "call buffer requires borrowed ptr<u8>: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=none"),
-            "call buffer requires read, write or read_write access"),
+            "call buffer requires read, write or read_write access: transfer output"),
         Arguments.of(
             output,
             output.replace(" access=read_write", ""),
-            "call buffer requires read, write or read_write access"),
+            "call buffer requires read, write or read_write access: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=write readonly=true@explicit_contract"),
@@ -1090,28 +2277,29 @@ class OwnershipTest {
         Arguments.of(
             output,
             output.replace(" nocapture=true@explicit_contract", ""),
-            "call buffer requires approved nocapture=true"),
+            "call buffer requires approved nocapture=true: transfer output"),
         Arguments.of(
             output,
             output.replace("access=read_write", "access=read"),
-            "shared call buffer requires approved readonly=true"),
+            "shared call buffer requires approved readonly=true: transfer output"),
         Arguments.of(
             output,
             output.replace("\n", " noalias=true@explicit_contract\n"),
-            "call buffer cannot impose alignment, extent, or noalias preconditions"),
+            "call buffer cannot impose extent or noalias preconditions: transfer output"),
         Arguments.of(
             "param capacity type=u32",
             "param capacity type=u16",
-            "buffer length must be a 32/64-bit integer (bytes)"),
+            "buffer length must be a 32/64-bit integer or usize (bytes): transfer output"
+                + " length=capacity"),
         Arguments.of(
             " nounwind=true@explicit_contract\n",
             "\n",
-            "ownership wrappers require approved nounwind=true"),
+            "ownership wrappers require approved nounwind=true: transfer"),
         Arguments.of(
             "return=i32 error=no_failure nounwind=true@explicit_contract\n",
             "return=void error=no_failure nounwind=true@explicit_contract"
                 + " noreturn=true@explicit_contract native_leaf=false@explicit_contract\n",
-            "ownership wrappers require returning no_failure native imports"));
+            "ownership wrappers require returning no_failure native imports: transfer"));
   }
 
   @ParameterizedTest
@@ -1566,5 +2754,19 @@ class OwnershipTest {
             + "end\n";
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), false), "relaxed: " + name);
     assertDoesNotThrow(() -> Generator.generate(Dsl.parse(source), true), "strict: " + name);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"align,false", "align,abc", "align,0", "dereferenceable,x", "dereferenceable,false"})
+  void rejectsNonNumericAlignmentFacts(String fact, String value) throws Exception {
+    String anchor = "readonly=true@explicit_contract";
+    String original = source();
+    assertTrue(original.contains(anchor), "mutation must affect fixture");
+    String changed =
+        original.replace(anchor, anchor + " " + fact + "=" + value + "@explicit_contract");
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(changed), false));
+    assertEquals(fact + " requires a positive integer: " + value, e.getMessage());
   }
 }

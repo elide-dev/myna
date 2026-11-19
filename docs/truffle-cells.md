@@ -161,7 +161,19 @@ Two guest buffer objects ship in `myna-truffle`:
 
 - `NativeBytes` views native memory (an address and size, or a native `MemorySegment`). It is an
   interop buffer and an interop pointer at once, so cells lend its address with no copy and no pin.
-  `toArrayBuffer(ptr, len)` in `bun:ffi` terms is a consumer API over it.
+  `toArrayBuffer(ptr, len)` in `bun:ffi` terms is a consumer API over it. It does not own the memory:
+  the embedder keeps it alive while guest code can reach the object. Its buffer messages check the
+  segment's scope before every access, in both runtimes, and fail with a `NativeCellException`, a
+  guest error that guest `try`/`catch` handles: once the arena is closed, or on a thread other than
+  a confined arena's owner. Its cause is what the segment's own accessors throw for the access
+  (`IllegalStateException`, `WrongThreadException`). In a Native Image the scalar messages compile
+  to word reads and writes, so this check is what keeps a guest from touching the memory of a
+  closed confined arena there. In compiled code it loads the scope's state and branches, and for a
+  confined arena also compares its owner with the current thread, with no call or allocation; the
+  global arena and `NativeBytes.of(address, size, writable)` views have no scope, and test one
+  field. It is a check, not a hold: it does not protect a shared arena closed by another thread
+  (in compiled code one check may cover a whole loop of reads), so an embedder that closes shared
+  arenas keeps them open while guest code can reach their `NativeBytes`.
 - `HeapBytes` wraps a Java `byte[]`, for languages without native memory. It is not an interop
   pointer: a heap address never reaches native code unpinned.
 
@@ -233,12 +245,37 @@ in a `finally` of its own, in reverse acquisition order:
   costs no allocation. Larger copies, and copies that do not fit beside outstanding ones, get an
   arena of their own. Because cells release in reverse order, nested borrows and calls back into
   guest code are last-in, first-out; releasing out of order or on another thread throws
-  `IllegalStateException` and leaves the stack unchanged.
+  `IllegalStateException` and leaves the stack unchanged;
+- every copy a borrow lends starts on a 16-byte boundary (`Borrow.Scratch.ALIGNMENT`): scratch,
+  arena, text and held copies alike, whatever was pushed before. A guest's UTF-16 or wider
+  elements therefore never meet an odd address through a copy, which heap arrays on HotSpot
+  (object-header dependent base offsets) could not promise in place;
+- a parameter with `align=N@explicit_contract` is never lent at an address not divisible by `N`.
+  Copies start on a boundary of at least `N` (an arena or a rounded `malloc` for `N` above 16); a
+  heap array is never pinned for `N` above 8 (a pinned array's data starts on 8 bytes), so it is
+  copied; native memory lent in place
+  at a lesser alignment (a misaligned `asSlice`) is copied, written back for writable parameters,
+  and not passed to an FFM downcall as the guest's own segment, so the callee never sees it; a
+  bare pointer, which has no size to copy, is refused with a `NativeCellException`. An empty
+  buffer lends a page-aligned dummy address under a fact up to 4096; under a stricter fact (a
+  16 KiB page, 64 KiB, 2 MiB) it is lent a dangling pointer aligned to the fact, the address `N`
+  itself (Rust's `NonNull::dangling` convention): non-null, aligned, never dereferenced, and neither
+  allocated nor copied. A non-empty buffer at the fact's alignment is still lent in place. A writable copy
+  is written back through the guest segment's scope after the call: if guest code closed the arena
+  meanwhile (from a callback or another thread), nothing is written and the cell fails with a
+  `NativeCellException`, as it does when the guest's memory is confined to another thread.
+  The fact is accepted on any byte-pointer parameter: a C string, a `truffle_buffer`, a call `borrow`
+  or a held one (a held copy and a held native buffer follow the same rules). On a `borrow` it is
+  also a caller contract for the other wrappers, which assert it in debug builds only; a cell is
+  the one caller that cannot be trusted, so it copies. A parameter with the fact takes
+  `AlignedBytesCoercion`: for a fact up to 16 it is `BytesCoercion` with checks that fold on the
+  fact, the borrow stays out of the heap in compiled code, and text keeps its scratch-stack paths; a
+  stricter fact encodes text into an array and copies it into an arena of its own.
 
 A borrow that a compiled cell acquires and releases costs no Java heap: the `Borrow` is
 scalar-replaced whichever kinds of value the call site has seen, lent native memory and scratch
 copies allocate nothing, and a pin allocates only its `PinnedObject` (24 bytes), exactly as a
-hand-written pin does. Each byte parameter profiles the kinds of value it has been given (native
+hand-written pin does. A parameter with an `align` fact keeps that for native memory, scratch copies and text: the mask folds on the final field and what remains is one AND of the address at run time, which allocates nothing. Two things allocate: a large heap array under `align` above 8, which a Native Image copies instead of pinning, and a fact above 16, which copies into an arena of its own. Each byte parameter profiles the kinds of value it has been given (native
 buffer, heap buffer, Java string, raw pointer, anything else through interop) and compiles only
 those paths. Several borrows on one call cost what each costs alone:
 `tests/truffle_integration.py` measures 0 bytes per compiled `transfer` call between native
@@ -331,15 +368,62 @@ A pinned array does not move, so its address stays valid across any safepoint be
 the call. The pin/copy threshold defaults to 256 bytes (`-Dmyna.truffle.pinThreshold`); see
 [Measurement](#measurement).
 
+### Batches of buffers
+
+A [batch](ownership.md#batches-of-buffers) (`borrow F SOURCES lengths=LENGTHS count=COUNT`) drops
+its lengths and count from the guest signature: the guest passes an interop array
+(`hasArrayElements`) of byte buffers or strings, or `null` (interop `null`, host `null`, or an
+empty array) for the empty batch, which reaches native code as null arrays with count zero. Host
+code can pass a `BufferArray.of(..)`.
+
+- Each element is lent by the single-buffer coercion, under exactly its rules: native memory in
+  place, heap arrays pinned or copied by the pin threshold, strings and other interop buffers
+  copied, a present empty buffer at a non-null address. An element may be interop `null` (the null
+  pointer with length zero) only under `elements_nullable=true`.
+- The array's size is read once and checked (a negative size, or more than 134217727 elements,
+  is a guest error before anything is lent), and each element is read once, as it is lent; what
+  the call lends and its release undoes is what was read, never re-read, whatever the guest stores
+  into the array meanwhile.
+- The pointer and length arrays take `16 * count` bytes of the thread's scratch stack, and the
+  elements' copies stack above them, so the whole batch pops in one step. Arrays too large for the
+  stack (above 1024 elements, or not fitting beside outstanding copies) take a confined arena of
+  their own, as a large copy does, and so does each element copy past the end of the scratch block.
+- A failure to lend element `k` releases the elements before it, in reverse, and the call never
+  reaches native code.
+- An FFM cell passes a single buffer's own segment to its downcall, which holds its scope for the
+  call; a batch's addresses are in memory, where the linker holds nothing. So an FFM cell lends an
+  element of scoped native memory in place only when nothing can close it during the call, as the
+  host wrapper does: a segment confined to the calling thread (accessible from it but not from a
+  sentinel thread that never starts, kept in a run-time-initialized holder) under a native leaf.
+  Any other (shared, automatic, or confined under an import that can call back) is copied through
+  its segment, a scope-checked read that refuses a closed or foreign-thread arena, straight onto
+  the scratch stack. Coercing a later element can run guest code (an array's element reads, a
+  string's or buffer's messages), which could close an element already lent in place, so once
+  every argument is coerced, right before the downcall, the cell checks again that each element it
+  lent in place is open and confined to this thread, and otherwise fails the call as a closed
+  single buffer's does, releasing the batch. From there nothing can close it: no other thread can
+  close a confined arena, and a leaf cannot call back. A batch with nothing lent in place pays one
+  branch. Native Image cells lend native memory in place, as for a single buffer.
+- A batch is a `Batch`, not a `Borrow`, so single borrows keep their layout. A compiled batch call
+  allocates only what lending its elements needs: nothing for native memory, scratch copies and
+  scoped copies, a `PinnedObject` per pinned element, an arena per element copied past the scratch
+  block, and one array of those owners per call that has any. `tests/truffle/CellsMain.java` and
+  `FfmCellsMain.java` measure three small heap arrays, native and scoped segments, and a string
+  batch beside a nullable batch at zero bytes per compiled call in both backends.
+
 ## Ownership
 
-A `resource` declaration makes the `create` import's cell return a `NativeResource`: a guest-visible
+A `resource` declaration makes each `create` import's cell (every one, for [several constructors](ownership.md#several-constructors)) return a `NativeResource`: a guest-visible
 owner that is an interop pointer while open, exposes a `close` member, closes exactly once, and
 refuses access from any thread other than its required thread when the resource is confined. The
 `destroy` import's cell takes that owner and closes it; a pointer or a foreign owner is rejected, and
 a second destroy is a no-op. A failed creation returns `NativeVoid`. `registerCleanup(Cleaner)`
 adds an optional cleaner for shared resources; a cleaner thread cannot honor confinement, so confined
-owners refuse it. These are the same rules as the existing Native Image ownership API.
+owners refuse it. These are the same rules as the existing Native Image ownership API. A create with a writable call buffer writes
+that buffer back after the call; if the write-back fails (the guest's buffer shrank, stopped
+accepting writes, or its arena closed during the call), the cell destroys the resource the call made,
+releasing any parent it held, and throws the write-back failure with any destroy failure attached as
+suppressed. The guest never receives an owner it would have to close.
 
 A create declared with a `handle` keeps its C shape for the guest: the guest passes a buffer for
 the struct the create writes through, and reads that struct's fields from it afterwards. The
@@ -386,7 +470,7 @@ handed it to the guest.
 
 A create declared with `borrow FUNCTION PARAMETER length=PARAMETER lifetime=resource:NAME` keeps
 that buffer until the resource it makes is destroyed (see
-[ownership](ownership.md#borrows-held-by-a-resource-truffle-cells-only) for the declaration). The
+[ownership](ownership.md#borrows-held-by-a-resource) for the declaration). The
 cell lends it through a `HeldBytesCoercion` instead of a `BytesCoercion`, because nothing that ends
 with the call can be used for it: no pin and no scratch-stack copy.
 
@@ -422,9 +506,12 @@ Why each choice:
   copy is the point of an adopting create. Keeping the `NativeBytes` reachable keeps an automatic
   arena's memory allocated; memory its owner frees explicitly (a closed arena, a raw address passed
   to `NativeBytes.of`) is the owner's to keep alive while the resource is open, exactly as
-  `NativeBytes` already requires for as long as guest code can reach it. No scope is acquired: the
-  FFM API exposes no acquire outside a downcall, and one held for as long as a guest keeps a
-  resource open would keep its arena from ever closing.
+  `NativeBytes` already requires for as long as guest code can reach it. An FFM cell passes the
+  segment to the create call itself, as it does a call borrow's (see [Borrows](#borrows)), so that
+  call refuses a closed segment or one confined to another thread before native code runs, and
+  holds a shared arena open while it runs. No scope is held after the call: the FFM API exposes no
+  acquire outside a downcall, and one held for as long as a guest keeps a resource open would keep
+  its arena from ever closing.
 - **Thread confinement is the resource's.** A confined resource closes only on its thread, so its
   borrow ends there; a shared one ends wherever it is closed, which the copies above allow.
 
@@ -443,6 +530,23 @@ Generated array convenience methods pin with a plain `try`/`finally`, not try-wi
 javac compiles try-with-resources to `Throwable.addSuppressed`, which Truffle's runtime-compilation
 blocklist (`-H:+TruffleCheckBlockListMethods`) rejects on partially evaluated paths. Hand-written
 code that runs around a cell on a compiled path should do the same.
+
+## Constants and names
+
+A module that declares constants, enums or flag sets also gets, in `<NativeClass>Truffle`:
+
+- `constants()`, a `NativeConstants` interop object whose members are the constants by name and one object per enum or flag set
+  (`constants.Status.ok`; a flag member is its bit's mask). Values use the guest carriers cells return: `u8` and `u16` are
+  `int`, `u32` is `long`, and `u64` is the raw bits as a `long`. A member read with a constant name
+  folds to the value in compiled code (the lookup cache keys on string equality, with four entries
+  per call site; further sites fall back to a `@TruffleBoundary` lookup).
+- `<Enum>Names.name(value)` per enum, returning a `TruffleString` or `null` for an unlisted value, with
+  overloads for the guest carriers.
+
+`constants` and the `<Enum>Names` classes are reserved, so a cell named `constants` is rejected in such a
+module. Cells stay primitive: results are carriers, never enum objects, and a reference changes no cell
+signature or leaf status. A Truffle class with no cells still compiles; its `function(String)` always
+throws `IllegalArgumentException`.
 
 ## Transitions
 
@@ -657,8 +761,9 @@ Findings that are tracked, not blocking:
   16 bytes the copy is faster than the pin (10.5 against 17.3 ns), at 256 bytes they are within
   2 ns. `-Dmyna.truffle.pinThreshold` moves the threshold.
 - FFM cells pass the scope of a guest's own segment to the downcall when they lend its memory in
-  place (see [Borrows](#borrows)). Host code calling `invoke` still passes raw addresses, whose
-  validity is its own to keep.
+  place (see [Borrows](#borrows)), a held borrow's included, for its create call only (see
+  [Borrows held by a resource](#borrows-held-by-a-resource)). Host code calling `invoke` still
+  passes raw addresses, whose validity is its own to keep.
 - FFM cells over leaf imports are critical: they call the module's static FFM entry, which for a
   native leaf is a critical downcall over the build-time typed adapter. See
   [Measurement](#measurement) for their cost against the direct and handwritten calls.

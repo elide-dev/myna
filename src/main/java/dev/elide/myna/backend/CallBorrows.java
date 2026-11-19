@@ -19,6 +19,16 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
   static List<CallBorrows> of(Module m) {
     var names = new LinkedHashSet<String>();
     m.callBorrows().forEach(b -> names.add(b.function()));
+    // An import with a C string parameter gets the same wrappers, unless a buffer of it is held.
+    var held = new HashSet<String>();
+    m.borrows()
+        .forEach(b -> {
+          if (b.held()) held.add(b.function());
+        });
+    for (Function f : m.functions())
+      if (f.direction() == Direction.IMPORT
+          && !held.contains(f.name())
+          && f.parameters().stream().anyMatch(CallBorrows::cstring)) names.add(f.name());
     var result = new ArrayList<CallBorrows>();
     for (String name : names)
       result.add(
@@ -46,6 +56,37 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
     return null;
   }
 
+  /** The batch whose count is {@code p}, or null. */
+  BufferBorrow count(Parameter p) {
+    for (BufferBorrow b : borrows) if (b.batch() && b.count().equals(p.name())) return b;
+    return null;
+  }
+
+  /** Whether {@code p} is a length or count the wrapper derives instead of taking. */
+  boolean derived(Parameter p) {
+    return length(p) != null || count(p) != null;
+  }
+
+  /** Whether any borrow of the function is a batch. */
+  boolean batched() {
+    return borrows.stream().anyMatch(BufferBorrow::batch);
+  }
+
+  /** The element type of a batch's lengths array. */
+  Scalar lengthElement(BufferBorrow b) {
+    return (Scalar) ((Pointer) parameter(b.length()).type()).pointee();
+  }
+
+  /** The scalar type of a batch's count. */
+  Scalar countType(BufferBorrow b) {
+    return (Scalar) parameter(b.count()).type();
+  }
+
+  /** The largest value a 32-bit integer type carries, as a Java {@code long} literal. */
+  static String max32(Scalar type) {
+    return type == Scalar.I32 ? "2147483647L" : "4294967295L";
+  }
+
   private Parameter parameter(String name) {
     return function.parameters().stream()
         .filter(p -> p.name().equals(name))
@@ -68,6 +109,47 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
    */
   boolean nullable(BufferBorrow b) {
     return parameter(b.parameter()).nullable();
+  }
+
+  /**
+   * The alignment the buffer's parameter promises its callee ({@code align=N@explicit_contract}),
+   * or zero for none. A caller contract: cells copy a buffer that violates it, and the other
+   * wrappers assert it in debug builds only.
+   */
+  long align(BufferBorrow b) {
+    return align(parameter(b.parameter()));
+  }
+
+  static long align(Parameter p) {
+    Fact fact = p.facts().get("align");
+    return fact != null && fact.approved() ? Long.parseLong(fact.value()) : 0;
+  }
+
+  /**
+   * A Java {@code assert} statement for a buffer at {@code address} of {@code length} bytes, or
+   * nothing without an {@code align} fact. A single AND of the address: it costs nothing where
+   * assertions are off, which is HotSpot without {@code -ea} and any Native Image built without
+   * assertions. An empty buffer is exempt because every wrapper lends it an aligned dummy in its
+   * place, whatever address it reports, which LLVM's {@code align} attribute requires: it does not
+   * depend on the extent.
+   */
+  String alignmentAssertion(BufferBorrow b, String address, String length, String pad) {
+    long align = align(b);
+    if (align <= 1) return "";
+    return pad
+        + "assert "
+        + length
+        + " == 0 || ("
+        + address
+        + " & "
+        + (align - 1)
+        + "L) == 0 : \""
+        + function.name()
+        + "."
+        + b.parameter()
+        + " requires "
+        + align
+        + "-byte alignment\";\n";
   }
 
   /** Whether the length travels in a 32-bit carrier, so the byte count needs a range check. */
@@ -93,6 +175,12 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
   /** Whether a parameter other than a buffer is a pointer, which the wrapper cannot vouch for. */
   boolean passesPointers() {
     return function.parameters().stream()
-        .anyMatch(p -> buffer(p) == null && p.type() instanceof Pointer);
+        .anyMatch(p ->
+            buffer(p) == null && length(p) == null && !cstring(p) && p.type() instanceof Pointer);
+  }
+
+  /** Whether the parameter is a NUL-terminated string ({@code access=cstring}). */
+  static boolean cstring(Parameter p) {
+    return p.access() == Access.CSTRING;
   }
 }

@@ -190,23 +190,24 @@ public final class Borrow {
    * #end()}: native memory of its own, never the scratch stack or a pin, which end with the call.
    * An empty buffer lends the dummy address and copies nothing.
    */
-  void lendHeld(byte[] bytes) {
+  void lendHeld(byte[] bytes, long align) {
     if (bytes.length == 0) {
       lend(emptyAddress(), 0);
       return;
     }
-    Copy copy = Copy.held(bytes);
+    Copy copy = Copy.held(bytes, align);
     own(COPIED, copy, copy.address, bytes.length);
   }
 
   /** Lends a held copy of {@code text} as UTF-8, without a terminator. */
-  void lendHeldText(String text) {
-    lendHeld(utf8(text));
+  void lendHeldText(String text, long align) {
+    lendHeld(utf8(text), align);
   }
 
-  /** Lends a held copy of any interop buffer, read through {@code interop}. */
-  void lendHeldBuffer(InteropLibrary interop, Object buffer) throws UnsupportedMessageException {
-    lendHeld(read(interop, buffer, false));
+  /** Lends a held copy of any interop buffer, read through {@code interop}, at {@code align}. */
+  void lendHeldBuffer(InteropLibrary interop, Object buffer, long align)
+      throws UnsupportedMessageException {
+    lendHeld(read(interop, buffer, false), align);
   }
 
   /**
@@ -230,6 +231,11 @@ public final class Borrow {
     else lendCopy(utf8(text), null, false, nulTerminated);
   }
 
+  /** Lends UTF-8 text at an address divisible by {@code align}, which exceeds 16. */
+  void lendAlignedString(String text, boolean nulTerminated, long align) {
+    lendAlignedCopy(utf8(text), null, false, nulTerminated, align);
+  }
+
   /**
    * Owns the terminated text that {@code scratch} has just pushed ({@link Scratch#pushText} or
    * {@link Scratch#pushUnits}). The push happens outside the borrow, which only records it: the
@@ -247,6 +253,13 @@ public final class Borrow {
   void lendBuffer(InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated)
       throws UnsupportedMessageException {
     lendCopy(read(interop, buffer, writable), buffer, writable, nulTerminated);
+  }
+
+  /** {@link #lendBuffer} for a parameter whose {@code align} fact is {@code align}. */
+  void lendBuffer(
+      InteropLibrary interop, Object buffer, boolean writable, boolean nulTerminated, long align)
+      throws UnsupportedMessageException {
+    lendAlignedCopy(read(interop, buffer, writable), buffer, writable, nulTerminated, align);
   }
 
   @TruffleBoundary
@@ -269,6 +282,16 @@ public final class Borrow {
       interop.readBuffer(buffer, 0, bytes, 0, bytes.length);
     } catch (InvalidBufferOffsetException e) {
       throw new IllegalArgumentException("buffer shrank while being borrowed", e);
+    } catch (IllegalStateException | WrongThreadException e) {
+      // Guest native memory read through its segment: closed, or confined to another thread.
+      if (!(buffer instanceof NativeBytes)) throw e;
+      throw unavailable("copy-in", e);
+    } catch (NativeCellException e) {
+      // NativeBytes refuses a closed or foreign scope itself, with the segment's exception as
+      // cause.
+      if (buffer instanceof NativeBytes && e.getCause() instanceof RuntimeException cause)
+        throw unavailable("copy-in", cause);
+      throw e;
     }
     return bytes;
   }
@@ -286,13 +309,44 @@ public final class Borrow {
       this.offset = start;
       this.terminated = nulTerminated;
     } else {
-      Copy copy = Copy.of(bytes, nulTerminated);
+      Copy copy = Copy.of(bytes, nulTerminated, 0);
       own(COPIED, copy, copy.address, bytes.length);
     }
     if (writable) {
       this.array = bytes;
       this.interopSource = source;
     }
+  }
+
+  /** Lends a copy of {@code array} at an address divisible by {@code align}, above 16. */
+  void lendAlignedArray(byte[] array, boolean writable, boolean nulTerminated, long align) {
+    lendAlignedCopy(array, null, writable, nulTerminated, align);
+  }
+
+  /**
+   * {@link #lendCopy} at an address divisible by {@code align}, which exceeds 16: scratch copies
+   * are 16-byte aligned, so only a stricter fact takes an arena of its own.
+   */
+  private void lendAlignedCopy(
+      byte[] bytes, Object source, boolean writable, boolean nulTerminated, long align) {
+    Copy copy = Copy.of(bytes, nulTerminated, align);
+    own(COPIED, copy, copy.address, bytes.length);
+    if (writable) {
+      this.array = bytes;
+      this.interopSource = source;
+    }
+  }
+
+  /**
+   * Hands what this borrow must undo to the {@link Batch} that takes it over: the pin or the arena
+   * {@link Copy} of a pinned or arena-copied element, or {@code null} when there is nothing to undo
+   * apart from the scratch stack, which pops with the batch. The borrow is released as far as
+   * {@link #release()} is concerned. A batch lends read-only elements, which have no copy-back.
+   */
+  Object handOver() {
+    assert array == null : "a batch element has no copy-back";
+    released = true;
+    return kind == PINNED || kind == COPIED ? owner : null;
   }
 
   public long address() {
@@ -364,6 +418,10 @@ public final class Borrow {
    * not an internal one.
    */
   private static void writeBackInterop(byte[] array, Object source) {
+    if (source instanceof NativeBytes bytes) {
+      writeBackNative(array, bytes);
+      return;
+    }
     InteropLibrary interop = InteropLibrary.getUncached(source);
     try {
       for (int i = 0; i < array.length; i++) interop.writeBufferByte(source, i, array[i]);
@@ -377,26 +435,99 @@ public final class Borrow {
   }
 
   /**
+   * Writes a copy back into the native memory it was taken from (memory lent at a lesser alignment
+   * than an {@code align} fact). Guest code can close that memory's arena while the call runs, from
+   * a callback or another thread, so the write-back goes through the segment, a scope-checked
+   * access in both runtimes, and never through the buffer's write messages, which a Native Image
+   * compiles to raw word stores. The check and the stores cannot race the free: a confined arena is
+   * closed only by its owner thread, which is either this one (and not inside this copy) or another
+   * one (and the copy fails as on the wrong thread); closing a shared arena handshakes every
+   * thread, so no thread is left inside a scoped access of it when its memory is freed; an
+   * automatic arena is not freed while this borrow reaches the segment; the global scope never
+   * closes. A closed or foreign scope writes nothing and fails as a {@link NativeCellException}.
+   */
+  private static void writeBackNative(byte[] array, NativeBytes bytes) {
+    try {
+      MemorySegment.copy(array, 0, bytes.segment(), ValueLayout.JAVA_BYTE, 0, array.length);
+    } catch (IllegalStateException | WrongThreadException e) {
+      throw unavailable("write-back", e);
+    }
+  }
+
+  /**
+   * The failure of a copy from or to guest native memory whose arena is closed ({@link
+   * IllegalStateException}) or confined to another thread ({@link WrongThreadException}).
+   */
+  private static NativeCellException unavailable(String when, RuntimeException e) {
+    return NativeCellException.memory(
+        e instanceof WrongThreadException
+            ? "borrowed native buffer is confined to another thread at " + when
+            : "borrowed native buffer's arena was closed before " + when,
+        e);
+  }
+
+  /**
    * A copy too large for the scratch stack, or one that did not fit: an arena of its own. A held
    * borrow's copy is one too, made by {@link #held}.
    */
-  private static final class Copy {
+  static final class Copy {
     /** The arena, or {@code null} for a held copy {@code malloc}ed in a Native Image. */
     final Arena arena;
 
     final MemorySegment segment;
     final long address;
 
+    /**
+     * What {@code free} takes when {@link #arena} is {@code null}; it precedes {@link #address}.
+     */
+    private final long raw;
+
     private Copy(Arena arena, MemorySegment segment) {
+      this(arena, segment, segment.address());
+    }
+
+    private Copy(Arena arena, MemorySegment segment, long raw) {
       this.arena = arena;
       this.segment = segment;
       this.address = segment.address();
+      this.raw = raw;
+    }
+
+    /** The alignment of a copy: {@link Scratch#ALIGNMENT}, or a stricter {@code align} fact. */
+    private static long alignment(long align) {
+      return Math.max(align, Scratch.ALIGNMENT);
+    }
+
+    /** Room for a batch's arrays that the scratch stack cannot take. */
+    @TruffleBoundary
+    static Copy region(long size) {
+      Arena arena = Arena.ofConfined();
+      return new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+    }
+
+    /**
+     * A copy of guest native memory too large for the scratch stack, read through its segment: a
+     * scope-checked access. Returns {@code null}, allocating nothing, when the segment is closed or
+     * confined to another thread.
+     */
+    @TruffleBoundary
+    static Copy ofSegment(MemorySegment segment) {
+      Arena arena = Arena.ofConfined();
+      MemorySegment copy = arena.allocate(segment.byteSize(), Scratch.ALIGNMENT);
+      try {
+        MemorySegment.copy(segment, 0, copy, 0, segment.byteSize());
+      } catch (IllegalStateException | WrongThreadException e) {
+        arena.close();
+        return null;
+      }
+      return new Copy(arena, copy);
     }
 
     @TruffleBoundary
-    static Copy of(byte[] bytes, boolean nulTerminated) {
+    static Copy of(byte[] bytes, boolean nulTerminated, long align) {
       Arena arena = Arena.ofConfined();
-      MemorySegment segment = arena.allocate(Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1));
+      MemorySegment segment =
+          arena.allocate(Math.max(bytes.length + (nulTerminated ? 1L : 0L), 1), alignment(align));
       MemorySegment.copy(bytes, 0, segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
       if (nulTerminated) segment.set(ValueLayout.JAVA_BYTE, bytes.length, (byte) 0);
       return new Copy(arena, segment);
@@ -411,14 +542,18 @@ public final class Borrow {
      * guest's later writes to the array would reach the native side.
      */
     @TruffleBoundary
-    static Copy held(byte[] bytes) {
+    static Copy held(byte[] bytes, long align) {
       long size = bytes.length;
+      long alignment = alignment(align);
       Copy copy;
       if (ImageInfo.inImageRuntimeCode()) {
-        copy = new Copy(null, MemorySegment.ofAddress(Malloc.allocate(size)).reinterpret(size));
+        // Over-allocate and round up, so the guarantee does not rest on malloc's own alignment.
+        long raw = Malloc.allocate(size + alignment);
+        MemorySegment at = MemorySegment.ofAddress(Scratch.roundUp(raw, alignment));
+        copy = new Copy(null, at.reinterpret(size), raw);
       } else {
         Arena arena = Arena.ofShared();
-        copy = new Copy(arena, arena.allocate(size, Scratch.ALIGNMENT));
+        copy = new Copy(arena, arena.allocate(size, alignment));
       }
       MemorySegment.copy(bytes, 0, copy.segment, ValueLayout.JAVA_BYTE, 0, bytes.length);
       return copy;
@@ -430,7 +565,7 @@ public final class Borrow {
         if (array != null) writeBack(copy.segment, 0, array, source);
       } finally {
         if (copy.arena != null) copy.arena.close();
-        else Malloc.free(copy.address);
+        else Malloc.free(copy.raw);
       }
     }
   }
@@ -454,7 +589,7 @@ public final class Borrow {
   }
 
   /** Native Image pinning; loaded only inside an image, where {@link PinnedObject} exists. */
-  private static final class Pins {
+  static final class Pins {
     static void pin(Borrow borrow, byte[] array) {
       PinnedObject pin = PinnedObject.create(array);
       borrow.own(PINNED, pin, pin.addressOfArrayElement(0).rawValue(), array.length);
@@ -506,7 +641,7 @@ public final class Borrow {
     static final long ALIGNMENT = 16;
 
     private final Thread thread = Thread.currentThread();
-    private MemorySegment block;
+    MemorySegment block;
     private long wanted = INITIAL;
 
     /** The address of {@link #block}, read by compiled code after a push. */
@@ -525,11 +660,16 @@ public final class Borrow {
     /** The end of the innermost copy: zero when the stack is empty. */
     long top;
 
+    /** {@code value} rounded up to a multiple of {@code align}, a power of two. */
+    static long roundUp(long value, long align) {
+      return (value + align - 1) & -align;
+    }
+
     /**
      * The bytes a copy of {@code size} bytes occupies; an empty copy still gets its own address.
      */
     static long reservation(long size) {
-      return (Math.max(size, 1) + ALIGNMENT - 1) & -ALIGNMENT;
+      return roundUp(Math.max(size, 1), ALIGNMENT);
     }
 
     /** The block to copy {@code size} bytes into at {@link #top}, or {@code null} if it is full. */
@@ -545,6 +685,45 @@ public final class Borrow {
         }
       }
       return end <= block.byteSize() ? block : null;
+    }
+
+    /** The current thread's stack. */
+    @TruffleBoundary
+    static Scratch current() {
+      return Scratches.CURRENT.get();
+    }
+
+    /**
+     * Reserves {@code size} bytes on the current thread's stack for a batch's arrays and returns
+     * that stack, whose {@link #top} is then the end of the region, or returns {@code null} when
+     * the region is larger than {@link #LARGEST} or does not fit. The region's bytes are left as
+     * they were.
+     */
+    @TruffleBoundary
+    static Scratch region(long size) {
+      if (size > LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      if (scratch.reserve(size) == null) return null;
+      scratch.top += reservation(size);
+      return scratch;
+    }
+
+    /**
+     * Copies guest native memory onto the current thread's stack through its segment, a
+     * scope-checked access, and returns that stack, whose {@link #top} is then the end of the copy.
+     * Returns {@code null}, pushing nothing, when the copy is too large or does not fit, and
+     * throws, pushing nothing, when the segment is closed or confined to another thread.
+     */
+    @TruffleBoundary
+    static Scratch pushSegment(MemorySegment segment) {
+      long size = segment.byteSize();
+      if (size > LARGEST) return null;
+      Scratch scratch = Scratches.CURRENT.get();
+      MemorySegment block = scratch.reserve(size);
+      if (block == null) return null;
+      MemorySegment.copy(segment, 0, block, scratch.top, size);
+      scratch.top += reservation(size);
+      return scratch;
     }
 
     /**

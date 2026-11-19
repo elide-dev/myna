@@ -72,8 +72,8 @@ class CompatibilityTest {
     assertTrue(java.contains("CShortPointer unsignedValue"));
     assertTrue(java.contains("CFloatPointer floatValue"));
     assertTrue(java.contains("CDoublePointer doubleValue"));
-    assertTrue(java.contains("readByte(0) != 0"));
-    assertTrue(java.contains("(byte) (value ? 1 : 0)"));
+    assertTrue(java.contains("@CField(\"value\") boolean value();"), java);
+    assertTrue(java.contains("@CField(\"value\") void value(boolean value);"), java);
     assertTrue(output.get("MynaFFM.java").contains("FunctionDescriptor.ofVoid"));
   }
 }

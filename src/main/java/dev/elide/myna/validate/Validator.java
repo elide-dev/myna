@@ -5,6 +5,7 @@ package dev.elide.myna.validate;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
+import dev.elide.myna.serialize.Fingerprint;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -34,6 +35,29 @@ public final class Validator {
           "truffle_cell",
           "truffle_raw_pointers");
   private static final Pattern IDENTIFIER = Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*");
+
+  /**
+   * Methods a Native Image record inherits from {@code PointerBase}: a field accessor of the same
+   * name would redeclare or overload a word operation.
+   */
+  private static final Set<String> WORD_METHODS =
+      Set.of("isNull", "isNonNull", "rawValue", "equal", "notEqual");
+
+  /**
+   * Every declared type is a nested type of the Native Image class, so it must not shadow a name
+   * that class imports or uses unqualified. (Its own name, and the {@code <function>_Leaf} and
+   * {@code <function>_Binding} classes it declares, are checked where they are known.)
+   */
+  static final Set<String> NATIVE_IMAGE_NAMES =
+      Set.of(
+          ("AlwaysInline Uninterruptible CGlobalData CGlobalDataFactory CFunction CFunctionPointer"
+               + " InvokeCFunctionPointer CEntryPoint CEntryPointLiteral CContext CLibrary CConst"
+               + " CStruct CField CFieldAddress CConstant AllowNarrowingCast PointerBase CEnum"
+               + " CEnumConstant CEnumValue CEnumLookup CBitfield WordFactory IsolateThread"
+               + " VoidPointer WordPointer CCharPointer CCharPointerPointer CShortPointer"
+               + " CIntPointer CLongPointer CFloatPointer CDoublePointer String Throwable")
+              .split(" "));
+
   private static final Set<String> KEYWORDS =
       Set.of(
           ("abstract assert auto boolean break byte case catch char class const continue default do"
@@ -60,16 +84,39 @@ public final class Validator {
    * names live in Rust's value namespace and do not collide, so they stay governed by {@link
    * #identifier(String)}.
    */
-  private static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
+  static final Set<String> RESERVED_TYPE_NAMES = Set.of("core", "Option");
 
   public static void validate(Module module, boolean strict) {
+    validate(module, strict, new Fingerprint(module));
+  }
+
+  /**
+   * {@link #validate(Module, boolean)} given the generation's fingerprint of exactly {@code
+   * module}, which validation reads only when a name it checks derives from it. Throws if {@code
+   * fingerprint} describes another module instance.
+   */
+  public static void validate(Module module, boolean strict, Fingerprint fingerprint) {
+    fingerprint.requireFor(module);
     identifier(module.name());
     if (module.javaPackage() != null)
       for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
-    if (module.javaClass() != null) identifier(module.javaClass());
+    if (module.javaClass() != null) {
+      identifier(module.javaClass());
+      // The class imports these names, so it cannot itself take one.
+      require(
+          !NATIVE_IMAGE_NAMES.contains(module.javaClass()),
+          "java_class shadows generated name: " + module.javaClass());
+    }
     if (module.nativeConfig() != null) {
       var config = module.nativeConfig();
-      if (config.cContext() != null) qualifiedType(config.cContext());
+      if (config.cContext() != null) {
+        qualifiedType(config.cContext());
+        // The generated context delegates to this one; naming itself would recurse.
+        String generated = module.javaPackageName() + "." + module.directivesClass();
+        require(
+            !config.cContext().equals(generated),
+            "c_context names the generated directives class " + generated);
+      }
       if (config.cLibrary() != null)
         require(
             config.cLibrary().matches("[A-Za-z0-9_][A-Za-z0-9_.+-]*"), "invalid C library name");
@@ -90,6 +137,7 @@ public final class Validator {
       require(types.add(opaque), "duplicate type: " + opaque);
       require(!isScalarName(opaque), "type shadows scalar: " + opaque);
       require(!RESERVED_TYPE_NAMES.contains(opaque), "type shadows generated name: " + opaque);
+      nativeImageType(module, opaque);
     }
     for (Struct struct : module.structs()) {
       identifier(struct.name());
@@ -98,6 +146,22 @@ public final class Validator {
       require(
           !RESERVED_TYPE_NAMES.contains(struct.name()),
           "type shadows generated name: " + struct.name());
+      nativeImageType(module, struct.name());
+    }
+    // Enum and flag-set names are types of the generated code, so every generated-name check
+    // below sees them; they are not pointees, so references use `pointable`.
+    Set<String> groups = new HashSet<>();
+    for (String group :
+        java.util.stream.Stream.concat(
+                module.enums().stream().map(EnumGroup::name),
+                module.flagSets().stream().map(FlagSet::name))
+            .toList()) {
+      identifier(group);
+      require(types.add(group), "duplicate type: " + group);
+      require(!isScalarName(group), "type shadows scalar: " + group);
+      require(!RESERVED_TYPE_NAMES.contains(group), "type shadows generated name: " + group);
+      nativeImageType(module, group);
+      groups.add(group);
     }
     Set<String> signatures = new HashSet<>();
     for (Signature signature : module.callbacks()) {
@@ -112,8 +176,10 @@ public final class Validator {
             signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
             "static FFM callbacks require an i32/i64 status return");
         try {
-          if (signature.returns() == Scalar.I32) Integer.parseInt(signature.ffmSentinel());
-          else Long.parseLong(signature.ffmSentinel());
+          if (!Ranges.fits(
+              (Scalar) signature.returns(),
+              new BigInteger(signature.ffmSentinel()),
+              Seam.targetAbi(module.targetTriple()))) throw new NumberFormatException();
         } catch (NumberFormatException invalid) {
           throw new IllegalArgumentException("FFM callback sentinel is outside its carrier range");
         }
@@ -123,7 +189,13 @@ public final class Validator {
       require(
           !RESERVED_TYPE_NAMES.contains(signature.name()),
           "type shadows generated name: " + signature.name());
+      nativeImageType(module, signature.name());
       signatures.add(signature.name());
+    }
+    Set<String> pointable = types;
+    if (!groups.isEmpty()) {
+      pointable = new HashSet<>(types);
+      pointable.removeAll(groups);
     }
     for (Signature signature : module.callbacks()) {
       for (String generated : List.of(signature.name() + "Callback", signature.name() + "Upcalls"))
@@ -153,10 +225,16 @@ public final class Validator {
       long end = 0;
       int naturalAlignment = 1;
       Set<String> fields = new HashSet<>();
+      boolean addressNames = false;
       for (Field field : struct.fields()) {
         identifier(field.name());
         require(fields.add(field.name()), "duplicate field: " + field.name());
-        type(field.type(), types, signatures, false);
+        addressNames |=
+            Character.isUpperCase(field.name().charAt(0)) || field.name().startsWith("addressOf");
+        require(
+            !WORD_METHODS.contains(field.name()),
+            "field collides with a Native Image word method: " + field.name());
+        type(field.type(), pointable, signatures, false);
         require(field.type() != Isolate.THREAD, "isolate_thread is a parameter type");
         int size = size(field.type());
         int align = size;
@@ -167,6 +245,24 @@ public final class Validator {
         require(
             field.offset() <= struct.size() - size, "field exceeds struct size: " + field.name());
         end = field.offset() + size;
+      }
+      // The record's Native Image interface: one getter/setter name per field, one address
+      // accessor per field, all distinct (fields x and X would both make addressOfX). Only a field
+      // that starts upper-case or with addressOf can make such a collision.
+      if (addressNames) {
+        Set<String> members = new HashSet<>(fields);
+        for (Field field : struct.fields()) {
+          String address =
+              "addressOf"
+                  + Character.toUpperCase(field.name().charAt(0))
+                  + field.name().substring(1);
+          require(
+              members.add(address),
+              "field collides with the Native Image address accessor "
+                  + address
+                  + " of "
+                  + field.name());
+        }
       }
       require(
           struct.alignment() == naturalAlignment,
@@ -181,13 +277,13 @@ public final class Validator {
               + struct.name());
     }
     for (Signature signature : module.callbacks()) {
-      type(signature.returns(), types, signatures, true);
+      type(signature.returns(), pointable, signatures, true);
       require(signature.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       Set<String> params = new HashSet<>();
       for (Parameter parameter : signature.parameters()) {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
-        type(parameter.type(), types, signatures, false);
+        type(parameter.type(), pointable, signatures, false);
         require(parameter.facts().isEmpty(), "contracts on callback parameters are not supported");
         // Native Image invokes with signed Java carriers; see NativeImage#widened.
         require(
@@ -230,7 +326,8 @@ public final class Validator {
           !signatures.contains(function.symbol()),
           "symbol collides with callback: " + function.symbol());
       record(module, function.returns());
-      if (!(function.returns() instanceof Named)) type(function.returns(), types, signatures, true);
+      if (!(function.returns() instanceof Named))
+        type(function.returns(), pointable, signatures, true);
       require(function.returns() != Isolate.THREAD, "isolate_thread is a parameter type");
       functionScalar(function.returns());
       facts(function.facts(), FUNCTION_FACTS, strict);
@@ -327,11 +424,8 @@ public final class Validator {
             function.sentinel() != null && function.sentinel().matches("-?[0-9]+"),
             "missing or invalid sentinel");
         BigInteger value = new BigInteger(function.sentinel());
-        int bits = ((Scalar) function.returns()).bytes * 8;
         require(
-            value.compareTo(BigInteger.ONE.shiftLeft(bits - 1).negate()) >= 0
-                && value.compareTo(BigInteger.ONE.shiftLeft(bits - 1).subtract(BigInteger.ONE))
-                    <= 0,
+            Ranges.fits((Scalar) function.returns(), value, Seam.targetAbi(module.targetTriple())),
             "sentinel out of range");
       } else require(function.sentinel() == null, "sentinel only applies to integer_sentinel");
       require(
@@ -343,7 +437,8 @@ public final class Validator {
         identifier(parameter.name());
         require(params.add(parameter.name()), "duplicate parameter: " + parameter.name());
         record(module, parameter.type());
-        if (!(parameter.type() instanceof Named)) type(parameter.type(), types, signatures, false);
+        if (!(parameter.type() instanceof Named))
+          type(parameter.type(), pointable, signatures, false);
         functionScalar(parameter.type());
         facts(parameter.facts(), PARAM_FACTS, strict);
         boolean pointer = parameter.type() instanceof Pointer;
@@ -376,12 +471,12 @@ public final class Validator {
             "ownership transfer to caller must be modeled on a return; unsupported in v1");
         Fact align = parameter.facts().get("align");
         if (align != null) {
-          long n = positive(align.value());
+          long n = positive("align", align.value());
           require(n <= (1L << 29) && (n & (n - 1)) == 0, "align must be a power of two <= 2^29");
         }
         Fact deref = parameter.facts().get("dereferenceable");
         if (deref != null) {
-          positive(deref.value());
+          positive("dereferenceable", deref.value());
           require(!parameter.nullable(), "dereferenceable implies non-null on supported targets");
         }
         Fact alias = parameter.facts().get("noalias");
@@ -390,7 +485,9 @@ public final class Validator {
             "noalias requires explicit_contract or compiler_proven");
       }
     }
+    ConstantsValidator.validate(module, fingerprint);
     OwnershipValidator.validate(module);
+    ViewsValidator.validate(module);
   }
 
   /**
@@ -408,6 +505,15 @@ public final class Validator {
     require(
         !function.facts().containsKey("truffle_cell") || function.direction() == Direction.IMPORT,
         "truffle_cell applies to imports only");
+    // The Truffle class's constants() returns the guest-visible constants object.
+    require(
+        !configured
+            || !function.name().equals("constants")
+            || !Seam.truffleCell(module, function)
+            || (module.constants().isEmpty()
+                && module.enums().isEmpty()
+                && module.flagSets().isEmpty()),
+        "Truffle cell constants collides with the generated constants() accessor");
     for (Parameter parameter : function.parameters()) {
       Fact buffer = parameter.facts().get("truffle_buffer");
       if (buffer == null) continue;
@@ -452,7 +558,7 @@ public final class Validator {
     for (String part : name.split("\\.", -1)) identifier(part);
   }
 
-  private static boolean isScalarName(String name) {
+  static boolean isScalarName(String name) {
     for (Scalar scalar : Scalar.values()) if (scalar.text().equals(name)) return true;
     return false;
   }
@@ -530,13 +636,24 @@ public final class Validator {
     return (value + align - 1) / align * align;
   }
 
-  private static long positive(String text) {
-    long value = Long.parseLong(text);
-    require(value > 0, "expected positive integer");
+  private static long positive(String name, String text) {
+    long value;
+    try {
+      value = Long.parseLong(text);
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException(name + " requires a positive integer: " + text, e);
+    }
+    require(value > 0, name + " requires a positive integer: " + text);
     return value;
   }
 
-  private static void identifier(String name) {
+  private static void nativeImageType(Module module, String name) {
+    require(
+        !name.equals(module.nativeClass()) && !NATIVE_IMAGE_NAMES.contains(name),
+        "type shadows generated name: " + name);
+  }
+
+  static void identifier(String name) {
     require(
         name != null
             && IDENTIFIER.matcher(name).matches()

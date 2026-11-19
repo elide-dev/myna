@@ -47,7 +47,7 @@ def build():
         execute(cc,*flags,'-c',source,'-o',WORK/output)
     execute(cc,WORK/'caller.o',WORK/'kernel.o',WORK/'batch.o','-o',WORK/'native')
     # Generator names its direct binding according to java_class, not the filename suffix.
-    java_sources=[SOURCE/'Floor.java',SOURCE/'FloorMeasure.java',ROOT/'benchmarks/comparison/Measure.java',generated/'boundary/Generated.java',generated/'batch/Batch.java',generated/'identity/Identity.java',generated/'leaf-pointer/LeafBindings.java',ROOT/'examples/leaf-pointer/LongLeaf.java']
+    java_sources=[SOURCE/'Floor.java',SOURCE/'FloorMeasure.java',ROOT/'benchmarks/comparison/Measure.java',generated/'boundary/Generated.java',generated/'batch/Batch.java',generated/'identity/Identity.java',generated/'leaf-pointer/LeafBindings.java',generated/'boundary/GeneratedDirectives.java',generated/'batch/BatchDirectives.java',generated/'identity/IdentityDirectives.java',generated/'leaf-pointer/LeafBindingsDirectives.java',ROOT/'examples/leaf-pointer/LongLeaf.java']
     sdk = [home/'lib/svm'/name for name in ('svm-shared.jar','svm-guest-staging.jar','svm-guest.jar')]
     execute('javac','-cp',os.pathsep.join(map(str,sdk)),'-d',classes,*java_sources)
     for directory in generated.iterdir():

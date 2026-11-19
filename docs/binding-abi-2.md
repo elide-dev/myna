@@ -1,6 +1,6 @@
 # Migrating to Myna 0.8.0 / binding ABI 2
 
-Binding ABI 2 makes the inlineable native leaf path the default for imports. Regenerate bindings and rebuild consumers together; do not combine old generated artifacts with new descriptors. Canonical descriptor schema 3 records `bindingAbiVersion: 2` and each import's effective `nativeCallPolicy`. Generated Java, C and Rust expose `BINDING_ABI_VERSION`. A module's `abi=...` remains its independent application protocol version. The value-tape layout remains ABI v3.
+Binding ABI 2 makes the inlineable native leaf path the default for imports. Regenerate bindings and rebuild consumers together; do not combine old generated artifacts with new descriptors. Canonical descriptor schema 3 records `bindingAbiVersion: 2` and each import's effective `nativeCallPolicy`. Generated Java, C and Rust expose `BINDING_ABI_VERSION`. A module's `abi=...` remains its independent application protocol version. The value-tape layout remains ABI v3. Constants, enums and flag sets (see [the descriptor format](dsl.md#constants-enums-and-flag-sets)) do not change `BINDING_ABI_VERSION`, carriers, layouts, symbols or `seam.ll` contracts; the Native Image record and context changes in the release notes are Java source changes only.
 
 ## Audit imports
 
@@ -26,7 +26,7 @@ mise exec -- scripts/python.sh scripts/compile-native-bindings.py \
 
 Supply additional Java dependencies with `--classpath`. Repeat `--generated` for multiple modules. The helper compiles generated Java files with three compile-only SDK jars from `$GRAALVM_HOME/lib/svm`: `svm-shared.jar`, `svm-guest-staging.jar`, and `svm-guest.jar`. It copies generated `META-INF/native-image` resources into the output directory. Include those resources when creating a JAR.
 
-Equivalent Maven/Gradle integrations must supply those jars only for compilation and package the generated metadata. Do not bundle Graal implementation jars or add them to Native Image's application classpath. The metadata supplies the required builder module export and class-initialization policy automatically. The backend uses internal APIs of elide-dev/graal 25.5.5-elide.28; compiler changes require integration and performance tests.
+Equivalent Maven/Gradle integrations must supply those jars only for compilation and package the generated metadata. Do not bundle Graal implementation jars or add them to Native Image's application classpath. The metadata supplies the required builder module export and class-initialization policy automatically. The backend uses internal APIs of elide-dev/graal 25.5.5-elide.31; compiler changes require integration and performance tests.
 
 Native linking still uses the module's `c_context` / `c_library` configuration or explicit native linker inputs. Ordinary calls obtain the relocated address through Graal's symbolic-address intrinsic; the pointer accessor uses a separate lazy runtime holder. Addresses are never captured from the build process; unused imports do not require their symbols. Libraries must remain valid for every call.
 

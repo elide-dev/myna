@@ -1,3 +1,11 @@
+# Patch coverage is checked against a fixed floor rather than the base's own total: generated-code
+# branches that only Native Image or Truffle execute pull small diffs below the project average.
+coverage:
+  status:
+    patch:
+      default:
+        target: 90%
+
 # These two readers execute raw Graal word operations and CFunction calls, which
 # cannot run on a stock JVM. tests/native_image_integration.py executes both in
 # real Native Images on Linux and macOS. The shared ValueTape remains measured.

@@ -1,0 +1,27 @@
+# Batches beside a C string and on a status-plus-out-pointer constructor: every backend generates
+# code that compiles (OwnershipTest compiles the FFM output; the Rust and Native Image output were
+# compiled by hand when the features met).
+module combo target=x86_64-unknown-linux-gnu java_package=fixture.combo java_class=Combo rust_implementation=trait
+enum WinStatus type=i32
+  value ok = 0
+end
+opaque Win
+resource Win representation=native threading=confined create=winBatch destroy=winClose handle=out success=0
+borrow winBatch parts lengths=lengths count=count lifetime=call
+import winBatch symbol=win_batch return=i32 enum=WinStatus error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param title type=ptr<u8> nullable=false ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+  param parts type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u64> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u64
+  param out type=ptr<ptr<Win>> nullable=true ownership=borrowed access=write
+end
+import winClose symbol=win_close return=void error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param win type=ptr<Win> nullable=false ownership=transferred_to_callee access=read_write
+end
+borrow labelled parts lengths=lengths count=count lifetime=call
+import labelled symbol=labelled return=u64 error=no_failure nounwind=true@explicit_contract native_leaf=false@explicit_contract
+  param name type=ptr<u8> nullable=true ownership=borrowed access=cstring nocapture=true@explicit_contract readonly=true@explicit_contract
+  param parts type=ptr<ptr<u8>> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param lengths type=ptr<u32> nullable=true ownership=borrowed access=read nocapture=true@explicit_contract readonly=true@explicit_contract
+  param count type=u32
+end

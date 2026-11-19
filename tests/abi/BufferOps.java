@@ -7,7 +7,6 @@ import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CLongPointer;
-import org.graalvm.word.PointerBase;
 
 /** End-to-end fixture: Rust caller -> Native Image sum -> Rust inspect. */
 public final class BufferOps {
@@ -60,36 +59,34 @@ public final class BufferOps {
     return MynaNative.reducer().invoke(visited, 7);
   }
 
-  public static void scale(PointerBase value, int factor, PointerBase result) {
-    MynaNative.Pair.left(result, MynaNative.Pair.left(value) * factor);
-    MynaNative.Pair.right(result, MynaNative.Pair.right(value) * factor);
+  public static void scale(MynaNative.Pair value, int factor, MynaNative.Pair result) {
+    result.left(value.left() * factor);
+    result.right(value.right() * factor);
   }
 
-  public static void spread(PointerBase value, PointerBase result) {
-    long a = MynaNative.Triple.a(value);
-    MynaNative.Triple.a(result, a);
-    MynaNative.Triple.b(result, a + MynaNative.Triple.b(value));
-    MynaNative.Triple.c(result, a + MynaNative.Triple.c(value));
+  public static void spread(MynaNative.Triple value, MynaNative.Triple result) {
+    long a = value.a();
+    result.a(a);
+    result.b(a + value.b());
+    result.c(a + value.c());
   }
 
   /** Java -> Rust by-value imports through their reference-form shims; one bit per check. */
   public static int structProbe() {
-    PointerBase pair = StackValue.get(MynaNative.Pair.SIZE);
-    PointerBase swapped = StackValue.get(MynaNative.Pair.SIZE);
-    MynaNative.Pair.left(pair, -5L);
-    MynaNative.Pair.right(pair, 1 << 30);
+    MynaNative.Pair pair = StackValue.get(MynaNative.Pair.class);
+    MynaNative.Pair swapped = StackValue.get(MynaNative.Pair.class);
+    pair.left(-5L);
+    pair.right(1 << 30);
     MynaNative.swapPair(pair, swapped);
     int mask = 0;
-    if (MynaNative.Pair.left(swapped) == 1 << 30 && MynaNative.Pair.right(swapped) == -5) mask |= 1;
-    PointerBase triple = StackValue.get(MynaNative.Triple.SIZE);
-    PointerBase rotated = StackValue.get(MynaNative.Triple.SIZE);
-    MynaNative.Triple.a(triple, 1);
-    MynaNative.Triple.b(triple, 2);
-    MynaNative.Triple.c(triple, Long.MIN_VALUE);
+    if (swapped.left() == 1 << 30 && swapped.right() == -5) mask |= 1;
+    MynaNative.Triple triple = StackValue.get(MynaNative.Triple.class);
+    MynaNative.Triple rotated = StackValue.get(MynaNative.Triple.class);
+    triple.a(1);
+    triple.b(2);
+    triple.c(Long.MIN_VALUE);
     MynaNative.rotate(triple, 1, rotated);
-    if (MynaNative.Triple.a(rotated) == 2
-        && MynaNative.Triple.b(rotated) == Long.MIN_VALUE
-        && MynaNative.Triple.c(rotated) == 1) mask |= 2;
+    if (rotated.a() == 2 && rotated.b() == Long.MIN_VALUE && rotated.c() == 1) mask |= 2;
     return mask;
   }
 }

@@ -58,13 +58,15 @@ def build_truffle_fixture():
     jars = truffle_jars()
     classpath = [TRUFFLE_JAR, *jars.values()]
     classes = work / "classes"
-    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java",
-                   FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
+    compile_native(classes, generated, generated / "CellApi.java", generated / "CellApiTruffle.java", generated / "CellApiOwnership.java",
+                   generated / "CellApiDirectives.java", FIXTURE / "Directives.java", FIXTURE / "CellChecks.java", FIXTURE / "CellsMain.java", classpath=classpath,
                    options=("--module-path", os.pathsep.join(map(str, jars.values()))))
     classes_ffm = work / "classes-ffm"
     compile_native(classes_ffm, generated_ffm, generated_ffm / "CellApiFFM.java", generated_ffm / "CellApiTruffle.java",
                    generated_ffm / "CellApiForeignFeature.java", FIXTURE / "CellChecks.java", FIXTURE / "FfmCellsMain.java",
                    classpath=classpath)
+    # Truffle cells over FFM need no C context: nothing compiles CellApiDirectives.
+    assert not list(classes_ffm.rglob("*Directives.class")), list(classes_ffm.rglob("*Directives.class"))
     return work, classes, classes_ffm, library, jars
 
 
@@ -76,8 +78,16 @@ class TruffleIntegrationTests(unittest.TestCase):
     def test_ffm_cells_on_hotspot(self):
         java = Path(os.environ["GRAALVM_HOME"]) / "bin/java"
         classpath = os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR, *self.jars.values()]))
-        result = run(java, "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
+        # Assertions on for the generated bindings only (Truffle's own interop assertions reject the
+        # host nulls the checks pass): a non-cell wrapper asserts the caller's align contract.
+        result = run(java, "-ea:fixture.cells...", "--enable-native-access=ALL-UNNAMED", "-cp", classpath, "fixture.cells.FfmCellsMain", self.library)
+        # A constructor whose buffer cannot be written back destroys the resource its call made.
+        self.assertIn("constructor write-back failure destroyed its resource", result.stdout)
+        self.assertIn("wrapper assertions enabled: fired", result.stdout)
+        self.assertIn("guest constants read and named", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 
     def test_ffm_cells_in_native_image(self):
         """FFM cells in an image: the same checks, including the scopes of lent segments, and what
@@ -87,12 +97,39 @@ class TruffleIntegrationTests(unittest.TestCase):
         # entry into a cell's boundary method, so even invoke allocates the address's segment.
         build = native_image("-O3", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The probe is the consumer's own node class.
-                             "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat",
+                             "--initialize-at-build-time=fixture.cells.FfmCellsMain$Repeat,fixture.cells.CellChecks$GuestConstants",
                              "--module-path", self.module_path(), "-cp", os.pathsep.join(map(str, [self.classes_ffm, TRUFFLE_JAR])),
+                             "-H:+PrintAnalysisCallTree", f"-H:Path={self.work}",
                              "--features=fixture.cells.CellApiForeignFeature", "fixture.cells.FfmCellsMain", "-o", app)
         self.assertIn("ffm-cells-app", build.stdout)
+        self.assert_wrapper_assertions_compiled_out(self.work / "reports")
         result = run(app, self.library)
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
+        self.assertIn("wrapper assertions disabled: silent", result.stdout)
         self.assertIn("Truffle FFM cells passed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
+
+    def assert_wrapper_assertions_compiled_out(self, reports):
+        """An image built without assertions has no assertion code in a non-cell wrapper.
+
+        The call tree lists what each method reaches; the wrapper that asserts a borrow's align
+        contract reaches `AssertionError` only if the `assert` statement survived into the image.
+        The report is kept in the build directory as evidence."""
+        trees = sorted(reports.glob("call_tree_ffm-cells-app_*.txt"))
+        self.assertTrue(trees, f"no call tree report in {reports}")
+        lines = trees[-1].read_text().splitlines()
+        wrapper = "CellApiFFM$LibraryBinding.addressOfBorrow("
+        starts = [i for i, line in enumerate(lines) if wrapper in line]
+        self.assertTrue(starts, "the asserting wrapper is not in the image's call tree")
+        for start in starts:
+            depth = len(lines[start]) - len(lines[start].lstrip())
+            for line in lines[start + 1:]:
+                if len(line) - len(line.lstrip()) <= depth:
+                    break
+                self.assertNotIn("AssertionError", line, "assertion code reachable from the wrapper")
+        evidence = self.work / "wrapper-assertions-call-tree.txt"
+        evidence.write_text("\n".join(lines[starts[0]:starts[0] + 60]) + "\n")
 
     def module_path(self):
         return os.pathsep.join(str(self.jars[name]) for name in
@@ -106,13 +143,22 @@ class TruffleIntegrationTests(unittest.TestCase):
         # need the pinned 25.5.5-elide.26 fork; the fixture uses the default direct transitions.
         build = native_image("-O2", "--macro:truffle-svm", "--enable-native-access=ALL-UNNAMED",
                              # The generated properties cover the cells; the probes are the consumer's own node classes.
-                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates",
+                             "--initialize-at-build-time=fixture.cells.CellsMain$Probe,fixture.cells.CellsMain$TypedAdd,fixture.cells.CellsMain$Repeat,fixture.cells.CellsMain$Creates,fixture.cells.CellsMain$BufferProbe,fixture.cells.CellChecks$GuestConstants",
                              "-H:+UnlockExperimentalVMOptions", "-H:+PrintRuntimeCompileMethods", "-H:-UnlockExperimentalVMOptions",
                              "--module-path", module_path, "-cp", os.pathsep.join(map(str, [self.classes, TRUFFLE_JAR])),
-                             f"-Dmyna.cells.libraryPath={self.work}", "fixture.cells.CellsMain", "-o", app)
+                             f"-Dmyna.cells.libraryPath={self.work}",
+                             "fixture.cells.CellsMain", "-o", app)
         self.assert_cells_are_runtime_compilable(build.stdout)
         result = run(app)
+        # Reads of constants.Status.ok compared with a cell result: compiled, folded to a compilation
+        # constant, no deoptimization and no allocation; lowByte's u8 255 equals constants.Octet.top
+        # (CellChecks.guestConstants throws otherwise).
+        self.assertRegex(result.stdout, r"guest constants folded and allocated \d+ bytes over 4096 compiled iterations")
         self.assertIn("Truffle cells compiled and passed", result.stdout)
+        # NativeBytes' scalar messages check the arena scope before their word access (#128).
+        self.assertIn("buffer messages checked the arena scope in compiled code: wrong thread, closed", result.stdout)
+        # Write-back of a copied buffer after its arena closed: refused, nothing written.
+        self.assertRegex(result.stdout, r"copy-back after close refused: confined, (shared|shared arenas unsupported)")
 
     def assert_cells_are_runtime_compilable(self, log):
         """Every method on a cell's compiled path must be available to partial evaluation.
@@ -135,8 +181,18 @@ class TruffleIntegrationTests(unittest.TestCase):
             "BooleanCoercion.execute", "FloatingCoercion.execute", "Borrow.lendArray", "Borrow.lendCopy",
             "Borrow.lendString", "Borrow.lendBuffer", "Borrow.lendPushed", "Borrow.release", "GuestText.push",
             "BytesCoercion.pushGuestText", "BytesCoercion.learn", "BytesCoercion.learnPinThreshold",
-            "BytesCoercion.emptyAddress",
-            "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText")]
+            "BytesCoercion.emptyAddress", "AlignedBytesCoercion.execute", "AlignedBytesCoercion.slow",
+            "OverAlignedBytesCoercion.execute", "OverAlignedBytesCoercion.slow",
+            "NativeCellRootNode.execute", "HeldBytesCoercion.execute", "Borrow.lendHeld", "Borrow.lendHeldText",
+            # Batch.absorbScratch and Borrow.handOver are trivially inlined at analysis.
+            "BatchCoercion.execute", "BatchCoercion.lendScoped", "Batch.reserve", "Batch.absorb",
+            "Batch.absorbCopy", "Batch.release",
+            # Guest-visible constants: the exported cached read (the specialization body is trivially
+            # inlined into it at analysis); names are a switch over constants.
+            "NativeConstantsGen$InteropLibraryExports$Cached.readMember")]
+        # Enum names are a switch over image-heap constants, trivially inlined into the probe that
+        # reads them; the probe compiling at run time proves no class-initialization check.
+        expected.append("fixture.cells.CellChecks$GuestConstants.execute")
         missing = [method for method in expected if method not in compilable]
         self.assertEqual([], missing, "excluded from runtime compilation")
 

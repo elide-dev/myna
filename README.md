@@ -137,7 +137,7 @@ Every measured sample ran in compiled code. Buffer, text and borrow cases are in
 
 ## Build and use
 
-Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.2, elide-dev/toolchain 2026.11.6 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.28 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
+Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.3, elide-dev/toolchain 2026.11.7 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.31 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.
 
 ```sh
 mise trust
@@ -165,7 +165,7 @@ The initial frontend is a strict, line-oriented text DSL with `#` comments. See 
 Generation produces:
 
 - `seam.h` and `seam.rs` for C and Rust consumers.
-- A direct Native Image API, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiFFM.java`, and `FastApiForeignFeature.java`; `truffle_cells=true` adds `FastApiTruffle.java`, one Truffle cell per import (see [Truffle native cells](docs/truffle-cells.md)).
+- A direct Native Image API, its image-build C context, a JVM FFM API, and a Native Image FFM registration feature. With `java_class=FastApi`, these are `FastApi.java`, `FastApiConstants.java` (when the descriptor declares a `const`, `enum` or `flags`, or names `abi=` on the module line; see [constants](docs/dsl.md#constants-enums-and-flag-sets)), `FastApiDirectives.java` (supplies `seam.h` to the image build, where `FastApi`'s fingerprinted `@CConstant` checks it automatically; see [the C context](docs/dsl.md#native-image-c-context-library-linkage-and-handwritten-callbacks)), `FastApiFFM.java`, and `FastApiForeignFeature.java`; `truffle_cells=true` adds `FastApiTruffle.java`, one Truffle cell per import (see [Truffle native cells](docs/truffle-cells.md)).
 - `seam.json` with optimizer-fact provenance and `seam.abi` with the descriptor's SHA-256 fingerprint.
 - `META-INF/native-image/` initialization metadata to package with the compiled Java bindings.
 - `seam.ll`, consumed by `myna apply` to annotate compiled LLVM objects and archives.
@@ -270,8 +270,8 @@ The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and poin
 
 Fixed-size C array fields, nested by-value records, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader design; the [current roadmap](docs/jvm-roadmap.md) distinguishes implemented features from planned work.
 
-Performance maintenance uses pinned Elide 1.6.2, native toolchain 2026.11.6,
-and Elide GraalVM 25.5.5-elide.28. See [benchmarking and native validation](docs/benchmarking.md)
+Performance maintenance uses pinned Elide 1.6.3, native toolchain 2026.11.7,
+and Elide GraalVM 25.5.5-elide.31. See [benchmarking and native validation](docs/benchmarking.md)
 for rerunnable comparisons, CodSpeed workloads, coverage, fuzzing and sanitizer commands.
 
 Build repeatability can be checked with `mise run check:repeatable`, which rebuilds distributables twice and retains per-artifact hashes and logs under `build/repeatability/`.

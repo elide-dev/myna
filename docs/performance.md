@@ -36,7 +36,7 @@ The default generated method calls a typed `@InvokeCFunctionPointer(NO_TRANSITIO
 
 Each leaf has a symbolic linker reference. Ordinary calls use Graal's relocated-symbol intrinsic directly, avoiding runtime holder-initialization guards in the hot path. A separate lazy runtime holder serves the cached pointer accessor. Generated `META-INF/native-image` configuration initializes symbolic metadata at image build time and resolves addresses at runtime. It must accompany the compiled classes. Only reached imports require their symbols; static libraries work through the existing `c_context` / `c_library` configuration. Linked libraries must remain available throughout calls. The generated `nameLeafPointer()` accessor exposes the cached typed pointer for specialized callers: resolve it before entering an uninterruptible region, because first-use initialization itself is interruptible.
 
-This backend deliberately uses internal APIs of the pinned **elide-dev/graal 25.5.5-elide.28** compiler. Compile against its `svm-shared.jar`, `svm-guest-staging.jar`, and `svm-guest.jar` without bundling them or putting them on the Native Image application classpath. [The compiler helper](../scripts/compile-native-bindings.py) handles the compile-only classpath and copies generated metadata. Retest compiler upgrades. See [ABI 2 migration](binding-abi-2.md) for complete commands.
+This backend deliberately uses internal APIs of the pinned **elide-dev/graal 25.5.5-elide.31** compiler. Compile against its `svm-shared.jar`, `svm-guest-staging.jar`, and `svm-guest.jar` without bundling them or putting them on the Native Image application classpath. [The compiler helper](../scripts/compile-native-bindings.py) handles the compile-only classpath and copies generated metadata. Retest compiler upgrades. See [ABI 2 migration](binding-abi-2.md) for complete commands.
 
 Leaf policy participates in canonical JSON and the ABI fingerprint. It never implies LLVM `nounwind`, `nofree`, or other effects. Unapproved explicit leaf facts fail strict validation; relaxed generation retains their provenance and conservatively uses a normal transition. FFM exposes opt-in critical factories and typed `CriticalLibraryBinding` calls only for this contract. Critical FFM does not permit heap access. JNI wrappers retain ordinary JNI transitions even when their raw target is a leaf.
 
@@ -66,6 +66,24 @@ The optional generated `MynaForeignFeature.java` registers all downcall descript
 Generated typed methods use per-symbol static-final handles and `invokeExact`. Load the native library with `System.load` in the binding's class loader before the first loader-scoped invocation, or use an explicit library binding. Unbound handle holders initialize at image build time; symbol addresses initialize at runtime. A build-host address must never be frozen into an executable. The factories accepting `SymbolLookup` remain available for independently bound handles.
 
 The integration suite compiles and runs this path as a Native Image executable calling Rust. Explicit scoped library bindings, consumer-owned resource factories and scoped dynamic/static callbacks are described in the [adapter guide](jvm-roadmap.md). Graal's [FFM documentation](https://www.graalvm.org/latest/reference-manual/native-image/native-code-interoperability/ffm-api/) explains AOT registration and specialization for known upcall targets.
+
+## Constants, enums and flag sets
+
+Constants cost nothing at run time, and the generator keeps it that way. The measurements come from design-time experiments recorded in the design (`docs/superpowers/specs/2026-11-15-constants-enums-flags-design.md`, sections 7, 7a and 8); the integration tests (`tests/llvm_integration.py`, `tests/native_image_integration.py`) assert the key ones.
+
+| Question | Result |
+| --- | --- |
+| Do constants occupy storage? | No. They are immediates (`cmpl $imm`, `ldc`/`bipush`); a bitcode global would stay as `.rodata` in a machine-code link and could disagree with the header. |
+| Rust enums | A `#[repr(transparent)]` newtype with associated consts compiles to the same code as raw integers. A `#[repr(int)]` enum is UB for undeclared values. |
+| Native Image image heap | The constants classes never load; their literals are in the consumer's bytecode. Name strings exist only when a name function is reachable and are interned once per image. |
+| Java `enum` instead | Costs a lookup, `ordinal()` and a switch map per read and keeps the class, `$VALUES` and name strings reachable. `<Class>Constants` has none. |
+| `@CStruct`/`@CField` vs offset reads | Identical machine code for wide fields. Narrow integer fields (`i8`, `u8`, `char`, `i16`, `u16`) carry one extra register sign-extension today; tracked as [elide-dev/graal#239](https://github.com/elide-dev/graal/issues/239). `@CField` stays, and a test pins the extra instruction so it fails when the fold lands. |
+| `@CConstant` | Byte-identical code to a `static final` literal; it only adds an image-build header query. |
+| `@CBitfield` | One extra shift and a narrower load against a mask test, so it is opt-in (`c_bitfields=true`). |
+| `@CEnum` | On this fork a `@CEnum` return does not build on a leaf call and costs two calls on a transition. The plain import stays raw and `<name>Enum` is a separate method; enum arguments through the literal value are free. |
+| Range facts | Not emitted for enum references: LLVM would delete a caller's check for a value the list omits (`-1` in the Komodo case). |
+
+A Truffle cell never sees these types: cell results stay primitive. `NativeConstants` values fold in compiled code when the guest passes a constant member name; see [Truffle native cells](truffle-cells.md#constants-and-names).
 
 ## Ownership and off-heap access
 
