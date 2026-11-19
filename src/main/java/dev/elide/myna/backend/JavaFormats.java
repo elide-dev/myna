@@ -610,8 +610,12 @@ public final class JavaFormats {
     }
   }
 
+  /**
+   * The suffix of a target set's {@code TARGETS_} constant: the declared node or kind name verbatim
+   * (or {@code any}), so names that differ only in case or underscores never share a set.
+   */
   private static String targetKey(String target) {
-    return target.equals("any") ? "ANY" : Names.upperSnake(target);
+    return target;
   }
 
   private String writer(Module module, PersistedLayout l) {
@@ -670,18 +674,12 @@ public final class JavaFormats {
     var keys = new TreeSet<String>();
     for (Node n : l.nodes) collectTargets(l, n.members(), keys);
     for (Element e : l.elements) collectTargets(l, e.members(), keys);
-    for (String key : keys) {
-      String target = key.equals("ANY") ? "any" : null;
-      if (target == null)
-        for (Node n : l.nodes) if (Names.upperSnake(n.name()).equals(key)) target = n.name();
-      if (target == null)
-        for (Kind k : l.kinds) if (Names.upperSnake(k.name()).equals(key)) target = k.name();
+    for (String target : keys)
       out.append("  private static final int[] TARGETS_")
-          .append(key)
+          .append(targetKey(target))
           .append(" = {")
           .append(join(l.targets(target)))
           .append("};\n");
-    }
     out.append(WRITER_CORE.replace("$NODES", nodes).replace("$EXCEPTION", family + "Exception"));
     for (Node n : l.nodes) writerNode(out, l, n);
     for (Format f : l.formats) {
@@ -705,8 +703,7 @@ public final class JavaFormats {
 
   private static void collectTargets(PersistedLayout l, List<Member> members, Set<String> keys) {
     for (Member m : members)
-      if (m.kind() == MemberKind.REF || m.kind() == MemberKind.REFS)
-        keys.add(targetKey(m.target()));
+      if (m.kind() == MemberKind.REF || m.kind() == MemberKind.REFS) keys.add(m.target());
   }
 
   private static String recordComponents(PersistedLayout l, Element e) {
@@ -1557,6 +1554,9 @@ public final class JavaFormats {
         private final ArrayList<Rec> nodes = new ArrayList<>();
         private final HashMap<Key, Integer> interned = new HashMap<>();
         private boolean[] used = new boolean[16];
+        /** {@code seen[id] == stamp} marks a unique child already referenced by the pending node. */
+        private int[] seen = new int[16];
+        private int stamp;
 
         private static $EXCEPTION error(int kind) {
           return new $EXCEPTION(kind, -1, -1);
@@ -1615,15 +1615,17 @@ public final class JavaFormats {
           }
           int depth = 0;
           long work = 0;
+          if (++stamp == 0) {
+            Arrays.fill(seen, 0);
+            stamp = 1;
+          }
           for (int p : patches) {
             if ((p & 1) == 0) continue;
             int child = rd32(bytes, p >>> 1);
             Rec rec = nodes.get(child);
             if ($NODES.nodeSpec(rec.tag).unique()) {
-              if (used[child]) throw error($NODES.SHARED_UNIQUE);
-              for (int q : patches)
-                if (q != p && (q & 1) == 1 && rd32(bytes, q >>> 1) == child)
-                  throw error($NODES.SHARED_UNIQUE);
+              if (used[child] || seen[child] == stamp) throw error($NODES.SHARED_UNIQUE);
+              seen[child] = stamp;
             }
             depth = Math.max(depth, rec.depth);
             work = Math.min(0xffffffffL, work + Integer.toUnsignedLong(rec.work));
@@ -1632,7 +1634,10 @@ public final class JavaFormats {
           int id = nodes.size();
           if (isInterned) interned.put(key, id);
           nodes.add(new Rec($NODES.rd16(bytes, 0), bytes, patches, depth + 1, (int) Math.min(0xffffffffL, work + 1)));
-          if (id >= used.length) used = Arrays.copyOf(used, used.length * 2);
+          if (id >= used.length) {
+            used = Arrays.copyOf(used, used.length * 2);
+            seen = Arrays.copyOf(seen, used.length);
+          }
           return id;
         }
 

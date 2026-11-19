@@ -25,11 +25,11 @@ public final class DocWriter {
     record SpanStyled(int style, int text, float scale) implements Span {}
   }
 
-  private static final int[] TARGETS_ANY = {1, 2, 3, 4, 5, 6, 7};
-  private static final int[] TARGETS_BLOCK = {2, 3, 4};
-  private static final int[] TARGETS_META = {6};
-  private static final int[] TARGETS_SECTION = {4};
-  private static final int[] TARGETS_STYLE = {1};
+  private static final int[] TARGETS_Block = {2, 3, 4};
+  private static final int[] TARGETS_Meta = {6};
+  private static final int[] TARGETS_Section = {4};
+  private static final int[] TARGETS_Style = {1};
+  private static final int[] TARGETS_any = {1, 2, 3, 4, 5, 6, 7};
   private static final int NONE = -1;
 
   private static final class Rec {
@@ -127,6 +127,9 @@ public final class DocWriter {
   private final ArrayList<Rec> nodes = new ArrayList<>();
   private final HashMap<Key, Integer> interned = new HashMap<>();
   private boolean[] used = new boolean[16];
+  /** {@code seen[id] == stamp} marks a unique child already referenced by the pending node. */
+  private int[] seen = new int[16];
+  private int stamp;
 
   private static DocException error(int kind) {
     return new DocException(kind, -1, -1);
@@ -185,15 +188,17 @@ public final class DocWriter {
     }
     int depth = 0;
     long work = 0;
+    if (++stamp == 0) {
+      Arrays.fill(seen, 0);
+      stamp = 1;
+    }
     for (int p : patches) {
       if ((p & 1) == 0) continue;
       int child = rd32(bytes, p >>> 1);
       Rec rec = nodes.get(child);
       if (DocNodes.nodeSpec(rec.tag).unique()) {
-        if (used[child]) throw error(DocNodes.SHARED_UNIQUE);
-        for (int q : patches)
-          if (q != p && (q & 1) == 1 && rd32(bytes, q >>> 1) == child)
-            throw error(DocNodes.SHARED_UNIQUE);
+        if (used[child] || seen[child] == stamp) throw error(DocNodes.SHARED_UNIQUE);
+        seen[child] = stamp;
       }
       depth = Math.max(depth, rec.depth);
       work = Math.min(0xffffffffL, work + Integer.toUnsignedLong(rec.work));
@@ -202,7 +207,10 @@ public final class DocWriter {
     int id = nodes.size();
     if (isInterned) interned.put(key, id);
     nodes.add(new Rec(DocNodes.rd16(bytes, 0), bytes, patches, depth + 1, (int) Math.min(0xffffffffL, work + 1)));
-    if (id >= used.length) used = Arrays.copyOf(used, used.length * 2);
+    if (id >= used.length) {
+      used = Arrays.copyOf(used, used.length * 2);
+      seen = Arrays.copyOf(seen, used.length);
+    }
     return id;
   }
 
@@ -299,7 +307,7 @@ public final class DocWriter {
     if ((align & 0xffL) != 0L && (align & 0xffL) != 1L && (align & 0xffL) != 2L) throw new DocException(DocNodes.BAD_VALUE, -1, -1);
     $e.u8(align);
     $e.u64(sizeBits);
-    $e.node(nodeRef(parent, TARGETS_STYLE, true));
+    $e.node(nodeRef(parent, TARGETS_Style, true));
     $e.pad();
     return push($e, true, false);
   }
@@ -307,7 +315,7 @@ public final class DocWriter {
   /** Adds a {@code Paragraph} node. */
   public int paragraph(int style, java.util.List<? extends Span> spans, java.util.List<Attr> attrs) {
     Enc $e = new Enc(2);
-    $e.node(nodeRef(style, TARGETS_STYLE, false));
+    $e.node(nodeRef(style, TARGETS_Style, false));
     $e.u32(count(spans.size(), 65535L));
     $e.u32(count(attrs.size(), 255L));
     $e.pad();
@@ -325,7 +333,7 @@ public final class DocWriter {
         case Span.SpanStyled $y -> {
           $e.u16(2);
           $e.u16(0);
-          $e.node(nodeRef($y.style(), TARGETS_STYLE, false));
+          $e.node(nodeRef($y.style(), TARGETS_Style, false));
           $e.string(stringRef($y.text()));
           $e.u32(Float.floatToRawIntBits($y.scale()));
         }
@@ -334,7 +342,7 @@ public final class DocWriter {
     }
     for (Attr $x : attrs) {
       $e.string(stringRef($x.key()));
-      $e.node(nodeRef($x.value(), TARGETS_STYLE, true));
+      $e.node(nodeRef($x.value(), TARGETS_Style, true));
       $e.u8($x.important() ? 1 : 0);
       $e.pad();
     }
@@ -359,7 +367,7 @@ public final class DocWriter {
     $e.string(stringRef(title));
     $e.u32(count(blocks.length, 4096L));
     $e.pad();
-    for (int $x : blocks) $e.node(nodeRef($x, TARGETS_BLOCK, false));
+    for (int $x : blocks) $e.node(nodeRef($x, TARGETS_Block, false));
     return push($e, false, true);
   }
 
@@ -368,9 +376,9 @@ public final class DocWriter {
     Enc $e = new Enc(5);
     $e.u32(count(sections.length, -1L));
     $e.u32(count(source.length, 1048576L));
-    $e.node(nodeRef(meta, TARGETS_META, true));
+    $e.node(nodeRef(meta, TARGETS_Meta, true));
     $e.pad();
-    for (int $x : sections) $e.node(nodeRef($x, TARGETS_SECTION, false));
+    for (int $x : sections) $e.node(nodeRef($x, TARGETS_Section, false));
     $e.raw(source);
     $e.pad();
     return push($e, false, true);
@@ -388,7 +396,7 @@ public final class DocWriter {
     $e.u8(g ? 1 : 0);
     $e.u32(count(samples.length, 64L));
     $e.u32(count(blob.length, -1L));
-    $e.node(nodeRef(marker, TARGETS_ANY, true));
+    $e.node(nodeRef(marker, TARGETS_any, true));
     $e.pad();
     for (long $x : samples) {
       $e.u64($x);

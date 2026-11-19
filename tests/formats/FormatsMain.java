@@ -402,6 +402,17 @@ public final class FormatsMain {
     out.append("java shared-unique-one-parent ").append(kind(() -> w8.section(t8, new int[] {w8.rawText(new short[] {1}), 0}))).append('\n');
     int r9 = w8.rawText(new short[] {2});
     out.append("java shared-unique-twice ").append(kind(() -> w8.section(t8, new int[] {r9, r9}))).append('\n');
+    // A rejected node marks none of its children used.
+    out.append("java accepts-after-rejection ").append(kind(() -> w8.section(t8, new int[] {r9}))).append('\n');
+    // Distinct unique children are checked in linear time: 100,000 sections in one document.
+    var w10 = new DocWriter();
+    int t10 = w10.string("t");
+    int[] sections = new int[100_000];
+    for (int i = 0; i < sections.length; i++) sections[i] = w10.section(t10, new int[0]);
+    out.append("java accepts-many-unique ").append(kind(() -> w10.document(sections, new byte[0], -1))).append('\n');
+    int u1 = w10.section(t10, new int[0]), u2 = w10.section(t10, new int[0]);
+    out.append("java unique-repeat-late ").append(kind(() -> w10.document(new int[] {u1, u2, u1}, new byte[0], -1))).append('\n');
+    out.append("java accepts-after-repeat ").append(kind(() -> w10.document(new int[] {u1, u2}, new byte[0], -1))).append('\n');
     out.append("java bad-ref-kind ").append(kind(() -> w8.paragraph(r8, List.of(), List.of()))).append('\n');
     out.append("java bad-ref ").append(kind(() -> w8.paragraph(1000, List.of(), List.of()))).append('\n');
     out.append("java bad-string ").append(kind(() -> w8.section(1000, new int[0]))).append('\n');

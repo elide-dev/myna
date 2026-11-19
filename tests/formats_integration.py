@@ -230,8 +230,11 @@ class FormatsTests(unittest.TestCase):
         if os.environ.get("MYNA_UPDATE_GOLDEN") == "1":
             (GOLDEN / "writer-errors.txt").write_text(java)
         self.assertEqual(java, (GOLDEN / "writer-errors.txt").read_text())
+        # Every case is an error but the java accepts-* ones: valid adds after a rejection, and
+        # 100,000 distinct unique children, which the writer checks in linear time.
         for line in java.splitlines():
-            self.assertNotEqual(line.split()[-1], "OK", line)
+            words = line.split()
+            self.assertEqual(words[-1] == "OK", words[1].startswith("accepts-"), line)
 
     def test_rejects(self):
         """One input per error kind; both readers return the same kind, offset and node."""

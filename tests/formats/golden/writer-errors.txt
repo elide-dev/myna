@@ -10,6 +10,10 @@ bad-root BadRoot
 java shared-unique SharedUnique
 java shared-unique-one-parent SharedUnique
 java shared-unique-twice SharedUnique
+java accepts-after-rejection OK
+java accepts-many-unique OK
+java unique-repeat-late SharedUnique
+java accepts-after-repeat OK
 java bad-ref-kind BadRefKind
 java bad-ref BadRef
 java bad-string BadString
