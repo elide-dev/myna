@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 3,
+  "bindingAbiVersion": 2,
+  "generatorVersion": "0.19.0",
+  "name": "formats_fixture",
+  "abiVersion": 1,
+  "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
+  "java": {"package":"fixture.formats","class":"MynaNative"},
+  "opaqueTypes": [],
+  "structs": [],
+  "callbacks": [],
+  "functions": [],
+  "enums": [{"name":"Align","type":"u8","values":[{"name":"left","value":"0"},{"name":"center","value":"1"},{"name":"right","value":"2"}]}],
+  "flagSets": [{"name":"StyleFlags","type":"u32","bits":[{"name":"bold","bit":0},{"name":"italic","bit":1}],"ranges":[{"name":"weight","low":4,"high":7}]}],
+  "families": [{"name":"Doc","nodes":[{"name":"Style","tag":1,"sharing":"interned","members":[{"name":"face","kind":"string"},{"name":"flags","kind":"field","type":"u32","flags":"StyleFlags"},{"name":"align","kind":"field","type":"u8","enum":"Align"},{"name":"size_bits","kind":"field","type":"u64"},{"name":"parent","kind":"ref","target":"Style","optional":true}]},{"name":"Paragraph","tag":2,"sharing":"unique","members":[{"name":"style","kind":"ref","target":"Style"},{"name":"spans","kind":"union","target":"Span","max":65535},{"name":"attrs","kind":"elements","target":"Attr","max":255}]},{"name":"RawText","tag":3,"sharing":"unique","members":[{"name":"units","kind":"list","type":"u16","max":1048576}]},{"name":"Section","tag":4,"sharing":"unique","members":[{"name":"title","kind":"string"},{"name":"blocks","kind":"refs","target":"Block","max":4096}]},{"name":"Document","tag":5,"sharing":"unique","members":[{"name":"sections","kind":"refs","target":"Section"},{"name":"source","kind":"bytes","max":1048576},{"name":"meta","kind":"ref","target":"Meta","optional":true}]},{"name":"Meta","tag":6,"sharing":"interned","members":[{"name":"a","kind":"field","type":"i8"},{"name":"b","kind":"field","type":"u16"},{"name":"c","kind":"field","type":"i16"},{"name":"d","kind":"field","type":"i32"},{"name":"e","kind":"field","type":"i64"},{"name":"f","kind":"field","type":"f64"},{"name":"g","kind":"field","type":"bool"},{"name":"samples","kind":"list","type":"i64","max":64},{"name":"blob","kind":"list","type":"u8"},{"name":"marker","kind":"ref","target":"any","optional":true}]},{"name":"Marker","tag":7,"sharing":"interned","members":[]}],"elements":[{"name":"Attr","members":[{"name":"key","kind":"string"},{"name":"value","kind":"ref","target":"Style","optional":true},{"name":"important","kind":"field","type":"bool"}]},{"name":"SpanBreak","tag":1,"members":[]},{"name":"SpanStyled","tag":2,"members":[{"name":"style","kind":"ref","target":"Style"},{"name":"text","kind":"string"},{"name":"scale","kind":"field","type":"f32"}]},{"name":"SpanText","tag":0,"members":[{"name":"text","kind":"string"}]}],"kinds":[{"name":"Block","nodes":["Paragraph","RawText","Section"]}],"unions":[{"name":"Span","elements":["SpanText","SpanBreak","SpanStyled"]}]}],
+  "formats": [{"name":"DocFile","family":"Doc","version":1,"magic":826494788,"limits":{"maxBytes":268435456,"maxNodes":4194304,"maxStrings":1048576,"maxDepth":128,"maxWork":16777216},"headerWord":"capability","roots":["Document"]},{"name":"DocFragment","family":"Doc","version":1,"magic":826757702,"limits":{"maxBytes":1048576,"maxNodes":65536,"maxStrings":65536,"maxDepth":64,"maxWork":1048576},"roots":["Paragraph","RawText"]},{"name":"DocTiny","family":"Doc","version":2,"magic":1498302804,"limits":{"maxBytes":512,"maxNodes":4,"maxStrings":3,"maxDepth":3,"maxWork":6},"headerWord":"mode","roots":["Block"]}]
+}

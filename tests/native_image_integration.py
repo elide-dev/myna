@@ -312,6 +312,27 @@ class NativeImageIntegrationTests(unittest.TestCase):
             self.assertEqual(len(pointer), 1, helper)
             self.assertEqual(len([i for i in helper if re.search(scaled[name], i)]), 1, helper)
 
+    def test_persisted_formats(self):
+        """tests/formats (myna#167) in an image: the generated Java writer reproduces the golden
+        bytes, and the byte[] reader returns the JVM's and Rust's verdicts, dumps and writer errors."""
+        work = ROOT / "build/formats-native"
+        shutil.rmtree(work, ignore_errors=True)
+        generated = work / "generated"
+        run(BINARY, "generate", ROOT / "tests/formats/doc.seam", "--out", generated)
+        classes = work / "classes"
+        run("javac", "-d", classes, *sorted(generated.glob("Doc*.java")), ROOT / "tests/formats/FormatsMain.java")
+        app = work / "formats-app"
+        native_image("-O2", "-cp", classes, "fixture.formats.FormatsMain", "-o", app)
+        golden = ROOT / "tests/formats/golden"
+        written = work / "golden"
+        written.mkdir()
+        run(app, "golden", written)
+        for path in sorted(golden.glob("*.bin")):
+            self.assertEqual((written / path.name).read_bytes(), path.read_bytes(), path.name)
+        self.assertEqual(run(app, "verdict", *sorted(golden.glob("*.bin"))).stdout,
+                         (golden / "verdicts.txt").read_text())
+        self.assertEqual(run(app, "writer-errors").stdout, (golden / "writer-errors.txt").read_text())
+
     def test_bemo_context_delegates(self):
         """Bemo names its own c_context: the generated context delegates its library path (static
         linkage), macros, options and headers to it; tests/bemo/context.h fails the C query unless

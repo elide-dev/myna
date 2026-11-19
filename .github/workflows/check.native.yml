@@ -89,6 +89,7 @@ jobs:
       - name: Verify symbol identity failures
         run: mise exec -- python3 tests/symbols.py
       - run: mise run test:e2e
+      - run: mise run test:formats
       - run: mise run test:llvm-coverage
       - run: mise run test:rust
       - name: C++ value ABI and simdjson conformance

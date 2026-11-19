@@ -53,6 +53,10 @@ run = "scripts/test-jvm.sh"
 [tasks."test:e2e"]
 run = "scripts/python.sh tests/e2e.py"
 
+[tasks."test:formats"]
+description = "Generated Rust and Java persisted-format writers and readers agree (myna#167)"
+run = "scripts/python.sh tests/formats_integration.py"
+
 [tasks."test:llvm"]
 run = "scripts/python.sh tests/llvm_integration.py"
 
@@ -117,7 +121,7 @@ description = "Measure production Rust coverage without stale or empty test bina
 run = ["cargo llvm-cov clean", "cargo llvm-cov -p myna-values --test values --locked --lcov --output-path build/reports/rust.lcov --fail-under-lines 97.5"]
 
 [tasks."test:rust-fuzz"]
-description = "Fuzz the Rust tape reader and UTF-8 bridge under ASan (cargo-fuzz)"
+description = "Fuzz the Rust tape reader, UTF-8 bridge and persisted-format reader under ASan (cargo-fuzz)"
 run = "scripts/rust-fuzz.sh"
 
 [tasks."test:miri"]

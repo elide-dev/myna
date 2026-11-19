@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.frontend;
 
+import dev.elide.myna.model.Persisted;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
@@ -35,6 +36,7 @@ public final class Dsl {
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
     var fields = new ArrayList<Field>();
+    PersistedDsl persisted = null; // created by the first persisted-format directive
     var lines = source.split("\\R");
     String previous = null; // the directive of the previous non-blank line
 
@@ -191,6 +193,15 @@ public final class Dsl {
             flagBits.clear();
             flagRanges.clear();
           }
+          case "format", "node", "element" -> {
+            require(
+                name != null && header == null && words.length >= 2,
+                "expected a named top-level block");
+            header = words;
+            options = options(words, 2);
+            if (persisted == null) persisted = new PersistedDsl();
+            persisted.open(words, i + 1);
+          }
           case "value" -> {
             require(header != null && header[0].equals("enum"), "value requires an enum block");
             require(words.length == 4 && words[2].equals("="), "expected: value NAME = INTEGER");
@@ -237,6 +248,13 @@ public final class Dsl {
                 new Parameter(words[1], type, nullable, ownership, access, facts(opts), group));
           }
           case "field" -> {
+            if (persisted != null
+                && header != null
+                && (header[0].equals("node") || header[0].equals("element"))
+                && words.length >= 3) {
+              persisted.line(words, header, i + 1);
+              continue;
+            }
             require(
                 header != null && header[0].equals("struct") && words.length >= 3,
                 "field requires a struct block");
@@ -285,6 +303,10 @@ public final class Dsl {
               boolean bitfields = bool(take(options, "c_bitfields", "false"));
               flagSets.add(new FlagSet(header[1], type, flagBits, bitfields, flagRanges));
               empty(options);
+            } else if (header[0].equals("format")
+                || header[0].equals("node")
+                || header[0].equals("element")) {
+              persisted.end(header, options);
             } else if (header[0].equals("struct")) {
               structs.add(
                   new Struct(
@@ -330,7 +352,12 @@ public final class Dsl {
             header = null;
             options = null;
           }
-          default -> throw new IllegalArgumentException("unknown directive: " + words[0]);
+          default -> {
+            require(PersistedDsl.DIRECTIVES.contains(words[0]), "unknown directive: " + words[0]);
+            require(name != null, "missing module");
+            if (persisted == null) persisted = new PersistedDsl();
+            persisted.line(words, header, i + 1);
+          }
         }
       } catch (IllegalArgumentException e) {
         throw new IllegalArgumentException("line " + (i + 1) + ": " + e.getMessage(), e);
@@ -356,7 +383,8 @@ public final class Dsl {
         enums,
         flagSets,
         abiDeclared,
-        rustImplementation);
+        rustImplementation,
+        persisted == null ? Persisted.Declarations.EMPTY : persisted.declarations());
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */
@@ -373,14 +401,14 @@ public final class Dsl {
   }
 
   /** Takes {@code enum=} or {@code flags=}, before the remaining options become facts. */
-  private static GroupRef group(Map<String, String> opts) {
+  static GroupRef group(Map<String, String> opts) {
     String enumName = take(opts, "enum", null), flagsName = take(opts, "flags", null);
     require(enumName == null || flagsName == null, "enum= and flags= are mutually exclusive");
     if (enumName != null) return new GroupRef(GroupKind.ENUM, enumName);
     return flagsName == null ? null : new GroupRef(GroupKind.FLAGS, flagsName);
   }
 
-  private static Map<String, String> options(String[] words, int start) {
+  static Map<String, String> options(String[] words, int start) {
     var result = new LinkedHashMap<String, String>();
     for (int i = start; i < words.length; i++) {
       String[] pair = words[i].split("=", 2);
@@ -411,27 +439,27 @@ public final class Dsl {
     }
   }
 
-  private static String take(Map<String, String> opts, String key, String fallback) {
+  static String take(Map<String, String> opts, String key, String fallback) {
     String value = opts.remove(key);
     return value == null ? fallback : value;
   }
 
-  private static String takeRequired(Map<String, String> opts, String key) {
+  static String takeRequired(Map<String, String> opts, String key) {
     String value = opts.remove(key);
     require(value != null, "missing " + key);
     return value;
   }
 
-  private static void empty(Map<String, String> opts) {
+  static void empty(Map<String, String> opts) {
     require(opts.isEmpty(), "unknown options: " + opts.keySet());
   }
 
-  private static boolean bool(String value) {
+  static boolean bool(String value) {
     require(value.equals("true") || value.equals("false"), "expected true or false");
     return Boolean.parseBoolean(value);
   }
 
-  private static void require(boolean test, String message) {
+  static void require(boolean test, String message) {
     if (!test) throw new IllegalArgumentException(message);
   }
 }

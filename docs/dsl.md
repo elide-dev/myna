@@ -315,6 +315,14 @@ accessors for constants that fold to the literal. `<Class>Constants` carries the
 `<Enum>.name(v)` or `<Flags>.<bit>(flags)` and `hasUnknown`. See
 [the C context](#native-image-c-context-library-linkage-and-handwritten-callbacks) for what an image needs.
 
+## Persisted formats
+
+`family`, `format`, `node`, `element`, `kind` and `union` declare versioned on-disk formats of tagged nodes with
+backward references, separate from the call-boundary types above. Myna generates a canonical writer and a
+validating reader for Rust (`formats.rs`) and Java (`<Family>Nodes`, `<Family>Writer`, `<Family>Exception`,
+`<Format>Reader`). Each format carries a layout fingerprint that `pinned=` locks. See
+[persisted formats](formats.md).
+
 ## Determinism
 
 Declarations and fact keys are sorted, parameter/field order is preserved, and output includes no timestamps or input paths. `seam.abi` is the SHA-256 of canonical `seam.json` including target ABI class, generator/schema version, ABI shape, Java adaptation, and fact provenance. It intentionally changes when contracts change, even if the C signature remains identical. Constants, enum values and flag bits sort by name, and numbers are canonical decimal strings, so a hex or decimal spelling in the source does not change the fingerprint. Fingerprints detect drift; they do not prove semantic correctness or authenticate a provider binary.

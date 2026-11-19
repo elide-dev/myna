@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 package dev.elide.myna.serialize;
 
+import dev.elide.myna.model.Persisted;
+import dev.elide.myna.model.PersistedLayout;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.*;
 import dev.elide.myna.model.Seam.Module;
@@ -90,6 +92,7 @@ public final class SeamJson {
         + array(m.functions().stream().map(SeamJson::function).toList())
         + groups(m)
         + ownership(m)
+        + persisted(m)
         + "\n}\n";
   }
 
@@ -224,6 +227,113 @@ public final class SeamJson {
         + facts(f.facts())
         + reference(f.returnsGroup(), "return")
         + "}";
+  }
+
+  /**
+   * Persisted-format families and formats (myna#167), written only when the module declares a
+   * family so every other module keeps its fingerprint. Nodes sort by tag, members keep wire order.
+   */
+  private static String persisted(Module m) {
+    var d = m.persisted();
+    if (d.families().isEmpty()) return "";
+    var families = new ArrayList<String>();
+    for (PersistedLayout layout : PersistedLayout.of(m)) {
+      var nodes = new ArrayList<String>();
+      for (Persisted.Node n : layout.nodes)
+        nodes.add(
+            "{\"name\":"
+                + quote(n.name())
+                + ",\"tag\":"
+                + n.tag()
+                + ",\"sharing\":"
+                + quote(n.sharing().text())
+                + ",\"members\":"
+                + members(n.members())
+                + "}");
+      var elements = new ArrayList<String>();
+      for (Persisted.Element e : layout.elements)
+        elements.add(
+            "{\"name\":"
+                + quote(e.name())
+                + (e.tag() == null ? "" : ",\"tag\":" + e.tag())
+                + ",\"members\":"
+                + members(e.members())
+                + "}");
+      var kinds = new ArrayList<String>();
+      for (Persisted.Kind k : layout.kinds)
+        kinds.add(
+            "{\"name\":"
+                + quote(k.name())
+                + ",\"nodes\":"
+                + array(k.nodes().stream().map(SeamJson::quote).toList())
+                + "}");
+      var unions = new ArrayList<String>();
+      for (Persisted.Union u : layout.unions)
+        unions.add(
+            "{\"name\":"
+                + quote(u.name())
+                + ",\"elements\":"
+                + array(u.elements().stream().map(SeamJson::quote).toList())
+                + "}");
+      families.add(
+          "{\"name\":"
+              + quote(layout.family.name())
+              + ",\"nodes\":"
+              + array(nodes)
+              + ",\"elements\":"
+              + array(elements)
+              + ",\"kinds\":"
+              + array(kinds)
+              + ",\"unions\":"
+              + array(unions)
+              + "}");
+    }
+    var formats = new ArrayList<String>();
+    for (Persisted.Format f : d.formats()) {
+      var l = f.limits();
+      formats.add(
+          "{\"name\":"
+              + quote(f.name())
+              + ",\"family\":"
+              + quote(f.family())
+              + ",\"version\":"
+              + f.version()
+              + ",\"magic\":"
+              + f.magic()
+              + ",\"limits\":{\"maxBytes\":"
+              + l.maxBytes()
+              + ",\"maxNodes\":"
+              + l.maxNodes()
+              + ",\"maxStrings\":"
+              + l.maxStrings()
+              + ",\"maxDepth\":"
+              + l.maxDepth()
+              + ",\"maxWork\":"
+              + l.maxWork()
+              + "}"
+              + (f.headerWord() == null ? "" : ",\"headerWord\":" + quote(f.headerWord()))
+              + ",\"roots\":"
+              + array(f.roots().stream().map(SeamJson::quote).toList())
+              + "}");
+    }
+    return ",\n  \"families\": " + array(families) + ",\n  \"formats\": " + array(formats);
+  }
+
+  private static String members(List<Persisted.Member> members) {
+    return array(
+        members.stream()
+            .map(x ->
+                "{\"name\":"
+                    + quote(x.name())
+                    + ",\"kind\":"
+                    + quote(x.kind().text())
+                    + (x.scalar() == null ? "" : ",\"type\":" + quote(x.scalar().text()))
+                    + reference(x.group(), "")
+                    + (x.target() == null ? "" : ",\"target\":" + quote(x.target()))
+                    + (x.optional() ? ",\"optional\":true" : "")
+                    + (x.max() == null ? "" : ",\"max\":" + x.max())
+                    + "}")
+            .toList());
   }
 
   /** Constants, enums and flag sets; each section is omitted when empty. Values are decimal. */
@@ -371,7 +481,7 @@ public final class SeamJson {
   }
 
   /** The fingerprint of an already serialized {@link #canonical(Module) canonical} descriptor. */
-  static String fingerprintOf(String canonical) {
+  public static String fingerprintOf(String canonical) {
     try {
       return HexFormat.of()
           .formatHex(

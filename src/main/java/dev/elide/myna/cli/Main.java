@@ -5,6 +5,8 @@ package dev.elide.myna.cli;
 import dev.elide.myna.Generator;
 import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
+import dev.elide.myna.model.Persisted;
+import dev.elide.myna.model.PersistedLayout;
 import dev.elide.myna.model.Seam;
 import dev.elide.myna.model.Seam.Module;
 import dev.elide.myna.serialize.Fingerprint;
@@ -133,6 +135,7 @@ public final class Main {
       if (args[0].equals("validate")) {
         Validator.validate(module, strict, abi);
         out.println("valid " + module.name() + " " + abi.value());
+        drafts(module, out);
         return 0;
       }
       if (destination == null) {
@@ -152,6 +155,7 @@ public final class Main {
         }
       } else write(outputs, destination);
       out.println((check ? "verified " : "generated ") + module.name() + " " + fingerprint);
+      drafts(module, out);
       return 0;
     } catch (IllegalArgumentException | IOException e) {
       err.println("myna: " + e.getMessage());
@@ -161,6 +165,16 @@ public final class Main {
       err.println("myna: interrupted");
       return 130;
     }
+  }
+
+  /**
+   * Reports each {@code draft=true} format's layout fingerprint after the module line: the value
+   * its {@code pinned=} takes once the layout is final.
+   */
+  static void drafts(Module module, PrintStream out) {
+    for (PersistedLayout layout : PersistedLayout.of(module))
+      for (Persisted.Format f : layout.formats)
+        if (f.draft()) out.println("draft format " + f.name() + " pinned=" + layout.fingerprint(f));
   }
 
   public static void write(Map<String, String> outputs, Path destination) throws IOException {

@@ -1,0 +1,116 @@
+# Copyright the Myna contributors.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Persisted-format fixture (myna#167): every member kind, both sharing modes, two formats over one
+# family plus one with small limits for the limit rejects.
+module formats_fixture target=x86_64-unknown-linux-gnu java_package=fixture.formats
+
+enum Align type=u8
+  value left = 0
+  value center = 1
+  value right = 2
+end
+
+flags StyleFlags type=u32
+  bit bold = 0
+  bit italic = 1
+  range weight = 4..7
+end
+
+family Doc
+
+format DocFile family=Doc version=1 magic=0x31434f44 pinned=e6838f3259d67776
+  limit max_bytes=268435456
+  limit max_nodes=4194304
+  limit max_strings=1048576
+  limit max_depth=128
+  limit max_work=16777216
+  header capability
+  root Document
+end
+
+format DocFragment family=Doc version=1 magic=0x31475246 pinned=b3d333173674f834
+  limit max_bytes=1048576
+  limit max_nodes=65536
+  limit max_strings=65536
+  limit max_depth=64
+  limit max_work=1048576
+  root Paragraph,RawText
+end
+
+format DocTiny family=Doc version=2 magic=0x594e4954 pinned=e71cd0c4bcab2fd4
+  limit max_bytes=512
+  limit max_nodes=4
+  limit max_strings=3
+  limit max_depth=3
+  limit max_work=6
+  header mode
+  root Block
+end
+
+kind Block family=Doc nodes=Paragraph,RawText,Section
+
+element Attr family=Doc
+  string key
+  ref value node=Style optional=true
+  field important type=bool
+end
+
+element SpanText family=Doc tag=0
+  string text
+end
+
+element SpanBreak family=Doc tag=1
+end
+
+element SpanStyled family=Doc tag=2
+  ref style node=Style
+  string text
+  field scale type=f32
+end
+
+union Span family=Doc elements=SpanText,SpanBreak,SpanStyled
+
+node Style family=Doc tag=1 sharing=interned
+  string face
+  field flags type=u32 flags=StyleFlags
+  field align type=u8 enum=Align
+  field size_bits type=u64
+  ref parent node=Style optional=true
+end
+
+node Paragraph family=Doc tag=2 sharing=unique
+  ref style node=Style
+  list spans union=Span max=65535
+  list attrs element=Attr max=255
+end
+
+node RawText family=Doc tag=3 sharing=unique
+  list units type=u16 max=1048576
+end
+
+node Section family=Doc tag=4 sharing=unique
+  string title
+  refs blocks node=Block max=4096
+end
+
+node Document family=Doc tag=5 sharing=unique
+  refs sections node=Section
+  field source type=bytes max=1048576
+  ref meta node=Meta optional=true
+end
+
+node Meta family=Doc tag=6 sharing=interned
+  field a type=i8
+  field b type=u16
+  field c type=i16
+  field d type=i32
+  field e type=i64
+  field f type=f64
+  field g type=bool
+  list samples type=i64 max=64
+  list blob type=u8
+  ref marker node=any optional=true
+end
+
+node Marker family=Doc tag=7 sharing=interned
+end

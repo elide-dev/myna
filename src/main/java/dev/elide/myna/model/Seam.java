@@ -630,7 +630,50 @@ public final class Seam {
       List<EnumGroup> enums,
       List<FlagSet> flagSets,
       boolean abiDeclared,
-      boolean rustImplementation) {
+      boolean rustImplementation,
+      Persisted.Declarations persisted) {
+    /** A module without persisted formats. */
+    public Module(
+        String name,
+        int abiVersion,
+        String targetTriple,
+        String javaPackage,
+        String javaClass,
+        List<String> opaqueTypes,
+        List<Struct> structs,
+        List<Signature> callbacks,
+        List<Function> functions,
+        List<Resource> resources,
+        List<BufferBorrow> borrows,
+        NativeConfig nativeConfig,
+        TruffleConfig truffleConfig,
+        List<Constant> constants,
+        List<EnumGroup> enums,
+        List<FlagSet> flagSets,
+        boolean abiDeclared,
+        boolean rustImplementation) {
+      this(
+          name,
+          abiVersion,
+          targetTriple,
+          javaPackage,
+          javaClass,
+          opaqueTypes,
+          structs,
+          callbacks,
+          functions,
+          resources,
+          borrows,
+          nativeConfig,
+          truffleConfig,
+          constants,
+          enums,
+          flagSets,
+          abiDeclared,
+          rustImplementation,
+          Persisted.Declarations.EMPTY);
+    }
+
     /** A module without the opt-in Rust implementer trait ({@code rust_implementation=trait}). */
     public Module(
         String name,
@@ -861,6 +904,7 @@ public final class Seam {
       enums = enums.stream().sorted(Comparator.comparing(EnumGroup::name)).toList();
       flagSets = flagSets.stream().sorted(Comparator.comparing(FlagSet::name)).toList();
       structs = canonicalCases(structs, enums);
+      persisted = persisted == null ? Persisted.Declarations.EMPTY : persisted;
     }
 
     /**
@@ -917,7 +961,8 @@ public final class Seam {
           enums,
           flagSets,
           abiDeclared,
-          rustImplementation);
+          rustImplementation,
+          persisted);
     }
 
     /**
@@ -930,6 +975,23 @@ public final class Seam {
         if (!part.isEmpty())
           out.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
       return out.append("Implementation").toString();
+    }
+
+    /**
+     * Whether the module declares persisted formats and no call boundary: no opaque, struct,
+     * callback, function, resource or borrow, and no Truffle cells. Such a module generates only
+     * its records ({@code seam.rs}, the constants class), {@code seam.json}, {@code seam.abi} and
+     * the format files, without the C header, LLVM contracts or Native Image and FFM bindings.
+     */
+    public boolean formatsOnly() {
+      return !persisted.families().isEmpty()
+          && opaqueTypes.isEmpty()
+          && structs.isEmpty()
+          && callbacks.isEmpty()
+          && functions.isEmpty()
+          && resources.isEmpty()
+          && borrows.isEmpty()
+          && truffleConfig == null;
     }
 
     /** Whether the module emits named constants: consts, groups, or the declared ABI version. */
