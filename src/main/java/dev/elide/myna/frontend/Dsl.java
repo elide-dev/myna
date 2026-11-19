@@ -36,16 +36,7 @@ public final class Dsl {
     Map<String, String> options = null;
     var parameters = new ArrayList<Parameter>();
     var fields = new ArrayList<Field>();
-    var families = new ArrayList<Persisted.Family>();
-    var formats = new ArrayList<Persisted.Format>();
-    var nodes = new ArrayList<Persisted.Node>();
-    var elementDecls = new ArrayList<Persisted.Element>();
-    var kinds = new ArrayList<Persisted.Kind>();
-    var unions = new ArrayList<Persisted.Union>();
-    var members = new ArrayList<Persisted.Member>();
-    var limits = new LinkedHashMap<String, Long>();
-    var roots = new ArrayList<String>();
-    String headerWord = null;
+    PersistedDsl persisted = null; // created by the first persisted-format directive
     var lines = source.split("\\R");
     String previous = null; // the directive of the previous non-blank line
 
@@ -190,15 +181,7 @@ public final class Dsl {
             constants.add(new Constant(words[1], type, integer(takeRequired(opts, "value"))));
             empty(opts);
           }
-          case "struct",
-              "import",
-              "export",
-              "callback",
-              "enum",
-              "flags",
-              "format",
-              "node",
-              "element" -> {
+          case "struct", "import", "export", "callback", "enum", "flags" -> {
             require(
                 name != null && header == null && words.length >= 2,
                 "expected a named top-level block");
@@ -209,57 +192,15 @@ public final class Dsl {
             enumValues.clear();
             flagBits.clear();
             flagRanges.clear();
-            members.clear();
-            limits.clear();
-            roots.clear();
-            headerWord = null;
           }
-          case "family" -> {
-            require(
-                name != null && header == null && words.length == 2,
-                "expected family NAME outside a block");
-            families.add(new Persisted.Family(words[1]));
-          }
-          case "kind", "union" -> {
+          case "format", "node", "element" -> {
             require(
                 name != null && header == null && words.length >= 2,
-                "expected " + words[0] + " NAME family=FAMILY outside a block");
-            var opts = options(words, 2);
-            String family = takeRequired(opts, "family");
-            if (words[0].equals("kind"))
-              kinds.add(new Persisted.Kind(words[1], family, names(takeRequired(opts, "nodes"))));
-            else
-              unions.add(
-                  new Persisted.Union(words[1], family, names(takeRequired(opts, "elements"))));
-            empty(opts);
-          }
-          case "limit" -> {
-            require(header != null && header[0].equals("format"), "limit requires a format block");
-            require(words.length == 2, "expected: limit KEY=VALUE");
-            var opts = options(words, 1);
-            var entry = opts.entrySet().iterator().next();
-            require(
-                limits.putIfAbsent(entry.getKey(), unsigned(entry.getValue())) == null,
-                "duplicate limit: " + entry.getKey());
-          }
-          case "header" -> {
-            require(header != null && header[0].equals("format"), "header requires a format block");
-            require(words.length == 2, "expected: header NAME");
-            require(headerWord == null, "a format declares at most one header word");
-            headerWord = words[1];
-          }
-          case "root" -> {
-            require(header != null && header[0].equals("format"), "root requires a format block");
-            require(words.length == 2, "expected: root NODE[,NODE...]");
-            require(roots.isEmpty(), "a format declares its roots once");
-            roots.addAll(names(words[1]));
-          }
-          case "string", "ref", "refs", "list" -> {
-            require(
-                header != null && (header[0].equals("node") || header[0].equals("element")),
-                words[0] + " requires a node or element block");
-            require(words.length >= 2, "expected: " + words[0] + " NAME");
-            members.add(member(words));
+                "expected a named top-level block");
+            header = words;
+            options = options(words, 2);
+            if (persisted == null) persisted = new PersistedDsl();
+            persisted.open();
           }
           case "value" -> {
             require(header != null && header[0].equals("enum"), "value requires an enum block");
@@ -307,10 +248,11 @@ public final class Dsl {
                 new Parameter(words[1], type, nullable, ownership, access, facts(opts), group));
           }
           case "field" -> {
-            if (header != null
+            if (persisted != null
+                && header != null
                 && (header[0].equals("node") || header[0].equals("element"))
                 && words.length >= 3) {
-              members.add(member(words));
+              persisted.line(words, header);
               continue;
             }
             require(
@@ -361,29 +303,10 @@ public final class Dsl {
               boolean bitfields = bool(take(options, "c_bitfields", "false"));
               flagSets.add(new FlagSet(header[1], type, flagBits, bitfields, flagRanges));
               empty(options);
-            } else if (header[0].equals("format")) {
-              formats.add(format(header[1], options, limits, headerWord, roots));
-            } else if (header[0].equals("node")) {
-              String family = takeRequired(options, "family");
-              int tag = tag(takeRequired(options, "tag"));
-              String sharing = takeRequired(options, "sharing");
-              require(
-                  sharing.equals("interned") || sharing.equals("unique"),
-                  "sharing is interned or unique: " + sharing);
-              nodes.add(
-                  new Persisted.Node(
-                      header[1],
-                      family,
-                      tag,
-                      Persisted.Sharing.valueOf(sharing.toUpperCase(Locale.ROOT)),
-                      members));
-              empty(options);
-            } else if (header[0].equals("element")) {
-              String family = takeRequired(options, "family");
-              String tag = take(options, "tag", null);
-              elementDecls.add(
-                  new Persisted.Element(header[1], family, tag == null ? null : tag(tag), members));
-              empty(options);
+            } else if (header[0].equals("format")
+                || header[0].equals("node")
+                || header[0].equals("element")) {
+              persisted.end(header, options);
             } else if (header[0].equals("struct")) {
               structs.add(
                   new Struct(
@@ -429,7 +352,12 @@ public final class Dsl {
             header = null;
             options = null;
           }
-          default -> throw new IllegalArgumentException("unknown directive: " + words[0]);
+          default -> {
+            require(PersistedDsl.DIRECTIVES.contains(words[0]), "unknown directive: " + words[0]);
+            require(name != null, "missing module");
+            if (persisted == null) persisted = new PersistedDsl();
+            persisted.line(words, header);
+          }
         }
       } catch (IllegalArgumentException e) {
         throw new IllegalArgumentException("line " + (i + 1) + ": " + e.getMessage(), e);
@@ -456,156 +384,7 @@ public final class Dsl {
         flagSets,
         abiDeclared,
         rustImplementation,
-        families.isEmpty()
-                && formats.isEmpty()
-                && nodes.isEmpty()
-                && elementDecls.isEmpty()
-                && kinds.isEmpty()
-                && unions.isEmpty()
-            ? Persisted.Declarations.EMPTY
-            : new Persisted.Declarations(families, formats, nodes, elementDecls, kinds, unions));
-  }
-
-  private static Persisted.Format format(
-      String name,
-      Map<String, String> options,
-      Map<String, Long> limits,
-      String headerWord,
-      List<String> roots) {
-    String family = takeRequired(options, "family");
-    long version = unsigned(takeRequired(options, "version"));
-    long magic = unsigned(takeRequired(options, "magic"));
-    String pinned = take(options, "pinned", null);
-    boolean draft = bool(take(options, "draft", "false"));
-    empty(options);
-    for (String key : limits.keySet()) require(LIMITS.contains(key), "unknown limit: " + key);
-    for (String key : LIMITS) require(limits.containsKey(key), "missing limit " + key);
-    require(!roots.isEmpty(), "format " + name + " requires a root line");
-    return new Persisted.Format(
-        name,
-        family,
-        version,
-        magic,
-        pinned,
-        draft,
-        new Persisted.Limits(
-            limits.get("max_bytes"),
-            limits.get("max_nodes"),
-            limits.get("max_strings"),
-            limits.get("max_depth"),
-            limits.get("max_work")),
-        headerWord,
-        roots);
-  }
-
-  private static final List<String> LIMITS =
-      List.of("max_bytes", "max_nodes", "max_strings", "max_depth", "max_work");
-
-  /** One member line of a node or element block: field, string, ref, refs or list. */
-  private static Persisted.Member member(String[] words) {
-    var opts = options(words, 2);
-    String memberName = words[1];
-    Persisted.Member result;
-    switch (words[0]) {
-      case "field" -> {
-        String type = takeRequired(opts, "type");
-        require(!opts.containsKey("offset"), "offset= is assigned by Myna in a node or element");
-        if (type.equals("bytes")) {
-          result =
-              new Persisted.Member(
-                  memberName, Persisted.MemberKind.BYTES, null, null, null, false, max(opts));
-        } else {
-          var scalar = scalar(type);
-          result =
-              new Persisted.Member(
-                  memberName, Persisted.MemberKind.FIELD, scalar, group(opts), null, false, null);
-        }
-      }
-      case "string" ->
-          result =
-              new Persisted.Member(
-                  memberName, Persisted.MemberKind.STRING, null, null, null, false, null);
-      case "ref" -> {
-        String target = takeRequired(opts, "node");
-        boolean optional = bool(take(opts, "optional", "false"));
-        result =
-            new Persisted.Member(
-                memberName, Persisted.MemberKind.REF, null, null, target, optional, null);
-      }
-      case "refs" ->
-          result =
-              new Persisted.Member(
-                  memberName,
-                  Persisted.MemberKind.REFS,
-                  null,
-                  null,
-                  takeRequired(opts, "node"),
-                  false,
-                  max(opts));
-      default -> {
-        String type = take(opts, "type", null),
-            element = take(opts, "element", null),
-            union = take(opts, "union", null);
-        require(
-            (type != null ? 1 : 0) + (element != null ? 1 : 0) + (union != null ? 1 : 0) == 1,
-            "list takes exactly one of type=, element= and union=");
-        if (type != null)
-          result =
-              new Persisted.Member(
-                  memberName,
-                  Persisted.MemberKind.SCALAR_LIST,
-                  scalar(type),
-                  null,
-                  null,
-                  false,
-                  max(opts));
-        else
-          result =
-              new Persisted.Member(
-                  memberName,
-                  element != null
-                      ? Persisted.MemberKind.ELEMENT_LIST
-                      : Persisted.MemberKind.UNION_LIST,
-                  null,
-                  null,
-                  element != null ? element : union,
-                  false,
-                  max(opts));
-      }
-    }
-    empty(opts);
-    return result;
-  }
-
-  private static Scalar scalar(String text) {
-    for (Scalar s : Scalar.values()) if (s.text().equals(text)) return s;
-    throw new IllegalArgumentException("unknown scalar type: " + text);
-  }
-
-  private static Long max(Map<String, String> opts) {
-    String max = take(opts, "max", null);
-    return max == null ? null : unsigned(max);
-  }
-
-  private static int tag(String text) {
-    long tag = unsigned(text);
-    require(tag <= 0xFFFF, "tag must fit u16: " + text);
-    return (int) tag;
-  }
-
-  /** A non-negative integer of at most 32 bits, decimal or {@code 0x} hex. */
-  private static long unsigned(String text) {
-    BigInteger value = integer(text);
-    require(
-        value.signum() >= 0 && value.bitLength() <= 32,
-        "expected an unsigned 32-bit integer: " + text);
-    return value.longValueExact();
-  }
-
-  private static List<String> names(String text) {
-    var result = List.of(text.split(",", -1));
-    for (String n : result) require(!n.isEmpty(), "empty name in list: " + text);
-    return result;
+        persisted == null ? Persisted.Declarations.EMPTY : persisted.declarations());
   }
 
   /** Decimal or {@code 0x} hexadecimal; hex is a magnitude, so only decimal is negative. */
@@ -622,14 +401,14 @@ public final class Dsl {
   }
 
   /** Takes {@code enum=} or {@code flags=}, before the remaining options become facts. */
-  private static GroupRef group(Map<String, String> opts) {
+  static GroupRef group(Map<String, String> opts) {
     String enumName = take(opts, "enum", null), flagsName = take(opts, "flags", null);
     require(enumName == null || flagsName == null, "enum= and flags= are mutually exclusive");
     if (enumName != null) return new GroupRef(GroupKind.ENUM, enumName);
     return flagsName == null ? null : new GroupRef(GroupKind.FLAGS, flagsName);
   }
 
-  private static Map<String, String> options(String[] words, int start) {
+  static Map<String, String> options(String[] words, int start) {
     var result = new LinkedHashMap<String, String>();
     for (int i = start; i < words.length; i++) {
       String[] pair = words[i].split("=", 2);
@@ -660,27 +439,27 @@ public final class Dsl {
     }
   }
 
-  private static String take(Map<String, String> opts, String key, String fallback) {
+  static String take(Map<String, String> opts, String key, String fallback) {
     String value = opts.remove(key);
     return value == null ? fallback : value;
   }
 
-  private static String takeRequired(Map<String, String> opts, String key) {
+  static String takeRequired(Map<String, String> opts, String key) {
     String value = opts.remove(key);
     require(value != null, "missing " + key);
     return value;
   }
 
-  private static void empty(Map<String, String> opts) {
+  static void empty(Map<String, String> opts) {
     require(opts.isEmpty(), "unknown options: " + opts.keySet());
   }
 
-  private static boolean bool(String value) {
+  static boolean bool(String value) {
     require(value.equals("true") || value.equals("false"), "expected true or false");
     return Boolean.parseBoolean(value);
   }
 
-  private static void require(boolean test, String message) {
+  static void require(boolean test, String message) {
     if (!test) throw new IllegalArgumentException(message);
   }
 }
