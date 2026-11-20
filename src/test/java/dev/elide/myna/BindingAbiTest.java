@@ -5,6 +5,7 @@ package dev.elide.myna;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.elide.myna.frontend.Dsl;
+import dev.elide.myna.serialize.Fingerprint;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,38 @@ class BindingAbiTest {
   private static final String MODULE = "module bindings target=aarch64-apple-darwin\n";
   private static final String CALL =
       "import read symbol=native_read return=i64 error=no_failure\nparam value type=i64\nend\n";
+
+  @Test
+  void variadicBoundaryIsFingerprintedAndRequiresRustGeneration() {
+    String declaration =
+        "import configure return=i32 variadic_after=op error=no_failure\n"
+            + "param op type=i32\nparam value type=i32\nparam result type=ptr<i32>\nend\n";
+    var module = Dsl.parse(MODULE + declaration);
+    var abi = new Fingerprint(module);
+    var generated = Generator.generate(module, true, abi, true);
+    assertTrue(abi.json().contains("\"variadicAfter\":\"op\""));
+    assertNotEquals(
+        abi.value(),
+        new Fingerprint(Dsl.parse(MODULE + declaration.replace("after=op", "after=value")))
+            .value());
+    assertThrows(IllegalArgumentException.class, () -> Generator.generate(module, true));
+    assertTrue(generated.get("seam.rs").contains("ConfigureFn = unsafe extern \"C\" fn(i32, ...)"));
+    assertFalse(generated.containsKey("seam.ll"));
+    for (String bad :
+        List.of(
+            declaration.replace("after=op", "after=missing"),
+            declaration.replace("after=op", "after=result"),
+            declaration.replace("value type=i32", "value type=f32"),
+            declaration
+                + declaration
+                    .replace("import configure", "import other symbol=configure")
+                    .replace("op type=i32", "op type=i64"))) {
+      var invalid = Dsl.parse(MODULE + bad);
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> Generator.generate(invalid, true, new Fingerprint(invalid), true));
+    }
+  }
 
   @Test
   void defaultIsInlineableAndOptOutRetainsNormalTransitions() {

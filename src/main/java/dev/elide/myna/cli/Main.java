@@ -22,7 +22,7 @@ public final class Main {
       """
       myna 0.20.0 — Native Image / Rust ABI generator
       Usage:
-        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni]
+        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni | --rust-only]
         myna validate INPUT.seam [--target TRIPLE | --targets TRIPLE,...] [--relaxed]
         myna apply --contracts seam.ll --input caller.o --output caller.seam.o [--llvm-tool PATH]
         myna --help | --version
@@ -97,7 +97,7 @@ public final class Main {
       Path input = Path.of(args[1]), destination = null;
       String target = null;
       List<String> targets = null;
-      boolean strict = true, check = false, jni = false;
+      boolean strict = true, check = false, jni = false, rustOnly = false;
       Set<String> seen = new HashSet<>();
       for (int i = 2; i < args.length; i++) {
         if (!seen.add(args[i])) throw new IllegalArgumentException("duplicate option: " + args[i]);
@@ -116,10 +116,14 @@ public final class Main {
           }
           case "--relaxed" -> strict = false;
           case "--check" -> check = true;
+          case "--rust-only" -> rustOnly = true;
           case "--jni" -> jni = true;
           default -> throw new IllegalArgumentException("unknown option: " + args[i]);
         }
       }
+      if (rustOnly && (jni || !args[0].equals("generate")))
+        throw new IllegalArgumentException(
+            "--rust-only requires generate and is incompatible with --jni");
       Module module = Dsl.parse(Files.readString(input));
       if (args[0].equals("validate") && (destination != null || check || jni))
         throw new IllegalArgumentException("validate does not accept --out/--check/--jni");
@@ -142,7 +146,7 @@ public final class Main {
         Validator.validate(module, strict, abi);
         throw new IllegalArgumentException("generate requires --out DIRECTORY");
       }
-      var outputs = new TreeMap<>(Generator.generate(module, strict, abi));
+      var outputs = new TreeMap<>(Generator.generate(module, strict, abi, rustOnly));
       String fingerprint = abi.value();
       if (jni) outputs.putAll(StaticJni.generate(module, abi));
       if (check) {

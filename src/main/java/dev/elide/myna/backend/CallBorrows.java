@@ -27,6 +27,7 @@ record CallBorrows(Function function, List<BufferBorrow> borrows) {
         });
     for (Function f : m.functions())
       if (f.direction() == Direction.IMPORT
+          && f.variadicAfter() == null
           && !held.contains(f.name())
           && f.parameters().stream().anyMatch(CallBorrows::cstring)) names.add(f.name());
     var result = new ArrayList<CallBorrows>();

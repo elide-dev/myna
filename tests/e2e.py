@@ -13,6 +13,61 @@ from support import BINARY, ROOT, TARGET, main, run
 VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
 
 class NativeCliTests(unittest.TestCase):
+    def test_variadic_imports(self):
+        with tempfile.TemporaryDirectory(prefix="myna-varargs-") as tmp:
+            work = Path(tmp)
+            source = work / "config.seam"
+            header = f"module config target={TARGET}\n"
+            shape = """import configure symbol=db_config return=i32 variadic_after=op error=no_failure native_leaf=false@explicit_contract
+  param op type=i32
+  param value type=i32
+  param result type=ptr<i32> nullable=true ownership=borrowed access=write
+end
+"""
+            second = shape.replace("configure", "measure").replace("value type=i32", "value type=f64")
+            source.write_text(header + shape + second)
+            out = work / "gen"
+            self.assertNotEqual(run(BINARY, "generate", source, "--out", out, ok=False).returncode, 0)
+            run(BINARY, "generate", source, "--rust-only", "--out", out)
+            self.assertEqual({p.name for p in out.iterdir()},
+                             {"seam.rs", "seam_types.rs", "seam_impl.rs", "seam.json", "seam.abi"})
+            (work / "native.c").write_text("""#include <stdarg.h>
+int db_config(int op, ...) {
+    va_list args;
+    va_start(args, op);
+    int value = op ? (int)va_arg(args, double) : va_arg(args, int);
+    int *result = va_arg(args, int *);
+    if (result) *result = value;
+    va_end(args);
+    return value;
+}
+""")
+            (work / "main.rs").write_text("""include!("gen/seam.rs");
+fn main() {
+    let mut result = 0;
+    unsafe {
+        assert_eq!(configure(0, -123, &mut result), -123);
+        assert_eq!(result, -123);
+        assert_eq!(measure(1, 42.5, &mut result), 42);
+        assert_eq!(result, 42);
+        assert_eq!(configure(0, 3, core::ptr::null_mut()), 3);
+    }
+}
+""")
+            run("cc", "-c", work / "native.c", "-o", work / "native.o")
+            run("rustc", "--edition=2024", "-Dwarnings", "-O", work / "main.rs",
+                "-C", f"link-arg={work / 'native.o'}", "-o", work / "run")
+            run(work / "run")
+            for invalid in (shape.replace("after=op", "after=typo"),
+                            shape.replace("after=op", "after=result"),
+                            shape.replace("value type=i32", "value type=f32"),
+                            shape.replace("value type=i32", "value type=i16"),
+                            shape + second.replace("op type=i32", "op type=i64"),
+                            shape + second.replace("variadic_after=op", "")):
+                with self.subTest(invalid=invalid):
+                    source.write_text(header + invalid)
+                    self.assertNotEqual(run(BINARY, "validate", source, ok=False).returncode, 0)
+
     def test_callback_records_are_rejected(self):
         with tempfile.TemporaryDirectory(prefix="myna-callback-record-") as tmp:
             work = Path(tmp)
