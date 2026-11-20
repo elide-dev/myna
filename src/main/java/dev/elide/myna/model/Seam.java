@@ -201,6 +201,10 @@ public final class Seam {
       this(name, type, nullable, ownership, access, facts, null);
     }
 
+    public boolean constPointer() {
+      return type instanceof Pointer && (access == Access.READ || access == Access.CSTRING);
+    }
+
     public Parameter {
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
     }

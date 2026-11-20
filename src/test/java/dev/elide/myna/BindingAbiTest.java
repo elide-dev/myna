@@ -15,6 +15,71 @@ class BindingAbiTest {
       "import read symbol=native_read return=i64 error=no_failure\nparam value type=i64\nend\n";
 
   @Test
+  void variadicSelectorPreventsSafeLifecycleAndBorrowWrappers() {
+    String call =
+        "import configure return=void variadic_after=op error=no_failure\n"
+            + "param op type=i32\nparam value type=i32\nend\n";
+    String resource = "opaque Ticket\nresource Ticket representation=native threading=shared ";
+    for (String contract :
+        List.of(
+            "borrow configure value length=op lifetime=call\n",
+            resource + "create=configure destroy=release\n",
+            resource + "create=acquire destroy=configure\n")) {
+      var invalid = Dsl.parse(MODULE + contract + call);
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(invalid, true, new Fingerprint(invalid), true));
+      assertEquals(
+          "variadic imports cannot back safe ownership or borrow wrappers", error.getMessage());
+    }
+    for (String source :
+        List.of(
+            MODULE.replace(" target=", " rust_implementation=trait target=") + call,
+            MODULE + call.replace("import configure", "export configure"))) {
+      var invalid = Dsl.parse(source);
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(invalid, true, new Fingerprint(invalid), true));
+      assertTrue(
+          error.getMessage().contains("variadic_after requires a native import"),
+          error.getMessage());
+    }
+  }
+
+  @Test
+  void sharedVariadicSymbolsRequireCompatibleFixedCarriers() {
+    String header = MODULE + "enum Mode type=i32\nvalue active = 1\nend\n";
+    String first =
+        "import first symbol=dispatch return=void variadic_after=op error=no_failure\n"
+            + "param buffer type=ptr<u8> access=read\n"
+            + "param op type=i32 enum=Mode\n"
+            + "param value type=i64\n"
+            + "end\n";
+    String second =
+        first.replace("import first", "import other").replace("value type=i64", "value type=f64");
+    var module = Dsl.parse(header + first + second.replace("param buffer", "param data"));
+    String rust = Generator.generate(module, true, new Fingerprint(module), true).get("seam.rs");
+    assertTrue(rust.contains("OtherFn = unsafe extern \"C\" fn(*const u8, Mode, ...)"));
+    for (String conflict :
+        List.of(
+            second.replace("access=read", "access=write"),
+            second.replace(" enum=Mode", ""),
+            second.replace("after=op", "after=buffer").replace(" enum=Mode", ""),
+            second.replace("return=void", "return=i32"),
+            second.replace("variadic_after=op", ""))) {
+      var invalid = Dsl.parse(header + first + conflict);
+      var error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Generator.generate(invalid, true, new Fingerprint(invalid), true));
+      assertTrue(
+          error.getMessage().contains("duplicate linker symbol: dispatch"), error.getMessage());
+    }
+  }
+
+  @Test
   void variadicBoundaryIsFingerprintedAndRequiresRustGeneration() {
     String declaration =
         "import configure return=i32 variadic_after=op error=no_failure\n"

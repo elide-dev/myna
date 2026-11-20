@@ -351,10 +351,7 @@ public final class Validator {
                   && function.variadicAfter() != null
                   && previous.returns().equals(function.returns())
                   && Objects.equals(previous.returnsGroup(), function.returnsGroup())
-                  && previous.fixedParameters().stream()
-                      .map(Parameter::type)
-                      .toList()
-                      .equals(function.fixedParameters().stream().map(Parameter::type).toList())),
+                  && sameFixedParameters(previous.fixedParameters(), function.fixedParameters())),
           "duplicate linker symbol: " + function.symbol());
       require(
           !signatures.contains(function.symbol()),
@@ -586,6 +583,17 @@ public final class Validator {
     require(
         !types.contains(cell) && !signatures.contains(cell),
         "type collides with generated Truffle cell for " + function.name());
+  }
+
+  private static boolean sameFixedParameters(List<Parameter> left, List<Parameter> right) {
+    if (left.size() != right.size()) return false;
+    for (int i = 0; i < left.size(); i++) {
+      Parameter a = left.get(i), b = right.get(i);
+      if (!a.type().equals(b.type())
+          || !Objects.equals(a.group(), b.group())
+          || a.constPointer() != b.constPointer()) return false;
+    }
+    return true;
   }
 
   private static void qualifiedType(String name) {

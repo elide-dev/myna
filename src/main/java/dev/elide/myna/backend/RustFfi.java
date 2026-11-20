@@ -219,9 +219,10 @@ public final class RustFfi implements Backend {
       out.append(";\n");
     }
     out.append("}\n");
-    for (Function f : m.functions())
-      if (f.direction() == Direction.EXPORT && ByValue.applies(f)) wrapper(m, f, out);
-    for (Function f : m.functions()) if (f.variadicAfter() != null) variadicWrapper(f, out);
+    for (Function f : m.functions()) {
+      if (f.variadicAfter() != null) variadicWrapper(f, out);
+      else if (f.direction() == Direction.EXPORT && ByValue.applies(f)) wrapper(m, f, out);
+    }
     // Function-pointer types for callers that resolve symbols dynamically (dlsym/GetProcAddress).
     for (Function declared : m.functions()) {
       Function f = declared.direction() == Direction.EXPORT ? ByValue.lower(m, declared) : declared;
