@@ -26,7 +26,7 @@ macro_rules! assert_implementations {
     };
     ($($seam:ident)::+) => {
         const _: () = {
-            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "c78e5b1deea2a2a887223a21a40627950e56ee600fdb8a120fe6b1302f2c587d".as_bytes());
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "3f180af4f7f6926a065f8438088fccf13cc9798542b0aa8e6d7595e9aea84004".as_bytes());
             assert!(records.len() == checks.len(), "records and checks come from different ABIs");
             let mut i = 0;
             while i < records.len() {
@@ -62,7 +62,7 @@ pub(crate) use assert_implementations;
 macro_rules! native_image_shims {
     ($($seam:ident)::+) => {
         const _: () = {
-            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "c78e5b1deea2a2a887223a21a40627950e56ee600fdb8a120fe6b1302f2c587d".as_bytes());
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "3f180af4f7f6926a065f8438088fccf13cc9798542b0aa8e6d7595e9aea84004".as_bytes());
             assert!(records.len() == checks.len(), "records and checks come from different ABIs");
             let mut i = 0;
             while i < records.len() {
