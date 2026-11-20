@@ -21,10 +21,25 @@ public final class Generator {
    * every backend share {@code abi}, which must have been computed for exactly {@code module}.
    */
   public static SortedMap<String, String> generate(Module module, boolean strict, Fingerprint abi) {
+    return generate(module, strict, abi, false);
+  }
+
+  public static SortedMap<String, String> generate(
+      Module module, boolean strict, Fingerprint abi, boolean rustOnly) {
     Validator.validate(module, strict, abi);
     var outputs = new TreeMap<String, String>();
     outputs.put("seam.json", abi.json());
     outputs.put("seam.abi", abi.value() + "\n");
+    if (rustOnly) {
+      var rust = new RustFfi().parts(module, abi);
+      outputs.put("seam.rs", rust.records() + rust.checks());
+      outputs.putAll(rust.files());
+      if (RustFormats.applies(module))
+        outputs.put(RustFormats.FILENAME, new RustFormats().generate(module));
+      return Collections.unmodifiableSortedMap(outputs);
+    }
+    if (module.functions().stream().anyMatch(f -> f.variadicAfter() != null))
+      throw new IllegalArgumentException("variadic imports require generate --rust-only");
     if (module.formatsOnly()) {
       // No call boundary: the records and the formats, nothing to link or bind.
       var rust = new RustFfi();

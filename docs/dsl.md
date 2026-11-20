@@ -375,3 +375,30 @@ Callbacks may additionally declare `ffm_java=qualified.Class.method ffm_sentinel
 Callbacks without a static FFM target still provide scoped factories accepting a Java callback and an explicit failure sentinel. Stub lifetime and thread access follow the supplied arena. Imports that call back must opt out of native leaves. See the [adapter guide](jvm-roadmap.md) for callback ownership and library lifetimes.
 
 The CLI's optional `--jni` flag projects imports into static SVM JNI methods. It does not change the canonical C signature or introduce JNI handles into seam types. Declared `borrow` relationships additionally generate a direct `ByteBuffer` overload per function, taking one buffer for each borrow (`null` for a nullable buffer that is absent); raw pointers remain explicit unsafe `long` addresses. The adapter emits its own concrete JNI signatures and library lifecycle metadata.
+
+### Variadic imports for Rust callers
+
+Use `variadic_after` to name the final fixed parameter. Each import declares one
+call shape. Several shapes can name the same native symbol when their fixed
+parameters and return type agree.
+
+```
+import dbConfigInt symbol=sqlite3_db_config return=i32 variadic_after=op error=no_failure native_leaf=false@explicit_contract
+  param database type=ptr<Database> ownership=borrowed
+  param op type=i32
+  param value type=i32
+  param result type=ptr<i32> nullable=true access=write ownership=borrowed
+end
+```
+
+Generate into a dedicated output directory with `myna generate INPUT.seam
+--rust-only --out DIRECTORY`. This produces the descriptor, fingerprint and
+Rust bindings for the entire seam. Each typed wrapper calls a C-variadic extern
+function. Trailing arguments must use promoted types (`i32`, `i64`, `f64`, or
+a pointer). The caller must select an operation that consumes exactly the
+declared trailing types and uphold the pointer contracts. Java, JNI and LLVM
+contract generation for variadic imports is unsupported.
+
+Variadic imports expose an unsafe Rust call. Resource lifecycle and buffer
+borrow directives cannot name these imports, and automatic C string wrappers
+are omitted for them. Rust implementation traits require fixed-arity imports.

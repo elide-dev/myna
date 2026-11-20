@@ -333,6 +333,7 @@ public final class Dsl {
               String cc = take(options, "cc", "c");
               require(cc.equals("c"), "only cc=c is supported");
               var returnsGroup = group(options);
+              String variadicAfter = take(options, "variadic_after", null);
               functions.add(
                   new Function(
                       header[1],
@@ -347,7 +348,8 @@ public final class Dsl {
                       callback,
                       isolate.equals("thread"),
                       facts(options),
-                      returnsGroup));
+                      returnsGroup,
+                      variadicAfter));
             }
             header = null;
             options = null;
