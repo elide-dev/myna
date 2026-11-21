@@ -16,6 +16,21 @@ import org.junit.jupiter.params.provider.ValueSource;
 class CliTest {
   @TempDir Path temp;
 
+  @Test
+  void generatedFilesFollowUmaskAndPreserveExistingPermissions() throws IOException {
+    org.junit.jupiter.api.Assumptions.assumeTrue(
+        temp.getFileSystem().supportedFileAttributeViews().contains("posix"));
+    Path ordinary = Files.createFile(temp.resolve("ordinary"));
+    Path generated = temp.resolve("result");
+    Main.write(Map.of("result", "first"), temp);
+    assertEquals(Files.getPosixFilePermissions(ordinary), Files.getPosixFilePermissions(generated));
+    var restricted = java.nio.file.attribute.PosixFilePermissions.fromString("r--r-----");
+    Files.setPosixFilePermissions(generated, restricted);
+    Main.write(Map.of("result", "second"), temp);
+    assertEquals(restricted, Files.getPosixFilePermissions(generated));
+    assertEquals("second", Files.readString(generated));
+  }
+
   record Result(int code, String out, String err) {}
 
   Result run(String... args) {
