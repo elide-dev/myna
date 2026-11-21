@@ -206,6 +206,16 @@ public final class Main {
                       PosixFilePermissions.fromString("rw-rw-rw-")))
               : Files.createTempFile(target.getParent(), ".myna-", ".tmp");
       try {
+        if (existing != null) {
+          // Keep filesystem-specific access controls (including POSIX ACL entries) and the
+          // owning group together with the mode. Give the writer access while staging content.
+          Files.copy(
+              target,
+              temporary,
+              StandardCopyOption.COPY_ATTRIBUTES,
+              StandardCopyOption.REPLACE_EXISTING);
+          Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));
+        }
         Files.writeString(temporary, item.getValue());
         if (existing != null) Files.setPosixFilePermissions(temporary, existing);
         try {

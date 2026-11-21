@@ -291,6 +291,8 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
+    Set<String> ffmOwners = new HashSet<>();
+    for (Resource resource : module.ownedResources()) ffmOwners.add(resource.name());
     Map<String, Function> symbols = new HashMap<>();
     Set<String> logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
     for (Function function : module.functions()) {
@@ -371,15 +373,17 @@ public final class Validator {
       }
       if (function.direction() == Direction.IMPORT)
         require(
-            !types.contains(function.name() + "_Binding"),
-            "type collides with generated FFM adapter for " + function.name());
+            !ffmOwners.contains(function.name() + "_Binding"),
+            "resource collides with generated FFM adapter for " + function.name());
       if (Seam.nativeLeaf(function)) {
         require(
             !enabled(function.facts(), "noreturn"),
             "noreturn requires native_leaf=false in binding ABI 2");
         require(
             !types.contains(function.name() + "_Leaf")
-                && !signatures.contains(function.name() + "_Leaf"),
+                && !signatures.contains(function.name() + "_Leaf")
+                && !types.contains(function.name() + "_Binding")
+                && !signatures.contains(function.name() + "_Binding"),
             "type collides with generated native leaf binding for " + function.name());
         require(
             module.functions().stream()

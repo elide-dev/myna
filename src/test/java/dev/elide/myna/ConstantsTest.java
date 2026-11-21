@@ -631,8 +631,9 @@ class ConstantsTest {
         Arguments.of(
             "enum foo_Binding type=i32\n value ok = 0\nend\n"
                 + "import foo symbol=f"
-                + " return=void error=no_failure native_leaf=false@explicit_contract\nend\n",
-            "type collides with generated FFM adapter for foo"),
+                + NOFAIL
+                + "\n",
+            "type collides with generated native leaf binding for foo"),
         Arguments.of(
             "enum XCallback type=i32\n value ok = 0\nend\n" + "callback X return=void\nend\n",
             "type collides with generated FFM callback helper: XCallback"),

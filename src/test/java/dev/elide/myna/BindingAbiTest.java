@@ -15,6 +15,23 @@ class BindingAbiTest {
       "import read symbol=native_read return=i64 error=no_failure\nparam value type=i64\nend\n";
 
   @Test
+  void transitioningBindingOnlyCollidesWithTypesInTheFfmClass() throws Exception {
+    String call =
+        "import foo return=i32 error=no_failure native_leaf=false@explicit_contract\nend\n";
+    Generator.generate(
+        Dsl.parse(MODULE + "enum foo_Binding type=i32\n value ok = 0\nend\n" + call), true);
+    String owner =
+        java.nio.file.Files.readString(java.nio.file.Path.of("examples/ownership.seam"))
+            .replace("Ticket", "foo_Binding");
+    assertEquals(
+        "resource collides with generated FFM adapter for foo",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Generator.generate(Dsl.parse(owner + "\n" + call), true))
+            .getMessage());
+  }
+
+  @Test
   void variadicSelectorPreventsSafeLifecycleAndBorrowWrappers() {
     String call =
         "import configure return=void variadic_after=op error=no_failure\n"

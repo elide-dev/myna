@@ -31,6 +31,16 @@ class CliTest {
     assertEquals("second", Files.readString(generated));
   }
 
+  @Test
+  void generatesOnFileSystemsWithoutPosixPermissions() throws IOException {
+    try (var zip = FileSystems.newFileSystem(temp.resolve("files.zip"), Map.of("create", "true"))) {
+      var root = zip.getPath("/");
+      Main.write(Map.of("nested/result", "first"), root);
+      Main.write(Map.of("nested/result", "second"), root);
+      assertEquals("second", Files.readString(root.resolve("nested/result")));
+    }
+  }
+
   record Result(int code, String out, String err) {}
 
   Result run(String... args) {
