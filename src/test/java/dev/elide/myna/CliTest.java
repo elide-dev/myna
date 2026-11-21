@@ -33,6 +33,8 @@ class CliTest {
     for (String[] args :
         List.of(
             new String[] {"bad"},
+            new String[] {"validate", "examples/buffer.seam", "--rust-only"},
+            new String[] {"generate", "examples/buffer.seam", "--rust-only", "--jni"},
             new String[] {"generate"},
             new String[] {"generate", "missing"},
             new String[] {"generate", "examples/buffer.seam", "--out"},
@@ -72,6 +74,15 @@ class CliTest {
       assertEquals(2, result.code(), Arrays.toString(args));
       assertTrue(result.err().startsWith("myna:"));
     }
+  }
+
+  @Test
+  void rustOnlyIncludesPersistedReaders() {
+    Result result =
+        run("generate", "tests/formats/shapes.seam", "--rust-only", "--out", temp.toString());
+    assertEquals(0, result.code(), result.err());
+    assertTrue(Files.isRegularFile(temp.resolve("formats.rs")));
+    assertFalse(Files.exists(temp.resolve("seam.h")));
   }
 
   @Test

@@ -201,6 +201,10 @@ public final class Seam {
       this(name, type, nullable, ownership, access, facts, null);
     }
 
+    public boolean constPointer() {
+      return type instanceof Pointer && (access == Access.READ || access == Access.CSTRING);
+    }
+
     public Parameter {
       facts = Collections.unmodifiableSortedMap(new TreeMap<>(facts));
     }
@@ -219,7 +223,8 @@ public final class Seam {
       String callback,
       boolean isolateThread,
       SortedMap<String, Fact> facts,
-      GroupRef returnsGroup) {
+      GroupRef returnsGroup,
+      String variadicAfter) {
     public Function(
         String name,
         String symbol,
@@ -246,7 +251,47 @@ public final class Seam {
           callback,
           isolateThread,
           facts,
+          null,
           null);
+    }
+
+    public Function(
+        String name,
+        String symbol,
+        Direction direction,
+        Type returns,
+        List<Parameter> parameters,
+        ErrorConvention error,
+        String sentinel,
+        String javaTarget,
+        String include,
+        String callback,
+        boolean isolateThread,
+        SortedMap<String, Fact> facts,
+        GroupRef returnsGroup) {
+      this(
+          name,
+          symbol,
+          direction,
+          returns,
+          parameters,
+          error,
+          sentinel,
+          javaTarget,
+          include,
+          callback,
+          isolateThread,
+          facts,
+          returnsGroup,
+          null);
+    }
+
+    public List<Parameter> fixedParameters() {
+      if (variadicAfter == null) return abiParameters();
+      var params = abiParameters();
+      for (int i = 0; i < params.size(); i++)
+        if (params.get(i).name().equals(variadicAfter)) return params.subList(0, i + 1);
+      throw new IllegalArgumentException("unknown variadic_after parameter: " + variadicAfter);
     }
 
     public Function {

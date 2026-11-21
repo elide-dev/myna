@@ -202,6 +202,7 @@ public final class SeamJson {
         + quote(f.name())
         + ",\"symbolName\":"
         + quote(f.symbol())
+        + (f.variadicAfter() == null ? "" : ",\"variadicAfter\":" + quote(f.variadicAfter()))
         + ",\"direction\":"
         + quote(f.direction().name())
         + (f.direction() == Direction.IMPORT

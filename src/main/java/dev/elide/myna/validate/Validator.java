@@ -291,9 +291,8 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
-    Set<String> symbols = new HashSet<>(),
-        logicalNames = new HashSet<>(),
-        rustAliases = new HashSet<>();
+    Map<String, Function> symbols = new HashMap<>();
+    Set<String> logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
     for (Function function : module.functions()) {
       identifier(function.name());
       identifier(function.symbol());
@@ -321,7 +320,39 @@ public final class Validator {
       require(
           rustAliases.add(rustAlias),
           "Rust alias " + rustAlias + " collides with another function's alias");
-      require(symbols.add(function.symbol()), "duplicate linker symbol: " + function.symbol());
+      var previous = symbols.put(function.symbol(), function);
+      if (function.variadicAfter() != null) {
+        require(
+            function.direction() == Direction.IMPORT && !module.rustImplementation(),
+            "variadic_after requires a native import without Rust implementation generation");
+        // The selector can change what the callee reads from va_list. A slice or RAII wrapper
+        // cannot discharge that precondition on behalf of safe Rust.
+        require(
+            module.borrows().stream().noneMatch(b -> b.function().equals(function.name()))
+                && module.resources().stream()
+                    .noneMatch(
+                        r -> r.createdBy(function.name()) || function.name().equals(r.destroy())),
+            "variadic imports cannot back safe ownership or borrow wrappers");
+        var fixed = function.fixedParameters();
+        var params = function.abiParameters();
+        require(fixed.size() < params.size(), "variadic_after requires a trailing argument");
+        for (Parameter p : params.subList(fixed.size(), params.size()))
+          require(
+              p.group() == null
+                  && (p.type() instanceof Pointer
+                      || p.type() == Scalar.I32
+                      || p.type() == Scalar.I64
+                      || p.type() == Scalar.F64),
+              "variadic argument " + p.name() + " requires i32, i64, f64 or a pointer");
+      }
+      require(
+          previous == null
+              || (previous.variadicAfter() != null
+                  && function.variadicAfter() != null
+                  && previous.returns().equals(function.returns())
+                  && Objects.equals(previous.returnsGroup(), function.returnsGroup())
+                  && sameFixedParameters(previous.fixedParameters(), function.fixedParameters())),
+          "duplicate linker symbol: " + function.symbol());
       require(
           !signatures.contains(function.symbol()),
           "symbol collides with callback: " + function.symbol());
@@ -552,6 +583,17 @@ public final class Validator {
     require(
         !types.contains(cell) && !signatures.contains(cell),
         "type collides with generated Truffle cell for " + function.name());
+  }
+
+  private static boolean sameFixedParameters(List<Parameter> left, List<Parameter> right) {
+    if (left.size() != right.size()) return false;
+    for (int i = 0; i < left.size(); i++) {
+      Parameter a = left.get(i), b = right.get(i);
+      if (!a.type().equals(b.type())
+          || !Objects.equals(a.group(), b.group())
+          || a.constPointer() != b.constPointer()) return false;
+    }
+    return true;
   }
 
   private static void qualifiedType(String name) {

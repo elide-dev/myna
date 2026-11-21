@@ -188,6 +188,7 @@ public final class RustFfi implements Backend {
     }
     out.append("\nunsafe extern \"C\" {\n");
     for (Function declared : m.functions()) {
+      if (declared.variadicAfter() != null) continue;
       // Native Image exports records by reference; a by-value wrapper follows the block.
       boolean wrapped = declared.direction() == Direction.EXPORT && ByValue.applies(declared);
       Function f = wrapped ? ByValue.lower(m, declared) : declared;
@@ -218,8 +219,10 @@ public final class RustFfi implements Backend {
       out.append(";\n");
     }
     out.append("}\n");
-    for (Function f : m.functions())
-      if (f.direction() == Direction.EXPORT && ByValue.applies(f)) wrapper(m, f, out);
+    for (Function f : m.functions()) {
+      if (f.variadicAfter() != null) variadicWrapper(f, out);
+      else if (f.direction() == Direction.EXPORT && ByValue.applies(f)) wrapper(m, f, out);
+    }
     // Function-pointer types for callers that resolve symbols dynamically (dlsym/GetProcAddress).
     for (Function declared : m.functions()) {
       Function f = declared.direction() == Direction.EXPORT ? ByValue.lower(m, declared) : declared;
@@ -227,7 +230,8 @@ public final class RustFfi implements Backend {
           .append(Character.toUpperCase(f.name().charAt(0)))
           .append(f.name().substring(1))
           .append("Fn = unsafe extern \"C\" fn(")
-          .append(String.join(", ", f.abiParameters().stream().map(Types::rust).toList()))
+          .append(String.join(", ", f.fixedParameters().stream().map(Types::rust).toList()))
+          .append(f.variadicAfter() == null ? "" : ", ...")
           .append(')');
       if (f.returns() != Scalar.VOID)
         out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup()));
@@ -251,7 +255,8 @@ public final class RustFfi implements Backend {
               + "}\n"
               + "#[allow(unused_imports)]\n"
               + "pub(crate) use assert_implementations;\n");
-      var byValue = imports.stream().filter(ByValue::applies).toList();
+      var byValue =
+          imports.stream().filter(f -> f.variadicAfter() == null).filter(ByValue::applies).toList();
       if (!byValue.isEmpty()) shims(m, byValue, fingerprint, checks);
     }
     out.append(RustImplementation.items(m));
@@ -559,12 +564,42 @@ public final class RustFfi implements Backend {
   private static void pins(java.util.List<Function> imports, String q, StringBuilder out) {
     for (Function f : imports) {
       out.append("            let _: unsafe extern \"C\" fn(")
-          .append(String.join(", ", f.abiParameters().stream().map(p -> Types.rust(p, q)).toList()))
+          .append(
+              String.join(", ", f.fixedParameters().stream().map(p -> Types.rust(p, q)).toList()))
+          .append(f.variadicAfter() == null ? "" : ", ...")
           .append(')');
       if (f.returns() != Scalar.VOID)
         out.append(" -> ").append(Types.rust(f.returns(), f.returnsGroup(), q));
       out.append(" = ").append(f.symbol()).append(";\n");
     }
+  }
+
+  private static void variadicWrapper(Function f, StringBuilder out) {
+    var params = f.abiParameters();
+    var names = params.stream().map(Parameter::name).toList();
+    String result =
+        f.returns() == Scalar.VOID ? "" : " -> " + Types.rust(f.returns(), f.returnsGroup());
+    var declarations = params.stream().map(p -> p.name() + ": " + Types.rust(p)).toList();
+    out.append(
+            "/// # Safety\n"
+                + "/// The native operation must consume the declared trailing argument types.\n")
+        .append("#[inline]\n#[allow(non_snake_case)]\npub unsafe fn ")
+        .append(f.name())
+        .append('(')
+        .append(String.join(", ", declarations))
+        .append(')')
+        .append(result)
+        .append(" {\n    unsafe extern \"C\" {\n        #[link_name = ")
+        .append(SeamJson.quote(f.symbol()))
+        .append("]\n        fn __myna_variadic")
+        .append('(')
+        .append(String.join(", ", declarations.subList(0, f.fixedParameters().size())))
+        .append(", ...)")
+        .append(result)
+        .append(";\n    }\n    unsafe { __myna_variadic")
+        .append('(')
+        .append(String.join(", ", names))
+        .append(") }\n}\n");
   }
 
   /** Inline by-value wrapper over a Native Image export's reference form. */
