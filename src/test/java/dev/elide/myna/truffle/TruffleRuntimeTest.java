@@ -3597,10 +3597,16 @@ class TruffleRuntimeTest {
     assertEquals(0x30, confined.address());
     var failure = new AtomicReference<Throwable>();
     var seen = new AtomicReference<Boolean>();
+    var coercionFailure = new AtomicReference<NativeCellException>();
     Thread other =
         new Thread(
             () -> {
               seen.set(INTEROP.isPointer(confined));
+              try {
+                new PointerCoercion("next", "ticket", false, false, "Ticket").execute(confined);
+              } catch (NativeCellException expected) {
+                coercionFailure.set(expected);
+              }
               try {
                 confined.address();
               } catch (NativeCellException expected) {
@@ -3618,6 +3624,7 @@ class TruffleRuntimeTest {
     assertEquals(Boolean.FALSE, seen.get());
     assertTrue(failure.get().getMessage().startsWith("Ticket is confined to "));
     assertTrue(failure.get().getMessage().endsWith("; accessed from foreign"));
+    assertEquals(failure.get().getMessage(), coercionFailure.get().getMessage());
     assertFalse(confined.isClosed());
     assertThrows(IllegalStateException.class, () -> confined.registerCleanup(Cleaner.create()));
     confined.close();
