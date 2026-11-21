@@ -369,15 +369,17 @@ public final class Validator {
             !types.contains(generated),
             "type collides with generated FFM adapter for " + function.name());
       }
+      if (function.direction() == Direction.IMPORT)
+        require(
+            !types.contains(function.name() + "_Binding"),
+            "type collides with generated FFM adapter for " + function.name());
       if (Seam.nativeLeaf(function)) {
         require(
             !enabled(function.facts(), "noreturn"),
             "noreturn requires native_leaf=false in binding ABI 2");
         require(
             !types.contains(function.name() + "_Leaf")
-                && !signatures.contains(function.name() + "_Leaf")
-                && !types.contains(function.name() + "_Binding")
-                && !signatures.contains(function.name() + "_Binding"),
+                && !signatures.contains(function.name() + "_Leaf"),
             "type collides with generated native leaf binding for " + function.name());
         require(
             module.functions().stream()
