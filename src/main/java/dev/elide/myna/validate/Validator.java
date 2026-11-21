@@ -291,6 +291,7 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
+    module.callbacksInDependencyOrder();
     Map<String, Function> symbols = new HashMap<>();
     Set<String> logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
     for (Function function : module.functions()) {

@@ -33,14 +33,20 @@ public final class CHeader implements Backend {
   public static final class Generated {
     private final Module module;
     private final String text;
+    private final String queryText;
 
-    private Generated(Module module, String text) {
+    private Generated(Module module, String text, String queryText) {
       this.module = module;
       this.text = text;
+      this.queryText = queryText;
     }
 
     public String text() {
       return text;
+    }
+
+    String queryText() {
+      return queryText;
     }
 
     /** Throws unless this header was generated for exactly {@code m}. */
@@ -57,10 +63,7 @@ public final class CHeader implements Backend {
 
   /** {@code seam.h} for {@code m}, which {@code abi} must describe. */
   public Generated header(Module m, Fingerprint abi) {
-    return new Generated(m, emit(m, abi.valueFor(m)));
-  }
-
-  private static String emit(Module m, String fingerprint) {
+    String fingerprint = abi.valueFor(m);
     String guard = m.name().toUpperCase(Locale.ROOT) + "_SEAM_H";
     var out =
         new StringBuilder(
@@ -78,6 +81,13 @@ public final class CHeader implements Backend {
                 + "#define SEAM_ASSERT static_assert\n"
                 + "#define SEAM_ALIGNOF alignof\n"
                 + "extern \"C\" {\n"
+                + "#elif defined(_MSC_VER) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ <"
+                + " 201112L)\n"
+                + "#define SEAM_ASSERT_JOIN_(a, b) a##b\n"
+                + "#define SEAM_ASSERT_JOIN(a, b) SEAM_ASSERT_JOIN_(a, b)\n"
+                + "#define SEAM_ASSERT(c, m) typedef char SEAM_ASSERT_JOIN(seam_assert_,"
+                + " __COUNTER__)[(c) ? 1 : -1]\n"
+                + "#define SEAM_ALIGNOF __alignof\n"
                 + "#else\n"
                 + "#define SEAM_ASSERT _Static_assert\n"
                 + "#define SEAM_ALIGNOF _Alignof\n"
@@ -95,10 +105,13 @@ public final class CHeader implements Backend {
         .append(Seam.BINDING_ABI_VERSION)
         .append('\n');
     out.append("SEAM_ASSERT(sizeof(void *) == 8, \"seam target requires 64-bit pointers\");\n\n");
+    int abiStart = out.length();
+    abiVersion(m, out);
+    int abiEnd = out.length();
     constants(m, out);
     for (String name : m.opaqueTypes()) out.append("struct ").append(name).append(";\n");
     for (Struct s : m.structs()) out.append("struct ").append(s.name()).append(";\n");
-    for (Signature c : m.callbacks())
+    for (Signature c : m.callbacksInDependencyOrder())
       out.append("typedef ")
           .append(Types.c(m, c.returns(), c.returnsGroup()))
           .append(" (*")
@@ -166,6 +179,7 @@ public final class CHeader implements Backend {
             .append(f.offset())
             .append(", \"field offset\");\n");
     }
+    int prototypes = out.length();
     for (Function declared : m.functions()) {
       // Native Image lowers records by reference at its C boundary, so a by-value record import
       // has two C symbols: the by-value implementation (declared here, called by C/Rust/FFM) and
@@ -216,16 +230,34 @@ public final class CHeader implements Backend {
       if (wrapped) wrapper(m, declared, lowered, out);
       if (importRef) importReference(m, lowered, out);
     }
-    return out.append(
-            "\n#ifdef __cplusplus\n}\n#endif\n#undef SEAM_ASSERT\n#undef SEAM_ALIGNOF\n#endif\n")
-        .toString();
+    int footer = out.length();
+    String text =
+        out.append(
+                "\n"
+                    + "#ifdef __cplusplus\n"
+                    + "}\n"
+                    + "#endif\n"
+                    + "#undef SEAM_ASSERT_JOIN\n"
+                    + "#undef SEAM_ASSERT_JOIN_\n"
+                    + "#undef SEAM_ASSERT\n"
+                    + "#undef SEAM_ALIGNOF\n"
+                    + "#endif\n")
+            .toString();
+    // The consumer may already declare its library functions and its own ABI version.
+    String queryText =
+        m.nativeConfig() != null && m.nativeConfig().cContext() != null
+            ? text.substring(0, abiStart)
+                + text.substring(abiEnd, prototypes)
+                + text.substring(footer)
+            : text;
+    return new Generated(m, text, queryText);
   }
 
   private static boolean bitfields(Module m, GroupRef ref) {
     return m.flagSets().stream().anyMatch(f -> f.name().equals(ref.name()) && f.cBitfields());
   }
 
-  private static void constants(Module m, StringBuilder out) {
+  private static void abiVersion(Module m, StringBuilder out) {
     if (m.abiDeclared()) {
       out.append("/* module abi=").append(m.abiVersion()).append(": i32 */\n");
       define(
@@ -233,6 +265,9 @@ public final class CHeader implements Backend {
           Names.abiVersionMacro(m),
           literal(Scalar.I32, BigInteger.valueOf(m.abiVersion()), false));
     }
+  }
+
+  private static void constants(Module m, StringBuilder out) {
     for (Constant c : m.constants()) {
       out.append("/* const ").append(c.name()).append(": ").append(c.type().text()).append(" */\n");
       define(

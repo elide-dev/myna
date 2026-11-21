@@ -1210,7 +1210,7 @@ class ConstantsTest {
 
   @Test
   void cHeaderWithoutDeclarationsHasNoConstantsSection() {
-    assertFalse(header("module m target=x86_64-unknown-linux-gnu\n").contains("typedef"));
+    assertFalse(header("module m target=x86_64-unknown-linux-gnu\n").contains("\ntypedef"));
   }
 
   @Test
@@ -1921,7 +1921,7 @@ class ConstantsTest {
     for (String source : List.of(ENUM_ONLY, FLAGS_ONLY, CONST_ONLY)) {
       var out = Generator.generate(Dsl.parse(source), true);
       assertTrue(
-          out.get("seam.h").contains("typedef") || out.get("seam.h").contains("#define M_NARROW"),
+          out.get("seam.h").contains("\ntypedef") || out.get("seam.h").contains("#define M_NARROW"),
           source);
       assertNotNull(out.get("ApiConstants.java"), source);
       assertTrue(out.get("ApiTruffle.java").contains("NativeConstants"), source);
