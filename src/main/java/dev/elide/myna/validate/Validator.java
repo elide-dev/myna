@@ -291,6 +291,8 @@ public final class Validator {
             "unsigned sub-32-bit callback parameters are not supported; use u32");
       }
     }
+    Set<String> ffmOwners = new HashSet<>();
+    for (Resource resource : module.ownedResources()) ffmOwners.add(resource.name());
     module.callbacksInDependencyOrder();
     Map<String, Function> symbols = new HashMap<>();
     Set<String> logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
@@ -370,6 +372,10 @@ public final class Validator {
             !types.contains(generated),
             "type collides with generated FFM adapter for " + function.name());
       }
+      if (function.direction() == Direction.IMPORT)
+        require(
+            !ffmOwners.contains(function.name() + "_Binding"),
+            "resource collides with generated FFM adapter for " + function.name());
       if (Seam.nativeLeaf(function)) {
         require(
             !enabled(function.facts(), "noreturn"),

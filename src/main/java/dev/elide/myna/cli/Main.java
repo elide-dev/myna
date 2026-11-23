@@ -13,6 +13,8 @@ import dev.elide.myna.serialize.Fingerprint;
 import dev.elide.myna.validate.Validator;
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 
 public final class Main {
@@ -190,9 +192,32 @@ public final class Main {
       if (!target.startsWith(destination.toAbsolutePath().normalize()))
         throw new IllegalArgumentException("generated path escapes destination: " + item.getKey());
       Files.createDirectories(target.getParent());
-      Path temporary = Files.createTempFile(target.getParent(), ".myna-", ".tmp");
+      boolean posix = target.getFileSystem().supportedFileAttributeViews().contains("posix");
+      Set<PosixFilePermission> existing = null;
+      if (posix && Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS))
+        existing = Files.getPosixFilePermissions(target);
+      Path temporary =
+          posix && existing == null
+              ? Files.createTempFile(
+                  target.getParent(),
+                  ".myna-",
+                  ".tmp",
+                  PosixFilePermissions.asFileAttribute(
+                      PosixFilePermissions.fromString("rw-rw-rw-")))
+              : Files.createTempFile(target.getParent(), ".myna-", ".tmp");
       try {
+        if (existing != null) {
+          // Keep filesystem-specific access controls (including POSIX ACL entries) and the
+          // owning group together with the mode. Give the writer access while staging content.
+          Files.copy(
+              target,
+              temporary,
+              StandardCopyOption.COPY_ATTRIBUTES,
+              StandardCopyOption.REPLACE_EXISTING);
+          Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));
+        }
         Files.writeString(temporary, item.getValue());
+        if (existing != null) Files.setPosixFilePermissions(temporary, existing);
         try {
           Files.move(
               temporary,
