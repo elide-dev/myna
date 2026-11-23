@@ -399,3 +399,20 @@ were 769.95 and 15.82 ns/call. Both target the same Java method, increment the s
 and return through the same C loop. The direct x86-64 SVM high-level upcall stub inlined the
 counter increment; the generic stub issued an indirect call. These measurements exclude registration
 and guest context entry.
+
+### Native callbacks into compiled Truffle code
+
+The four `guest-*` cases in the SVM upcall suite use a registered benchmark language.
+Each callback invokes the same cached call target. A child node rotates a context-owned
+integer and branches on its low bit. Each measured round checks the final value against
+an independent recurrence and verifies that all 262,144 root executions observed
+`CompilerDirectives.inCompiledCode()`. The volatile counters and state accesses are
+included in the timings.
+
+In `guest-each-*` the callback enters its context and leaves it in a finally block on
+every call. In `guest-batch-*` the native producer calls an entry hook once on the
+worker, delivers the entire round on that thread, and calls the exit hook before it
+returns. The batch timer measures notifications between those hooks. Both modes still
+cross the native boundary once per notification. A producer using batch entry must
+own the delivery interval and balance entry and exit on the same thread, including
+on errors. Independent notifications from framework-owned threads use per-call entry.

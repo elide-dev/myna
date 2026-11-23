@@ -1,0 +1,448 @@
+{
+  "affinity_cpu": 7,
+  "metadata": {
+    "revision": "ffebc4e6efa916d1a3fb784396249acb8e7c0fe0",
+    "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+    "build_flags": {
+      "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
+      "kernel": "-O3 -shared -fPIC -pthread"
+    },
+    "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
+    "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+    "binaries": {
+      "measure": "3f67ef10af4f3d589816bce931c47fcebf6849bb2010817d46df02419d5628b1",
+      "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
+    },
+    "sources": {
+      "upcalls.seam": "28f19befb71b9cae480a62100904013d83f276eca4d0d950ae046012e5357e22",
+      "HookLanguage.java": "3b30eb7f5436551112b748dfef9a360655c6da668733196ced5830fd8a523baa",
+      "run.py": "4ea16d4aecb478d5deb6f37d893f602f27b3fa16d738d275eee9c3c51a6b34b0",
+      "Measure.java": "0f1e096fe3410972ee1fcb4f797b8a49e769a8ffb118fda375618b2b03c90288",
+      "kernel.c": "722fea4f67155148adf45e2a6d596353b0646545e93799bf99c12a30ce69a4d1",
+      "Guest.java": "8cf2cdbaffe5a53ddcc81a67008125d309351b2cb0079b01f06bdd932ab10fa2"
+    },
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected"
+  },
+  "runs": [
+    {
+      "case": "guest-each-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        19787848,
+        20327759,
+        20473214,
+        17248319,
+        17241907,
+        17165383,
+        18203097,
+        18229506,
+        18145324,
+        18147533,
+        18424235,
+        18235428
+      ],
+      "pid": 2504924,
+      "fork": 0
+    },
+    {
+      "case": "guest-each-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        38791821,
+        44276399,
+        22126274,
+        17998410,
+        17713421,
+        17482758,
+        17488299,
+        17794695,
+        18710176,
+        17817196,
+        17659258,
+        17742055
+      ],
+      "pid": 2505631,
+      "fork": 1
+    },
+    {
+      "case": "guest-each-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        22857196,
+        22136803,
+        22071700,
+        18384901,
+        20109136,
+        22815718,
+        22421873,
+        19079175,
+        19326062,
+        18168773,
+        18108908,
+        17878572
+      ],
+      "pid": 2505998,
+      "fork": 2
+    },
+    {
+      "case": "guest-each-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        21306683,
+        21140087,
+        21259011,
+        17907958,
+        18186645,
+        20867552,
+        21836885,
+        19133859,
+        22352010,
+        22421121,
+        22199024,
+        18670439
+      ],
+      "pid": 2506238,
+      "fork": 3
+    },
+    {
+      "case": "guest-each-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        24527548,
+        23452243,
+        25382767,
+        20251534,
+        23015606,
+        27706250,
+        21726431,
+        24387433,
+        25344945,
+        20268678,
+        21552276,
+        19715280
+      ],
+      "pid": 2506476,
+      "fork": 4
+    },
+    {
+      "case": "guest-batch-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        8667127,
+        7657073,
+        7680138,
+        7742367,
+        7760299,
+        7668296,
+        10001132,
+        8526550,
+        8881742,
+        12619839,
+        9645747,
+        9711113
+      ],
+      "pid": 2505099,
+      "fork": 0
+    },
+    {
+      "case": "guest-batch-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        10212382,
+        10534430,
+        9935157,
+        10662177,
+        11227728,
+        16900000,
+        12913614,
+        12246161,
+        10074670,
+        10866801,
+        12876573,
+        11647659
+      ],
+      "pid": 2505691,
+      "fork": 1
+    },
+    {
+      "case": "guest-batch-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        8652980,
+        7746663,
+        7694415,
+        7739721,
+        7759969,
+        7714572,
+        7681451,
+        7612971,
+        7690157,
+        7674608,
+        8141362,
+        7651793
+      ],
+      "pid": 2506053,
+      "fork": 2
+    },
+    {
+      "case": "guest-batch-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        12036558,
+        12222477,
+        11750582,
+        10281432,
+        11234542,
+        11606324,
+        12446069,
+        11821328,
+        12927320,
+        15626182,
+        12741745,
+        15058434
+      ],
+      "pid": 2506278,
+      "fork": 3
+    },
+    {
+      "case": "guest-batch-caller",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        8637275,
+        7752614,
+        11121523,
+        12273788,
+        11722851,
+        12468551,
+        13012131,
+        16456069,
+        11672175,
+        10728537,
+        11359633,
+        10044463
+      ],
+      "pid": 2506508,
+      "fork": 4
+    },
+    {
+      "case": "guest-each-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        20783031,
+        20839336,
+        20804260,
+        17672603,
+        17873864,
+        17896937,
+        18255635,
+        18152564,
+        18628362,
+        17523369,
+        17782050,
+        17876380
+      ],
+      "pid": 2505015,
+      "fork": 0
+    },
+    {
+      "case": "guest-each-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        22150548,
+        27955609,
+        30453696,
+        24208995,
+        25124609,
+        24090991,
+        30751580,
+        50975112,
+        50042436,
+        46149437,
+        49758909,
+        50454596
+      ],
+      "pid": 2505639,
+      "fork": 1
+    },
+    {
+      "case": "guest-each-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        21125869,
+        20856920,
+        21139986,
+        17766149,
+        18810478,
+        17844818,
+        17772251,
+        17911615,
+        18381726,
+        17664026,
+        17705254,
+        18103920
+      ],
+      "pid": 2506030,
+      "fork": 2
+    },
+    {
+      "case": "guest-each-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        21188629,
+        21000202,
+        21347369,
+        18186134,
+        18057300,
+        18349555,
+        18078371,
+        17983030,
+        18726769,
+        18051831,
+        18593445,
+        24260783
+      ],
+      "pid": 2506247,
+      "fork": 3
+    },
+    {
+      "case": "guest-each-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        29006306,
+        28324967,
+        28404977,
+        20093570,
+        19236259,
+        18682754,
+        17838336,
+        22529327,
+        29301445,
+        19162488,
+        18662517,
+        18918852
+      ],
+      "pid": 2506484,
+      "fork": 4
+    },
+    {
+      "case": "guest-batch-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        8601861,
+        11187738,
+        8361388,
+        7938155,
+        8000956,
+        7996185,
+        8497810,
+        7932236,
+        7916125,
+        7810574,
+        7868515,
+        7779186
+      ],
+      "pid": 2505152,
+      "fork": 0
+    },
+    {
+      "case": "guest-batch-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        9809527,
+        11055829,
+        11509195,
+        10109448,
+        11900497,
+        10694273,
+        10694424,
+        10200167,
+        10746954,
+        10439259,
+        10247338,
+        10024246
+      ],
+      "pid": 2505699,
+      "fork": 1
+    },
+    {
+      "case": "guest-batch-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        10472173,
+        7717138,
+        7687582,
+        7669908,
+        7726575,
+        7621628,
+        7728581,
+        7676240,
+        7714142,
+        7723691,
+        7649729,
+        7652706
+      ],
+      "pid": 2506061,
+      "fork": 2
+    },
+    {
+      "case": "guest-batch-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        11130110,
+        12763600,
+        12128339,
+        12122736,
+        12158626,
+        12472829,
+        10650802,
+        11003589,
+        11290922,
+        10835231,
+        13907965,
+        11911799
+      ],
+      "pid": 2506286,
+      "fork": 3
+    },
+    {
+      "case": "guest-batch-worker",
+      "iterations": 262144,
+      "warmup_iters": 786432,
+      "samples_ns": [
+        11525567,
+        10970185,
+        11828341,
+        11470251,
+        11575151,
+        10853284,
+        13143349,
+        11266939,
+        10242467,
+        10842505,
+        11243853,
+        11647819
+      ],
+      "pid": 2506518,
+      "fork": 4
+    }
+  ]
+}
