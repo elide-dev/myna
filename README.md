@@ -135,6 +135,31 @@ Every measured sample ran in compiled code. Buffer, text and borrow cases are in
 
 </details>
 
+### Native upcalls into Java and Truffle
+
+Five fresh SVM processes per case on a Ryzen 9 9950X3D2 (Linux x86-64). The table reports the median of the five process medians. Each worker serves a full round on one native thread. The explicit isolate-thread case uses the calling thread only.
+
+<!-- upcall-results:start -->
+
+| Upcall path | Calling thread (ns/call) | Native worker (ns/call) |
+|---|---:|---:|
+| Native C control | 1.11 | 1.13 |
+| Static FFM reducer | 12.50 | 12.37 |
+| Dynamic FFM reducer | 2,403.52 | 3,736.48 |
+| Explicit isolate-thread reducer | 9.37 | — |
+| Static void hook | 16.44 | 17.21 |
+| Dynamic void hook | 886.79 | 1,034.61 |
+| Compiled Truffle AST, enter per call | 75.22 | 70.46 |
+| Compiled Truffle AST, enter per batch | 42.14 | 40.31 |
+
+Creating stubs and closing their arena cost 7,679 ns per static registration and 5,069 ns per dynamic registration.
+
+<!-- upcall-results:end -->
+
+Each Truffle case checks the guest result and verifies that every measured callback ran in compiled code. Batch entry holds the context on the delivery thread for the round; the timer excludes its one entry and exit. Both Truffle paths cross the native boundary once per notification.
+
+[Raw samples and build hashes](benchmarks/upcalls/baselines/readme.json) · [Rerun and refresh](docs/benchmarking.md#upcall-benchmark-cycle)
+
 ## Build and use
 
 Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.3, elide-dev/toolchain 2026.11.7 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.31 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.

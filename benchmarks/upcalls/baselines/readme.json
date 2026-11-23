@@ -1,0 +1,1761 @@
+{
+  "metadata": {
+    "revision": "ffebc4e6efa916d1a3fb784396249acb8e7c0fe0",
+    "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+    "build_flags": {
+      "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
+      "kernel": "-O3 -shared -fPIC -pthread"
+    },
+    "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
+    "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+    "binaries": {
+      "measure": "3f67ef10af4f3d589816bce931c47fcebf6849bb2010817d46df02419d5628b1",
+      "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
+    },
+    "sources": {
+      "upcalls.seam": "28f19befb71b9cae480a62100904013d83f276eca4d0d950ae046012e5357e22",
+      "HookLanguage.java": "3b30eb7f5436551112b748dfef9a360655c6da668733196ced5830fd8a523baa",
+      "run.py": "4ea16d4aecb478d5deb6f37d893f602f27b3fa16d738d275eee9c3c51a6b34b0",
+      "Measure.java": "0f1e096fe3410972ee1fcb4f797b8a49e769a8ffb118fda375618b2b03c90288",
+      "kernel.c": "722fea4f67155148adf45e2a6d596353b0646545e93799bf99c12a30ce69a4d1",
+      "Guest.java": "8cf2cdbaffe5a53ddcc81a67008125d309351b2cb0079b01f06bdd932ab10fa2"
+    },
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected"
+  },
+  "samples": {
+    "control-caller": [
+      {
+        "case": "control-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          19427,
+          21451,
+          18836,
+          21090,
+          18805,
+          18815,
+          18815,
+          49374,
+          20719,
+          22873,
+          20880,
+          20118
+        ],
+        "pid": 2504805
+      },
+      {
+        "case": "control-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          18525,
+          18495,
+          18515,
+          37601,
+          15459,
+          15420,
+          15439,
+          15419,
+          15439,
+          15419,
+          15439,
+          15419
+        ],
+        "pid": 2505375
+      },
+      {
+        "case": "control-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          17343,
+          18194,
+          17814,
+          17433,
+          17794,
+          17763,
+          17544,
+          17644,
+          17794,
+          17734,
+          18164,
+          18185
+        ],
+        "pid": 2505722
+      },
+      {
+        "case": "control-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          18244,
+          18265,
+          18285,
+          18275,
+          18255,
+          18265,
+          18285,
+          18265,
+          18255,
+          18255,
+          18265,
+          18275
+        ],
+        "pid": 2506085
+      },
+      {
+        "case": "control-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          20348,
+          20880,
+          20439,
+          20258,
+          21441,
+          20950,
+          21009,
+          21090,
+          45326,
+          17614,
+          17533,
+          17413
+        ],
+        "pid": 2506309
+      }
+    ],
+    "control-worker": [
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          20519,
+          18555,
+          18575,
+          18585,
+          23173,
+          18576,
+          18575,
+          18555,
+          18555,
+          18575,
+          18565,
+          18566
+        ],
+        "pid": 2504810
+      },
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          20569,
+          18625,
+          18625,
+          18595,
+          18595,
+          18616,
+          18615,
+          18585,
+          18595,
+          18615,
+          18615,
+          18605
+        ],
+        "pid": 2505378
+      },
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          19627,
+          19918,
+          21721,
+          22302,
+          21271,
+          23094,
+          21210,
+          20609,
+          21921,
+          22372,
+          22593,
+          21040
+        ],
+        "pid": 2505725
+      },
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          20188,
+          18245,
+          18274,
+          18234,
+          58881,
+          26340,
+          17613,
+          17593,
+          17603,
+          17594,
+          17613,
+          28905
+        ],
+        "pid": 2506088
+      },
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          17924,
+          18515,
+          17633,
+          19717,
+          17563,
+          18345,
+          20018,
+          18134,
+          18365,
+          16972,
+          17233,
+          18385
+        ],
+        "pid": 2506312
+      }
+    ],
+    "static-caller": [
+      {
+        "case": "static-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          225507,
+          321639,
+          206150,
+          217412,
+          204758,
+          200860,
+          200660,
+          200470,
+          211039,
+          200579,
+          204718,
+          203946
+        ],
+        "pid": 2504828
+      },
+      {
+        "case": "static-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          203635,
+          225286,
+          201221,
+          201041,
+          206641,
+          201271,
+          201612,
+          213624,
+          201772,
+          201622,
+          201722,
+          202603
+        ],
+        "pid": 2505396
+      },
+      {
+        "case": "static-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          248120,
+          255113,
+          250665,
+          274360,
+          235105,
+          226128,
+          226419,
+          236378,
+          227270,
+          226819,
+          228944,
+          246367
+        ],
+        "pid": 2505743
+      },
+      {
+        "case": "static-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          198235,
+          198235,
+          222311,
+          201822,
+          198165,
+          197984,
+          197885,
+          208625,
+          198376,
+          198726,
+          202894,
+          199117
+        ],
+        "pid": 2506106
+      },
+      {
+        "case": "static-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          254522,
+          235596,
+          228342,
+          217582,
+          263138,
+          236558,
+          254642,
+          242659,
+          250444,
+          298465,
+          263208,
+          317531
+        ],
+        "pid": 2506330
+      }
+    ],
+    "static-worker": [
+      {
+        "case": "static-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          199577,
+          199578,
+          199458,
+          199988,
+          203926,
+          214816,
+          200329,
+          200570,
+          200479,
+          200660,
+          204507,
+          200730
+        ],
+        "pid": 2504831
+      },
+      {
+        "case": "static-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          229624,
+          222782,
+          203045,
+          202794,
+          202603,
+          211560,
+          207163,
+          201882,
+          200911,
+          201521,
+          200921,
+          200900
+        ],
+        "pid": 2505399
+      },
+      {
+        "case": "static-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          255534,
+          269671,
+          249172,
+          247619,
+          239454,
+          246947,
+          251236,
+          354932,
+          303795,
+          451244,
+          260413,
+          246947
+        ],
+        "pid": 2505746
+      },
+      {
+        "case": "static-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          240495,
+          211380,
+          199859,
+          203636,
+          199738,
+          203726,
+          199538,
+          199518,
+          199408,
+          199047,
+          209507,
+          203525
+        ],
+        "pid": 2506109
+      },
+      {
+        "case": "static-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          365903,
+          329113,
+          283757,
+          243431,
+          315587,
+          250664,
+          221138,
+          248901,
+          261374,
+          308925,
+          440274,
+          388565
+        ],
+        "pid": 2506333
+      }
+    ],
+    "dynamic-caller": [
+      {
+        "case": "dynamic-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          37320496,
+          38547156,
+          39805198,
+          37333620,
+          37746379,
+          38800287,
+          37103142,
+          38633802,
+          37164318,
+          37279086,
+          37951499,
+          56483779
+        ],
+        "pid": 2504849
+      },
+      {
+        "case": "dynamic-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          37702257,
+          38603232,
+          39251430,
+          38359296,
+          37883209,
+          38495338,
+          37357885,
+          37640601,
+          39638302,
+          38439432,
+          38914843,
+          38081665
+        ],
+        "pid": 2505417
+      },
+      {
+        "case": "dynamic-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          61955807,
+          67274555,
+          84314960,
+          84464164,
+          92383424,
+          85815361,
+          91491064,
+          58650421,
+          49381014,
+          44613529,
+          55890586,
+          87613451
+        ],
+        "pid": 2505764
+      },
+      {
+        "case": "dynamic-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          39709467,
+          40081349,
+          43185626,
+          39535678,
+          40545514,
+          39222745,
+          38405738,
+          51621335,
+          37980223,
+          37551742,
+          37727305,
+          37934947
+        ],
+        "pid": 2506127
+      },
+      {
+        "case": "dynamic-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          65991913,
+          75259258,
+          73850723,
+          71370588,
+          77149226,
+          71168838,
+          75974392,
+          72192314,
+          75134338,
+          70358427,
+          72094904,
+          96359545
+        ],
+        "pid": 2506353
+      }
+    ],
+    "dynamic-worker": [
+      {
+        "case": "dynamic-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          37121578,
+          37823546,
+          37063789,
+          37052035,
+          37857943,
+          37542694,
+          36565024,
+          36972434,
+          36670274,
+          40563947,
+          38155412,
+          36812432
+        ],
+        "pid": 2504855
+      },
+      {
+        "case": "dynamic-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          40556288,
+          61799773,
+          64576145,
+          62118563,
+          62855509,
+          63513241,
+          62667999,
+          60637117,
+          49452439,
+          45209988,
+          49006776,
+          48200709
+        ],
+        "pid": 2505485
+      },
+      {
+        "case": "dynamic-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          77119740,
+          86123424,
+          58025548,
+          90654926,
+          98117763,
+          94924980,
+          92629023,
+          84360517,
+          95951040,
+          56221048,
+          60391672,
+          81671712
+        ],
+        "pid": 2505875
+      },
+      {
+        "case": "dynamic-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          36558623,
+          36472999,
+          39546198,
+          37036095,
+          52888574,
+          67669894,
+          53169364,
+          47348617,
+          66756260,
+          41072150,
+          38784576,
+          37799350
+        ],
+        "pid": 2506158
+      },
+      {
+        "case": "dynamic-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          62657996,
+          69680068,
+          72961742,
+          67128698,
+          53794744,
+          66443365,
+          70117215,
+          75659326,
+          64971116,
+          63490671,
+          59462838,
+          62396926
+        ],
+        "pid": 2506398
+      }
+    ],
+    "static-hook-caller": [
+      {
+        "case": "static-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          246436,
+          246607,
+          246457,
+          246858,
+          257237,
+          247137,
+          247348,
+          248500,
+          248480,
+          248460,
+          248781,
+          253269
+        ],
+        "pid": 2504873
+      },
+      {
+        "case": "static-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          261385,
+          281693,
+          265313,
+          265613,
+          264481,
+          272696,
+          266024,
+          254382,
+          290851,
+          281644,
+          302883,
+          281443
+        ],
+        "pid": 2505551
+      },
+      {
+        "case": "static-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          319305,
+          281954,
+          292033,
+          303385,
+          295780,
+          288847,
+          385054,
+          328572,
+          276594,
+          262907,
+          275141,
+          286974
+        ],
+        "pid": 2505929
+      },
+      {
+        "case": "static-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          305809,
+          256456,
+          262006,
+          274761,
+          272896,
+          262026,
+          256616,
+          261565,
+          259631,
+          289168,
+          278868,
+          256596
+        ],
+        "pid": 2506186
+      },
+      {
+        "case": "static-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          272646,
+          282926,
+          283115,
+          276353,
+          268258,
+          310077,
+          272536,
+          306130,
+          290630,
+          270883,
+          271264,
+          272075
+        ],
+        "pid": 2506418
+      }
+    ],
+    "static-hook-worker": [
+      {
+        "case": "static-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          322691,
+          263017,
+          323312,
+          251476,
+          254772,
+          250615,
+          250604,
+          250825,
+          285110,
+          250945,
+          250935,
+          251446
+        ],
+        "pid": 2504876
+      },
+      {
+        "case": "static-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          260894,
+          266865,
+          267647,
+          270923,
+          268217,
+          256927,
+          257017,
+          270602,
+          256275,
+          265662,
+          256225,
+          262056
+        ],
+        "pid": 2505554
+      },
+      {
+        "case": "static-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          295360,
+          310999,
+          383506,
+          327820,
+          284278,
+          297583,
+          290400,
+          293014,
+          311660,
+          305749,
+          301832,
+          287384
+        ],
+        "pid": 2505932
+      },
+      {
+        "case": "static-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          272746,
+          255834,
+          285581,
+          279939,
+          284448,
+          303504,
+          294588,
+          285490,
+          262697,
+          257768,
+          260003,
+          284117
+        ],
+        "pid": 2506189
+      },
+      {
+        "case": "static-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          516839,
+          324073,
+          622178,
+          325457,
+          368217,
+          326357,
+          317782,
+          462496,
+          374869,
+          323953,
+          314345,
+          343480
+        ],
+        "pid": 2506421
+      }
+    ],
+    "dynamic-hook-caller": [
+      {
+        "case": "dynamic-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          11574348,
+          20813549,
+          20172636,
+          19181990,
+          12210874,
+          11824353,
+          11692412,
+          11857234,
+          11518113,
+          12942579,
+          11557487,
+          11863216
+        ],
+        "pid": 2504894
+      },
+      {
+        "case": "dynamic-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          12298318,
+          26176084,
+          40425623,
+          33738607,
+          35766069,
+          33165485,
+          38380831,
+          26155585,
+          17499594,
+          13234862,
+          17440349,
+          21977300
+        ],
+        "pid": 2505572
+      },
+      {
+        "case": "dynamic-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          23958091,
+          25572364,
+          26154885,
+          24154708,
+          19195981,
+          14487863,
+          20003936,
+          22687838,
+          12308347,
+          13380649,
+          12660963,
+          14359722
+        ],
+        "pid": 2505950
+      },
+      {
+        "case": "dynamic-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          14334734,
+          12981073,
+          12282810,
+          12878438,
+          12174435,
+          12364525,
+          12140300,
+          12440499,
+          12251862,
+          12474794,
+          12161620,
+          14924280
+        ],
+        "pid": 2506207
+      },
+      {
+        "case": "dynamic-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          19967386,
+          16916282,
+          13808748,
+          14873805,
+          14492737,
+          13349986,
+          14372878,
+          14565436,
+          14212954,
+          16381935,
+          12040733,
+          14740002
+        ],
+        "pid": 2506439
+      }
+    ],
+    "dynamic-hook-worker": [
+      {
+        "case": "dynamic-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          11666393,
+          12176940,
+          12054818,
+          11875900,
+          11598205,
+          11808022,
+          11592684,
+          11996459,
+          11773796,
+          11901169,
+          11602352,
+          11917229
+        ],
+        "pid": 2504897
+      },
+      {
+        "case": "dynamic-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          25900407,
+          13488893,
+          15078022,
+          21573421,
+          19916547,
+          14300987,
+          21256979,
+          22848755,
+          20937340,
+          20925671,
+          14096852,
+          20821975
+        ],
+        "pid": 2505597
+      },
+      {
+        "case": "dynamic-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          15982633,
+          16223224,
+          18529576,
+          17239122,
+          16663091,
+          13573525,
+          20474676,
+          22965151,
+          24482272,
+          19025764,
+          12859033,
+          13473183
+        ],
+        "pid": 2505967
+      },
+      {
+        "case": "dynamic-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          22863388,
+          21832337,
+          12516514,
+          12240168,
+          11903954,
+          14351505,
+          12000727,
+          12244998,
+          12512525,
+          12589761,
+          12217408,
+          12687335
+        ],
+        "pid": 2506210
+      },
+      {
+        "case": "dynamic-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          20827925,
+          23293883,
+          19139511,
+          18737308,
+          16394052,
+          18081797,
+          20448749,
+          21545544,
+          13992456,
+          19517545,
+          21702291,
+          21948101
+        ],
+        "pid": 2506442
+      }
+    ],
+    "isolate-caller": [
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          156036,
+          147830,
+          147810,
+          147840,
+          172176,
+          147879,
+          158731,
+          148571,
+          148582,
+          171184,
+          216270,
+          148591
+        ],
+        "pid": 2504915
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          150865,
+          150856,
+          166124,
+          150846,
+          173699,
+          196522,
+          150314,
+          172306,
+          150174,
+          150155,
+          159272,
+          150044
+        ],
+        "pid": 2505622
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          159111,
+          161896,
+          157017,
+          156988,
+          165834,
+          191192,
+          157709,
+          169141,
+          156777,
+          156587,
+          159522,
+          162888
+        ],
+        "pid": 2505985
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          152929,
+          167778,
+          165373,
+          152910,
+          162477,
+          153370,
+          153351,
+          163149,
+          153310,
+          153310,
+          162848,
+          153731
+        ],
+        "pid": 2506229
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          163018,
+          164160,
+          160584,
+          161045,
+          162508,
+          172838,
+          164391,
+          162458,
+          178147,
+          211270,
+          215007,
+          190430
+        ],
+        "pid": 2506467
+      }
+    ],
+    "static-setup": [
+      {
+        "case": "static-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1551948,
+          1637820,
+          1579068,
+          1583277,
+          1610068,
+          1575462,
+          1644132,
+          1582606,
+          1699507,
+          1608404,
+          1536458,
+          1635205
+        ],
+        "pid": 2504918
+      },
+      {
+        "case": "static-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1848059,
+          2060992,
+          10418161,
+          16834426,
+          4445595,
+          4035178,
+          6881655,
+          5768260,
+          5605300,
+          7500476,
+          4980217,
+          4016343
+        ],
+        "pid": 2505625
+      },
+      {
+        "case": "static-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1867004,
+          2132507,
+          2008923,
+          2679065,
+          3686298,
+          2427986,
+          2970442,
+          2640658,
+          2739786,
+          2884671,
+          2891063,
+          2947670
+        ],
+        "pid": 2505988
+      },
+      {
+        "case": "static-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1872264,
+          2122969,
+          1815557,
+          1921928,
+          1802682,
+          1924884,
+          1732169,
+          1852337,
+          1785780,
+          1921968,
+          1829092,
+          1916768
+        ],
+        "pid": 2506232
+      },
+      {
+        "case": "static-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          2705942,
+          2303100,
+          2146893,
+          1915776,
+          1701531,
+          1991129,
+          2107690,
+          1933029,
+          1768007,
+          2400505,
+          1757422,
+          1940588
+        ],
+        "pid": 2506470
+      }
+    ],
+    "dynamic-setup": [
+      {
+        "case": "dynamic-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1164314,
+          1061179,
+          1099722,
+          1100432,
+          1148474,
+          1108287,
+          1102126,
+          1082549,
+          1108428,
+          1242953,
+          1051371,
+          1105162
+        ],
+        "pid": 2504921
+      },
+      {
+        "case": "dynamic-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          6771948,
+          4315268,
+          3894182,
+          2899939,
+          3057527,
+          2643914,
+          2654454,
+          2849734,
+          3280866,
+          3095730,
+          2933293,
+          3203535
+        ],
+        "pid": 2505628
+      },
+      {
+        "case": "dynamic-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1280744,
+          1465535,
+          1251068,
+          1381906,
+          1322223,
+          1272008,
+          1274142,
+          1332493,
+          1326742,
+          1310962,
+          1300061,
+          1392856
+        ],
+        "pid": 2505991
+      },
+      {
+        "case": "dynamic-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1328605,
+          1201013,
+          1140680,
+          1190554,
+          1198028,
+          1299881,
+          1192307,
+          1236641,
+          1218968,
+          1281345,
+          1211794,
+          1415399
+        ],
+        "pid": 2506235
+      },
+      {
+        "case": "dynamic-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1202476,
+          1287918,
+          1200242,
+          1256148,
+          1290263,
+          1305130,
+          1162681,
+          1571935,
+          1573087,
+          1837287,
+          1461136,
+          1680561
+        ],
+        "pid": 2506473
+      }
+    ],
+    "guest-each-caller": [
+      {
+        "case": "guest-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          19787848,
+          20327759,
+          20473214,
+          17248319,
+          17241907,
+          17165383,
+          18203097,
+          18229506,
+          18145324,
+          18147533,
+          18424235,
+          18235428
+        ],
+        "pid": 2504924
+      },
+      {
+        "case": "guest-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          38791821,
+          44276399,
+          22126274,
+          17998410,
+          17713421,
+          17482758,
+          17488299,
+          17794695,
+          18710176,
+          17817196,
+          17659258,
+          17742055
+        ],
+        "pid": 2505631
+      },
+      {
+        "case": "guest-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          22857196,
+          22136803,
+          22071700,
+          18384901,
+          20109136,
+          22815718,
+          22421873,
+          19079175,
+          19326062,
+          18168773,
+          18108908,
+          17878572
+        ],
+        "pid": 2505998
+      },
+      {
+        "case": "guest-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          21306683,
+          21140087,
+          21259011,
+          17907958,
+          18186645,
+          20867552,
+          21836885,
+          19133859,
+          22352010,
+          22421121,
+          22199024,
+          18670439
+        ],
+        "pid": 2506238
+      },
+      {
+        "case": "guest-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          24527548,
+          23452243,
+          25382767,
+          20251534,
+          23015606,
+          27706250,
+          21726431,
+          24387433,
+          25344945,
+          20268678,
+          21552276,
+          19715280
+        ],
+        "pid": 2506476
+      }
+    ],
+    "guest-each-worker": [
+      {
+        "case": "guest-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          20783031,
+          20839336,
+          20804260,
+          17672603,
+          17873864,
+          17896937,
+          18255635,
+          18152564,
+          18628362,
+          17523369,
+          17782050,
+          17876380
+        ],
+        "pid": 2505015
+      },
+      {
+        "case": "guest-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          22150548,
+          27955609,
+          30453696,
+          24208995,
+          25124609,
+          24090991,
+          30751580,
+          50975112,
+          50042436,
+          46149437,
+          49758909,
+          50454596
+        ],
+        "pid": 2505639
+      },
+      {
+        "case": "guest-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          21125869,
+          20856920,
+          21139986,
+          17766149,
+          18810478,
+          17844818,
+          17772251,
+          17911615,
+          18381726,
+          17664026,
+          17705254,
+          18103920
+        ],
+        "pid": 2506030
+      },
+      {
+        "case": "guest-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          21188629,
+          21000202,
+          21347369,
+          18186134,
+          18057300,
+          18349555,
+          18078371,
+          17983030,
+          18726769,
+          18051831,
+          18593445,
+          24260783
+        ],
+        "pid": 2506247
+      },
+      {
+        "case": "guest-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          29006306,
+          28324967,
+          28404977,
+          20093570,
+          19236259,
+          18682754,
+          17838336,
+          22529327,
+          29301445,
+          19162488,
+          18662517,
+          18918852
+        ],
+        "pid": 2506484
+      }
+    ],
+    "guest-batch-caller": [
+      {
+        "case": "guest-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          8667127,
+          7657073,
+          7680138,
+          7742367,
+          7760299,
+          7668296,
+          10001132,
+          8526550,
+          8881742,
+          12619839,
+          9645747,
+          9711113
+        ],
+        "pid": 2505099
+      },
+      {
+        "case": "guest-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          10212382,
+          10534430,
+          9935157,
+          10662177,
+          11227728,
+          16900000,
+          12913614,
+          12246161,
+          10074670,
+          10866801,
+          12876573,
+          11647659
+        ],
+        "pid": 2505691
+      },
+      {
+        "case": "guest-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          8652980,
+          7746663,
+          7694415,
+          7739721,
+          7759969,
+          7714572,
+          7681451,
+          7612971,
+          7690157,
+          7674608,
+          8141362,
+          7651793
+        ],
+        "pid": 2506053
+      },
+      {
+        "case": "guest-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          12036558,
+          12222477,
+          11750582,
+          10281432,
+          11234542,
+          11606324,
+          12446069,
+          11821328,
+          12927320,
+          15626182,
+          12741745,
+          15058434
+        ],
+        "pid": 2506278
+      },
+      {
+        "case": "guest-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          8637275,
+          7752614,
+          11121523,
+          12273788,
+          11722851,
+          12468551,
+          13012131,
+          16456069,
+          11672175,
+          10728537,
+          11359633,
+          10044463
+        ],
+        "pid": 2506508
+      }
+    ],
+    "guest-batch-worker": [
+      {
+        "case": "guest-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          8601861,
+          11187738,
+          8361388,
+          7938155,
+          8000956,
+          7996185,
+          8497810,
+          7932236,
+          7916125,
+          7810574,
+          7868515,
+          7779186
+        ],
+        "pid": 2505152
+      },
+      {
+        "case": "guest-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          9809527,
+          11055829,
+          11509195,
+          10109448,
+          11900497,
+          10694273,
+          10694424,
+          10200167,
+          10746954,
+          10439259,
+          10247338,
+          10024246
+        ],
+        "pid": 2505699
+      },
+      {
+        "case": "guest-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          10472173,
+          7717138,
+          7687582,
+          7669908,
+          7726575,
+          7621628,
+          7728581,
+          7676240,
+          7714142,
+          7723691,
+          7649729,
+          7652706
+        ],
+        "pid": 2506061
+      },
+      {
+        "case": "guest-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          11130110,
+          12763600,
+          12128339,
+          12122736,
+          12158626,
+          12472829,
+          10650802,
+          11003589,
+          11290922,
+          10835231,
+          13907965,
+          11911799
+        ],
+        "pid": 2506286
+      },
+      {
+        "case": "guest-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          11525567,
+          10970185,
+          11828341,
+          11470251,
+          11575151,
+          10853284,
+          13143349,
+          11266939,
+          10242467,
+          10842505,
+          11243853,
+          11647819
+        ],
+        "pid": 2506518
+      }
+    ]
+  }
+}
