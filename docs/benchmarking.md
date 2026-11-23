@@ -378,8 +378,9 @@ python3 scripts/check-hygiene.py
 
 Run `mise run build:jvm`, then `mise exec -- python3 benchmarks/upcalls/run.py build` and
 `mise exec -- python3 benchmarks/upcalls/run.py run --forks 5`. Each process warms up three
-rounds and records twelve. The native control, generated static FFM stub and dynamic FFM stub
-perform the same dependent integer reduction. Each worker round creates one native thread
+rounds and records twelve. The native control, declared static target, generic dynamic target
+and receiver-bound direct target perform the same dependent integer reduction. Matching void
+hooks increment a volatile counter through each of the three generated FFM callback paths. Each worker round creates one native thread
 and uses it for every callback in the round. Its timer excludes thread creation and joining
 and includes any VM entry or attachment triggered by the callbacks. The explicit isolate-thread
 entry point uses the current thread only. Both Komodo and TruffleData use this explicit-thread
@@ -432,16 +433,18 @@ receiver-bound adapter. The public API exposes that adapter separately as `creat
 
 ### Native callbacks into compiled Truffle code
 
-The four `guest-*` cases in the SVM upcall suite use a registered benchmark language.
-Each callback invokes the same cached call target. A child node rotates a context-owned
+The eight `guest-*` cases in the SVM upcall suite use a registered benchmark language.
+The static cases use the declared target and a single registered context. Each
+`guest-bound-*` callback binds the context and call target for its own registration.
+Both paths execute the same callback body and cached call target. A child node rotates a context-owned
 integer and branches on its low bit. Each measured round checks the final value against
 an independent recurrence and verifies that all 262,144 root executions observed
 `CompilerDirectives.inCompiledCode()`. The volatile counters and state accesses are
 included in the timings.
 
-In `guest-each-*` the callback enters its context and leaves it in a finally block on
-every call. In `guest-batch-*` the native producer calls an entry hook once on the
-worker, delivers the entire round on that thread, and calls the exit hook before it
+In both `*-each-*` modes the callback enters its context and leaves it in a finally block on
+every call. In both `*-batch-*` modes the native producer calls an entry hook once on the
+delivery thread, delivers the entire round on that thread, and calls the exit hook before it
 returns. The batch timer measures notifications between those hooks. Both modes still
 cross the native boundary once per notification. A producer using batch entry must
 own the delivery interval and balance entry and exit on the same thread, including
