@@ -21,11 +21,13 @@ SOURCE = Path(__file__).resolve().parent
 WORK = ROOT / "build/upcalls"
 LIB = WORK / ("libbench.dylib" if sys.platform == "darwin" else "libbench.so")
 APP = WORK / "measure"
-CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic")
-         for thread in ("caller", "worker")] + ["static-hook-caller", "static-hook-worker", "dynamic-hook-caller", "dynamic-hook-worker", "isolate-caller", "static-setup", "dynamic-setup"]
-
-
-CASES += [f"guest-{scope}-{thread}" for scope in ("each", "batch") for thread in ("caller", "worker")]
+CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic", "bound")
+         for thread in ("caller", "worker")]
+CASES += [f"{kind}-hook-{thread}" for kind in ("static", "dynamic", "bound")
+          for thread in ("caller", "worker")]
+CASES += ["isolate-caller", "static-setup", "dynamic-setup", "bound-setup"]
+CASES += [f"{target}-{scope}-{thread}" for target in ("guest", "guest-bound")
+          for scope in ("each", "batch") for thread in ("caller", "worker")]
 
 
 def source_hashes():
@@ -73,6 +75,8 @@ def measure(forks):
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:
         metadata["cpu"] = run("lscpu").stdout.strip()
+    if hasattr(os, "sched_getaffinity"):
+        metadata["cpu_affinity"] = sorted(os.sched_getaffinity(0))
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
     for fork in range(forks):
         for case in CASES:

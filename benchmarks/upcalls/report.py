@@ -15,12 +15,16 @@ END = "<!-- upcall-results:end -->"
 ROWS = [
     ("Native C control", "control"),
     ("Static FFM reducer", "static"),
-    ("Dynamic FFM reducer", "dynamic"),
+    ("Generic dynamic FFM reducer", "dynamic"),
+    ("Receiver-bound FFM reducer", "bound"),
     ("Explicit isolate-thread reducer", "isolate"),
     ("Static void hook", "static-hook"),
-    ("Dynamic void hook", "dynamic-hook"),
-    ("Compiled Truffle AST, enter per call", "guest-each"),
-    ("Compiled Truffle AST, enter per batch", "guest-batch"),
+    ("Generic dynamic void hook", "dynamic-hook"),
+    ("Receiver-bound void hook", "bound-hook"),
+    ("Static Truffle callback, enter per call", "guest-each"),
+    ("Receiver-bound Truffle callback, enter per call", "guest-bound-each"),
+    ("Static Truffle callback, enter per batch", "guest-batch"),
+    ("Receiver-bound Truffle callback, enter per batch", "guest-bound-batch"),
 ]
 
 
@@ -56,12 +60,13 @@ def table(data):
             displayed.add(worker)
             value = f"{medians[worker]:,.2f}"
         lines.append(f"| {name} | {medians[caller]:,.2f} | {value} |")
-    displayed.update(("static-setup", "dynamic-setup"))
+    displayed.update(("static-setup", "dynamic-setup", "bound-setup"))
     if displayed != set(CASES) or displayed != medians.keys():
         raise ValueError("README rows and measured cases differ")
     lines += ["", "Creating stubs and closing their arena cost "
-              f"{medians['static-setup']:,.0f} ns per static registration and "
-              f"{medians['dynamic-setup']:,.0f} ns per dynamic registration."]
+              f"{medians['static-setup']:,.0f} ns per static registration, "
+              f"{medians['dynamic-setup']:,.0f} ns per generic dynamic registration, and "
+              f"{medians['bound-setup']:,.0f} ns per receiver-bound registration."]
     return "\n".join(lines)
 
 
