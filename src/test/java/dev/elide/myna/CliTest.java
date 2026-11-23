@@ -86,6 +86,29 @@ class CliTest {
             .waitFor());
   }
 
+  @Test
+  void standaloneConstantsCheckAndRejectIncompatibleModes() throws IOException {
+    String fixture = "examples/constants.seam";
+    String[] args = {
+      "generate", fixture, "--constants-only", "safe.pkg", "--out", temp.toString(), "--check"
+    };
+    assertEquals(1, run(args).code());
+    assertEquals(0, run(Arrays.copyOf(args, args.length - 1)).code());
+    assertEquals(0, run(args).code());
+    assertEquals(2, run("generate", fixture, "--constants-only", "invalid..pkg").code());
+    assertEquals(2, run("validate", fixture, "--constants-only", "safe.pkg").code());
+    for (String incompatible : List.of("--rust-only", "--jni"))
+      assertEquals(
+          2, run("generate", fixture, "--constants-only", "safe.pkg", incompatible).code());
+    Path empty =
+        Files.writeString(
+            temp.resolve("empty.seam"), "module empty target=x86_64-unknown-linux-gnu\n");
+    assertTrue(
+        run("generate", empty.toString(), "--out", temp.toString(), "--constants-only", "safe.pkg")
+            .err()
+            .contains("module declares no constants"));
+  }
+
   record Result(int code, String out, String err) {}
 
   Result run(String... args) {
