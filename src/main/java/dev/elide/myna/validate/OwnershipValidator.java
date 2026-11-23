@@ -579,6 +579,17 @@ final class OwnershipValidator {
       require(
           pointee.equals(new Named(r.name())),
           "a resource initialized in place is what its handle parameter points to: " + form);
+      var struct =
+          m.structs().stream().filter(s -> s.name().equals(r.name())).findFirst().orElseThrow();
+      for (String fact : List.of("align", "dereferenceable")) {
+        var requirement = out.facts().get(fact);
+        long bound = fact.equals("align") ? 16 : struct.size();
+        require(
+            requirement == null
+                || !requirement.enabled()
+                || Long.parseLong(requirement.value()) <= bound,
+            "in-place resource storage cannot satisfy " + fact + " on " + create.name());
+      }
     } else {
       Struct struct =
           pointee instanceof Named named
