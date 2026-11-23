@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "revision": "ffebc4e6efa916d1a3fb784396249acb8e7c0fe0",
+    "revision": "8834dbecb1f64f5d92263a60a6846a889b467661",
     "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
     "build_flags": {
       "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
@@ -9,18 +9,48 @@
     "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
     "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
     "binaries": {
-      "measure": "3f67ef10af4f3d589816bce931c47fcebf6849bb2010817d46df02419d5628b1",
+      "measure": "13a8c98fc0a1f62a4a3653591241a61ddf4cc8a07d3364670ff4189243bb1400",
       "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
     },
     "sources": {
       "upcalls.seam": "28f19befb71b9cae480a62100904013d83f276eca4d0d950ae046012e5357e22",
       "HookLanguage.java": "3b30eb7f5436551112b748dfef9a360655c6da668733196ced5830fd8a523baa",
-      "run.py": "4ea16d4aecb478d5deb6f37d893f602f27b3fa16d738d275eee9c3c51a6b34b0",
-      "Measure.java": "0f1e096fe3410972ee1fcb4f797b8a49e769a8ffb118fda375618b2b03c90288",
+      "Measure.java": "1d9ed4d6605f3712b483270a029dbb5eb6ae7d209214c93ab12d811392a714ba",
       "kernel.c": "722fea4f67155148adf45e2a6d596353b0646545e93799bf99c12a30ce69a4d1",
-      "Guest.java": "8cf2cdbaffe5a53ddcc81a67008125d309351b2cb0079b01f06bdd932ab10fa2"
+      "Guest.java": "dbd76c96e3020a6e2f092be1bb3fb9a9a1fe65241f8f85b675490504e319601b"
     },
-    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected"
+    "cases": [
+      "control-caller",
+      "control-worker",
+      "static-caller",
+      "static-worker",
+      "dynamic-caller",
+      "dynamic-worker",
+      "bound-caller",
+      "bound-worker",
+      "static-hook-caller",
+      "static-hook-worker",
+      "dynamic-hook-caller",
+      "dynamic-hook-worker",
+      "bound-hook-caller",
+      "bound-hook-worker",
+      "isolate-caller",
+      "static-setup",
+      "dynamic-setup",
+      "bound-setup",
+      "guest-each-caller",
+      "guest-each-worker",
+      "guest-batch-caller",
+      "guest-batch-worker",
+      "guest-bound-each-caller",
+      "guest-bound-each-worker",
+      "guest-bound-batch-caller",
+      "guest-bound-batch-worker"
+    ],
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+    "cpu_affinity": [
+      9
+    ]
   },
   "samples": {
     "control-caller": [
@@ -29,100 +59,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          19427,
-          21451,
-          18836,
-          21090,
-          18805,
-          18815,
-          18815,
-          49374,
-          20719,
-          22873,
-          20880,
-          20118
+          15559,
+          15579,
+          16471,
+          19527,
+          15589,
+          15559,
+          16471,
+          15560,
+          15580,
+          15559,
+          15569,
+          15560
         ],
-        "pid": 2504805
+        "pid": 3381122
       },
       {
         "case": "control-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          18525,
-          18495,
-          18515,
-          37601,
-          15459,
-          15420,
-          15439,
-          15419,
-          15439,
-          15419,
-          15439,
-          15419
+          19837,
+          19978,
+          19507,
+          19326,
+          20028,
+          19798,
+          19346,
+          19187,
+          19156,
+          19697,
+          19347,
+          19287
         ],
-        "pid": 2505375
+        "pid": 3383317
       },
       {
         "case": "control-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          17343,
-          18194,
-          17814,
-          17433,
-          17794,
-          17763,
-          17544,
-          17644,
-          17794,
-          17734,
-          18164,
-          18185
+          18294,
+          18305,
+          18645,
+          18414,
+          18295,
+          18485,
+          18395,
+          18395,
+          18385,
+          18405,
+          18274,
+          18195
         ],
-        "pid": 2505722
+        "pid": 3384705
       },
       {
         "case": "control-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          18244,
-          18265,
-          18285,
-          18275,
-          18255,
-          18265,
-          18285,
-          18265,
-          18255,
-          18255,
-          18265,
-          18275
+          21701,
+          22172,
+          20298,
+          23314,
+          24677,
+          21181,
+          25287,
+          21400,
+          21401,
+          28373,
+          24527,
+          24958
         ],
-        "pid": 2506085
+        "pid": 3386517
       },
       {
         "case": "control-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          20348,
-          20880,
-          20439,
-          20258,
-          21441,
-          20950,
-          21009,
-          21090,
-          45326,
-          17614,
-          17533,
-          17413
+          22122,
+          21330,
+          20749,
+          21942,
+          22142,
+          21872,
+          21480,
+          21771,
+          21621,
+          21941,
+          21811,
+          28534
         ],
-        "pid": 2506309
+        "pid": 3387838
       }
     ],
     "control-worker": [
@@ -131,100 +161,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
+          20098,
+          17964,
+          20429,
+          20438,
+          17553,
+          20429,
+          18906,
+          18485,
+          20109,
+          22883,
+          23013,
+          22322
+        ],
+        "pid": 3381131
+      },
+      {
+        "case": "control-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          19156,
+          21260,
+          22232,
+          20819,
+          21330,
+          20980,
+          20820,
           20519,
-          18555,
-          18575,
-          18585,
-          23173,
-          18576,
-          18575,
-          18555,
-          18555,
-          18575,
-          18565,
-          18566
+          18505,
+          20539,
+          18886,
+          19828
         ],
-        "pid": 2504810
+        "pid": 3383320
       },
       {
         "case": "control-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          20569,
-          18625,
-          18625,
-          18595,
-          18595,
-          18616,
-          18615,
-          18585,
-          18595,
-          18615,
-          18615,
-          18605
+          18936,
+          18495,
+          19026,
+          18846,
+          18124,
+          18014,
+          18495,
+          19226,
+          17753,
+          19406,
+          17974,
+          20008
         ],
-        "pid": 2505378
+        "pid": 3384708
       },
       {
         "case": "control-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          19627,
-          19918,
-          21721,
-          22302,
-          21271,
-          23094,
-          21210,
-          20609,
-          21921,
-          22372,
-          22593,
-          21040
+          20539,
+          21571,
+          19828,
+          20899,
+          20910,
+          23735,
+          21381,
+          21340,
+          23083,
+          19957,
+          18004,
+          18245
         ],
-        "pid": 2505725
+        "pid": 3386520
       },
       {
         "case": "control-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          20188,
-          18245,
-          18274,
-          18234,
-          58881,
-          26340,
-          17613,
-          17593,
-          17603,
-          17594,
-          17613,
-          28905
+          21481,
+          20980,
+          19908,
+          18214,
+          21400,
+          20819,
+          20148,
+          19217,
+          20228,
+          18986,
+          19297,
+          20288
         ],
-        "pid": 2506088
-      },
-      {
-        "case": "control-worker",
-        "iterations": 16384,
-        "warmup_iters": 49152,
-        "samples_ns": [
-          17924,
-          18515,
-          17633,
-          19717,
-          17563,
-          18345,
-          20018,
-          18134,
-          18365,
-          16972,
-          17233,
-          18385
-        ],
-        "pid": 2506312
+        "pid": 3387841
       }
     ],
     "static-caller": [
@@ -233,100 +263,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          225507,
-          321639,
-          206150,
-          217412,
-          204758,
-          200860,
-          200660,
-          200470,
-          211039,
-          200579,
-          204718,
-          203946
+          236808,
+          249642,
+          267416,
+          263899,
+          245635,
+          242800,
+          244933,
+          255794,
+          246738,
+          265924,
+          251776,
+          407552
         ],
-        "pid": 2504828
+        "pid": 3381157
       },
       {
         "case": "static-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          203635,
-          225286,
-          201221,
-          201041,
-          206641,
-          201271,
-          201612,
-          213624,
-          201772,
-          201622,
-          201722,
-          202603
+          288446,
+          243932,
+          291041,
+          312141,
+          335656,
+          311210,
+          266164,
+          259311,
+          240405,
+          283697,
+          313894,
+          303715
         ],
-        "pid": 2505396
+        "pid": 3383339
       },
       {
         "case": "static-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          248120,
-          255113,
-          250665,
-          274360,
-          235105,
-          226128,
-          226419,
-          236378,
-          227270,
-          226819,
-          228944,
-          246367
+          250294,
+          371683,
+          369370,
+          393485,
+          392694,
+          347097,
+          345033,
+          257598,
+          345444,
+          376483,
+          299337,
+          247299
         ],
-        "pid": 2505743
+        "pid": 3384728
       },
       {
         "case": "static-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          198235,
-          198235,
-          222311,
-          201822,
-          198165,
-          197984,
-          197885,
-          208625,
-          198376,
-          198726,
-          202894,
-          199117
+          258730,
+          283095,
+          270222,
+          259050,
+          249503,
+          271474,
+          252077,
+          269661,
+          259731,
+          267286,
+          259511,
+          259511
         ],
-        "pid": 2506106
+        "pid": 3386542
       },
       {
         "case": "static-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          254522,
-          235596,
-          228342,
-          217582,
-          263138,
-          236558,
-          254642,
-          242659,
-          250444,
-          298465,
-          263208,
-          317531
+          272837,
+          273518,
+          265352,
+          259081,
+          260844,
+          263027,
+          261836,
+          292654,
+          253379,
+          267997,
+          252648,
+          261104
         ],
-        "pid": 2506330
+        "pid": 3387859
       }
     ],
     "static-worker": [
@@ -335,100 +365,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          199577,
-          199578,
-          199458,
-          199988,
-          203926,
-          214816,
-          200329,
-          200570,
-          200479,
-          200660,
-          204507,
-          200730
+          212803,
+          224786,
+          204247,
+          204116,
+          208094,
+          236869,
+          204457,
+          203756,
+          219215,
+          204527,
+          208204,
+          204006
         ],
-        "pid": 2504831
+        "pid": 3381173
       },
       {
         "case": "static-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          229624,
-          222782,
-          203045,
-          202794,
-          202603,
-          211560,
-          207163,
-          201882,
-          200911,
-          201521,
-          200921,
-          200900
+          362847,
+          272936,
+          291251,
+          241036,
+          305548,
+          360633,
+          330866,
+          317571,
+          330416,
+          305428,
+          412200,
+          329103
         ],
-        "pid": 2505399
+        "pid": 3383343
       },
       {
         "case": "static-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          255534,
-          269671,
-          249172,
-          247619,
-          239454,
-          246947,
-          251236,
-          354932,
-          303795,
-          451244,
-          260413,
-          246947
+          347598,
+          251066,
+          430996,
+          263299,
+          258039,
+          259672,
+          363058,
+          364149,
+          317331,
+          278387,
+          253971,
+          249462
         ],
-        "pid": 2505746
+        "pid": 3384737
       },
       {
         "case": "static-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          240495,
-          211380,
-          199859,
-          203636,
-          199738,
-          203726,
-          199538,
-          199518,
-          199408,
-          199047,
-          209507,
-          203525
+          286893,
+          294738,
+          273057,
+          278667,
+          273608,
+          296762,
+          359840,
+          303344,
+          277916,
+          285440,
+          273087,
+          307953
         ],
-        "pid": 2506109
+        "pid": 3386552
       },
       {
         "case": "static-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          365903,
-          329113,
-          283757,
-          243431,
-          315587,
-          250664,
-          221138,
-          248901,
-          261374,
-          308925,
-          440274,
-          388565
+          251356,
+          258169,
+          290956,
+          355703,
+          378917,
+          275011,
+          226909,
+          247559,
+          240766,
+          313513,
+          248089,
+          238702
         ],
-        "pid": 2506333
+        "pid": 3387862
       }
     ],
     "dynamic-caller": [
@@ -437,100 +467,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          37320496,
-          38547156,
-          39805198,
-          37333620,
-          37746379,
-          38800287,
-          37103142,
-          38633802,
-          37164318,
-          37279086,
-          37951499,
-          56483779
+          56733056,
+          55062814,
+          58866526,
+          41964706,
+          50886663,
+          51674343,
+          85177578,
+          56104340,
+          47613557,
+          42919293,
+          44958636,
+          42693868
         ],
-        "pid": 2504849
+        "pid": 3381202
       },
       {
         "case": "dynamic-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          37702257,
-          38603232,
-          39251430,
-          38359296,
-          37883209,
-          38495338,
-          37357885,
-          37640601,
-          39638302,
-          38439432,
-          38914843,
-          38081665
+          82537941,
+          87797046,
+          72335961,
+          79944434,
+          89578430,
+          119065532,
+          72983642,
+          101679739,
+          79841775,
+          90374265,
+          97970407,
+          65489364
         ],
-        "pid": 2505417
+        "pid": 3383362
       },
       {
         "case": "dynamic-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          61955807,
-          67274555,
-          84314960,
-          84464164,
-          92383424,
-          85815361,
-          91491064,
-          58650421,
-          49381014,
-          44613529,
-          55890586,
-          87613451
+          142413134,
+          100347133,
+          83938323,
+          72502935,
+          71515957,
+          62751047,
+          81861831,
+          74280896,
+          73762775,
+          79464032,
+          70067627,
+          71315767
         ],
-        "pid": 2505764
+        "pid": 3384759
       },
       {
         "case": "dynamic-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          39709467,
-          40081349,
-          43185626,
-          39535678,
-          40545514,
-          39222745,
-          38405738,
-          51621335,
-          37980223,
-          37551742,
-          37727305,
-          37934947
+          89152540,
+          68877577,
+          75513053,
+          63316359,
+          39238517,
+          39358068,
+          44603515,
+          71448643,
+          71712102,
+          83606551,
+          39363999,
+          50548576
         ],
-        "pid": 2506127
+        "pid": 3386578
       },
       {
         "case": "dynamic-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          65991913,
-          75259258,
-          73850723,
-          71370588,
-          77149226,
-          71168838,
-          75974392,
-          72192314,
-          75134338,
-          70358427,
-          72094904,
-          96359545
+          73723745,
+          76725437,
+          76306201,
+          76565984,
+          96658271,
+          83279221,
+          79200993,
+          77624508,
+          73431121,
+          82976081,
+          85394741,
+          84364068
         ],
-        "pid": 2506353
+        "pid": 3387880
       }
     ],
     "dynamic-worker": [
@@ -539,100 +569,304 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          37121578,
-          37823546,
-          37063789,
-          37052035,
-          37857943,
-          37542694,
-          36565024,
-          36972434,
-          36670274,
-          40563947,
-          38155412,
-          36812432
+          55307246,
+          40130616,
+          42824505,
+          51339364,
+          56939867,
+          58268219,
+          62870240,
+          69185140,
+          68977888,
+          92974448,
+          46780849,
+          55383618
         ],
-        "pid": 2504855
+        "pid": 3381965
       },
       {
         "case": "dynamic-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          40556288,
-          61799773,
-          64576145,
-          62118563,
-          62855509,
-          63513241,
-          62667999,
-          60637117,
-          49452439,
-          45209988,
-          49006776,
-          48200709
+          68266967,
+          100647334,
+          83197279,
+          81731723,
+          106777721,
+          88960808,
+          94517880,
+          80424654,
+          72543263,
+          70011434,
+          70727139,
+          71258302
         ],
-        "pid": 2505485
+        "pid": 3383520
       },
       {
         "case": "dynamic-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          77119740,
-          86123424,
-          58025548,
-          90654926,
-          98117763,
-          94924980,
-          92629023,
-          84360517,
-          95951040,
-          56221048,
-          60391672,
-          81671712
+          74150955,
+          92677901,
+          69453058,
+          68401135,
+          58438323,
+          83759049,
+          131481174,
+          72180596,
+          74744599,
+          69911065,
+          68817314,
+          73199524
         ],
-        "pid": 2505875
+        "pid": 3385331
       },
       {
         "case": "dynamic-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          36558623,
-          36472999,
-          39546198,
-          37036095,
-          52888574,
-          67669894,
-          53169364,
-          47348617,
-          66756260,
-          41072150,
-          38784576,
-          37799350
+          54657655,
+          67897711,
+          68025811,
+          52931714,
+          39706543,
+          52753557,
+          40351229,
+          54713785,
+          65479759,
+          50036537,
+          52504775,
+          48616217
         ],
-        "pid": 2506158
+        "pid": 3386832
       },
       {
         "case": "dynamic-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          62657996,
-          69680068,
-          72961742,
-          67128698,
-          53794744,
-          66443365,
-          70117215,
-          75659326,
-          64971116,
-          63490671,
-          59462838,
-          62396926
+          87421883,
+          104488586,
+          176076100,
+          149832013,
+          163584458,
+          162350724,
+          157726719,
+          181044878,
+          72401010,
+          76719855,
+          84424565,
+          79276336
         ],
-        "pid": 2506398
+        "pid": 3388008
+      }
+    ],
+    "bound-caller": [
+      {
+        "case": "bound-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          205409,
+          205268,
+          218804,
+          233682,
+          229054,
+          206741,
+          206731,
+          206451,
+          206400,
+          231668,
+          228513,
+          275651
+        ],
+        "pid": 3382499
+      },
+      {
+        "case": "bound-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          291853,
+          234013,
+          276303,
+          232169,
+          231778,
+          230697,
+          243350,
+          233863,
+          239543,
+          235126,
+          250334,
+          385250
+        ],
+        "pid": 3383746
+      },
+      {
+        "case": "bound-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          383135,
+          377485,
+          360984,
+          1571445,
+          376032,
+          546745,
+          380410,
+          370341,
+          410026,
+          359901,
+          355213,
+          376513
+        ],
+        "pid": 3385489
+      },
+      {
+        "case": "bound-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          206811,
+          222010,
+          207152,
+          237049,
+          207042,
+          218533,
+          206351,
+          206270,
+          215047,
+          237760,
+          224344,
+          206792
+        ],
+        "pid": 3386944
+      },
+      {
+        "case": "bound-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          403615,
+          422741,
+          278097,
+          239022,
+          240185,
+          249843,
+          239033,
+          291732,
+          256005,
+          315708,
+          483526,
+          516688
+        ],
+        "pid": 3388821
+      }
+    ],
+    "bound-worker": [
+      {
+        "case": "bound-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          206141,
+          233424,
+          236007,
+          221469,
+          242910,
+          228893,
+          251977,
+          253941,
+          230076,
+          206211,
+          205659,
+          265170
+        ],
+        "pid": 3382502
+      },
+      {
+        "case": "bound-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          265213,
+          233973,
+          232820,
+          247979,
+          221870,
+          423292,
+          252427,
+          247468,
+          250033,
+          247569,
+          248350,
+          248360
+        ],
+        "pid": 3383750
+      },
+      {
+        "case": "bound-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          378076,
+          326478,
+          388155,
+          385249,
+          382584,
+          375822,
+          384447,
+          444311,
+          420416,
+          279810,
+          514864,
+          415246
+        ],
+        "pid": 3385492
+      },
+      {
+        "case": "bound-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          221910,
+          206090,
+          206180,
+          206260,
+          231779,
+          206812,
+          206220,
+          219295,
+          206290,
+          210068,
+          205980,
+          206561
+        ],
+        "pid": 3386947
+      },
+      {
+        "case": "bound-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          250254,
+          270182,
+          384237,
+          476833,
+          433591,
+          235155,
+          232901,
+          234604,
+          248741,
+          267026,
+          243581,
+          246567
+        ],
+        "pid": 3388826
       }
     ],
     "static-hook-caller": [
@@ -641,100 +875,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          246436,
-          246607,
-          246457,
-          246858,
-          257237,
-          247137,
-          247348,
-          248500,
-          248480,
-          248460,
-          248781,
-          253269
+          354000,
+          291422,
+          286292,
+          372565,
+          303114,
+          293887,
+          338912,
+          286091,
+          290139,
+          282244,
+          330575,
+          423412
         ],
-        "pid": 2504873
+        "pid": 3382520
       },
       {
         "case": "static-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          261385,
-          281693,
-          265313,
-          265613,
-          264481,
-          272696,
-          266024,
-          254382,
-          290851,
-          281644,
-          302883,
-          281443
+          446325,
+          441996,
+          386652,
+          304606,
+          318523,
+          328783,
+          315788,
+          303425,
+          290590,
+          288276,
+          289338,
+          388455
         ],
-        "pid": 2505551
+        "pid": 3383768
       },
       {
         "case": "static-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          319305,
-          281954,
-          292033,
-          303385,
-          295780,
-          288847,
-          385054,
-          328572,
-          276594,
-          262907,
-          275141,
-          286974
+          422049,
+          362977,
+          409525,
+          403854,
+          409876,
+          409636,
+          416198,
+          555892,
+          434152,
+          437338,
+          454310,
+          411620
         ],
-        "pid": 2505929
+        "pid": 3385510
       },
       {
         "case": "static-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          305809,
-          256456,
-          262006,
-          274761,
-          272896,
-          262026,
-          256616,
-          261565,
-          259631,
-          289168,
-          278868,
-          256596
+          259701,
+          278537,
+          259661,
+          259582,
+          270853,
+          260112,
+          259962,
+          259721,
+          259831,
+          259902,
+          259892,
+          273858
         ],
-        "pid": 2506186
+        "pid": 3386965
       },
       {
         "case": "static-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          272646,
-          282926,
-          283115,
-          276353,
-          268258,
-          310077,
-          272536,
-          306130,
-          290630,
-          270883,
-          271264,
-          272075
+          313924,
+          298024,
+          289839,
+          296100,
+          293636,
+          306070,
+          294398,
+          313984,
+          306069,
+          307993,
+          302152,
+          289919
         ],
-        "pid": 2506418
+        "pid": 3388846
       }
     ],
     "static-hook-worker": [
@@ -743,100 +977,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          322691,
-          263017,
-          323312,
-          251476,
-          254772,
-          250615,
-          250604,
-          250825,
-          285110,
-          250945,
-          250935,
-          251446
+          359330,
+          347247,
+          346356,
+          336377,
+          366103,
+          361865,
+          359801,
+          464740,
+          303014,
+          311841,
+          310899,
+          303124
         ],
-        "pid": 2504876
+        "pid": 3382524
       },
       {
         "case": "static-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          260894,
-          266865,
-          267647,
-          270923,
-          268217,
-          256927,
-          257017,
-          270602,
-          256275,
-          265662,
-          256225,
-          262056
+          361665,
+          498819,
+          494416,
+          336667,
+          512260,
+          333491,
+          388806,
+          424273,
+          453829,
+          439372,
+          483606,
+          317621
         ],
-        "pid": 2505554
+        "pid": 3383771
       },
       {
         "case": "static-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          295360,
-          310999,
-          383506,
-          327820,
-          284278,
-          297583,
-          290400,
-          293014,
-          311660,
-          305749,
-          301832,
-          287384
+          424273,
+          443179,
+          394527,
+          418111,
+          375541,
+          278116,
+          436566,
+          428792,
+          425897,
+          424564,
+          427980,
+          402492
         ],
-        "pid": 2505932
+        "pid": 3385513
       },
       {
         "case": "static-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          272746,
-          255834,
-          285581,
-          279939,
-          284448,
-          303504,
-          294588,
-          285490,
-          262697,
-          257768,
-          260003,
-          284117
+          357737,
+          302703,
+          313704,
+          319014,
+          316359,
+          339352,
+          309996,
+          319966,
+          299106,
+          328732,
+          306119,
+          299276
         ],
-        "pid": 2506189
+        "pid": 3386968
       },
       {
         "case": "static-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          516839,
-          324073,
-          622178,
-          325457,
-          368217,
-          326357,
-          317782,
-          462496,
-          374869,
-          323953,
-          314345,
-          343480
+          345724,
+          341306,
+          377755,
+          337188,
+          305649,
+          287113,
+          414445,
+          470862,
+          427049,
+          485169,
+          478646,
+          499296
         ],
-        "pid": 2506421
+        "pid": 3388857
       }
     ],
     "dynamic-hook-caller": [
@@ -845,100 +1079,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          11574348,
-          20813549,
-          20172636,
-          19181990,
-          12210874,
-          11824353,
-          11692412,
-          11857234,
-          11518113,
-          12942579,
-          11557487,
-          11863216
+          16962522,
+          17749414,
+          17380733,
+          18330225,
+          12996673,
+          12999786,
+          14051683,
+          15173646,
+          19635340,
+          31740881,
+          22731195,
+          22763084
         ],
-        "pid": 2504894
+        "pid": 3382542
       },
       {
         "case": "dynamic-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          12298318,
-          26176084,
-          40425623,
-          33738607,
-          35766069,
-          33165485,
-          38380831,
-          26155585,
-          17499594,
-          13234862,
-          17440349,
-          21977300
+          46243717,
+          47384672,
+          37784746,
+          22254423,
+          20363858,
+          19379355,
+          21789666,
+          20299296,
+          20915943,
+          22763912,
+          21909233,
+          21546832
         ],
-        "pid": 2505572
+        "pid": 3383789
       },
       {
         "case": "dynamic-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          23958091,
-          25572364,
-          26154885,
-          24154708,
-          19195981,
-          14487863,
-          20003936,
-          22687838,
-          12308347,
-          13380649,
-          12660963,
-          14359722
+          22524399,
+          46165680,
+          44330394,
+          31820375,
+          22659194,
+          25630632,
+          22371018,
+          23042052,
+          23974077,
+          15131336,
+          14321521,
+          19050411
         ],
-        "pid": 2505950
+        "pid": 3385531
       },
       {
         "case": "dynamic-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          14334734,
-          12981073,
-          12282810,
-          12878438,
-          12174435,
-          12364525,
-          12140300,
-          12440499,
-          12251862,
-          12474794,
-          12161620,
-          14924280
+          23261779,
+          22406105,
+          22220924,
+          27763247,
+          21780076,
+          26844028,
+          24891372,
+          25542355,
+          31541088,
+          23226251,
+          25973159,
+          24963419
         ],
-        "pid": 2506207
+        "pid": 3386989
       },
       {
         "case": "dynamic-hook-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          19967386,
-          16916282,
-          13808748,
-          14873805,
-          14492737,
-          13349986,
-          14372878,
-          14565436,
-          14212954,
-          16381935,
-          12040733,
-          14740002
+          47423799,
+          35774161,
+          23907765,
+          27019327,
+          24771319,
+          30272577,
+          35488160,
+          25287428,
+          27458328,
+          27259501,
+          47315284,
+          44902407
         ],
-        "pid": 2506439
+        "pid": 3388875
       }
     ],
     "dynamic-hook-worker": [
@@ -947,100 +1181,304 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          11666393,
-          12176940,
-          12054818,
-          11875900,
-          11598205,
-          11808022,
-          11592684,
-          11996459,
-          11773796,
-          11901169,
-          11602352,
-          11917229
+          28858801,
+          20667989,
+          24220615,
+          15435541,
+          15575448,
+          18852540,
+          14276950,
+          14222545,
+          13229246,
+          12729350,
+          14018068,
+          17443505
         ],
-        "pid": 2504897
+        "pid": 3382601
       },
       {
         "case": "dynamic-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          25900407,
-          13488893,
-          15078022,
-          21573421,
-          19916547,
-          14300987,
-          21256979,
-          22848755,
-          20937340,
-          20925671,
-          14096852,
-          20821975
+          25475686,
+          29153235,
+          29111627,
+          25372329,
+          26526142,
+          23044994,
+          23890553,
+          26319863,
+          23688432,
+          24952504,
+          23639179,
+          24616328
         ],
-        "pid": 2505597
+        "pid": 3383887
       },
       {
         "case": "dynamic-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          15982633,
-          16223224,
-          18529576,
-          17239122,
-          16663091,
-          13573525,
-          20474676,
-          22965151,
-          24482272,
-          19025764,
-          12859033,
-          13473183
+          36974632,
+          23889763,
+          23643596,
+          19129591,
+          14695749,
+          13754137,
+          13994441,
+          12487699,
+          12863991,
+          13436424,
+          13684314,
+          13241656
         ],
-        "pid": 2505967
+        "pid": 3385560
       },
       {
         "case": "dynamic-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          22863388,
-          21832337,
-          12516514,
-          12240168,
-          11903954,
-          14351505,
-          12000727,
-          12244998,
-          12512525,
-          12589761,
-          12217408,
-          12687335
+          24580684,
+          24642251,
+          22265699,
+          24100631,
+          22244914,
+          25155292,
+          23811219,
+          24842141,
+          25520061,
+          23590461,
+          24857780,
+          25399112
         ],
-        "pid": 2506210
+        "pid": 3387037
       },
       {
         "case": "dynamic-hook-worker",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          20827925,
-          23293883,
-          19139511,
-          18737308,
-          16394052,
-          18081797,
-          20448749,
-          21545544,
-          13992456,
-          19517545,
-          21702291,
-          21948101
+          22191275,
+          26652653,
+          24692851,
+          28640817,
+          27764898,
+          22786192,
+          22597214,
+          25087209,
+          26651899,
+          47929295,
+          65848994,
+          59608860
         ],
-        "pid": 2506442
+        "pid": 3388988
+      }
+    ],
+    "bound-hook-caller": [
+      {
+        "case": "bound-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          259872,
+          286913,
+          309646,
+          786389,
+          328181,
+          302623,
+          302764,
+          324735,
+          304617,
+          314375,
+          315182,
+          288847
+        ],
+        "pid": 3382671
+      },
+      {
+        "case": "bound-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          436036,
+          370982,
+          333752,
+          356114,
+          314575,
+          303114,
+          327219,
+          318673,
+          286592,
+          290781,
+          294056,
+          287614
+        ],
+        "pid": 3383962
+      },
+      {
+        "case": "bound-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          262066,
+          265603,
+          311490,
+          273658,
+          274309,
+          261736,
+          261515,
+          281103,
+          261595,
+          274118,
+          261475,
+          261445
+        ],
+        "pid": 3385617
+      },
+      {
+        "case": "bound-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          301761,
+          329213,
+          310288,
+          305989,
+          304306,
+          300739,
+          319024,
+          321168,
+          300839,
+          312040,
+          324163,
+          332008
+        ],
+        "pid": 3387089
+      },
+      {
+        "case": "bound-hook-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          3142014,
+          294698,
+          288196,
+          385449,
+          294878,
+          272106,
+          270462,
+          270252,
+          754368,
+          455918,
+          298655,
+          308173
+        ],
+        "pid": 3389121
+      }
+    ],
+    "bound-hook-worker": [
+      {
+        "case": "bound-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          264942,
+          269741,
+          263850,
+          264591,
+          267727,
+          268128,
+          264100,
+          295289,
+          265302,
+          295239,
+          293025,
+          269871
+        ],
+        "pid": 3382678
+      },
+      {
+        "case": "bound-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          290851,
+          292674,
+          1043044,
+          291371,
+          310898,
+          310087,
+          298185,
+          289227,
+          501860,
+          388595,
+          321839,
+          308574
+        ],
+        "pid": 3383965
+      },
+      {
+        "case": "bound-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          289829,
+          269790,
+          270351,
+          265152,
+          264952,
+          335144,
+          267387,
+          270652,
+          270612,
+          276824,
+          281934,
+          274750
+        ],
+        "pid": 3385620
+      },
+      {
+        "case": "bound-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          318202,
+          323452,
+          303915,
+          307712,
+          358087,
+          369399,
+          371142,
+          372164,
+          344752,
+          312581,
+          323211,
+          310367
+        ],
+        "pid": 3387092
+      },
+      {
+        "case": "bound-hook-worker",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          305268,
+          313353,
+          320156,
+          312121,
+          317391,
+          283817,
+          316520,
+          288587,
+          305569,
+          322460,
+          306801,
+          307372
+        ],
+        "pid": 3389140
       }
     ],
     "isolate-caller": [
@@ -1049,100 +1487,100 @@
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          156036,
-          147830,
-          147810,
-          147840,
-          172176,
-          147879,
-          158731,
-          148571,
-          148582,
-          171184,
-          216270,
-          148591
-        ],
-        "pid": 2504915
-      },
-      {
-        "case": "isolate-caller",
-        "iterations": 16384,
-        "warmup_iters": 49152,
-        "samples_ns": [
-          150865,
-          150856,
-          166124,
-          150846,
-          173699,
-          196522,
-          150314,
-          172306,
-          150174,
-          150155,
-          159272,
-          150044
-        ],
-        "pid": 2505622
-      },
-      {
-        "case": "isolate-caller",
-        "iterations": 16384,
-        "warmup_iters": 49152,
-        "samples_ns": [
-          159111,
-          161896,
-          157017,
-          156988,
-          165834,
-          191192,
-          157709,
-          169141,
-          156777,
-          156587,
-          159522,
-          162888
-        ],
-        "pid": 2505985
-      },
-      {
-        "case": "isolate-caller",
-        "iterations": 16384,
-        "warmup_iters": 49152,
-        "samples_ns": [
-          152929,
-          167778,
+          166525,
+          180793,
+          166254,
+          161496,
+          156145,
+          156096,
+          156256,
+          169300,
           165373,
-          152910,
-          162477,
-          153370,
-          153351,
-          163149,
-          153310,
-          153310,
-          162848,
-          153731
+          319224,
+          156095,
+          156005
         ],
-        "pid": 2506229
+        "pid": 3382696
       },
       {
         "case": "isolate-caller",
         "iterations": 16384,
         "warmup_iters": 49152,
         "samples_ns": [
-          163018,
-          164160,
-          160584,
-          161045,
-          162508,
-          172838,
-          164391,
-          162458,
-          178147,
-          211270,
-          215007,
-          190430
+          172387,
+          191884,
+          176244,
+          174771,
+          174961,
+          175993,
+          173479,
+          174781,
+          265222,
+          171515,
+          180482,
+          173769
         ],
-        "pid": 2506467
+        "pid": 3383983
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          173268,
+          162538,
+          162798,
+          155684,
+          155695,
+          166716,
+          156035,
+          164341,
+          156106,
+          161756,
+          216510,
+          173288
+        ],
+        "pid": 3385638
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          170182,
+          172697,
+          165473,
+          165413,
+          170131,
+          172617,
+          174491,
+          174791,
+          221288,
+          190270,
+          192354,
+          174841
+        ],
+        "pid": 3387110
+      },
+      {
+        "case": "isolate-caller",
+        "iterations": 16384,
+        "warmup_iters": 49152,
+        "samples_ns": [
+          175272,
+          201542,
+          185051,
+          185161,
+          185310,
+          185130,
+          208895,
+          183577,
+          183377,
+          176804,
+          182175,
+          179209
+        ],
+        "pid": 3389166
       }
     ],
     "static-setup": [
@@ -1151,100 +1589,100 @@
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1551948,
-          1637820,
-          1579068,
-          1583277,
-          1610068,
-          1575462,
-          1644132,
-          1582606,
-          1699507,
-          1608404,
-          1536458,
-          1635205
+          2682038,
+          2876486,
+          2677730,
+          2613443,
+          1951896,
+          1722331,
+          1808624,
+          1735486,
+          1817101,
+          1788376,
+          1928381,
+          1743421
         ],
-        "pid": 2504918
+        "pid": 3382699
       },
       {
         "case": "static-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1848059,
-          2060992,
-          10418161,
-          16834426,
-          4445595,
-          4035178,
-          6881655,
-          5768260,
-          5605300,
-          7500476,
-          4980217,
-          4016343
+          3120858,
+          2701233,
+          2574905,
+          3236838,
+          3333499,
+          2899769,
+          4152872,
+          5225061,
+          5672027,
+          3978936,
+          4014179,
+          3016230
         ],
-        "pid": 2505625
+        "pid": 3383986
       },
       {
         "case": "static-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1867004,
-          2132507,
-          2008923,
-          2679065,
-          3686298,
-          2427986,
-          2970442,
-          2640658,
-          2739786,
-          2884671,
-          2891063,
-          2947670
+          2331784,
+          2458664,
+          2419118,
+          2425591,
+          2464575,
+          2385906,
+          2614079,
+          2461860,
+          2456099,
+          2504581,
+          2435300,
+          2731161
         ],
-        "pid": 2505988
+        "pid": 3385641
       },
       {
         "case": "static-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1872264,
-          2122969,
-          1815557,
-          1921928,
-          1802682,
-          1924884,
-          1732169,
-          1852337,
-          1785780,
-          1921968,
-          1829092,
-          1916768
+          2806049,
+          3025285,
+          2871195,
+          3242116,
+          3078976,
+          2773608,
+          2964689,
+          3457332,
+          3397979,
+          2949071,
+          2933681,
+          2754552
         ],
-        "pid": 2506232
+        "pid": 3387113
       },
       {
         "case": "static-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          2705942,
-          2303100,
-          2146893,
-          1915776,
-          1701531,
-          1991129,
-          2107690,
-          1933029,
-          1768007,
-          2400505,
-          1757422,
-          1940588
+          5445045,
+          7560024,
+          5253326,
+          3113434,
+          4882854,
+          3313804,
+          5879181,
+          5551962,
+          6004574,
+          5702080,
+          5654194,
+          8573068
         ],
-        "pid": 2506470
+        "pid": 3389173
       }
     ],
     "dynamic-setup": [
@@ -1253,100 +1691,202 @@
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1164314,
-          1061179,
-          1099722,
-          1100432,
-          1148474,
-          1108287,
-          1102126,
-          1082549,
-          1108428,
-          1242953,
-          1051371,
-          1105162
+          1158834,
+          1189071,
+          1359424,
+          1151150,
+          1194382,
+          1217986,
+          1353222,
+          1369764,
+          1272629,
+          1246580,
+          1200613,
+          1414488
         ],
-        "pid": 2504921
+        "pid": 3382702
       },
       {
         "case": "dynamic-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          6771948,
-          4315268,
-          3894182,
-          2899939,
-          3057527,
-          2643914,
-          2654454,
-          2849734,
-          3280866,
-          3095730,
-          2933293,
-          3203535
+          1848689,
+          1835525,
+          4661995,
+          1909725,
+          4662235,
+          1848930,
+          1879108,
+          1992141,
+          1976080,
+          1967514,
+          4674980,
+          1873536
         ],
-        "pid": 2505628
+        "pid": 3384007
       },
       {
         "case": "dynamic-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1280744,
-          1465535,
-          1251068,
-          1381906,
-          1322223,
-          1272008,
-          1274142,
-          1332493,
-          1326742,
-          1310962,
-          1300061,
-          1392856
+          1486253,
+          1290923,
+          1310991,
+          1298268,
+          1555916,
+          1355616,
+          1515769,
+          1581313,
+          1517212,
+          1289661,
+          1369944,
+          1237232
         ],
-        "pid": 2505991
+        "pid": 3385644
       },
       {
         "case": "dynamic-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1328605,
-          1201013,
-          1140680,
-          1190554,
-          1198028,
-          1299881,
-          1192307,
-          1236641,
-          1218968,
-          1281345,
-          1211794,
-          1415399
+          2404740,
+          1992140,
+          2062493,
+          2711181,
+          2023719,
+          2605906,
+          2108861,
+          1957254,
+          1877463,
+          3216586,
+          1981911,
+          2143576
         ],
-        "pid": 2506235
+        "pid": 3387119
       },
       {
         "case": "dynamic-setup",
         "iterations": 256,
         "warmup_iters": 768,
         "samples_ns": [
-          1202476,
-          1287918,
-          1200242,
-          1256148,
-          1290263,
-          1305130,
-          1162681,
-          1571935,
-          1573087,
-          1837287,
-          1461136,
-          1680561
+          7250061,
+          1868108,
+          11531744,
+          1991120,
+          2415484,
+          2088053,
+          1954470,
+          1839824,
+          11967968,
+          2188184,
+          2204023,
+          2058046
         ],
-        "pid": 2506473
+        "pid": 3389200
+      }
+    ],
+    "bound-setup": [
+      {
+        "case": "bound-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          1898924,
+          2211567,
+          2136064,
+          1994737,
+          2080969,
+          2337790,
+          2158697,
+          2656239,
+          2829838,
+          2425592,
+          2386939,
+          2435181
+        ],
+        "pid": 3382705
+      },
+      {
+        "case": "bound-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          2900440,
+          3047249,
+          2854053,
+          3106991,
+          3545201,
+          4399692,
+          4432116,
+          3012522,
+          3191681,
+          3161955,
+          4401442,
+          3226608
+        ],
+        "pid": 3384019
+      },
+      {
+        "case": "bound-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          2788398,
+          2718786,
+          2787016,
+          2380987,
+          2082572,
+          3482350,
+          2451430,
+          2230192,
+          1986987,
+          2106327,
+          2020534,
+          1988224
+        ],
+        "pid": 3385647
+      },
+      {
+        "case": "bound-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          2949301,
+          2990168,
+          3163526,
+          2853861,
+          3118722,
+          2955803,
+          2982163,
+          3384173,
+          3204945,
+          2711261,
+          2671837,
+          2918893
+        ],
+        "pid": 3387125
+      },
+      {
+        "case": "bound-setup",
+        "iterations": 256,
+        "warmup_iters": 768,
+        "samples_ns": [
+          3101463,
+          3190291,
+          3141548,
+          3279469,
+          2930738,
+          2878390,
+          3054844,
+          2871957,
+          3161577,
+          2964754,
+          2768642,
+          2903708
+        ],
+        "pid": 3389227
       }
     ],
     "guest-each-caller": [
@@ -1355,100 +1895,100 @@
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          19787848,
-          20327759,
-          20473214,
-          17248319,
-          17241907,
-          17165383,
-          18203097,
-          18229506,
-          18145324,
-          18147533,
-          18424235,
-          18235428
+          25760779,
+          23414698,
+          23990580,
+          19474208,
+          18413851,
+          21882718,
+          20951795,
+          19860060,
+          19616798,
+          27811281,
+          19087687,
+          18675606
         ],
-        "pid": 2504924
+        "pid": 3382708
       },
       {
         "case": "guest-each-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          38791821,
-          44276399,
-          22126274,
-          17998410,
-          17713421,
-          17482758,
-          17488299,
-          17794695,
-          18710176,
-          17817196,
-          17659258,
-          17742055
+          28059826,
+          29532604,
+          44524534,
+          23716475,
+          26179195,
+          29527926,
+          34532909,
+          24563849,
+          27669007,
+          28441359,
+          35882725,
+          34435486
         ],
-        "pid": 2505631
+        "pid": 3384027
       },
       {
         "case": "guest-each-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          22857196,
-          22136803,
-          22071700,
-          18384901,
-          20109136,
-          22815718,
-          22421873,
-          19079175,
-          19326062,
-          18168773,
-          18108908,
-          17878572
+          25529617,
+          25357590,
+          26288954,
+          20919059,
+          20943215,
+          18087127,
+          17955088,
+          18013198,
+          18791162,
+          18058961,
+          18782095,
+          18114569
         ],
-        "pid": 2505998
+        "pid": 3385650
       },
       {
         "case": "guest-each-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          21306683,
-          21140087,
-          21259011,
-          17907958,
-          18186645,
-          20867552,
-          21836885,
-          19133859,
-          22352010,
-          22421121,
-          22199024,
-          18670439
+          26425857,
+          24885492,
+          26049794,
+          22720243,
+          21580597,
+          20936909,
+          21495953,
+          19075943,
+          21137519,
+          26490327,
+          27670774,
+          33551780
         ],
-        "pid": 2506238
+        "pid": 3387141
       },
       {
         "case": "guest-each-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          24527548,
-          23452243,
-          25382767,
-          20251534,
-          23015606,
-          27706250,
-          21726431,
-          24387433,
-          25344945,
-          20268678,
-          21552276,
-          19715280
+          31388565,
+          29643755,
+          26660968,
+          33128953,
+          33473137,
+          40763857,
+          32165651,
+          26487148,
+          24710737,
+          26253226,
+          37117972,
+          27862628
         ],
-        "pid": 2506476
+        "pid": 3389239
       }
     ],
     "guest-each-worker": [
@@ -1457,100 +1997,100 @@
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          20783031,
-          20839336,
-          20804260,
-          17672603,
-          17873864,
-          17896937,
-          18255635,
-          18152564,
-          18628362,
-          17523369,
-          17782050,
-          17876380
+          26100148,
+          25157758,
+          26018477,
+          18356862,
+          20715189,
+          22467189,
+          21629488,
+          22651089,
+          24168846,
+          18849625,
+          19922938,
+          20561957
         ],
-        "pid": 2505015
+        "pid": 3382797
       },
       {
         "case": "guest-each-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          22150548,
-          27955609,
-          30453696,
-          24208995,
-          25124609,
-          24090991,
-          30751580,
-          50975112,
-          50042436,
-          46149437,
-          49758909,
-          50454596
+          68423724,
+          33429871,
+          36100948,
+          73559075,
+          45223908,
+          55065877,
+          41423894,
+          40213022,
+          23024205,
+          20603942,
+          21404156,
+          21366357
         ],
-        "pid": 2505639
+        "pid": 3384154
       },
       {
         "case": "guest-each-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          21125869,
-          20856920,
-          21139986,
-          17766149,
-          18810478,
-          17844818,
-          17772251,
-          17911615,
-          18381726,
-          17664026,
-          17705254,
-          18103920
+          21004418,
+          21150895,
+          21390478,
+          18294047,
+          17951991,
+          20953410,
+          20624328,
+          20300755,
+          19728172,
+          18434534,
+          18737167,
+          20547562
         ],
-        "pid": 2506030
+        "pid": 3385715
       },
       {
         "case": "guest-each-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          21188629,
-          21000202,
-          21347369,
-          18186134,
-          18057300,
-          18349555,
-          18078371,
-          17983030,
-          18726769,
-          18051831,
-          18593445,
-          24260783
+          22431247,
+          24618446,
+          26175403,
+          19373240,
+          19085136,
+          18966321,
+          19966504,
+          19208048,
+          19828395,
+          18090459,
+          18039623,
+          23118493
         ],
-        "pid": 2506247
+        "pid": 3387667
       },
       {
         "case": "guest-each-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          29006306,
-          28324967,
-          28404977,
-          20093570,
-          19236259,
-          18682754,
-          17838336,
-          22529327,
-          29301445,
-          19162488,
-          18662517,
-          18918852
+          25768237,
+          27696058,
+          30829950,
+          28627641,
+          63752365,
+          51540253,
+          63396139,
+          35917233,
+          27196452,
+          32013072,
+          26487811,
+          25006695
         ],
-        "pid": 2506484
+        "pid": 3389332
       }
     ],
     "guest-batch-caller": [
@@ -1559,100 +2099,100 @@
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          8667127,
-          7657073,
-          7680138,
-          7742367,
-          7760299,
-          7668296,
-          10001132,
-          8526550,
-          8881742,
-          12619839,
-          9645747,
-          9711113
+          9885619,
+          9471742,
+          10029248,
+          10058692,
+          10246358,
+          9739840,
+          9631656,
+          9871638,
+          9842574,
+          9419995,
+          9735311,
+          8017718
         ],
-        "pid": 2505099
+        "pid": 3382862
       },
       {
         "case": "guest-batch-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          10212382,
-          10534430,
-          9935157,
-          10662177,
-          11227728,
-          16900000,
-          12913614,
-          12246161,
-          10074670,
-          10866801,
-          12876573,
-          11647659
+          9715356,
+          10639326,
+          9963691,
+          13099462,
+          9569465,
+          9644667,
+          10812748,
+          11815682,
+          9855907,
+          10447547,
+          21530788,
+          11763468
         ],
-        "pid": 2505691
+        "pid": 3384284
       },
       {
         "case": "guest-batch-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          8652980,
-          7746663,
-          7694415,
-          7739721,
-          7759969,
-          7714572,
-          7681451,
-          7612971,
-          7690157,
-          7674608,
-          8141362,
-          7651793
+          8377714,
+          7931870,
+          7959872,
+          7873320,
+          9363098,
+          9423161,
+          9457797,
+          9284879,
+          9374511,
+          7905198,
+          8008054,
+          8504634
         ],
-        "pid": 2506053
+        "pid": 3385777
       },
       {
         "case": "guest-batch-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          12036558,
-          12222477,
-          11750582,
-          10281432,
-          11234542,
-          11606324,
-          12446069,
-          11821328,
-          12927320,
-          15626182,
-          12741745,
-          15058434
+          24881037,
+          11732159,
+          12204012,
+          11009491,
+          11995546,
+          12467621,
+          12702105,
+          11122704,
+          12171971,
+          9882005,
+          11490396,
+          9701586
         ],
-        "pid": 2506278
+        "pid": 3387696
       },
       {
         "case": "guest-batch-caller",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          8637275,
-          7752614,
-          11121523,
-          12273788,
-          11722851,
-          12468551,
-          13012131,
-          16456069,
-          11672175,
-          10728537,
-          11359633,
-          10044463
+          11880423,
+          9926455,
+          10038055,
+          9902499,
+          10410380,
+          9866469,
+          9798784,
+          21671441,
+          22983245,
+          25214018,
+          19237073,
+          20769722
         ],
-        "pid": 2506508
+        "pid": 3389455
       }
     ],
     "guest-batch-worker": [
@@ -1661,100 +2201,508 @@
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          8601861,
-          11187738,
-          8361388,
-          7938155,
-          8000956,
-          7996185,
-          8497810,
-          7932236,
-          7916125,
-          7810574,
-          7868515,
-          7779186
+          8524248,
+          8076040,
+          8026075,
+          7919443,
+          8527676,
+          8508472,
+          10040228,
+          9227681,
+          7934541,
+          7973776,
+          8979210,
+          8102700
         ],
-        "pid": 2505152
+        "pid": 3382928
       },
       {
         "case": "guest-batch-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          9809527,
-          11055829,
-          11509195,
-          10109448,
-          11900497,
-          10694273,
-          10694424,
-          10200167,
-          10746954,
-          10439259,
-          10247338,
-          10024246
+          14512748,
+          12094183,
+          10499075,
+          11878917,
+          10630117,
+          11546517,
+          11176297,
+          9788428,
+          12413198,
+          12474074,
+          11080735,
+          11080985
         ],
-        "pid": 2505699
+        "pid": 3384373
       },
       {
         "case": "guest-batch-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          10472173,
-          7717138,
-          7687582,
-          7669908,
-          7726575,
-          7621628,
-          7728581,
-          7676240,
-          7714142,
-          7723691,
-          7649729,
-          7652706
+          12540030,
+          9577463,
+          9430016,
+          9567594,
+          9543481,
+          9644439,
+          9683344,
+          8331225,
+          8856679,
+          8637236,
+          9228001,
+          9725405
         ],
-        "pid": 2506061
+        "pid": 3385829
       },
       {
         "case": "guest-batch-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          11130110,
-          12763600,
-          12128339,
-          12122736,
-          12158626,
-          12472829,
-          10650802,
-          11003589,
-          11290922,
-          10835231,
-          13907965,
-          11911799
+          25829863,
+          9846744,
+          9901283,
+          10412710,
+          11831111,
+          10792057,
+          11860221,
+          11240113,
+          11152031,
+          16345120,
+          12960363,
+          10332499
         ],
-        "pid": 2506286
+        "pid": 3387707
       },
       {
         "case": "guest-batch-worker",
         "iterations": 262144,
         "warmup_iters": 786432,
         "samples_ns": [
-          11525567,
-          10970185,
-          11828341,
-          11470251,
-          11575151,
-          10853284,
-          13143349,
-          11266939,
-          10242467,
-          10842505,
-          11243853,
-          11647819
+          22352827,
+          32808107,
+          22988183,
+          26409583,
+          45304711,
+          33906517,
+          21189158,
+          16328405,
+          22357159,
+          11143319,
+          10682385,
+          18486592
         ],
-        "pid": 2506518
+        "pid": 3389519
+      }
+    ],
+    "guest-bound-each-caller": [
+      {
+        "case": "guest-bound-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          21456942,
+          23577447,
+          25056957,
+          19831235,
+          22547131,
+          23104586,
+          27763627,
+          21324307,
+          19498524,
+          18455349,
+          18223271,
+          18089576
+        ],
+        "pid": 3383002
+      },
+      {
+        "case": "guest-bound-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          30536053,
+          31624920,
+          28523258,
+          36481458,
+          30723379,
+          27949072,
+          28873219,
+          31662866,
+          26726595,
+          26516935,
+          23544127,
+          22708537
+        ],
+        "pid": 3384397
+      },
+      {
+        "case": "guest-bound-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          28339639,
+          29316445,
+          28479116,
+          31157086,
+          22325518,
+          28463391,
+          23958026,
+          34895475,
+          31267007,
+          39501219,
+          29492601,
+          45910477
+        ],
+        "pid": 3385890
+      },
+      {
+        "case": "guest-bound-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          31737968,
+          26267494,
+          28335567,
+          24636135,
+          21244495,
+          20857863,
+          24430194,
+          21842186,
+          23272153,
+          22642370,
+          21439464,
+          25300392
+        ],
+        "pid": 3387736
+      },
+      {
+        "case": "guest-bound-each-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          30829963,
+          34995537,
+          47862410,
+          50386138,
+          24651454,
+          24269454,
+          29623923,
+          21897749,
+          36710285,
+          35411135,
+          30497322,
+          30241446
+        ],
+        "pid": 3389651
+      }
+    ],
+    "guest-bound-each-worker": [
+      {
+        "case": "guest-bound-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          22521016,
+          22857926,
+          24445910,
+          20204731,
+          20592486,
+          19840542,
+          19650471,
+          21667191,
+          21669374,
+          21197260,
+          20862177,
+          20457474
+        ],
+        "pid": 3383042
+      },
+      {
+        "case": "guest-bound-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          34082708,
+          29819778,
+          29571538,
+          25644895,
+          24639292,
+          26945096,
+          29032929,
+          26388863,
+          29626844,
+          61063070,
+          45291395,
+          30829640
+        ],
+        "pid": 3384509
+      },
+      {
+        "case": "guest-bound-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          48045282,
+          27804436,
+          28224785,
+          23155819,
+          26410026,
+          22789094,
+          23456158,
+          23300873,
+          21664536,
+          20091852,
+          21274136,
+          22255244
+        ],
+        "pid": 3385997
+      },
+      {
+        "case": "guest-bound-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          27265187,
+          27518665,
+          39281839,
+          29507964,
+          24713209,
+          33330813,
+          23476962,
+          23995743,
+          26303209,
+          23741794,
+          28846053,
+          28571706
+        ],
+        "pid": 3387766
+      },
+      {
+        "case": "guest-bound-each-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          32185398,
+          32239802,
+          31723472,
+          29853051,
+          24367746,
+          28771514,
+          27577774,
+          36145927,
+          30725519,
+          26905401,
+          46290008,
+          87900494
+        ],
+        "pid": 3390057
+      }
+    ],
+    "guest-bound-batch-caller": [
+      {
+        "case": "guest-bound-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          11688326,
+          9680858,
+          9791878,
+          9404262,
+          9315109,
+          9366232,
+          9944024,
+          8542360,
+          8667741,
+          8723476,
+          9182725,
+          8930706
+        ],
+        "pid": 3383207
+      },
+      {
+        "case": "guest-bound-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          9761889,
+          10109758,
+          9933710,
+          10232184,
+          11657644,
+          11193748,
+          9469055,
+          9891985,
+          9664425,
+          9589492,
+          9530942,
+          9439158
+        ],
+        "pid": 3384544
+      },
+      {
+        "case": "guest-bound-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          9959347,
+          10063092,
+          12321227,
+          10126482,
+          10586313,
+          10956091,
+          10016445,
+          10107996,
+          10874098,
+          12277337,
+          11800005,
+          11644143
+        ],
+        "pid": 3386340
+      },
+      {
+        "case": "guest-bound-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          16037408,
+          14793840,
+          17798205,
+          13420826,
+          11265746,
+          11350655,
+          11298738,
+          17468338,
+          17302862,
+          14782724,
+          12386617,
+          17732567
+        ],
+        "pid": 3387794
+      },
+      {
+        "case": "guest-bound-batch-caller",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          10634928,
+          10614444,
+          9651613,
+          9195460,
+          15763965,
+          14316756,
+          17438190,
+          19675776,
+          23732055,
+          28029113,
+          21754360,
+          23300433
+        ],
+        "pid": 3390365
+      }
+    ],
+    "guest-bound-batch-worker": [
+      {
+        "case": "guest-bound-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          11274574,
+          12725892,
+          11744976,
+          11540546,
+          10236285,
+          11051904,
+          9906549,
+          10298918,
+          10278830,
+          11231763,
+          10566966,
+          11708998
+        ],
+        "pid": 3383252
+      },
+      {
+        "case": "guest-bound-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          10524992,
+          9790319,
+          10802103,
+          11705938,
+          13721324,
+          17433421,
+          10773423,
+          10781660,
+          10177406,
+          19897745,
+          22716482,
+          22199693
+        ],
+        "pid": 3384582
+      },
+      {
+        "case": "guest-bound-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          19125722,
+          11490976,
+          11161089,
+          13758286,
+          12206999,
+          12010859,
+          11253295,
+          10378360,
+          12234571,
+          12996204,
+          11918633,
+          10409539
+        ],
+        "pid": 3386387
+      },
+      {
+        "case": "guest-bound-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          10600041,
+          10231907,
+          10172906,
+          13141831,
+          10949197,
+          10201661,
+          9788495,
+          9979003,
+          9323348,
+          9764444,
+          11359850,
+          10074836
+        ],
+        "pid": 3387806
+      },
+      {
+        "case": "guest-bound-batch-worker",
+        "iterations": 262144,
+        "warmup_iters": 786432,
+        "samples_ns": [
+          21895919,
+          22888768,
+          23431635,
+          22377991,
+          21432392,
+          17746374,
+          18117656,
+          15675342,
+          15166871,
+          18284788,
+          13100550,
+          10015189
+        ],
+        "pid": 3390409
       }
     ]
   }
