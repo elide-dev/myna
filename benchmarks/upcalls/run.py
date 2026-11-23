@@ -28,6 +28,11 @@ CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic")
 CASES += [f"guest-{scope}-{thread}" for scope in ("each", "batch") for thread in ("caller", "worker")]
 
 
+def source_hashes():
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
+            if p.suffix in (".java", ".c", ".seam")}
+
+
 def build():
     gen = WORK / "generated"
     WORK.mkdir(parents=True, exist_ok=True)
@@ -52,8 +57,8 @@ def build():
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
         "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
-        "sources": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
-                    if p.is_file()},
+        "sources": source_hashes(),
+        "cases": CASES,
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2))
 
@@ -62,6 +67,8 @@ def measure(forks):
     output = WORK / "results"
     output.mkdir(exist_ok=True)
     metadata = json.loads((WORK / "build.json").read_text())
+    if metadata.get("cases") != CASES or metadata["sources"] != source_hashes():
+        raise RuntimeError("upcall workloads have changed; rebuild the Native Image before measuring")
     if sys.platform == "darwin":
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:
