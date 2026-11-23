@@ -9,6 +9,11 @@
 #define SEAM_ASSERT static_assert
 #define SEAM_ALIGNOF alignof
 extern "C" {
+#elif defined(_MSC_VER) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
+#define SEAM_ASSERT_JOIN_(a, b) a##b
+#define SEAM_ASSERT_JOIN(a, b) SEAM_ASSERT_JOIN_(a, b)
+#define SEAM_ASSERT(c, m) typedef char SEAM_ASSERT_JOIN(seam_assert_, __COUNTER__)[(c) ? 1 : -1]
+#define SEAM_ALIGNOF __alignof
 #else
 #define SEAM_ASSERT _Static_assert
 #define SEAM_ALIGNOF _Alignof
@@ -105,6 +110,8 @@ int64_t cells_widen(uint8_t small, uint16_t medium, uint32_t wide, bool flag);
 #ifdef __cplusplus
 }
 #endif
+#undef SEAM_ASSERT_JOIN
+#undef SEAM_ASSERT_JOIN_
 #undef SEAM_ASSERT
 #undef SEAM_ALIGNOF
 #endif

@@ -15,6 +15,25 @@ class BindingAbiTest {
       "import read symbol=native_read return=i64 error=no_failure\nparam value type=i64\nend\n";
 
   @Test
+  void callbackTypedefsFollowDependencies() {
+    String outer = "callback Alpha return=i32\nparam f type=fn<Beta>\nend\n";
+    String inner = "callback Beta return=i32\nend\n";
+    var output = Generator.generate(Dsl.parse(MODULE + outer + inner), true).get("seam.h");
+    assertTrue(output.indexOf("(*Beta)") >= 0);
+    assertTrue(output.indexOf("(*Alpha)") > output.indexOf("(*Beta)"));
+    for (String cycle :
+        List.of(
+            outer.replace("fn<Beta>", "fn<Alpha>"),
+            outer + inner.replace("end", "param g type=fn<Alpha>\nend")))
+      assertTrue(
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> Generator.generate(Dsl.parse(MODULE + cycle), true))
+              .getMessage()
+              .contains("cyclic callback"));
+  }
+
+  @Test
   void variadicSelectorPreventsSafeLifecycleAndBorrowWrappers() {
     String call =
         "import configure return=void variadic_after=op error=no_failure\n"

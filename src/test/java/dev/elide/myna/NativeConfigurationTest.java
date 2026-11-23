@@ -30,6 +30,11 @@ class NativeConfigurationTest {
     String check = "BEMO_FIXTURE_SEAM_ABI_" + outputs.get("seam.abi").strip();
     assertTrue(java.contains("@CConstant(\"" + check + "\") static native int seamHeaderCheck();"));
     assertTrue(outputs.get("seam.h").contains("#define " + check + " 1\n"));
+    assertFalse(outputs.get("BemoImportsDirectives.java").contains("bemo_invoke("));
+    assertFalse(
+        outputs.get("BemoImportsDirectives.java").contains("#define BEMO_FIXTURE_ABI_VERSION "));
+    assertTrue(outputs.get("seam.h").contains("bemo_invoke("));
+    assertTrue(outputs.get("seam.h").contains("#define BEMO_FIXTURE_ABI_VERSION "));
     assertTrue(java.contains("@CLibrary(value = \"bemofixture\", requireStatic = true)"));
     assertTrue(java.contains("fixture.bemo.HandwrittenSink callback"));
     assertFalse(java.contains("interface Sink"));

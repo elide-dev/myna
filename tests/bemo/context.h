@@ -10,3 +10,8 @@
 #ifdef BEMO_FIXTURE_SEAM_H
 #error "seam.h came before the consumer context's headers"
 #endif
+/* These belong to the consumer, whose prototype uses a distinct opaque pointer carrier. */
+#include <stdint.h>
+#define BEMO_FIXTURE_ABI_VERSION 7
+struct bemo_thread;
+int64_t bemo_invoke(int64_t (*sink)(void *, int64_t), struct bemo_thread *thread, int64_t value);
