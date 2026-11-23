@@ -442,6 +442,10 @@ an independent recurrence and verifies that all 262,144 root executions observed
 `CompilerDirectives.inCompiledCode()`. The volatile counters and state accesses are
 included in the timings.
 
+The [x86-64 debugger trace and instructions](../benchmarks/upcalls/baselines/linux-x86_64-truffle-receiver-paths.json)
+show which direct stub the native loop entered for each target. The receiver-bound stub injects
+the registration receiver. Both high-level stubs call the same Truffle compiled-target adapter.
+
 In both `*-each-*` modes the callback enters its context and leaves it in a finally block on
 every call. In both `*-batch-*` modes the native producer calls an entry hook once on the
 delivery thread, delivers the entire round on that thread, and calls the exit hook before it
