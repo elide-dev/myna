@@ -37,20 +37,27 @@ def build():
                  "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
                  "-o", APP, timeout=900)
 
-
-def measure(forks):
-    output = WORK / "results"
-    output.mkdir(exist_ok=True)
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
         "machine": platform.platform(),
-        "cpu": platform.processor(),
+        "build_flags": {"native_image": "-O3 -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
         "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
         "sources": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
                     if p.is_file()},
     }
+    (WORK / "build.json").write_text(json.dumps(metadata, indent=2))
+
+
+def measure(forks):
+    output = WORK / "results"
+    output.mkdir(exist_ok=True)
+    metadata = json.loads((WORK / "build.json").read_text())
+    if sys.platform == "darwin":
+        metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
+    else:
+        metadata["cpu"] = run("lscpu").stdout.strip()
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
     for fork in range(forks):
         for case in CASES:
