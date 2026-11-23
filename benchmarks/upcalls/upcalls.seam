@@ -1,0 +1,24 @@
+module upcalls target=aarch64-apple-darwin java_package=bench.upcalls java_class=Upcalls
+callback Reducer return=i64 ffm_java=bench.upcalls.Measure.reduce ffm_sentinel=-1
+  param previous type=i64
+  param increment type=i64
+end
+import measure symbol=myna_measure return=i64 error=no_failure native_leaf=false@explicit_contract
+  param target type=fn<Reducer>
+  param worker type=bool
+  param count type=i32
+end
+callback IsolateReducer return=i64
+  param thread type=isolate_thread
+  param previous type=i64
+  param increment type=i64
+end
+export reduceInIsolate symbol=myna_reduce_isolate return=i64 java=bench.upcalls.Measure.reduce isolate=thread error=integer_sentinel sentinel=-1 callback=IsolateReducer
+  param previous type=i64
+  param increment type=i64
+end
+import measureIsolate symbol=myna_measure_isolate return=i64 error=no_failure native_leaf=false@explicit_contract
+  param target type=fn<IsolateReducer>
+  param thread type=isolate_thread
+  param count type=i32
+end
