@@ -33,9 +33,34 @@ public final class CallbackMain {
       }
       if (calls.get() != (args.length > 1 ? 6 : 4)) throw new AssertionError("callback count");
       verifyCarriers(binding, callbacks, args.length > 1);
+      verifyDistinctRegistrations(binding, callbacks);
     }
     if (expired.scope().isAlive()) throw new AssertionError("upcall arena lifetime");
     System.out.println("Scoped callbacks, native threads and exception status passed");
+  }
+
+  private static MemorySegment offsetReducer(long offset, long sentinel, Arena arena) {
+    return CallbackApiFFM.ReducerUpcalls.create((left, right) -> {
+      if (left < 0) throw new IllegalArgumentException("negative input");
+      return offset + left + right;
+    }, sentinel, arena);
+  }
+
+  private static void verifyDistinctRegistrations(CallbackApiFFM.LibraryBinding binding,
+                                                  Arena outer) throws Throwable {
+    var first = offsetReducer(10, -11, outer);
+    try (var inner = Arena.ofShared()) {
+      var second = offsetReducer(20, -22, inner);
+      System.gc();
+      for (boolean worker : new boolean[] {false, true}) {
+        if (binding.invoke(first, worker, 2, 3) != 15 || binding.invoke(second, worker, 2, 3) != 25
+            || binding.invoke(first, worker, -1, 0) != -11 || binding.invoke(second, worker, -1, 0) != -22)
+          throw new AssertionError("callback target or sentinel crossed registrations");
+      }
+    }
+    System.gc();
+    if (binding.invoke(first, true, 2, 3) != 15)
+      throw new AssertionError("closing a second registration invalidated the first");
   }
 
   private static void verifyCarriers(CallbackApiFFM.LibraryBinding binding, Arena arena,

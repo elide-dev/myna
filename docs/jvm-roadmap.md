@@ -41,6 +41,8 @@ try (var library = Arena.ofConfined(); var memory = Arena.ofConfined()) {
 
 Each callback signature emits `NameCallback`, `Name_CALLBACK_DESCRIPTOR` and `NameUpcalls`. `NameUpcalls.create(callback, sentinel, arena)` catches Java exceptions and returns the supplied sentinel. Void callbacks omit the sentinel and discard exceptions; callers needing diagnostics must catch and report inside their callback. Pointer sentinels must remain valid and satisfy the callback ABI. By-value record callback parameters and returns are rejected by the canonical seam validator; use explicit pointers to caller-owned storage. The arena owns the stub and retains its target. Native code must stop using the stub before that arena closes. Use a shared arena when native threads may invoke the callback; confined arenas impose the owning-thread restriction.
 
+For a callback selected at runtime, the generated factory binds a single receiver containing the target and its exception sentinel. The Native Image feature registers the receiver's invocation method for a direct upcall at image build time. Each call to `create` supplies its own receiver and arena at runtime. This works with the original C signature, including callbacks without a user-data parameter.
+
 A known static callback target can declare an integer status policy:
 
 ```text

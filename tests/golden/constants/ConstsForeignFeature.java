@@ -21,7 +21,7 @@ public final class ConstsForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$status_CriticalDowncall");
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$status_Downcall");
         RuntimeClassInitialization.initializeAtRunTime("fixture.constants.ConstsFFM$status_Binding");
-        RuntimeForeignAccess.registerForUpcall(ConstsFFM.Listener_CALLBACK_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$ListenerUpcalls");
+        RuntimeForeignAccess.registerForDirectUpcall(ConstsFFM.ListenerUpcalls.HANDLE, ConstsFFM.Listener_CALLBACK_DESCRIPTOR);
     }
 }
