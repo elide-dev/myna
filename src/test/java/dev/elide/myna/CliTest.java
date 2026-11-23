@@ -52,7 +52,7 @@ class CliTest {
       "shared.tape"
     };
     assertEquals(0, run(args).code());
-    try (var files = Files.list(temp)) {
+    try (var files = Files.walk(temp).filter(Files::isRegularFile)) {
       assertEquals(
           List.of("ConstsConstants.java"), files.map(p -> p.getFileName().toString()).toList());
     }
@@ -72,7 +72,7 @@ class CliTest {
                 temp.toString(),
                 "-d",
                 temp.toString(),
-                temp.resolve("ConstsConstants.java").toString(),
+                temp.resolve("shared/tape/ConstsConstants.java").toString(),
                 temp.resolve("Consumer.java").toString()));
     assertEquals(
         0,
@@ -90,21 +90,33 @@ class CliTest {
   void standaloneConstantsCheckAndRejectIncompatibleModes() throws IOException {
     String fixture = "examples/constants.seam";
     String[] args = {
-      "generate", fixture, "--constants-only", "safe.pkg", "--out", temp.toString(), "--check"
+      "generate",
+      fixture,
+      "--constants-only",
+      "internal.struct",
+      "--out",
+      temp.toString(),
+      "--check"
     };
     assertEquals(1, run(args).code());
     assertEquals(0, run(Arrays.copyOf(args, args.length - 1)).code());
     assertEquals(0, run(args).code());
     assertEquals(2, run("generate", fixture, "--constants-only", "invalid..pkg").code());
-    assertEquals(2, run("validate", fixture, "--constants-only", "safe.pkg").code());
+    assertEquals(2, run("validate", fixture, "--constants-only", "internal.struct").code());
     for (String incompatible : List.of("--rust-only", "--jni"))
       assertEquals(
-          2, run("generate", fixture, "--constants-only", "safe.pkg", incompatible).code());
+          2, run("generate", fixture, "--constants-only", "internal.struct", incompatible).code());
     Path empty =
         Files.writeString(
             temp.resolve("empty.seam"), "module empty target=x86_64-unknown-linux-gnu\n");
     assertTrue(
-        run("generate", empty.toString(), "--out", temp.toString(), "--constants-only", "safe.pkg")
+        run(
+                "generate",
+                empty.toString(),
+                "--out",
+                temp.toString(),
+                "--constants-only",
+                "internal.struct")
             .err()
             .contains("module declares no constants"));
   }

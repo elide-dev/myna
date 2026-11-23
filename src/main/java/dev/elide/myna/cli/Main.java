@@ -122,7 +122,8 @@ public final class Main {
           case "--constants-only" -> {
             requireValue(args, i);
             constantsPackage = args[++i];
-            Validator.javaPackage(constantsPackage);
+            if (!javax.lang.model.SourceVersion.isName(constantsPackage))
+              throw new IllegalArgumentException("invalid Java package: " + constantsPackage);
           }
           case "--rust-only" -> rustOnly = true;
           case "--jni" -> jni = true;
@@ -163,7 +164,10 @@ public final class Main {
         if (!JavaConstants.applies(module))
           throw new IllegalArgumentException("module declares no constants");
         var constants = new JavaConstants();
-        outputs = Map.of(constants.filename(module), constants.generate(module, constantsPackage));
+        outputs =
+            Map.of(
+                constantsPackage.replace('.', '/') + "/" + constants.filename(module),
+                constants.generate(module, constantsPackage));
       } else {
         outputs = new TreeMap<>(Generator.generate(module, strict, abi, rustOnly));
       }

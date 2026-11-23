@@ -98,7 +98,8 @@ public final class Validator {
   public static void validate(Module module, boolean strict, Fingerprint fingerprint) {
     fingerprint.requireFor(module);
     identifier(module.name());
-    if (module.javaPackage() != null) javaPackage(module.javaPackage());
+    if (module.javaPackage() != null)
+      for (String segment : module.javaPackage().split("\\.", -1)) identifier(segment);
     if (module.javaClass() != null) {
       identifier(module.javaClass());
       // The class imports these names, so it cannot itself take one.
@@ -600,10 +601,6 @@ public final class Validator {
           || a.constPointer() != b.constPointer()) return false;
     }
     return true;
-  }
-
-  public static void javaPackage(String name) {
-    for (String segment : name.split("\\.", -1)) identifier(segment);
   }
 
   private static void qualifiedType(String name) {
