@@ -29,3 +29,16 @@ import measureHook symbol=myna_measure_hook return=i64 error=no_failure native_l
   param worker type=bool
   param count type=i32
 end
+callback GuestHook return=void ffm_java=bench.upcalls.Guest.run
+end
+callback EnterGuest return=void ffm_java=bench.upcalls.Guest.enter
+end
+callback LeaveGuest return=void ffm_java=bench.upcalls.Guest.leave
+end
+import measureGuest symbol=myna_measure_guest return=i64 error=no_failure native_leaf=false@explicit_contract
+  param target type=fn<GuestHook>
+  param enter type=fn<EnterGuest>
+  param leave type=fn<LeaveGuest>
+  param worker type=bool
+  param count type=i32
+end

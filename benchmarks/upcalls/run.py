@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "benchmarks/native"))
 from support import TARGET, compile_native, native_image, run
 from walltime import report
+from truffle_integration import truffle_jars
 
 SOURCE = Path(__file__).resolve().parent
 WORK = ROOT / "build/upcalls"
@@ -24,6 +25,9 @@ CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic")
          for thread in ("caller", "worker")] + ["static-hook-caller", "static-hook-worker", "dynamic-hook-caller", "dynamic-hook-worker", "isolate-caller", "static-setup", "dynamic-setup"]
 
 
+CASES += [f"guest-{scope}-{thread}" for scope in ("each", "batch") for thread in ("caller", "worker")]
+
+
 def build():
     gen = WORK / "generated"
     WORK.mkdir(parents=True, exist_ok=True)
@@ -31,8 +35,11 @@ def build():
         "generate", SOURCE / "upcalls.seam", "--out", gen, "--target", TARGET)
     run("cc", "-O3", "-shared", "-fPIC", "-pthread", "-I", gen, SOURCE / "kernel.c", "-o", LIB)
     classes = WORK / "classes"
-    compile_native(classes, gen, *sorted(gen.glob("*.java")), SOURCE / "Measure.java")
-    native_image("-O3", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
+    jars = truffle_jars()
+    modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
+    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=jars.values())
+    native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
+                 "--initialize-at-build-time=bench.upcalls.Guest$CountingRoot,bench.upcalls.Guest$MixNode", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
                  "-H:-UnlockExperimentalVMOptions", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                  "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
                  "-o", APP, timeout=900)
@@ -40,7 +47,7 @@ def build():
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
         "machine": platform.platform(),
-        "build_flags": {"native_image": "-O3 -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
+        "build_flags": {"native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
         "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
@@ -61,7 +68,7 @@ def measure(forks):
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
     for fork in range(forks):
         for case in CASES:
-            count = 256 if case.endswith("setup") else 16384
+            count = 262144 if case.startswith("guest-") else 256 if case.endswith("setup") else 16384
             proc = subprocess.Popen([APP, LIB, case, str(count)], stdout=subprocess.PIPE, text=True)
             stdout, _ = proc.communicate()
             samples = list(map(int, stdout.splitlines()))

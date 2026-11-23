@@ -66,3 +66,20 @@ int64_t myna_measure_hook(Hook target, bool worker, int32_t count) {
   run_round(hook_loop, &s, worker);
   return s.elapsed;
 }
+
+struct guest_sample { struct hook_sample hook; EnterGuest enter; LeaveGuest leave; };
+
+static void *guest_loop(void *arg) {
+  struct guest_sample *s = arg;
+  if (s->enter) s->enter();
+  hook_loop(&s->hook);
+  if (s->leave) s->leave();
+  return NULL;
+}
+
+int64_t myna_measure_guest(GuestHook target, EnterGuest enter, LeaveGuest leave,
+                           bool worker, int32_t count) {
+  struct guest_sample s = {{target, count, 0}, enter, leave};
+  run_round(guest_loop, &s, worker);
+  return s.hook.elapsed;
+}
