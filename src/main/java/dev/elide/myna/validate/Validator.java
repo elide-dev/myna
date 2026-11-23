@@ -293,6 +293,7 @@ public final class Validator {
     }
     Set<String> ffmOwners = new HashSet<>();
     for (Resource resource : module.ownedResources()) ffmOwners.add(resource.name());
+    module.callbacksInDependencyOrder();
     Map<String, Function> symbols = new HashMap<>();
     Set<String> logicalNames = new HashSet<>(), rustAliases = new HashSet<>();
     for (Function function : module.functions()) {

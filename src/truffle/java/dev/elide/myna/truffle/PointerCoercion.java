@@ -52,6 +52,7 @@ public final class PointerCoercion extends Coercion {
       if (resource == null) throw unexpectedOwner(owner);
       if (!sameType(resource, owner.type())) throw wrongResource(owner);
       if (owner.isClosed()) throw closed(owner);
+      owner.checkThread();
     }
     InteropLibrary interop = interop();
     try {

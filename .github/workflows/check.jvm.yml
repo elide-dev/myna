@@ -63,3 +63,17 @@ jobs:
             .dev/reports/tests/jvm/
             .dev/reports/coverage/jvm/
             build/reports/jvm-production.xml
+  msvc-header:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compile generated header in default MSVC C mode
+        shell: cmd
+        run: |
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          echo #include "tests/golden/seam.h" > header.c
+          cl /nologo /TC /Zs header.c

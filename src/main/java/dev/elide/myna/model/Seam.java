@@ -1082,6 +1082,29 @@ public final class Seam {
       return false;
     }
 
+    public List<Signature> callbacksInDependencyOrder() {
+      var remaining = new ArrayList<>(callbacks);
+      var ordered = new ArrayList<Signature>();
+      var declared = new HashSet<String>();
+      while (!remaining.isEmpty()) {
+        int before = remaining.size();
+        remaining.removeIf(callback -> {
+          if (callback.returns() instanceof FunctionPointer ref
+              && !declared.contains(ref.signature())) return false;
+          for (Parameter parameter : callback.parameters())
+            if (parameter.type() instanceof FunctionPointer ref
+                && !declared.contains(ref.signature())) return false;
+          declared.add(callback.name());
+          ordered.add(callback);
+          return true;
+        });
+        if (remaining.size() == before)
+          throw new IllegalArgumentException(
+              "cyclic callback dependency involving " + remaining.getFirst().name());
+      }
+      return ordered;
+    }
+
     public String javaPackageName() {
       return javaPackage == null ? DEFAULT_JAVA_PACKAGE : javaPackage;
     }

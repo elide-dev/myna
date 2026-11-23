@@ -1831,7 +1831,9 @@ class GeneratorTest {
                 + "        headers.add(Header.INCLUDE);\n"
                 + "        return headers;\n"),
         directives);
-    assertEquals(List.of(output.get("seam.h")), headerPieces(directives));
+    String query = String.join("", headerPieces(directives));
+    assertTrue(query.contains("struct HandlerSlot {"));
+    assertTrue(query.contains("BEMO_FIXTURE_SEAM_ABI_" + output.get("seam.abi").strip()));
   }
 
   @Test

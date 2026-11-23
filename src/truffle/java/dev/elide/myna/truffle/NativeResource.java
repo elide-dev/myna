@@ -287,9 +287,13 @@ public final class NativeResource implements TruffleObject {
     return requiredThread == null || requiredThread == Thread.currentThread();
   }
 
+  void checkThread() {
+    if (!accessible()) throw wrongThread();
+  }
+
   /** The live address; fails after close or from a foreign thread. */
   public long address() {
-    if (!accessible()) throw wrongThread();
+    checkThread();
     if (isClosed()) {
       CompilerDirectives.transferToInterpreter();
       throw NativeCellException.of(null, type, " is closed");
@@ -304,7 +308,7 @@ public final class NativeResource implements TruffleObject {
    *     may still use it through them, so they are closed first
    */
   public void close() {
-    if (!accessible()) throw wrongThread();
+    checkThread();
     int dependents = state.close();
     if (dependents > 0) throw held(dependents);
   }
