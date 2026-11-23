@@ -102,6 +102,7 @@ class FfmTest {
         generate(
             MODULE
                 + "callback Notify return=void\nend\n"
+                + "callback Ptr return=ptr<u8>\nend\n"
                 + "callback Reduce return=i64\nparam left type=i64\nparam right type=i64\nend\n");
     String ffm = out.get("MynaFFM.java");
     String feature = out.get("MynaForeignFeature.java");
@@ -130,14 +131,36 @@ class FfmTest {
     assertTrue(ffm.contains("createDirect(NotifyCallback target, Arena arena)"));
     assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new ReduceUpcalls(target, sentinel))"));
     assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new NotifyUpcalls(target))"));
-    assertTrue(
-        feature.contains(
-            "registerForDirectUpcall(MynaFFM.ReduceUpcalls.DIRECT_HANDLE,"
-                + " MynaFFM.Reduce_CALLBACK_DESCRIPTOR)"));
-    assertTrue(
-        feature.contains(
-            "registerForDirectUpcall(MynaFFM.NotifyUpcalls.DIRECT_HANDLE,"
-                + " MynaFFM.Notify_CALLBACK_DESCRIPTOR)"));
+    int split = feature.indexOf("@Override public void beforeAnalysis");
+    assertTrue(split > 0);
+    String setup = feature.substring(0, split), analysis = feature.substring(split);
+    assertFalse(setup.contains("DIRECT_HANDLE"));
+    for (var entry :
+        java.util.Map.of(
+                "Notify",
+                "",
+                "Ptr",
+                "java.lang.foreign.MemorySegment.class, ",
+                "Reduce",
+                "long.class, ")
+            .entrySet()) {
+      String prefix = "MynaFFM." + entry.getKey();
+      assertTrue(setup.contains("registerForUpcall(" + prefix + "_CALLBACK_DESCRIPTOR)"));
+      assertTrue(
+          analysis.contains(
+              "registerReachabilityHandler(during -> RuntimeForeignAccess.registerForDirectUpcall("
+                  + prefix
+                  + "Upcalls.DIRECT_HANDLE, "
+                  + prefix
+                  + "_CALLBACK_DESCRIPTOR),\n"
+                  + "                "
+                  + prefix
+                  + "Upcalls.class.getDeclaredMethod(\"createDirect\", "
+                  + prefix
+                  + "Callback.class, "
+                  + entry.getValue()
+                  + "java.lang.foreign.Arena.class))"));
+    }
   }
 
   @Test
