@@ -138,6 +138,7 @@ public final class ConstsConstants {
     /** flags Octet: u8 */
     public static final class Octet {
         private Octet() {}
+        public static final byte CODE_WIDTH = (byte) 8;
         public static final byte CODE_SHIFT = (byte) 0;
         public static final byte CODE_MASK = (byte) 0xff;
         public static final byte ALL = (byte) 0xff;
@@ -154,8 +155,10 @@ public final class ConstsConstants {
         private Packed() {}
         public static final int OPEN = 0x1;
         public static final int EXTERNAL = 0x4;
+        public static final int KIND_WIDTH = 8;
         public static final int KIND_SHIFT = 8;
         public static final int KIND_MASK = 0xff00;
+        public static final int DEPTH_WIDTH = 4;
         public static final int DEPTH_SHIFT = 16;
         public static final int DEPTH_MASK = 0xf0000;
         public static final int ALL = 0xfff05;

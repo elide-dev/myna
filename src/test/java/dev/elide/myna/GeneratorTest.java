@@ -1242,10 +1242,10 @@ class GeneratorTest {
                 @CFieldAddress("ratio") CDoublePointer addressOfRatio();
                 @CField("next") Rec next();
                 @CField("next") void next(Rec value);
-                @CFieldAddress("next") PointerBase addressOfNext();
+                @CFieldAddress("next") WordPointer addressOfNext();
                 @CField("handle") Handle handle();
                 @CField("handle") void handle(Handle value);
-                @CFieldAddress("handle") PointerBase addressOfHandle();
+                @CFieldAddress("handle") WordPointer addressOfHandle();
                 @CField("signed32") int signed32();
                 @CField("signed32") void signed32(int value);
                 @CFieldAddress("signed32") CIntPointer addressOfSigned32();

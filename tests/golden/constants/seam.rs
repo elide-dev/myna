@@ -97,6 +97,7 @@ impl UnaryOp {
 pub struct Octet(pub u8);
 impl Octet {
     pub const NONE: Self = Self(0);
+    pub const CODE_WIDTH: u8 = 8;
     pub const CODE_SHIFT: u8 = 0;
     pub const CODE_MASK: u8 = 0xff;
     pub const ALL: Self = Self(0xff);
@@ -121,8 +122,10 @@ impl Packed {
     pub const NONE: Self = Self(0);
     pub const OPEN: Self = Self(0x1);
     pub const EXTERNAL: Self = Self(0x4);
+    pub const KIND_WIDTH: u32 = 8;
     pub const KIND_SHIFT: u32 = 8;
     pub const KIND_MASK: u32 = 0xff00;
+    pub const DEPTH_WIDTH: u32 = 4;
     pub const DEPTH_SHIFT: u32 = 16;
     pub const DEPTH_MASK: u32 = 0xf0000;
     pub const ALL: Self = Self(0xfff05);

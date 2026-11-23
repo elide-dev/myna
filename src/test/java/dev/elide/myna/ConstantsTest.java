@@ -1727,7 +1727,8 @@ class ConstantsTest {
         out.get("seam.h"));
     assertTrue(out.get("seam.rs").contains("pub const TOP_MASK: i32 = -16777216;"));
     assertTrue(
-        out.get("EdgeTruffle.java").contains("new String[] {\"low\", \"top_shift\", \"top_mask\"}"),
+        out.get("EdgeTruffle.java")
+            .contains("new String[] {\"low\", \"top_width\", \"top_shift\", \"top_mask\"}"),
         out.get("EdgeTruffle.java"));
     assertTrue(out.get("EdgeTruffle.java").contains("-16777216"), out.get("EdgeTruffle.java"));
     String consumer =
