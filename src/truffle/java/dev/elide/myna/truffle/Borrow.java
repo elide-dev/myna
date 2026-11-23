@@ -168,6 +168,11 @@ public final class Borrow {
     this.length = length;
   }
 
+  void lendNative(NativeBytes bytes, long address, long length) {
+    lend(address, length);
+    owner = bytes;
+  }
+
   /** Lends bytes that {@code owner} must undo on release. */
   private void own(int kind, Object owner, long address, long length) {
     this.kind = kind;
@@ -350,6 +355,7 @@ public final class Borrow {
   }
 
   public long address() {
+    if (ImageInfo.inImageRuntimeCode() && owner instanceof NativeBytes bytes) bytes.checkScope();
     return address;
   }
 

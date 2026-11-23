@@ -174,7 +174,7 @@ public final class NativeBytes implements TruffleObject {
    * also compares its owner with the current thread. Compiled code makes no call and allocates
    * nothing unless the check fails, a branch it lays out as a slow path.
    */
-  private void checkScope() {
+  void checkScope() {
     MemorySegment.Scope s = scope;
     if (s != null
         && CompilerDirectives.injectBranchProbability(

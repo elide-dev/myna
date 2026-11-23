@@ -61,6 +61,7 @@ public final class Batch {
 
   /** The address of the pointer array; {@code 0} for the empty batch. */
   public long address() {
+    if (org.graalvm.nativeimage.ImageInfo.inImageRuntimeCode() && inPlace != null) recheck(null);
     return address;
   }
 

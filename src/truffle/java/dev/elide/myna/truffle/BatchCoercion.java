@@ -105,6 +105,8 @@ public final class BatchCoercion extends Coercion {
           Borrow lent = element.execute(item);
           length = lent.length();
           batch.absorb(i, lent, wide);
+          if (!scoped && item instanceof NativeBytes bytes && bytes.scoped != null)
+            batch.lentInPlace(bytes.scoped);
         }
         if (length > maxLength) throw tooLong(i, length);
       }

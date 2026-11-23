@@ -295,6 +295,11 @@ UTF-16 unit (two for Latin-1) and the terminator; text whose worst case exceeds 
 copy may take, or that does not fit beside outstanding copies, is encoded into an array first, a
 guest string through its Java string.
 
+Native Image cells check the liveness and thread confinement of a scoped `NativeBytes` before
+lending its address. For a transitioning import, the caller must keep a shared arena open until the
+call returns. A resource that retains the address needs its arena open throughout the resource's
+lifetime.
+
 FFM cells lend through the same borrows but pass the downcall more than an address. Where a borrow
 lent a guest's `NativeBytes` in place and its segment has a scope to check, the cell passes that
 segment: the linker acquires the scope for the call, so a closed segment and one confined to
