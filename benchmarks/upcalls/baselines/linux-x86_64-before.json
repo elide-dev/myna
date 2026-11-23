@@ -1,0 +1,1039 @@
+{
+  "affinity_cpu": 7,
+  "forks_per_case": 5,
+  "build": {
+    "revision": "b61e76546021a4cc19a24f37f9622d524bbc1741",
+    "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+    "build_flags": {
+      "native_image": "-O3 -H:-DeleteLocalSymbols",
+      "kernel": "-O3 -shared -fPIC -pthread"
+    },
+    "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
+    "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+    "binaries": {
+      "measure": "7c7f099ac91e5620d1ca22a643058314c82f2a4af550f7c7ff8d9dde8cdbbaf2",
+      "libbench.so": "0fd5278de0e5cdde4a7f5ff192e383f4677916d921fe88adbc3926724540f3ed"
+    },
+    "sources": {
+      "upcalls.seam": "e859e7e93307aa097abce06887fc88632b35c0447223002964ffc6c315ae4730",
+      "run.py": "2a60d6db2fd7ff67e1dea43ae9cf1d3c05b20fcd2aeb0c6f4fe844a1de5c6396",
+      "Measure.java": "a64ca2937970af3a7fa4bd4d8982d3144a9ce821ce0682a697e1b5342973604d",
+      "kernel.c": "8b8eac5f941d0001953e610153bbf7d79dfe99b6703f4b086bf57b877ba73f6b"
+    },
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected"
+  },
+  "samples": {
+    "control-caller": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          15560,
+          15539,
+          17113,
+          15519,
+          15530,
+          16692,
+          15519,
+          17112,
+          15530,
+          17503,
+          17543,
+          15540
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18586,
+          18535,
+          18555,
+          18565,
+          18575,
+          18556,
+          18545,
+          18545,
+          18545,
+          18556,
+          18545,
+          18525
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18605,
+          18726,
+          18656,
+          18665,
+          18655,
+          18645,
+          18625,
+          18655,
+          18655,
+          18646,
+          18635,
+          18645
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          20499,
+          20569,
+          20739,
+          20429,
+          21330,
+          21000,
+          22012,
+          20799,
+          25268,
+          21069,
+          22833,
+          20519
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18806,
+          18805,
+          18815,
+          18786,
+          18776,
+          18785,
+          18786,
+          18776,
+          18785,
+          18786,
+          18796,
+          18796
+        ]
+      }
+    ],
+    "control-worker": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18686,
+          18696,
+          18686,
+          18685,
+          18705,
+          18695,
+          18665,
+          31781,
+          18696,
+          18695,
+          18615,
+          18706
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18575,
+          18565,
+          18565,
+          18556,
+          18545,
+          18555,
+          18545,
+          27342,
+          20499,
+          18545,
+          18545,
+          20469
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          18676,
+          18676,
+          18675,
+          18716,
+          18695,
+          18685,
+          18695,
+          29155,
+          22953,
+          37010,
+          27021,
+          18074
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          20980,
+          20439,
+          53091,
+          17614,
+          17663,
+          24296,
+          21410,
+          23504,
+          18124,
+          21611,
+          22302,
+          22542
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          21891,
+          21952,
+          21611,
+          22733,
+          21560,
+          21250,
+          21301,
+          21922,
+          21741,
+          23965,
+          23565,
+          23494
+        ]
+      }
+    ],
+    "dynamic-caller": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          59872369,
+          65353339,
+          47007662,
+          51277876,
+          43980703,
+          38218906,
+          37317598,
+          38748328,
+          37858243,
+          37154309,
+          43080078,
+          38210579
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          47170550,
+          49529095,
+          37683462,
+          37371682,
+          42853258,
+          40073106,
+          38503104,
+          40343906,
+          39095665,
+          41796926,
+          47510665,
+          51603261
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          43326598,
+          38263121,
+          40386451,
+          38788526,
+          38778577,
+          39865575,
+          37939329,
+          37950451,
+          37024832,
+          37683334,
+          37684421,
+          37924772
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          53357506,
+          58455782,
+          55440844,
+          59336424,
+          53975956,
+          38530247,
+          41181886,
+          53548176,
+          48831588,
+          47684907,
+          52236994,
+          63870953
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          42538340,
+          44643580,
+          39675235,
+          44074763,
+          56115456,
+          53281061,
+          39086391,
+          38358633,
+          38964319,
+          44675481,
+          38632351,
+          38452941
+        ]
+      }
+    ],
+    "dynamic-hook-caller": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          11954380,
+          14129896,
+          12021116,
+          12359014,
+          12597386,
+          12616452,
+          12016556,
+          12406245,
+          12408807,
+          12855315,
+          12035582,
+          12322586
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12151433,
+          16810262,
+          17950240,
+          19953372,
+          15502286,
+          13044143,
+          12600752,
+          12688821,
+          12629568,
+          12395204,
+          12062665,
+          12532554
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12374464,
+          15504911,
+          18080096,
+          13544870,
+          14216351,
+          16844712,
+          14143689,
+          17329365,
+          16275029,
+          19594362,
+          15513036,
+          15812362
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12671153,
+          14816887,
+          13688913,
+          12713938,
+          12278017,
+          14751695,
+          12826872,
+          14382270,
+          12024463,
+          12703086,
+          12720653,
+          13281714
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12369275,
+          13149252,
+          13172656,
+          13616506,
+          13491129,
+          13342157,
+          13202593,
+          13069170,
+          12654335,
+          13309305,
+          12426293,
+          12647883
+        ]
+      }
+    ],
+    "dynamic-hook-worker": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12030853,
+          12941138,
+          12125752,
+          12367451,
+          12572979,
+          12439638,
+          12032877,
+          12344127,
+          12055220,
+          12376487,
+          11997070,
+          12391746
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          11981350,
+          14703464,
+          15898476,
+          12275918,
+          16476178,
+          13569045,
+          13824109,
+          13658647,
+          14257710,
+          12434118,
+          12921455,
+          12609149
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          15989047,
+          26801665,
+          19783570,
+          19959243,
+          20420105,
+          21857059,
+          19815968,
+          21776314,
+          20511208,
+          23885265,
+          23755059,
+          21055377
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          15290093,
+          17797237,
+          15863189,
+          18683292,
+          13671750,
+          13016180,
+          12992234,
+          12741209,
+          12797216,
+          13136968,
+          13830030,
+          13574747
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          12278834,
+          13238741,
+          13168738,
+          12320062,
+          11929883,
+          12248075,
+          11873176,
+          12206788,
+          12137005,
+          14253932,
+          12269907,
+          13026779
+        ]
+      }
+    ],
+    "dynamic-setup": [
+      {
+        "fork": 0,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1208919,
+          1133114,
+          1328425,
+          1180745,
+          1199471,
+          1210652,
+          1207456,
+          1230409,
+          1236661,
+          1243884,
+          1201795,
+          1238604
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1267289,
+          1217063,
+          1146821,
+          1251559,
+          1268892,
+          1448472,
+          1393248,
+          1130881,
+          1266648,
+          1322914,
+          1230940,
+          1192107
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1954600,
+          1710087,
+          1841896,
+          1533743,
+          1660844,
+          1652438,
+          1899405,
+          2001363,
+          2196778,
+          1923501,
+          1773803,
+          1775205
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1201675,
+          1222164,
+          1670100,
+          1234839,
+          1143274,
+          1290483,
+          1325570,
+          1141320,
+          1394549,
+          1232914,
+          1149957,
+          1271347
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1209820,
+          1171067,
+          1295212,
+          1175675,
+          1202577,
+          1193349,
+          1141340,
+          1235789,
+          1265436,
+          1200632,
+          1215561,
+          1158914
+        ]
+      }
+    ],
+    "dynamic-worker": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          37982837,
+          38187626,
+          39163357,
+          49462104,
+          37024122,
+          39616361,
+          41364861,
+          41582812,
+          39456709,
+          42834076,
+          37790315,
+          38742397
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          38007075,
+          40191740,
+          45118174,
+          42944013,
+          40553001,
+          44277617,
+          46867305,
+          52579772,
+          56326851,
+          40247454,
+          49930403,
+          63918347
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          38605563,
+          38321374,
+          39463855,
+          37522486,
+          44046550,
+          38285654,
+          37066847,
+          38491816,
+          37616377,
+          42701434,
+          49469861,
+          41879989
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          40728474,
+          38319049,
+          40953399,
+          37895046,
+          52780659,
+          45446725,
+          80770637,
+          44838860,
+          41025054,
+          40503649,
+          40207137,
+          40162983
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          41209469,
+          68548782,
+          69649356,
+          51808635,
+          38432298,
+          37620841,
+          38066069,
+          38239467,
+          37703773,
+          38264524,
+          47020099,
+          38261750
+        ]
+      }
+    ],
+    "isolate-caller": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          154933,
+          154813,
+          154844,
+          154753,
+          154723,
+          154823,
+          154703,
+          184159,
+          154663,
+          161826,
+          171515,
+          154672
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          178328,
+          215838,
+          154853,
+          154913,
+          209046,
+          155114,
+          155314,
+          183989,
+          155314,
+          155253,
+          155103,
+          180412
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          170563,
+          173077,
+          155956,
+          161286,
+          183427,
+          183728,
+          190170,
+          168168,
+          166666,
+          161316,
+          171605,
+          162738
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          176945,
+          175482,
+          189759,
+          221139,
+          183507,
+          178067,
+          178578,
+          181273,
+          194668,
+          175653,
+          190661,
+          180020
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          160353,
+          159322,
+          172586,
+          157458,
+          158179,
+          158981,
+          192194,
+          155554,
+          155785,
+          155745,
+          155555,
+          155665
+        ]
+      }
+    ],
+    "static-caller": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          201181,
+          210097,
+          213404,
+          201251,
+          201000,
+          247539,
+          201291,
+          200920,
+          200620,
+          200379,
+          200369,
+          213113
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          201712,
+          246802,
+          233231,
+          248030,
+          266204,
+          232931,
+          230747,
+          234303,
+          257056,
+          257327,
+          238381,
+          274138
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          201472,
+          233892,
+          199779,
+          199768,
+          244512,
+          200069,
+          212753,
+          200379,
+          215237,
+          200590,
+          200490,
+          213014
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          250885,
+          267775,
+          249934,
+          224695,
+          259160,
+          225156,
+          225807,
+          340725,
+          224485,
+          225467,
+          239163,
+          233061
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          201461,
+          216690,
+          201702,
+          201592,
+          201582,
+          228773,
+          214125,
+          203605,
+          201762,
+          201721,
+          201701,
+          201812
+        ]
+      }
+    ],
+    "static-setup": [
+      {
+        "fork": 0,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1779168,
+          1743790,
+          1886471,
+          1778336,
+          1815126,
+          1811209,
+          1890669,
+          1826443,
+          1911980,
+          1737880,
+          1688216,
+          1831747
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1799953,
+          1723162,
+          2044430,
+          1661034,
+          1668238,
+          1822610,
+          2036445,
+          2122508,
+          1767065,
+          1748851,
+          1926016,
+          1789087
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 256,
+        "samples_ns": [
+          2730730,
+          3036218,
+          2928323,
+          2784832,
+          2600794,
+          2843192,
+          2633696,
+          2612084,
+          2656950,
+          2753733,
+          2574347,
+          2816362
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 256,
+        "samples_ns": [
+          2008462,
+          1862406,
+          1737900,
+          2604861,
+          2379444,
+          1799497,
+          1692844,
+          1797412,
+          2376148,
+          2646891,
+          2364245,
+          2925447
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 256,
+        "samples_ns": [
+          1796751,
+          1866503,
+          1803183,
+          1819845,
+          1752467,
+          1765242,
+          1738051,
+          1916217,
+          1744833,
+          1740184,
+          2059699,
+          1743260
+        ]
+      }
+    ],
+    "static-worker": [
+      {
+        "fork": 0,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          201381,
+          201502,
+          201351,
+          201391,
+          201582,
+          201362,
+          201402,
+          214115,
+          201942,
+          267507,
+          216680,
+          201722
+        ]
+      },
+      {
+        "fork": 1,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          237340,
+          228803,
+          234043,
+          231288,
+          233832,
+          269289,
+          206190,
+          201041,
+          221449,
+          201642,
+          216861,
+          201512
+        ]
+      },
+      {
+        "fork": 2,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          245614,
+          203005,
+          202394,
+          202273,
+          201983,
+          207022,
+          201943,
+          215959,
+          202313,
+          202153,
+          228072,
+          209547
+        ]
+      },
+      {
+        "fork": 3,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          203115,
+          203365,
+          203295,
+          230496,
+          203496,
+          203436,
+          202804,
+          202694,
+          205780,
+          202213,
+          202323,
+          217111
+        ]
+      },
+      {
+        "fork": 4,
+        "calls_per_round": 16384,
+        "samples_ns": [
+          215989,
+          216901,
+          206982,
+          211360,
+          232450,
+          201972,
+          201592,
+          210308,
+          208084,
+          203024,
+          201752,
+          214336
+        ]
+      }
+    ]
+  }
+}
