@@ -1,0 +1,1768 @@
+{
+  "forks": 5,
+  "affinity_cpu": 7,
+  "workload": "benchmarks/upcalls/run.py",
+  "warmup_rounds": 3,
+  "measured_rounds": 12,
+  "builds": {
+    "before": {
+      "revision": "ef24b695f08c9a5839892d773498a0b63be9294f",
+      "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+      "build_flags": {
+        "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
+        "kernel": "-O3 -shared -fPIC -pthread"
+      },
+      "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
+      "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+      "binaries": {
+        "measure": "fbcc4d8596bead248401fef37e3102294f2b8975077194d4d33ac9641b1f468f",
+        "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
+      },
+      "sources": {
+        "upcalls.seam": "28f19befb71b9cae480a62100904013d83f276eca4d0d950ae046012e5357e22",
+        "HookLanguage.java": "3b30eb7f5436551112b748dfef9a360655c6da668733196ced5830fd8a523baa",
+        "Measure.java": "0f1e096fe3410972ee1fcb4f797b8a49e769a8ffb118fda375618b2b03c90288",
+        "kernel.c": "722fea4f67155148adf45e2a6d596353b0646545e93799bf99c12a30ce69a4d1",
+        "Guest.java": "8cf2cdbaffe5a53ddcc81a67008125d309351b2cb0079b01f06bdd932ab10fa2"
+      },
+      "cases": [
+        "control-caller",
+        "control-worker",
+        "static-caller",
+        "static-worker",
+        "dynamic-caller",
+        "dynamic-worker",
+        "static-hook-caller",
+        "static-hook-worker",
+        "dynamic-hook-caller",
+        "dynamic-hook-worker",
+        "isolate-caller",
+        "static-setup",
+        "dynamic-setup",
+        "guest-each-caller",
+        "guest-each-worker",
+        "guest-batch-caller",
+        "guest-batch-worker"
+      ],
+      "generator_source": "8721fc19e6f00709a2043743a657983c6a6e3ff1",
+      "executable_sha256": "fbcc4d8596bead248401fef37e3102294f2b8975077194d4d33ac9641b1f468f",
+      "kernel_sha256": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441",
+      "cpu_profile": {
+        "case": "dynamic-caller",
+        "event": "cpu-clock:u",
+        "frequency_hz": 499,
+        "iterations_per_round": 65536,
+        "lost_samples": 0,
+        "top_symbols": [
+          [
+            16.08,
+            "LambdaForm_interpretName_DoPZMrvpdU9RBjSTrxYSbE"
+          ],
+          [
+            9.88,
+            "MethodHandle_invokeBasic_w1WLuXKv6oKBRkg53Rcaw3"
+          ],
+          [
+            7.91,
+            "MethodHandleIntrinsicImpl_execute_BtV9UczCG1CzZQPtkts3X8"
+          ],
+          [
+            5.86,
+            "MethodHandleUtils_cast_gyO5Msj5gH33HANWaCDBHB"
+          ],
+          [
+            5.0,
+            "Util_java_lang_invoke_MethodHandle_convertArgs_0Rwvufn2uyIubLtmt11Yy6"
+          ],
+          [
+            4.96,
+            "LambdaForm_interpretWithArguments_NmVSNCl0V5Jcf9QXcoZPK9"
+          ]
+        ]
+      }
+    },
+    "after": {
+      "revision": "298fa1245caccf08801a9ec8e58b148d1b126c58",
+      "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+      "build_flags": {
+        "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
+        "kernel": "-O3 -shared -fPIC -pthread"
+      },
+      "compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg",
+      "graalvm": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+      "binaries": {
+        "measure": "359b7df58bf7af38daeed11acc0ff84b44fc25bd7ee3ab9aa20dcf6a3df8da8f",
+        "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
+      },
+      "sources": {
+        "upcalls.seam": "28f19befb71b9cae480a62100904013d83f276eca4d0d950ae046012e5357e22",
+        "HookLanguage.java": "3b30eb7f5436551112b748dfef9a360655c6da668733196ced5830fd8a523baa",
+        "Measure.java": "0f1e096fe3410972ee1fcb4f797b8a49e769a8ffb118fda375618b2b03c90288",
+        "kernel.c": "722fea4f67155148adf45e2a6d596353b0646545e93799bf99c12a30ce69a4d1",
+        "Guest.java": "8cf2cdbaffe5a53ddcc81a67008125d309351b2cb0079b01f06bdd932ab10fa2"
+      },
+      "cases": [
+        "control-caller",
+        "control-worker",
+        "static-caller",
+        "static-worker",
+        "dynamic-caller",
+        "dynamic-worker",
+        "static-hook-caller",
+        "static-hook-worker",
+        "dynamic-hook-caller",
+        "dynamic-hook-worker",
+        "isolate-caller",
+        "static-setup",
+        "dynamic-setup",
+        "guest-each-caller",
+        "guest-each-worker",
+        "guest-batch-caller",
+        "guest-batch-worker"
+      ],
+      "generator_source": "68c5b161585a8107b71cd576ba9118d3589b21fb",
+      "executable_sha256": "359b7df58bf7af38daeed11acc0ff84b44fc25bd7ee3ab9aa20dcf6a3df8da8f",
+      "kernel_sha256": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441",
+      "cpu_profile": {
+        "case": "dynamic-caller",
+        "event": "cpu-clock:u",
+        "frequency_hz": 499,
+        "iterations_per_round": 8388608,
+        "lost_samples": 0,
+        "top_symbols": [
+          [
+            61.0,
+            "UpcallStubsHolder_direct_upcallLow_injrecv_JJ_J_IVQJzXAUaiAuPAouEuPG7G"
+          ],
+          [
+            12.45,
+            "CEntryPointSnippets_enterAttachThread1_DyyRIjnWVrEm6wvovz6IbC"
+          ],
+          [
+            7.43,
+            "UpcallStubsHolder_direct_upcallHigh_injrecv_JJJ_J_AnbqQM2GG637t2aAPOLxT0"
+          ],
+          [
+            5.89,
+            "pthread_getspecific@@GLIBC_2.34"
+          ],
+          [
+            3.67,
+            "0x00003f2476fec000"
+          ],
+          [
+            3.28,
+            "CEntryPointSnippets_attachThread_EpOczwuRvrHvfSHU62r3o8"
+          ]
+        ]
+      }
+    }
+  },
+  "runs": [
+    {
+      "build": "before",
+      "case": "dynamic-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        162250373,
+        225808849,
+        183525638,
+        92067224,
+        83430777,
+        92796034,
+        137965542,
+        159059563,
+        243989356,
+        128480220,
+        116097891,
+        235799382
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        269851,
+        337649,
+        379167,
+        267256,
+        260443,
+        258219,
+        265473,
+        3090450,
+        258159,
+        259551,
+        251235,
+        253490
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        349181,
+        337940,
+        357827,
+        351876,
+        350784,
+        336457,
+        323442,
+        345464,
+        306681,
+        308434,
+        297554,
+        243912
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        231775847,
+        217898987,
+        268217410,
+        287072273,
+        243950902,
+        221697392,
+        214792111,
+        196667409,
+        104713276,
+        174197534,
+        239426831,
+        314427506
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        26416217,
+        26645310,
+        23399767,
+        30889366,
+        39287712,
+        27617652,
+        24076207,
+        25096859,
+        27289969,
+        39451483,
+        24765451,
+        28932341
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        312442,
+        285691,
+        317581,
+        3628538,
+        298385,
+        461754,
+        315256,
+        364420,
+        1199771,
+        506659,
+        314545,
+        298094
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        298225,
+        297974,
+        293546,
+        319285,
+        292434,
+        287154,
+        311820,
+        298575,
+        296020,
+        314626,
+        311549,
+        293916
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        49391148,
+        50560001,
+        27547587,
+        27963487,
+        27487224,
+        34743841,
+        23552866,
+        26257926,
+        24495581,
+        54325690,
+        51360394,
+        41979390
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        249924,
+        259221,
+        232019,
+        252297,
+        244313,
+        440695,
+        248901,
+        289197,
+        290970,
+        313643,
+        3266133,
+        280070
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-caller",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        349863,
+        367586,
+        342198,
+        361063,
+        377766,
+        313995,
+        238782,
+        230296,
+        236959,
+        488675,
+        453959,
+        430224
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        255554,
+        266625,
+        265312,
+        241547,
+        244803,
+        256686,
+        252908,
+        275271,
+        276964,
+        285881,
+        253671,
+        469157
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-worker",
+      "fork": 0,
+      "iterations": 16384,
+      "samples_ns": [
+        423903,
+        287204,
+        349312,
+        241196,
+        251957,
+        318072,
+        251746,
+        440353,
+        288506,
+        265162,
+        341486,
+        452065
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-setup",
+      "fork": 0,
+      "iterations": 256,
+      "samples_ns": [
+        5169085,
+        6787569,
+        4804095,
+        7928554,
+        5434217,
+        8353794,
+        8345468,
+        11361388,
+        1900237,
+        8125074,
+        5048035,
+        5084992
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-setup",
+      "fork": 0,
+      "iterations": 256,
+      "samples_ns": [
+        14597914,
+        6995141,
+        5901671,
+        27908181,
+        11675166,
+        12770160,
+        9370077,
+        6309013,
+        12306556,
+        8245250,
+        5459495,
+        6086362
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-setup",
+      "fork": 0,
+      "iterations": 256,
+      "samples_ns": [
+        10221689,
+        11520400,
+        5651799,
+        14941785,
+        9460149,
+        6932083,
+        3621786,
+        7268029,
+        6313692,
+        10678666,
+        5730387,
+        5891562
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-setup",
+      "fork": 0,
+      "iterations": 256,
+      "samples_ns": [
+        5723094,
+        5644425,
+        2722745,
+        2775594,
+        2935056,
+        2684321,
+        2683870,
+        2688019,
+        5910329,
+        3104146,
+        2664735,
+        6043776
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        273598,
+        236298,
+        269430,
+        254462,
+        282736,
+        270823,
+        257317,
+        276303,
+        3218442,
+        255443,
+        269089,
+        308193
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        113514128,
+        89016757,
+        88874806,
+        91359972,
+        84874455,
+        89694790,
+        83262154,
+        79006597,
+        77002443,
+        88670491,
+        97897355,
+        90719520
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        90016889,
+        89719832,
+        78480916,
+        113718546,
+        89265147,
+        82402705,
+        127807055,
+        81719912,
+        96362623,
+        137455450,
+        119449355,
+        99361687
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        272787,
+        253189,
+        258229,
+        256476,
+        255995,
+        254862,
+        271604,
+        254782,
+        253970,
+        367820,
+        265743,
+        260112
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        295329,
+        300459,
+        311710,
+        298244,
+        297022,
+        299176,
+        305819,
+        304998,
+        934399,
+        328452,
+        338541,
+        307021
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        39273423,
+        29888097,
+        37714050,
+        25157864,
+        24006584,
+        36650959,
+        35528174,
+        32564363,
+        30628750,
+        55643942,
+        31488166,
+        35486305
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        33200929,
+        33227137,
+        40825371,
+        45231211,
+        32434407,
+        34189220,
+        67205097,
+        33419362,
+        41796249,
+        44042491,
+        46866467,
+        33954965
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        311750,
+        332460,
+        354311,
+        377054,
+        316469,
+        316810,
+        308294,
+        298115,
+        317020,
+        323974,
+        317270,
+        295249
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        267036,
+        269160,
+        262016,
+        240064,
+        263398,
+        266495,
+        266705,
+        279740,
+        241037,
+        242910,
+        272817,
+        243180
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-caller",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        251335,
+        2027105,
+        261805,
+        280801,
+        231338,
+        267145,
+        239985,
+        234444,
+        252899,
+        239433,
+        242510,
+        258339
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        266063,
+        248100,
+        249753,
+        246617,
+        289428,
+        249322,
+        238852,
+        230596,
+        241457,
+        236096,
+        227972,
+        234293
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-worker",
+      "fork": 1,
+      "iterations": 16384,
+      "samples_ns": [
+        247308,
+        243300,
+        248150,
+        251847,
+        241868,
+        266474,
+        251365,
+        250744,
+        289488,
+        233652,
+        233863,
+        249803
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-setup",
+      "fork": 1,
+      "iterations": 256,
+      "samples_ns": [
+        5329833,
+        7239975,
+        4140675,
+        4253502,
+        3181202,
+        5558533,
+        5948850,
+        3439350,
+        3321487,
+        10408393,
+        3014446,
+        2862589
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-setup",
+      "fork": 1,
+      "iterations": 256,
+      "samples_ns": [
+        2029502,
+        1876402,
+        2142606,
+        2066502,
+        1988794,
+        1807822,
+        4933989,
+        2864062,
+        2153296,
+        2013522,
+        2126435,
+        2118039
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-setup",
+      "fork": 1,
+      "iterations": 256,
+      "samples_ns": [
+        2579292,
+        3788251,
+        2723927,
+        2591465,
+        4082027,
+        2773951,
+        2882457,
+        5766025,
+        4583367,
+        2706433,
+        3201170,
+        4567265
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-setup",
+      "fork": 1,
+      "iterations": 256,
+      "samples_ns": [
+        2562911,
+        3546905,
+        4219367,
+        9580185,
+        2576106,
+        2548774,
+        3731915,
+        7434253,
+        3113925,
+        2796433,
+        2788719,
+        6808508
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        86946547,
+        95790153,
+        157169993,
+        118490669,
+        178739489,
+        112650453,
+        319713539,
+        203422572,
+        290134286,
+        261163275,
+        270145558,
+        249438781
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        245324,
+        262417,
+        248731,
+        247659,
+        275372,
+        265823,
+        241266,
+        253299,
+        12510632,
+        268949,
+        271414,
+        247067
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        282805,
+        288286,
+        251146,
+        243882,
+        243501,
+        289057,
+        259130,
+        244944,
+        422650,
+        648432,
+        246507,
+        248300
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        102033392,
+        103352307,
+        105784633,
+        97009572,
+        129356793,
+        81572792,
+        76038334,
+        98717065,
+        143839684,
+        93400274,
+        88869840,
+        84933709
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        24272686,
+        25363742,
+        36186969,
+        27350243,
+        27938396,
+        24135977,
+        29791825,
+        31856155,
+        24099468,
+        26183343,
+        26603954,
+        30268667
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        289598,
+        443940,
+        456042,
+        287564,
+        1895638,
+        296702,
+        299457,
+        291482,
+        338822,
+        300168,
+        322110,
+        442628
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        404295,
+        304858,
+        301270,
+        323432,
+        331087,
+        330075,
+        321488,
+        326107,
+        312872,
+        312141,
+        326699,
+        302101
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        24697930,
+        28444022,
+        24043112,
+        25541910,
+        25926522,
+        24357432,
+        27012081,
+        26370688,
+        25126544,
+        27527758,
+        34873192,
+        35878626
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        237610,
+        236578,
+        239073,
+        232700,
+        239303,
+        243291,
+        240095,
+        236257,
+        3168137,
+        228082,
+        251787,
+        252838
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-caller",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        237610,
+        264941,
+        366825,
+        334222,
+        262948,
+        249172,
+        245504,
+        236909,
+        253891,
+        240205,
+        240174,
+        252878
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        247559,
+        245815,
+        248160,
+        245715,
+        516958,
+        249342,
+        245244,
+        232630,
+        234844,
+        3512089,
+        272636,
+        249392
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-worker",
+      "fork": 2,
+      "iterations": 16384,
+      "samples_ns": [
+        260723,
+        249072,
+        261164,
+        239514,
+        235836,
+        232129,
+        236087,
+        249462,
+        238080,
+        275421,
+        261355,
+        764628
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-setup",
+      "fork": 2,
+      "iterations": 256,
+      "samples_ns": [
+        3818468,
+        2711032,
+        2525100,
+        2339087,
+        2027156,
+        1859129,
+        2372831,
+        2069277,
+        2344859,
+        1930435,
+        3494514,
+        1866714
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-setup",
+      "fork": 2,
+      "iterations": 256,
+      "samples_ns": [
+        3117972,
+        3633789,
+        3134303,
+        2905220,
+        3164401,
+        2891203,
+        5812433,
+        3343669,
+        3218993,
+        2985251,
+        3272785,
+        3982874
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-setup",
+      "fork": 2,
+      "iterations": 256,
+      "samples_ns": [
+        3002473,
+        2939535,
+        2751709,
+        2670565,
+        2972748,
+        2782186,
+        2831138,
+        3128863,
+        2933563,
+        2860465,
+        2903285,
+        2806663
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-setup",
+      "fork": 2,
+      "iterations": 256,
+      "samples_ns": [
+        2901313,
+        2615982,
+        2585815,
+        2659394,
+        2559715,
+        2869742,
+        4779475,
+        3475389,
+        5533034,
+        3841652,
+        5595722,
+        2736119
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        280511,
+        289123,
+        264140,
+        256015,
+        325326,
+        320767,
+        293977,
+        337659,
+        310527,
+        254321,
+        250394,
+        267426
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        74033961,
+        79414696,
+        74575315,
+        77282841,
+        84156643,
+        81781525,
+        75601008,
+        73604253,
+        74710837,
+        85604042,
+        79168611,
+        85363943
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        84921508,
+        82677773,
+        85503833,
+        87448613,
+        78149603,
+        97166699,
+        96666873,
+        79385071,
+        82334904,
+        74710797,
+        73174119,
+        74107671
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        287684,
+        268678,
+        271384,
+        290760,
+        283247,
+        291522,
+        292634,
+        274399,
+        273347,
+        284649,
+        277866,
+        272606
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        302904,
+        320026,
+        360593,
+        294638,
+        283987,
+        369399,
+        331337,
+        307833,
+        290019,
+        314906,
+        310348,
+        464810
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        24378128,
+        26284585,
+        24241928,
+        24534642,
+        33823926,
+        26371659,
+        22732411,
+        24264331,
+        24339062,
+        24404897,
+        23081671,
+        23169912
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        22630768,
+        26077301,
+        24421443,
+        25707784,
+        25179624,
+        28019048,
+        25364823,
+        24809392,
+        26155831,
+        27733016,
+        29401475,
+        22993496
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        307893,
+        861300,
+        307622,
+        307362,
+        322080,
+        321489,
+        306871,
+        304867,
+        313834,
+        399605,
+        314986,
+        404748
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        254893,
+        254341,
+        260343,
+        260784,
+        295770,
+        264280,
+        261475,
+        340625,
+        280912,
+        310588,
+        357126,
+        391140
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-caller",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        300259,
+        238631,
+        257036,
+        274580,
+        261595,
+        261706,
+        268828,
+        258219,
+        265452,
+        252658,
+        369168,
+        252728
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        238822,
+        255674,
+        237800,
+        236909,
+        250775,
+        275251,
+        277215,
+        275912,
+        240285,
+        254311,
+        251165,
+        276062
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-worker",
+      "fork": 3,
+      "iterations": 16384,
+      "samples_ns": [
+        288035,
+        236277,
+        222511,
+        250123,
+        222702,
+        230516,
+        243270,
+        235876,
+        228211,
+        251206,
+        225807,
+        425760
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-setup",
+      "fork": 3,
+      "iterations": 256,
+      "samples_ns": [
+        3633528,
+        4680529,
+        4024812,
+        4394800,
+        3421687,
+        3451494,
+        3956279,
+        4509622,
+        4361569,
+        5758601,
+        4028135,
+        4581079
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-setup",
+      "fork": 3,
+      "iterations": 256,
+      "samples_ns": [
+        2158396,
+        1844321,
+        1889798,
+        2510497,
+        2553944,
+        3005589,
+        2832212,
+        2430861,
+        2262553,
+        2128950,
+        1974617,
+        1811639
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-setup",
+      "fork": 3,
+      "iterations": 256,
+      "samples_ns": [
+        3476801,
+        2855465,
+        5210433,
+        3340763,
+        5252163,
+        2937090,
+        2836589,
+        4609275,
+        2646049,
+        2823645,
+        2955014,
+        3820421
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-setup",
+      "fork": 3,
+      "iterations": 256,
+      "samples_ns": [
+        3599093,
+        2911241,
+        3398684,
+        3160723,
+        3242468,
+        2963028,
+        3150944,
+        2865073,
+        2863120,
+        3825972,
+        2836189,
+        3773374
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        106665224,
+        76307625,
+        81308848,
+        80472788,
+        76536189,
+        87165939,
+        93022656,
+        88935057,
+        83850342,
+        87796182,
+        95058168,
+        93743990
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        253149,
+        260813,
+        237289,
+        261304,
+        247689,
+        251156,
+        253951,
+        245034,
+        353039,
+        266795,
+        300018,
+        270091
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        267096,
+        290470,
+        240516,
+        224475,
+        291031,
+        283577,
+        287625,
+        271153,
+        268719,
+        282374,
+        283677,
+        276424
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        113279896,
+        106679236,
+        129607535,
+        106458672,
+        125480402,
+        91264860,
+        109168020,
+        133909701,
+        114371992,
+        96073112,
+        84233940,
+        75665831
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        24152764,
+        24950653,
+        22221052,
+        21669826,
+        18406576,
+        19258909,
+        18179254,
+        24949391,
+        22590114,
+        22533337,
+        23001503,
+        18208930
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        265132,
+        272496,
+        274179,
+        270692,
+        277896,
+        265643,
+        265763,
+        275542,
+        279780,
+        265683,
+        299157,
+        291211
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-hook-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        269350,
+        274179,
+        323062,
+        294558,
+        319816,
+        367446,
+        348580,
+        300839,
+        310628,
+        304346,
+        320237,
+        308594
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-hook-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        18475856,
+        23841494,
+        24532671,
+        21551559,
+        25124704,
+        19803168,
+        21883747,
+        22897125,
+        24046093,
+        23995374,
+        18450106,
+        22597207
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        233362,
+        244754,
+        236508,
+        239123,
+        203695,
+        203626,
+        239048,
+        230567,
+        242179,
+        209066,
+        206291,
+        224625
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-caller",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        232811,
+        281568,
+        250855,
+        231698,
+        227190,
+        317691,
+        267116,
+        323432,
+        255794,
+        247279,
+        210328,
+        228242
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        241708,
+        273768,
+        248530,
+        302399,
+        291683,
+        230807,
+        230386,
+        385435,
+        277535,
+        274149,
+        288577,
+        334944
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-worker",
+      "fork": 4,
+      "iterations": 16384,
+      "samples_ns": [
+        239904,
+        224876,
+        230426,
+        241988,
+        236047,
+        242369,
+        254311,
+        233562,
+        328462,
+        230817,
+        224044,
+        223293
+      ]
+    },
+    {
+      "build": "before",
+      "case": "dynamic-setup",
+      "fork": 4,
+      "iterations": 256,
+      "samples_ns": [
+        2009014,
+        1900418,
+        1991249,
+        2278017,
+        2712616,
+        2461860,
+        2483361,
+        2194845,
+        2071250,
+        2177732,
+        2031316,
+        2157946
+      ]
+    },
+    {
+      "build": "after",
+      "case": "dynamic-setup",
+      "fork": 4,
+      "iterations": 256,
+      "samples_ns": [
+        3099428,
+        4814213,
+        4201444,
+        4701119,
+        3231537,
+        3094919,
+        3258008,
+        3296561,
+        3495727,
+        4037904,
+        4220620,
+        2757250
+      ]
+    },
+    {
+      "build": "after",
+      "case": "static-setup",
+      "fork": 4,
+      "iterations": 256,
+      "samples_ns": [
+        3156015,
+        2774232,
+        3503443,
+        3363498,
+        2840387,
+        2186829,
+        2549065,
+        2776626,
+        2572209,
+        2739316,
+        2562451,
+        3628680
+      ]
+    },
+    {
+      "build": "before",
+      "case": "static-setup",
+      "fork": 4,
+      "iterations": 256,
+      "samples_ns": [
+        2242836,
+        2594041,
+        3129004,
+        2608879,
+        1928521,
+        1912260,
+        1888955,
+        2127288,
+        1977112,
+        2077668,
+        1831898,
+        2023470
+      ]
+    }
+  ],
+  "cpu": "AMD Ryzen 9 9950X3D2 16-Core Processor",
+  "ordering": "alternate before/after by fork and case",
+  "statistic": "median of the five per-process medians",
+  "graalvm_release": "25.5.5-elide.32",
+  "host_note": "Shared Linux host. Compare like-for-like workloads across the two builds."
+}

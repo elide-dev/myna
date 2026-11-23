@@ -400,6 +400,36 @@ and return through the same C loop. The direct x86-64 SVM high-level upcall stub
 counter increment; the generic stub issued an indirect call. These measurements exclude registration
 and guest context entry.
 
+#### Direct upcalls for a runtime-selected receiver
+
+The `createDirect` factory binds a callback and its sentinel to one receiver. A matched
+GraalVM `25.5.5-elide.32` experiment measured the existing dynamic adapter and the
+receiver-bound adapter in separate Native Images. The benchmark sources, C executable
+code, compiler options and logical CPU were identical. Each variant ran five fresh
+processes per case, with alternating build order, on a shared Linux x86-64 host.
+
+| Workload | Existing adapter | Receiver-bound adapter |
+|---|---:|---:|
+| Reducer, caller | 5,428.82 ns/call | 16.05 ns/call |
+| Reducer, native worker | 5,973.10 ns/call | 17.05 ns/call |
+| Void hook, caller | 1,645.97 ns/call | 18.99 ns/call |
+| Void hook, native worker | 1,595.98 ns/call | 19.19 ns/call |
+| Reducer registration and arena teardown | 8.63 µs/registration | 16.39 µs/registration |
+
+The runtime-selected reducer spent 16% of baseline CPU samples in `LambdaForm.interpretName`.
+In the receiver-bound build, 61% landed in the low-level direct upcall stub. The optimized
+high-level stub loaded the receiver and target, checked their types, and reduced with one
+integer add on the success path. The static reducer control measured 15.39 and 16.17 ns/call
+on the caller, with overlapping ranges across processes. The factory is opt-in because
+registration and arena teardown were more expensive in all five paired forks.
+
+The [raw samples, revisions, binary hashes and profile summaries](../benchmarks/upcalls/baselines/linux-x86_64-receiver-bound.json)
+identify the two experimental generator revisions. To reproduce, run `mise run bench:upcalls-build`
+at each revision and alternate runs of `taskset -c 7 build/upcalls/measure build/upcalls/libbench.so CASE COUNT`.
+Use 16,384 invocations or 256 registrations per round. Report the median of the five
+process medians per case. The `after` revision routed its dynamic factory through the
+receiver-bound adapter. The public API exposes that adapter separately as `createDirect`.
+
 ### Native callbacks into compiled Truffle code
 
 The four `guest-*` cases in the SVM upcall suite use a registered benchmark language.
