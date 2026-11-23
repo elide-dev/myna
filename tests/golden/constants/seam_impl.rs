@@ -14,7 +14,7 @@ macro_rules! assert_implementations {
     };
     ($($seam:ident)::+) => {
         const _: () = {
-            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "67e4222b753fc4d7d363c8870c8872c4e0e146d301e6802c94a032bfb55452fe".as_bytes());
+            let (records, checks) = ($($seam)::+::ABI_FINGERPRINT.as_bytes(), "dcb6e338b495f7c108733bed950aa2674c8c20521c1de20cf76ceb160a2b6f24".as_bytes());
             assert!(records.len() == checks.len(), "records and checks come from different ABIs");
             let mut i = 0;
             while i < records.len() {
