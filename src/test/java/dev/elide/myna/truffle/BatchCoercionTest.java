@@ -41,6 +41,22 @@ class BatchCoercionTest {
   }
 
   @Test
+  void nativeBatchTracksArenasUntilAllArgumentsAreReady() {
+    var site = new BatchCoercion("digest", "parts", false, true, Long.MAX_VALUE, false, true);
+    Arena arena = Arena.ofConfined();
+    NativeBytes bytes = NativeBytes.of(arena.allocate(8), false);
+    Batch lent = site.execute(BufferArray.of(bytes, bytes));
+    try {
+      lent.recheck(null);
+      arena.close();
+      assertThrows(NativeCellException.class, () -> lent.recheck(null));
+    } finally {
+      lent.release();
+      if (arena.scope().isAlive()) arena.close();
+    }
+  }
+
+  @Test
   void theEmptyBatchIsNullArraysWithCountZero() {
     var coercion = new BatchCoercion("f", "sources", false, true, Long.MAX_VALUE, false, false);
     for (Object empty : new Object[] {null, NativeVoid.INSTANCE, BufferArray.of()}) {
