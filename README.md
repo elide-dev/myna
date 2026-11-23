@@ -270,7 +270,7 @@ Java 25 FFM supports explicit library arenas, typed buffer borrows, consumer-own
 
 The tested subset is C calling convention, `bool`, `char`, 8- to 64-bit and pointer-sized integers with per-target extension, floats, typed pointers, callbacks in both directions, isolate threads as values, opaque handles, naturally aligned records with explicit offsets passed by pointer or by value, and isolate-thread exports with include predicates and abort/integer/null exception translation.
 
-Fixed-size C array fields, nested by-value records, enums, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader design; the [current roadmap](docs/jvm-roadmap.md) distinguishes implemented features from planned work.
+Fixed-size C array fields, nested by-value records, general allocator optimizer attributes, automatic ownership inference, additional address spaces, and YAML remain future work. The original [architecture briefing](myna-architecture-briefing.md) describes the broader design; the [current roadmap](docs/jvm-roadmap.md) distinguishes implemented features from planned work.
 
 Performance maintenance uses pinned Elide 1.6.3, native toolchain 2026.11.7,
 and Elide GraalVM 25.5.5-elide.31. See [benchmarking and native validation](docs/benchmarking.md)
