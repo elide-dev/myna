@@ -74,8 +74,8 @@ public final class MynaForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$widen_Downcall");
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.myna.generated.MynaFFM$widen_Binding");
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$ReducerUpcalls");
-        RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.ReducerUpcalls.HANDLE, MynaFFM.Reducer_CALLBACK_DESCRIPTOR);
+        RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.ReducerUpcalls.DIRECT_HANDLE, MynaFFM.Reducer_CALLBACK_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$VisitorUpcalls");
-        RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.VisitorUpcalls.HANDLE, MynaFFM.Visitor_CALLBACK_DESCRIPTOR);
+        RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.VisitorUpcalls.DIRECT_HANDLE, MynaFFM.Visitor_CALLBACK_DESCRIPTOR);
     }
 }

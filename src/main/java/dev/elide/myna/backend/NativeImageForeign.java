@@ -67,7 +67,7 @@ public final class NativeImageForeign implements Backend {
       String descriptor = ", " + prefix + "_CALLBACK_DESCRIPTOR);\n";
       out.append(buildTime).append(callback.name()).append("Upcalls\");\n");
       // Direct registration also creates the shared stub for this descriptor.
-      out.append(direct).append("HANDLE").append(descriptor);
+      out.append(direct).append("DIRECT_HANDLE").append(descriptor);
       if (callback.ffmTarget() != null)
         out.append(direct).append("STATIC_HANDLE").append(descriptor);
     }
