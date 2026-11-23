@@ -97,7 +97,7 @@ class FfmTest {
   }
 
   @Test
-  void dynamicUpcallsBindOneReceiverToADirectlyRegisteredAdapter() {
+  void dynamicUpcallsExposeGenericAndDirectFactories() {
     var out =
         generate(
             MODULE
@@ -109,21 +109,34 @@ class FfmTest {
     assertTrue(ffm.contains("private final long sentinel;"));
     assertTrue(
         ffm.contains(
+            "findStatic(ReduceUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(long.class, ReduceCallback.class,"
+                + " long.class, long.class, long.class))"));
+    assertTrue(
+        ffm.contains(
+            "findStatic(NotifyUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(void.class, NotifyCallback.class))"));
+    assertTrue(ffm.contains("insertArguments(HANDLE, 0, target, sentinel)"));
+    assertTrue(ffm.contains("insertArguments(HANDLE, 0, target)"));
+    assertTrue(
+        ffm.contains(
             "findVirtual(ReduceUpcalls.class, \"invoke\","
                 + " java.lang.invoke.MethodType.methodType(long.class, long.class, long.class))"));
     assertTrue(
         ffm.contains(
             "findVirtual(NotifyUpcalls.class, \"invoke\","
                 + " java.lang.invoke.MethodType.methodType(void.class))"));
-    assertTrue(ffm.contains("HANDLE.bindTo(new ReduceUpcalls(target, sentinel))"));
-    assertTrue(ffm.contains("HANDLE.bindTo(new NotifyUpcalls(target))"));
+    assertTrue(ffm.contains("createDirect(ReduceCallback target, long sentinel, Arena arena)"));
+    assertTrue(ffm.contains("createDirect(NotifyCallback target, Arena arena)"));
+    assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new ReduceUpcalls(target, sentinel))"));
+    assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new NotifyUpcalls(target))"));
     assertTrue(
         feature.contains(
-            "registerForDirectUpcall(MynaFFM.ReduceUpcalls.HANDLE,"
+            "registerForDirectUpcall(MynaFFM.ReduceUpcalls.DIRECT_HANDLE,"
                 + " MynaFFM.Reduce_CALLBACK_DESCRIPTOR)"));
     assertTrue(
         feature.contains(
-            "registerForDirectUpcall(MynaFFM.NotifyUpcalls.HANDLE,"
+            "registerForDirectUpcall(MynaFFM.NotifyUpcalls.DIRECT_HANDLE,"
                 + " MynaFFM.Notify_CALLBACK_DESCRIPTOR)"));
   }
 

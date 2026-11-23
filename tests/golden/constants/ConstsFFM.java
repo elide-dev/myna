@@ -202,13 +202,18 @@ public final class ConstsFFM {
             this.target = target;
             this.sentinel = sentinel;
         }
-        static final MethodHandle HANDLE;
+        private static final MethodHandle HANDLE;
+        static final MethodHandle DIRECT_HANDLE;
         static {
             try {
-                HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(ListenerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, MemorySegment.class));
+                HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(ListenerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, ListenerCallback.class, int.class, MemorySegment.class));
+                DIRECT_HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(ListenerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, MemorySegment.class));
             } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
         }
         private int invoke(MemorySegment arg0) {
+            return invoke(target, sentinel, arg0);
+        }
+        private static int invoke(ListenerCallback target, int sentinel, MemorySegment arg0) {
             try { return target.invoke(arg0); }
             catch (Throwable failure) { return sentinel; }
         }
@@ -217,7 +222,12 @@ public final class ConstsFFM {
          * A void callback discards exceptions; catch inside the callback to report them. */
         public static MemorySegment create(ListenerCallback target, int sentinel, Arena arena) {
             java.util.Objects.requireNonNull(target);
-            return Linker.nativeLinker().upcallStub(HANDLE.bindTo(new ListenerUpcalls(target, sentinel)), Listener_CALLBACK_DESCRIPTOR, arena);
+            return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Listener_CALLBACK_DESCRIPTOR, arena);
+        }
+        /** Specializes repeated Native Image calls to this receiver. Uses the same arena and exception policy as create. */
+        public static MemorySegment createDirect(ListenerCallback target, int sentinel, Arena arena) {
+            java.util.Objects.requireNonNull(target);
+            return Linker.nativeLinker().upcallStub(DIRECT_HANDLE.bindTo(new ListenerUpcalls(target, sentinel)), Listener_CALLBACK_DESCRIPTOR, arena);
         }
     }
 }
