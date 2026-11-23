@@ -1,0 +1,34 @@
+name: SVM upcall benchmarks
+
+"on":
+  workflow_dispatch:
+  schedule:
+    - cron: '37 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upcalls-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upcalls:
+    runs-on: ${{ vars.MYNA_ARM_BENCH_RUNNER || 'ubuntu-24.04-arm' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          version: '2026.10.25'
+      - uses: ./.github/actions/setup-graalvm
+      - run: mise run bench:upcalls
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: svm-upcall-baseline
+          if-no-files-found: error
+          path: |
+            build/upcalls/baseline.json
+            build/upcalls/summary.md
