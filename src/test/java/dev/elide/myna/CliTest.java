@@ -41,6 +41,86 @@ class CliTest {
     }
   }
 
+  @Test
+  void standaloneConstantsCompileWithoutBindings() throws Exception {
+    String[] args = {
+      "generate",
+      "examples/constants.seam",
+      "--out",
+      temp.toString(),
+      "--constants-only",
+      "shared.tape"
+    };
+    assertEquals(0, run(args).code());
+    try (var files = Files.walk(temp).filter(Files::isRegularFile)) {
+      assertEquals(
+          List.of("ConstsConstants.java"), files.map(p -> p.getFileName().toString()).toList());
+    }
+    Files.writeString(
+        temp.resolve("Consumer.java"),
+        "class Consumer { public static void main(String[] args) { if"
+            + " (!shared.tape.ConstsConstants.Kind.name((byte) 0).equals(\"plain\")) throw new"
+            + " AssertionError(); } }");
+    assertEquals(
+        0,
+        javax.tools.ToolProvider.getSystemJavaCompiler()
+            .run(
+                null,
+                null,
+                null,
+                "-classpath",
+                temp.toString(),
+                "-d",
+                temp.toString(),
+                temp.resolve("shared/tape/ConstsConstants.java").toString(),
+                temp.resolve("Consumer.java").toString()));
+    assertEquals(
+        0,
+        new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp",
+                temp.toString(),
+                "Consumer")
+            .inheritIO()
+            .start()
+            .waitFor());
+  }
+
+  @Test
+  void standaloneConstantsCheckAndRejectIncompatibleModes() throws IOException {
+    String fixture = "examples/constants.seam";
+    String[] args = {
+      "generate",
+      fixture,
+      "--constants-only",
+      "internal.struct",
+      "--out",
+      temp.toString(),
+      "--check"
+    };
+    assertEquals(1, run(args).code());
+    assertEquals(0, run(Arrays.copyOf(args, args.length - 1)).code());
+    assertEquals(0, run(args).code());
+    assertEquals(2, run("generate", fixture, "--constants-only", "invalid..pkg").code());
+    assertEquals(2, run("validate", fixture, "--constants-only", "internal.struct").code());
+    for (String incompatible : List.of("--rust-only", "--jni"))
+      assertEquals(
+          2, run("generate", fixture, "--constants-only", "internal.struct", incompatible).code());
+    Path empty =
+        Files.writeString(
+            temp.resolve("empty.seam"), "module empty target=x86_64-unknown-linux-gnu\n");
+    assertTrue(
+        run(
+                "generate",
+                empty.toString(),
+                "--out",
+                temp.toString(),
+                "--constants-only",
+                "internal.struct")
+            .err()
+            .contains("module declares no constants"));
+  }
+
   record Result(int code, String out, String err) {}
 
   Result run(String... args) {
