@@ -41,6 +41,51 @@ class CliTest {
     }
   }
 
+  @Test
+  void standaloneConstantsCompileWithoutBindings() throws Exception {
+    String[] args = {
+      "generate",
+      "examples/constants.seam",
+      "--out",
+      temp.toString(),
+      "--constants-only",
+      "shared.tape"
+    };
+    assertEquals(0, run(args).code());
+    try (var files = Files.list(temp)) {
+      assertEquals(
+          List.of("ConstsConstants.java"), files.map(p -> p.getFileName().toString()).toList());
+    }
+    Files.writeString(
+        temp.resolve("Consumer.java"),
+        "class Consumer { public static void main(String[] args) { if"
+            + " (!shared.tape.ConstsConstants.Kind.name((byte) 0).equals(\"plain\")) throw new"
+            + " AssertionError(); } }");
+    assertEquals(
+        0,
+        javax.tools.ToolProvider.getSystemJavaCompiler()
+            .run(
+                null,
+                null,
+                null,
+                "-classpath",
+                temp.toString(),
+                "-d",
+                temp.toString(),
+                temp.resolve("ConstsConstants.java").toString(),
+                temp.resolve("Consumer.java").toString()));
+    assertEquals(
+        0,
+        new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp",
+                temp.toString(),
+                "Consumer")
+            .inheritIO()
+            .start()
+            .waitFor());
+  }
+
   record Result(int code, String out, String err) {}
 
   Result run(String... args) {

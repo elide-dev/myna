@@ -3,6 +3,7 @@
 package dev.elide.myna.cli;
 
 import dev.elide.myna.Generator;
+import dev.elide.myna.backend.JavaConstants;
 import dev.elide.myna.backend.StaticJni;
 import dev.elide.myna.frontend.Dsl;
 import dev.elide.myna.model.Persisted;
@@ -24,7 +25,7 @@ public final class Main {
       """
       myna 0.20.0 — Native Image / Rust ABI generator
       Usage:
-        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni | --rust-only]
+        myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni | --rust-only | --constants-only PACKAGE]
         myna validate INPUT.seam [--target TRIPLE | --targets TRIPLE,...] [--relaxed]
         myna apply --contracts seam.ll --input caller.o --output caller.seam.o [--llvm-tool PATH]
         myna --help | --version
@@ -97,7 +98,7 @@ public final class Main {
         throw new IllegalArgumentException("unknown command: " + args[0]);
       if (args.length < 2) throw new IllegalArgumentException("missing INPUT.seam");
       Path input = Path.of(args[1]), destination = null;
-      String target = null;
+      String target = null, constantsPackage = null;
       List<String> targets = null;
       boolean strict = true, check = false, jni = false, rustOnly = false;
       Set<String> seen = new HashSet<>();
@@ -118,6 +119,11 @@ public final class Main {
           }
           case "--relaxed" -> strict = false;
           case "--check" -> check = true;
+          case "--constants-only" -> {
+            requireValue(args, i);
+            constantsPackage = args[++i];
+            Validator.javaPackage(constantsPackage);
+          }
           case "--rust-only" -> rustOnly = true;
           case "--jni" -> jni = true;
           default -> throw new IllegalArgumentException("unknown option: " + args[i]);
@@ -126,6 +132,9 @@ public final class Main {
       if (rustOnly && (jni || !args[0].equals("generate")))
         throw new IllegalArgumentException(
             "--rust-only requires generate and is incompatible with --jni");
+      if (constantsPackage != null && (rustOnly || jni || !args[0].equals("generate")))
+        throw new IllegalArgumentException(
+            "--constants-only requires generate without --jni or --rust-only");
       Module module = Dsl.parse(Files.readString(input));
       if (args[0].equals("validate") && (destination != null || check || jni))
         throw new IllegalArgumentException("validate does not accept --out/--check/--jni");
@@ -148,7 +157,16 @@ public final class Main {
         Validator.validate(module, strict, abi);
         throw new IllegalArgumentException("generate requires --out DIRECTORY");
       }
-      var outputs = new TreeMap<>(Generator.generate(module, strict, abi, rustOnly));
+      Map<String, String> outputs;
+      if (constantsPackage != null) {
+        Validator.validate(module, strict, abi);
+        if (!JavaConstants.applies(module))
+          throw new IllegalArgumentException("module declares no constants");
+        var constants = new JavaConstants();
+        outputs = Map.of(constants.filename(module), constants.generate(module, constantsPackage));
+      } else {
+        outputs = new TreeMap<>(Generator.generate(module, strict, abi, rustOnly));
+      }
       String fingerprint = abi.value();
       if (jni) outputs.putAll(StaticJni.generate(module, abi));
       if (check) {

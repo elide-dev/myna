@@ -402,3 +402,11 @@ contract generation for variadic imports is unsupported.
 Variadic imports expose an unsafe Rust call. Resource lifecycle and buffer
 borrow directives cannot name these imports, and automatic C string wrappers
 are omitted for them. Rust implementation traits require fixed-arity imports.
+
+### Standalone Java constants
+
+Run `myna generate INPUT.seam --out DIR --constants-only shared.tape` to generate
+the constants source in package `shared.tape`. Compile it into a separate jar using a plain JDK.
+Its literals, enum helpers and flag operations depend only on the Java standard library.
+The package choice applies to this output and leaves the descriptor fingerprint intact.
+Use `--check` with the same arguments to verify the generated source.
