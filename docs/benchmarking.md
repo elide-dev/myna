@@ -434,9 +434,10 @@ receiver-bound adapter. The public API exposes that adapter separately as `creat
 ### Native callbacks into compiled Truffle code
 
 The eight `guest-*` cases in the SVM upcall suite use a registered benchmark language.
-The static cases use the declared target and a single registered context. Each
-`guest-bound-*` callback binds the context and call target for its own registration.
-Both paths execute the same callback body and cached call target. A child node rotates a context-owned
+The original `guest-each-*` and `guest-batch-*` cases load the context and call target
+from static fields in their declared callback. Each `guest-bound-*` callback reads the
+context and call target from its own registration. Both paths invoke the same guest AST
+through a cached call target. A child node rotates a context-owned
 integer and branches on its low bit. Each measured round checks the final value against
 an independent recurrence and verifies that all 262,144 root executions observed
 `CompilerDirectives.inCompiledCode()`. The volatile counters and state accesses are
