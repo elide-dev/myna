@@ -37,12 +37,30 @@ class NativeImageIntegrationTests(unittest.TestCase):
     def test_scoped_ffm_callbacks_and_static_jni(self):
         from callback_fixture import build_callback_fixture
         work, classes, library = build_callback_fixture()
-        native_image("-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
-                     "--features=fixture.callbacks.CallbackApiForeignFeature",
-                     "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}",
-                     "-H:-UnlockExperimentalVMOptions", "fixture.callbacks.CallbackMain", "-o", work / "callback-app")
-        self.assertIn("Scoped callbacks, native threads and exception status passed",
-                      run(work / "callback-app", library, "jni").stdout)
+        fixture = ROOT / "tests/callbacks/svm"
+        foreign = Path(os.environ["GRAALVM_HOME"]) / "lib/svm/builder"
+        # The pinned SVM provides a post-patch test listener. Only the image fixture imports it.
+        compile_native(classes, work / "generated", *sorted(fixture.glob("*.java")),
+                       classpath=[classes, foreign / "svm-foreign.jar", foreign / "svm.jar"])
+        options = ["-O1", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
+                   "--features=fixture.callbacks.CallbackApiForeignFeature",
+                   "-H:+UnlockExperimentalVMOptions", f"-H:CLibraryPath={work}", "-H:-DeleteLocalSymbols",
+                   "-H:-UnlockExperimentalVMOptions"]
+        full = work / "callback-app"
+        native_image(*options, "-J--add-exports=org.graalvm.nativeimage.foreign/com.oracle.svm.core.foreign=ALL-UNNAMED",
+                     "fixture.callbacks.SvmCallbackMain", "-o", full)
+        output = run(full, library, "jni").stdout
+        self.assertIn("Scoped callbacks, native threads and exception status passed", output)
+        self.assertIn("Receiver-bound direct upcall selection passed", output)
+        generic = work / "generic-callback-app"
+        native_image(*options, "fixture.callbacks.GenericCallbackMain", "-o", generic)
+        run(generic, library)
+        for app, uses_receivers in ((full, True), (generic, False)):
+            stubs = [line for line in run(LLVM / "llvm-nm", app).stdout.splitlines()
+                     if "UpcallStubsHolder_" in line]
+            self.assertTrue(any("UpcallStubsHolder_upcallHigh_" in line for line in stubs), app.name)
+            self.assertEqual(any("UpcallStubsHolder_direct_upcallHigh_injrecv_" in line for line in stubs),
+                             uses_receivers, app.name)
 
     def test_static_jni_archive(self):
         work = ROOT / "build/static-jni-test"
