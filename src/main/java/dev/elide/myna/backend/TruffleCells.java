@@ -63,7 +63,8 @@ public final class TruffleCells implements Backend {
    * The guest-facing shape of one cell. Every borrowed length drops out of the guest signature: the
    * guest passes each buffer and the cell derives its byte count.
    */
-  private record Cell(Function function, CallBorrows borrows, Resource creates, Resource destroys) {
+  private record Cell(
+      Function function, CallBorrows borrows, Resource creates, Resource destroys, Resource reuse) {
     boolean isLength(Parameter p) {
       // A batch's lengths array and count drop out too: the cell derives both from its elements.
       return borrows.derived(p);
@@ -90,7 +91,8 @@ public final class TruffleCells implements Backend {
         f,
         CallBorrows.of(m, f),
         m.resources().stream().filter(r -> r.createdBy(f.name())).findFirst().orElse(null),
-        m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null));
+        m.resources().stream().filter(r -> r.destroy().equals(f.name())).findFirst().orElse(null),
+        m.resources().stream().filter(r -> f.name().equals(r.reuse())).findFirst().orElse(null));
   }
 
   public String generate(Module m) {
@@ -551,6 +553,28 @@ public final class TruffleCells implements Backend {
                             + align(p)
                         : rawBytes(p) ? ", false" : "")
                 .append(");\n");
+          } else if (cell.reuse() != null && p.name().equals(cell.reuse().handleParameter())) {
+            imports.add(RUNTIME + "NativeResource");
+            imports.add(RUNTIME + "NativeCellException");
+            locals
+                .append("            if (!(")
+                .append(argument)
+                .append(" instanceof NativeResource reuse$) || !reuse$.type().equals(")
+                .append(SeamJson.quote(cell.reuse().name()))
+                .append("))\n")
+                .append("                throw NativeCellException.type(")
+                .append(quotedName)
+                .append(", ")
+                .append(declared)
+                .append(", ")
+                .append(SeamJson.quote(cell.reuse().name() + " resource"))
+                .append(", ")
+                .append(argument)
+                .append(", this);\n")
+                .append("            long address_")
+                .append(p.name())
+                .append(" = reuse$.address();\n");
+            arguments.add(address(ffm, imports, "address_" + p.name()));
           } else {
             imports.add(RUNTIME + "PointerCoercion");
             fields
@@ -869,6 +893,24 @@ public final class TruffleCells implements Backend {
           .append(", arguments[0], this);\n")
           .append("            resource.close();\n")
           .append("            return Carriers.none();\n");
+    } else if (cell.reuse() != null) {
+      String succeeded =
+          String.join(
+              " || ", cell.reuse().success().stream().map(s -> "status$ == " + s + "L").toList());
+      result
+          .append("            reuse$.beginReuse();\n")
+          .append("            boolean live$ = true;\n")
+          .append("            try {\n                ")
+          .append(typed((Scalar) f.returns())[0])
+          .append(" status$ = ")
+          .append(call)
+          .append(";\n")
+          .append("                live$ = ")
+          .append(succeeded)
+          .append(";\n")
+          .append("                return status$;\n")
+          .append(
+              "            } finally {\n                reuse$.endReuse(live$);\n            }\n");
     } else if (cell.creates() != null) {
       imports.add(RUNTIME + "NativeResource");
       String type = SeamJson.quote(cell.creates().name());

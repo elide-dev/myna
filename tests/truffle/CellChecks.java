@@ -1033,7 +1033,13 @@ public final class CellChecks {
       Object again = call(cells, "viewInit", new HeapBytes(new byte[] {7}, false), memory);
       check(call(cells, "viewSum", again).equals(7L) && call(cells, "viewSum", owned).equals(6L), "independent resources");
       check(call(cells, "counterLive").equals(2L), "two live views");
-      check(call(cells, "viewRelease", again) == NativeVoid.INSTANCE, "second view released");
+      rejects(cells, "viewReuse", NativePointer.of(view.address()), 8L);
+      check(call(cells, "viewReuse", again, 8L).equals(0), "successful reuse");
+      check(call(cells, "viewSum", again).equals(8L), "same owner reads replacement");
+      check(call(cells, "viewReuse", again, -1L).equals(-1), "failed reuse status");
+      rejects(cells, "viewSum", again);
+      check(call(cells, "viewRelease", again) == NativeVoid.INSTANCE, "consumed owner closes idempotently");
+      check(call(cells, "counterLive").equals(1L), "failed reuse consumed exactly once");
       // An owner is not memory for a new resource, and neither is a pointer without a size, a
       // read-only buffer, or one too small for the struct: the create is not called for those.
       rejects(cells, "viewInit", new HeapBytes(new byte[] {1}, false), owned);

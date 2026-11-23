@@ -410,3 +410,19 @@ the constants source in package `shared.tape`. Compile it into a separate jar us
 Its literals, enum helpers and flag operations depend only on the Java standard library.
 The package choice applies to this output and leaves the descriptor fingerprint intact.
 Use `--check` with the same arguments to verify the generated source.
+
+### Reusing a live in-place resource
+
+A confined resource with a struct handle may declare `reuse=FUNCTION` alongside
+`handle=PARAMETER` and `success=...`. Use this for a returning, non-unwinding import
+that takes the current contents of the struct, consumes them even on failure, and
+reinitializes the same storage. Its handle is a non-null borrowed `read_write` pointer.
+The provider must leave nothing requiring destruction on failure and must not retain
+new input pointers beyond the call. The success codes have the same meaning as on create.
+
+The Truffle cell takes an open owner of that resource and returns the native status.
+Success keeps the same owner live. Failure closes the owner and releases the backing
+struct without calling the destructor on the consumed value. A coercion or linkage
+error before native entry leaves the original owner live. Close dependent owners before
+reuse and discard borrowed views into the old contents. The low-level static binding
+and cell `invoke` use raw carriers and leave those ownership obligations to their caller.
