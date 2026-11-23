@@ -410,8 +410,8 @@ public final class Borrow {
       return;
     }
     released = true;
-    if (kind == LENT) java.lang.ref.Reference.reachabilityFence(owner);
-    else if (kind == PINNED) Pins.unpin(owner);
+    java.lang.ref.Reference.reachabilityFence(owner);
+    if (kind == PINNED) Pins.unpin(owner);
     else if (kind == COPIED) Copy.release((Copy) owner, array, interopSource);
   }
 
