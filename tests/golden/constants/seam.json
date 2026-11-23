@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "bindingAbiVersion": 2,
-  "generatorVersion": "0.20.0",
+  "generatorVersion": "0.21.0",
   "name": "constants",
   "abiVersion": 3,
   "targetAbi": {"dataModel":"LP64","byteOrder":"little"},
