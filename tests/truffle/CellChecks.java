@@ -1058,7 +1058,8 @@ public final class CellChecks {
       } catch (NativeStatusException failed) {
         check(failed.status() == -1, "negative status carried");
       }
-      check(call(cells, "viewRelease", owned) == NativeVoid.INSTANCE, "view released");
+      check(call(cells, "viewReuse", owned, 9L).equals(0), "owner reused before explicit release");
+      check(call(cells, "viewRelease", owned) == NativeVoid.INSTANCE, "replacement released");
       rejects(cells, "viewSum", owned);
       check(call(cells, "counterLive").equals(0L), "nothing left");
     }
