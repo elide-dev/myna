@@ -96,7 +96,7 @@ public final class Borrow {
 
   /**
    * A {@code PinnedObject}, the thread's {@link Scratch}, the {@link Copy} of a large copy or of a
-   * held borrow, or the native memory a held borrow lends in place.
+   * held borrow, or the native memory a call or held borrow lends in place.
    */
   private Object owner;
 
