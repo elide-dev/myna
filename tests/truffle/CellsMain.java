@@ -97,10 +97,15 @@ public final class CellsMain {
     owner.start();
     NativeBytes foreign = NativeBytes.of(owned.take(), true);
     expectScopeFailure(probe, foreign, "native buffer is confined to another thread (WrongThreadException: Attempted access outside owning thread)", "another thread's confined arena");
-    done.countDown();
+    try {
+      expectBorrowFailure(foreign, WrongThreadException.class);
+    } finally {
+      done.countDown();
+    }
     owner.join();
     // Closed by its owner, this thread: the next message fails before its word access.
     confined.close();
+    expectBorrowFailure(bytes, IllegalStateException.class);
     expectScopeFailure(probe, bytes, "native buffer's arena is closed (IllegalStateException: Already closed)", "a closed confined arena");
     // The global arena has no scope to check, so the same compiled code still runs over it.
     java.lang.foreign.MemorySegment global = java.lang.foreign.Arena.global().allocate(16, 8);
@@ -119,6 +124,15 @@ public final class CellsMain {
       Object[] outcome = (Object[]) probe.call(bytes, 5L);
       if (!expected.equals(outcome[0])) throw new AssertionError(what + ": " + outcome[0]);
       if (!(Boolean) outcome[1]) throw new AssertionError(what + ": the scope failure left compiled code at call " + call);
+    }
+  }
+
+  static void expectBorrowFailure(NativeBytes bytes, Class<? extends Throwable> cause) {
+    try {
+      new CellApiTruffle.addressOfBorrow_Cell().function().call(bytes);
+      throw new AssertionError("cell accepted inaccessible native memory");
+    } catch (NativeCellException failure) {
+      if (!cause.isInstance(failure.getCause())) throw new AssertionError(failure);
     }
   }
 

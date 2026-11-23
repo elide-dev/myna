@@ -47,9 +47,9 @@ public final class Batch {
   private boolean released;
 
   /**
-   * The segments an FFM cell lent in place, confined to this thread under a native leaf, which
-   * {@link #recheck} validates again once every element has been coerced: the first in a field, any
-   * others in an array made only for a second one.
+   * The scoped segments a cell lent in place, which {@link #recheck} validates again once every
+   * element has been coerced: the first in a field, any others in an array made only for a second
+   * one.
    */
   private MemorySegment inPlace;
 
@@ -61,6 +61,7 @@ public final class Batch {
 
   /** The address of the pointer array; {@code 0} for the empty batch. */
   public long address() {
+    if (inPlace != null) recheck(null);
     return address;
   }
 
@@ -189,6 +190,7 @@ public final class Batch {
    *     the one that lent it; the batch and the stack are left as they were
    */
   public void release() {
+    java.lang.ref.Reference.reachabilityFence(this);
     if (released || count == 0) return;
     Borrow.Scratch scratch = this.scratch;
     scratch.check((int) mark, top);

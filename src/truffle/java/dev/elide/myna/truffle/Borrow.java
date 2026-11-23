@@ -96,7 +96,7 @@ public final class Borrow {
 
   /**
    * A {@code PinnedObject}, the thread's {@link Scratch}, the {@link Copy} of a large copy or of a
-   * held borrow, or the native memory a held borrow lends in place.
+   * held borrow, or the native memory a call or held borrow lends in place.
    */
   private Object owner;
 
@@ -166,6 +166,14 @@ public final class Borrow {
   void lend(long address, long length) {
     this.address = address;
     this.length = length;
+  }
+
+  /**
+   * Retain the originating segment through the call and check it when the cell takes the address.
+   */
+  void lendNative(NativeBytes bytes, long address, long length) {
+    lend(address, length);
+    owner = bytes;
   }
 
   /** Lends bytes that {@code owner} must undo on release. */
@@ -350,6 +358,7 @@ public final class Borrow {
   }
 
   public long address() {
+    if (owner instanceof NativeBytes bytes && bytes.scoped != null) bytes.checkScope();
     return address;
   }
 
@@ -401,6 +410,7 @@ public final class Borrow {
       return;
     }
     released = true;
+    java.lang.ref.Reference.reachabilityFence(owner);
     if (kind == PINNED) Pins.unpin(owner);
     else if (kind == COPIED) Copy.release((Copy) owner, array, interopSource);
   }
