@@ -49,21 +49,27 @@ final class FfmCallbacks {
           .append("    public static final class ")
           .append(name)
           .append("Upcalls {\n")
-          .append("        private ")
+          .append("        private final ")
           .append(name)
-          .append("Upcalls() {}\n")
-          .append("        private static final MethodHandle HANDLE;\n");
+          .append("Callback target;\n");
+      if (returns) out.append("        private final ").append(carrier).append(" sentinel;\n");
+      out.append("        private ")
+          .append(name)
+          .append("Upcalls(")
+          .append(name)
+          .append("Callback target")
+          .append(returns ? ", " + carrier + " sentinel" : "")
+          .append(") {\n            this.target = target;\n");
+      if (returns) out.append("            this.sentinel = sentinel;\n");
+      out.append("        }\n").append("        static final MethodHandle HANDLE;\n");
       if (s.ffmTarget() != null)
         out.append("        public static final MethodHandle STATIC_HANDLE;\n");
       out.append("        static {\n            try {\n")
-          .append("                HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(")
+          .append("                HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(")
           .append(name)
           .append("Upcalls.class, \"invoke\", java.lang.invoke.MethodType.methodType(")
           .append(abiCarrier)
-          .append(".class, ")
-          .append(name)
-          .append("Callback.class")
-          .append(returns ? ", " + carrier + ".class" : "")
+          .append(".class")
           .append(classes.isEmpty() ? "" : ", " + String.join(", ", classes))
           .append("));\n");
       if (s.ffmTarget() != null)
@@ -80,13 +86,10 @@ final class FfmCallbacks {
               "            } catch (ReflectiveOperationException failure) { throw new"
                   + " ExceptionInInitializerError(failure); }\n"
                   + "        }\n")
-          .append("        private static ")
+          .append("        private ")
           .append(abiCarrier)
           .append(" invoke(")
-          .append(name)
-          .append("Callback target")
-          .append(returns ? ", " + carrier + " sentinel" : "")
-          .append(params.isEmpty() ? "" : ", " + String.join(", ", params))
+          .append(String.join(", ", params))
           .append(") {\n")
           .append("            try { ")
           .append(returns ? "return " : "")
@@ -118,12 +121,12 @@ final class FfmCallbacks {
           .append("            java.util.Objects.requireNonNull(target);\n");
       if (returns && carrier.equals("MemorySegment"))
         out.append("            java.util.Objects.requireNonNull(sentinel);\n");
-      out.append(
-              "            return"
-                  + " Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE,"
-                  + " 0, target")
+      // A single bound receiver lets Native Image specialize the trampoline for this adapter.
+      out.append("            return Linker.nativeLinker().upcallStub(HANDLE.bindTo(new ")
+          .append(name)
+          .append("Upcalls(target")
           .append(returns ? ", sentinel" : "")
-          .append("), ")
+          .append(")), ")
           .append(name)
           .append("_CALLBACK_DESCRIPTOR, arena);\n        }\n");
       if (s.ffmTarget() != null) {
