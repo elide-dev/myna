@@ -97,6 +97,37 @@ class FfmTest {
   }
 
   @Test
+  void dynamicUpcallsBindOneReceiverToADirectlyRegisteredAdapter() {
+    var out =
+        generate(
+            MODULE
+                + "callback Notify return=void\nend\n"
+                + "callback Reduce return=i64\nparam left type=i64\nparam right type=i64\nend\n");
+    String ffm = out.get("MynaFFM.java");
+    String feature = out.get("MynaForeignFeature.java");
+    assertTrue(ffm.contains("private final ReduceCallback target;"));
+    assertTrue(ffm.contains("private final long sentinel;"));
+    assertTrue(
+        ffm.contains(
+            "findVirtual(ReduceUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(long.class, long.class, long.class))"));
+    assertTrue(
+        ffm.contains(
+            "findVirtual(NotifyUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(void.class))"));
+    assertTrue(ffm.contains("HANDLE.bindTo(new ReduceUpcalls(target, sentinel))"));
+    assertTrue(ffm.contains("HANDLE.bindTo(new NotifyUpcalls(target))"));
+    assertTrue(
+        feature.contains(
+            "registerForDirectUpcall(MynaFFM.ReduceUpcalls.HANDLE,"
+                + " MynaFFM.Reduce_CALLBACK_DESCRIPTOR)"));
+    assertTrue(
+        feature.contains(
+            "registerForDirectUpcall(MynaFFM.NotifyUpcalls.HANDLE,"
+                + " MynaFFM.Notify_CALLBACK_DESCRIPTOR)"));
+  }
+
+  @Test
   void rejectsIncompleteAndInvalidStaticPolicies() {
     assertThrows(
         IllegalArgumentException.class,
@@ -130,11 +161,11 @@ class FfmTest {
     assertTrue(
         ffm.contains(
             "ShortResult_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT)"));
-    assertTrue(ffm.contains("private static int invoke(ByteResultCallback target, byte sentinel)"));
+    assertTrue(ffm.contains("private ByteResultUpcalls(ByteResultCallback target, byte sentinel)"));
     assertTrue(ffm.contains("return target.invoke() & 0xff;"));
     assertTrue(ffm.contains("return sentinel & 0xff;"));
     assertTrue(
-        ffm.contains("private static int invoke(ShortResultCallback target, short sentinel)"));
+        ffm.contains("private ShortResultUpcalls(ShortResultCallback target, short sentinel)"));
     assertTrue(ffm.contains("return target.invoke() & 0xffff;"));
     assertTrue(ffm.contains("return sentinel & 0xffff;"));
   }

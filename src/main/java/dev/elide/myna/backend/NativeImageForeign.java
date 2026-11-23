@@ -62,24 +62,14 @@ public final class NativeImageForeign implements Backend {
       out.append(runTime).append(function.name()).append("_Binding\");\n");
     }
     for (var callback : module.callbacks()) {
-      out.append("        RuntimeForeignAccess.registerForUpcall(")
-          .append(ffm)
-          .append('.')
-          .append(callback.name())
-          .append("_CALLBACK_DESCRIPTOR);\n")
-          .append(buildTime)
-          .append(callback.name())
-          .append("Upcalls\");\n");
+      String prefix = ffm + '.' + callback.name();
+      String direct = "        RuntimeForeignAccess.registerForDirectUpcall(" + prefix + "Upcalls.";
+      String descriptor = ", " + prefix + "_CALLBACK_DESCRIPTOR);\n";
+      out.append(buildTime).append(callback.name()).append("Upcalls\");\n");
+      // Direct registration also creates the shared stub for this descriptor.
+      out.append(direct).append("HANDLE").append(descriptor);
       if (callback.ffmTarget() != null)
-        out.append("        RuntimeForeignAccess.registerForDirectUpcall(")
-            .append(ffm)
-            .append('.')
-            .append(callback.name())
-            .append("Upcalls.STATIC_HANDLE, ")
-            .append(ffm)
-            .append('.')
-            .append(callback.name())
-            .append("_CALLBACK_DESCRIPTOR);\n");
+        out.append(direct).append("STATIC_HANDLE").append(descriptor);
     }
     return out.append("    }\n}\n").toString();
   }
