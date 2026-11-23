@@ -196,14 +196,19 @@ public final class ConstsFFM {
         int invoke(MemorySegment arg0) throws Throwable;
     }
     public static final class ListenerUpcalls {
-        private ListenerUpcalls() {}
-        private static final MethodHandle HANDLE;
+        private final ListenerCallback target;
+        private final int sentinel;
+        private ListenerUpcalls(ListenerCallback target, int sentinel) {
+            this.target = target;
+            this.sentinel = sentinel;
+        }
+        static final MethodHandle HANDLE;
         static {
             try {
-                HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(ListenerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, ListenerCallback.class, int.class, MemorySegment.class));
+                HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(ListenerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, MemorySegment.class));
             } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
         }
-        private static int invoke(ListenerCallback target, int sentinel, MemorySegment arg0) {
+        private int invoke(MemorySegment arg0) {
             try { return target.invoke(arg0); }
             catch (Throwable failure) { return sentinel; }
         }
@@ -212,7 +217,7 @@ public final class ConstsFFM {
          * A void callback discards exceptions; catch inside the callback to report them. */
         public static MemorySegment create(ListenerCallback target, int sentinel, Arena arena) {
             java.util.Objects.requireNonNull(target);
-            return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Listener_CALLBACK_DESCRIPTOR, arena);
+            return Linker.nativeLinker().upcallStub(HANDLE.bindTo(new ListenerUpcalls(target, sentinel)), Listener_CALLBACK_DESCRIPTOR, arena);
         }
     }
 }
