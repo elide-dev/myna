@@ -15,11 +15,7 @@ public final class Guest {
   private static Context context;
   private static CallTarget target;
   private static boolean perCall;
-  private static volatile int compiled;
-  private static volatile int calls;
   private static volatile Throwable failure;
-
-  private static volatile int state;
 
   static final class MixNode extends Node {
     int execute(int value) {
@@ -30,11 +26,12 @@ public final class Guest {
 
   static final class CountingRoot extends RootNode {
     @Child private MixNode mix = new MixNode();
-    CountingRoot() { super(null); }
+    CountingRoot(HookLanguage language) { super(language); }
     @Override public Object execute(VirtualFrame frame) {
-      if (CompilerDirectives.inCompiledCode()) compiled++;
-      state = mix.execute(state);
-      calls++;
+      var guest = HookLanguage.CURRENT.get(this);
+      if (CompilerDirectives.inCompiledCode()) guest.compiled++;
+      guest.value = mix.execute(guest.value);
+      guest.calls++;
       return null;
     }
   }
@@ -55,12 +52,17 @@ public final class Guest {
   }
 
   static void measure(UpcallsFFM.LibraryBinding binding, Arena arena, String name, int count) throws Throwable {
-    try (var ctx = Context.newBuilder().allowExperimentalOptions(true)
+    try (var ctx = Context.newBuilder("upcallbench").allowExperimentalOptions(true)
         .option("engine.CompileImmediately", "true").option("engine.BackgroundCompilation", "false")
         .option("engine.MultiTier", "false").option("engine.CompilationFailureAction", "Throw").build()) {
       context = ctx;
+      ctx.initialize("upcallbench");
+      HookLanguage.State guest;
       ctx.enter();
-      try { target = new CountingRoot().getCallTarget(); } finally { ctx.leave(); }
+      try {
+        guest = HookLanguage.CURRENT.get(null);
+        target = guest.root.getCallTarget();
+      } finally { ctx.leave(); }
       perCall = name.contains("-each-");
       var hook = UpcallsFFM.GuestHookUpcalls.create(arena);
       var enter = perCall ? MemorySegment.NULL : UpcallsFFM.EnterGuestUpcalls.create(arena);
@@ -71,12 +73,12 @@ public final class Guest {
         expected = (expected & 1) == 0 ? rotated + 17 : rotated ^ 0x5a5a;
       }
       for (int round = -3; round < 12; round++) {
-        calls = compiled = 0;
-        state = 1;
+        guest.calls = guest.compiled = 0;
+        guest.value = 1;
         long elapsed = binding.measureGuest(hook, enter, leave, name.endsWith("-worker"), count);
         if (failure != null) throw new AssertionError("guest callback failed", failure);
-        if (state != expected || calls != count || (round >= 0 && compiled != count)) {
-          throw new AssertionError("calls=" + calls + " compiled=" + compiled);
+        if (guest.value != expected || guest.calls != count || (round >= 0 && guest.compiled != count)) {
+          throw new AssertionError("calls=" + guest.calls + " compiled=" + guest.compiled);
         }
         if (round >= 0) System.out.println(elapsed);
       }

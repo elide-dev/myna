@@ -37,9 +37,10 @@ def build():
     classes = WORK / "classes"
     jars = truffle_jars()
     modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
-    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=jars.values())
+    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=jars.values(),
+                   options=("-processorpath", str(jars["truffle-dsl-processor"])))
     native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
-                 "--initialize-at-build-time=bench.upcalls.Guest$CountingRoot,bench.upcalls.Guest$MixNode", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
+                 "--initialize-at-build-time=bench.upcalls.Guest$CountingRoot,bench.upcalls.Guest$MixNode,bench.upcalls.HookLanguage", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
                  "-H:-UnlockExperimentalVMOptions", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                  "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
                  "-o", APP, timeout=900)
