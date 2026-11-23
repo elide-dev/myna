@@ -7,6 +7,12 @@ import java.lang.foreign.MemorySegment;
 import java.nio.file.Path;
 
 public final class Measure {
+  private static volatile int hookCalls;
+
+  public static void hook() {
+    hookCalls++;
+  }
+
   public static long reduce(long previous, long increment) {
     return previous + increment;
   }
@@ -20,6 +26,8 @@ public final class Measure {
       var callback = workload.startsWith("control") ? MemorySegment.NULL
           : dynamic ? UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, arena)
           : UpcallsFFM.ReducerUpcalls.create(arena);
+      var hook = workload.contains("-hook-")
+          ? UpcallsFFM.HookUpcalls.create(Measure::hook, arena) : MemorySegment.NULL;
       for (int round = -3; round < 12; round++) {
         long elapsed;
         if (workload.endsWith("-setup")) {
@@ -33,6 +41,10 @@ public final class Measure {
             }
           }
           elapsed = System.nanoTime() - start;
+        } else if (workload.contains("-hook-")) {
+          hookCalls = 0;
+          elapsed = binding.measureHook(hook, workload.endsWith("-worker"), count);
+          if (hookCalls != count) throw new AssertionError("missing hook calls");
         } else if (workload.equals("isolate-caller")) {
           elapsed = binding.measureIsolate(
               MemorySegment.ofAddress(Upcalls.Literals.reduceInIsolate.getFunctionPointer().rawValue()),

@@ -21,7 +21,7 @@ WORK = ROOT / "build/upcalls"
 LIB = WORK / ("libbench.dylib" if sys.platform == "darwin" else "libbench.so")
 APP = WORK / "measure"
 CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic")
-         for thread in ("caller", "worker")] + ["isolate-caller", "static-setup", "dynamic-setup"]
+         for thread in ("caller", "worker")] + ["dynamic-hook-caller", "dynamic-hook-worker", "isolate-caller", "static-setup", "dynamic-setup"]
 
 
 def build():

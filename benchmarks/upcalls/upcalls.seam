@@ -22,3 +22,10 @@ import measureIsolate symbol=myna_measure_isolate return=i64 error=no_failure na
   param thread type=isolate_thread
   param count type=i32
 end
+callback Hook return=void
+end
+import measureHook symbol=myna_measure_hook return=i64 error=no_failure native_leaf=false@explicit_contract
+  param target type=fn<Hook>
+  param worker type=bool
+  param count type=i32
+end

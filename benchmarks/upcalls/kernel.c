@@ -27,14 +27,18 @@ static void *loop(void *arg) {
   return NULL;
 }
 
-int64_t myna_measure(Reducer target, bool worker, int32_t count) {
-  struct sample s = {target ? target : control, count, 0};
+static void run_round(void *(*task)(void *), void *args, bool worker) {
   if (worker) {
     pthread_t thread;
-    if (pthread_create(&thread, NULL, loop, &s) || pthread_join(thread, NULL)) abort();
+    if (pthread_create(&thread, NULL, task, args) || pthread_join(thread, NULL)) abort();
   } else {
-    loop(&s);
+    task(args);
   }
+}
+
+int64_t myna_measure(Reducer target, bool worker, int32_t count) {
+  struct sample s = {target ? target : control, count, 0};
+  run_round(loop, &s, worker);
   return s.elapsed;
 }
 
@@ -45,4 +49,20 @@ int64_t myna_measure_isolate(IsolateReducer target, void *thread, int32_t count)
   int64_t elapsed = now() - start;
   if (result != count) abort();
   return elapsed;
+}
+
+struct hook_sample { Hook target; int32_t count; int64_t elapsed; };
+
+static void *hook_loop(void *arg) {
+  struct hook_sample *s = arg;
+  int64_t start = now();
+  for (int32_t i = 0; i < s->count; ++i) s->target();
+  s->elapsed = now() - start;
+  return NULL;
+}
+
+int64_t myna_measure_hook(Hook target, bool worker, int32_t count) {
+  struct hook_sample s = {target, count, 0};
+  run_round(hook_loop, &s, worker);
+  return s.elapsed;
 }
