@@ -85,7 +85,7 @@ pub mod ownership {
             let owned = core::mem::ManuallyDrop::new(self);
             owned.pointer.as_ptr()
         }
-        pub fn borrow(&self) -> TicketBorrow<'_> {
+        pub const fn borrow(&self) -> TicketBorrow<'_> {
             TicketBorrow { owner: self }
         }
     }
@@ -95,7 +95,7 @@ pub mod ownership {
     pub struct TicketBorrow<'owner> { owner: &'owner Ticket }
     impl TicketBorrow<'_> {
         /// Raw escape hatch. Dereferencing or passing it on remains unsafe.
-        pub fn as_ptr(&self) -> *mut super::Ticket { self.owner.pointer.as_ptr() }
+        pub const fn as_ptr(&self) -> *mut super::Ticket { self.owner.pointer.as_ptr() }
     }
     pub fn check(bytes: &[u8], mode: super::Status) -> super::Status {
         unsafe { super::check(bytes.as_ptr(), bytes.len().try_into().expect("buffer length exceeds ABI range"), mode) }

@@ -34,6 +34,7 @@ const _: () = assert!(core::mem::size_of::<Level>() == 1);
 const _: () = assert!(core::mem::size_of::<Perms>() == 4);
 const _: () = assert!(core::mem::size_of::<Wide>() == 8);
 const _: () = assert!(core::mem::offset_of!(Record, perms) == 4);
+const _: () = assert!(Packed::KIND_WIDTH == 8 && Packed::DEPTH_WIDTH == 4);
 const _: () = assert!(Packed::KIND_SHIFT == 8 && Packed::KIND_MASK == 0xff00);
 const _: () = assert!(Packed::DEPTH_SHIFT == 16 && Packed::DEPTH_MASK == 0xf_0000);
 const _: () = assert!(Packed::ALL.0 == 0xf_ff05);

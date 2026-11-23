@@ -91,7 +91,7 @@ end
 The pair is a contract on the record: a non-null pointer addresses `count` consecutive elements that stay valid for as long as the record does, and a null pointer has a zero count. The carrier, layout, C ABI, `seam.h` and `seam.ll` do not change; `seam.json` records `"count"` on the pointer field, so the relation is part of the fingerprint. `T` is a declared struct, a non-`bool` scalar, or a pointer to a struct or opaque type (`ptr<ptr<Node>>`, an array of element pointers such as a tree's child list; the views read the element pointers as stored, so a null element comes back null and is the caller's to check); the count is a plain `u8`, `u16`, `u32`, `u64` or `usize` field (no `enum=`/`flags=`) that counts at most one pointer. A count is never negative, so signed carriers, `isize` included, are rejected: declare a C `int` count as `u32` (the layout is identical) and a `size_t` count as `usize`. A view that should share another view's count is not expressible yet. Generated accessors (see `examples/views.seam`):
 
 - **Rust**: `unsafe fn functions(&self) -> &[Function]` on the record (the field's name; Rust keeps methods and fields apart). It is `unsafe` because records are `Copy` with public raw fields, so safe code can build one whose pointer and count disagree. Its `# Safety` contract: the record came from the producer, or a non-null pointer addresses `count` initialized, aligned elements that stay valid and unmodified while the record is borrowed, and a null one has a zero count. Null is the empty slice; `debug_assert!` checks a null pointer's zero count, the `isize` size limit and alignment. Indexing past the count panics as any slice does. A pointer array is `&[*mut T]`, the field's own pointer spelling, with the same rules.
-- **Java FFM**: every view is **read-only**: the elements are the producer's memory, as Rust's shared `&[T]` is. Beside the `_OFFSET` constants, each view gets:
+- **Java FFM**: every view is **read-only**: the elements are the producer's memory, so a view’s `asByteBuffer()` is read-only too. Rust projects it as a shared `&[T]`. Beside the `_OFFSET` constants, each view gets:
   - `long <Struct>_<field>_count(record)`: the count widened unsigned. A `u64` above `Long.MAX_VALUE` reads negative, which every view rejects, so take the view before looping on a `u64` count: a loop bounded by a negative count silently runs zero times.
   - `<Struct>_<field>(record)`: the elements as one segment of `count * sizeof(T)` bytes (`count * ADDRESS.byteSize()` for a pointer array) in the global scope, for callers that manage the lifetime themselves.
   - `<Struct>_<field>(record, Arena owner)`: the same view bound to `owner`, so a read after the owner closes throws `IllegalStateException` instead of reading freed memory. A confined owner makes the view confined to its thread (`WrongThreadException` elsewhere).
@@ -236,10 +236,10 @@ end
 - `enum=ENUM` is optional. The enum's carrier must hold every value of the width (an unsigned carrier of at
   least that many bits, a signed one of more), and each declared value must be non-negative and fit the width.
 - Range names follow the bit-name rule and share a namespace with the set's bits, including each range's
-  derived `<name>_shift` and `<name>_mask`. `all` and `none` are reserved, and a range may not be named after a
+  derived `<name>_shift`, `<name>_width` and `<name>_mask`. `all` and `none` are reserved, and a range may not be named after a
   Rust flag or derived trait method (`contains`, `intersects`, `union`, `when`, `clone`, `clone_from`, `eq`, `ne`, `hash`, `hash_slice`, `fmt`, `bitor`, `bitand`, `assert_receiver_is_total_eq`) or take another member's Java getter or `with`
   setter name.
-- Every backend that emits bit constants also emits `<GROUP>_<NAME>_SHIFT` (`LOW`) and `<GROUP>_<NAME>_MASK`
+- Every backend that emits bit constants also emits `<GROUP>_<NAME>_SHIFT` (`LOW`), `<GROUP>_<NAME>_WIDTH` (number of bits) and `<GROUP>_<NAME>_MASK`
   (the range in place), typed with the carrier. `<GROUP>_ALL` includes every range, so `hasUnknown` means a bit
   outside every declared bit and range.
 - C: `static inline` getter `<module>_<group>_<name>(flags)` and setter

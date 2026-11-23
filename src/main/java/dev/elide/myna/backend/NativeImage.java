@@ -58,6 +58,14 @@ public final class NativeImage implements Backend {
     else if (type instanceof Pointer) imports.add("org.graalvm.nativeimage.c.type." + c);
   }
 
+  /** The address of a pointer field points to a pointer-sized slot in the C record. */
+  private static Pointer fieldAddressType(Field field) {
+    Pointer address = new Pointer(field.type());
+    return field.type() instanceof Pointer && Types.java(address).equals("PointerBase")
+        ? new Pointer(Scalar.USIZE)
+        : address;
+  }
+
   private static String params(Module m, List<Parameter> ps) {
     return String.join(", ", ps.stream().map(p -> carrier(m, p) + " " + p.name()).toList());
   }
@@ -149,7 +157,7 @@ public final class NativeImage implements Backend {
     for (Struct st : m.structs())
       for (Field f : st.fields()) {
         carrierImport(imports, f.type());
-        carrierImport(imports, new Pointer(f.type()));
+        carrierImport(imports, fieldAddressType(f));
       }
     for (Signature c : m.callbacks()) {
       if (c.javaType() != null) continue;
@@ -583,7 +591,7 @@ public final class NativeImage implements Backend {
           .append(carrier)
           .append(" value);\n        @CFieldAddress")
           .append(field)
-          .append(Types.nativeImage(new Pointer(f.type())))
+          .append(Types.nativeImage(fieldAddressType(f)))
           .append(" addressOf")
           .append(Character.toUpperCase(f.name().charAt(0)))
           .append(f.name().substring(1))

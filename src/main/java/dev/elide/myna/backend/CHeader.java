@@ -311,6 +311,10 @@ public final class CHeader implements Backend {
       for (FlagRange r : f.ranges()) {
         define(
             out,
+            Names.cMacro(m, f.name(), r.name() + "_width"),
+            literal(f.type(), BigInteger.valueOf(r.width()), false));
+        define(
+            out,
             Names.cMacro(m, f.name(), r.name() + "_shift"),
             literal(f.type(), BigInteger.valueOf(r.low()), false));
         define(

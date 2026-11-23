@@ -110,6 +110,7 @@ static inline const char *constants_unary_op_name(uint32_t value) {
 }
 /* flags Octet: u8 */
 typedef uint8_t constants_octet_t;
+#define CONSTANTS_OCTET_CODE_WIDTH UINT8_C(8)
 #define CONSTANTS_OCTET_CODE_SHIFT UINT8_C(0)
 #define CONSTANTS_OCTET_CODE_MASK UINT8_C(0xff)
 #define CONSTANTS_OCTET_ALL UINT8_C(0xff)
@@ -123,8 +124,10 @@ static inline constants_octet_t constants_octet_with_code(constants_octet_t flag
 typedef uint32_t constants_packed_t;
 #define CONSTANTS_PACKED_OPEN UINT32_C(0x1)
 #define CONSTANTS_PACKED_EXTERNAL UINT32_C(0x4)
+#define CONSTANTS_PACKED_KIND_WIDTH UINT32_C(8)
 #define CONSTANTS_PACKED_KIND_SHIFT UINT32_C(8)
 #define CONSTANTS_PACKED_KIND_MASK UINT32_C(0xff00)
+#define CONSTANTS_PACKED_DEPTH_WIDTH UINT32_C(4)
 #define CONSTANTS_PACKED_DEPTH_SHIFT UINT32_C(16)
 #define CONSTANTS_PACKED_DEPTH_MASK UINT32_C(0xf0000)
 #define CONSTANTS_PACKED_ALL UINT32_C(0xfff05)

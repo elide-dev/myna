@@ -86,13 +86,13 @@ public final class Views {
         int ALIGNMENT = 8;
         @CField("functions") Function functions();
         @CField("functions") void functions(Function value);
-        @CFieldAddress("functions") PointerBase addressOfFunctions();
+        @CFieldAddress("functions") WordPointer addressOfFunctions();
         @CField("functionCount") long functionCount();
         @CField("functionCount") void functionCount(long value);
         @CFieldAddress("functionCount") CLongPointer addressOfFunctionCount();
         @CField("text") CShortPointer text();
         @CField("text") void text(CShortPointer value);
-        @CFieldAddress("text") PointerBase addressOfText();
+        @CFieldAddress("text") WordPointer addressOfText();
         @CField("textLength") int textLength();
         @CField("textLength") void textLength(int value);
         @CFieldAddress("textLength") CIntPointer addressOfTextLength();
@@ -101,7 +101,7 @@ public final class Views {
         @CFieldAddress("version") CIntPointer addressOfVersion();
         @CField("roots") PointerBase roots();
         @CField("roots") void roots(PointerBase value);
-        @CFieldAddress("roots") PointerBase addressOfRoots();
+        @CFieldAddress("roots") WordPointer addressOfRoots();
         @CField("rootCount") long rootCount();
         @CField("rootCount") void rootCount(long value);
         @CFieldAddress("rootCount") WordPointer addressOfRootCount();

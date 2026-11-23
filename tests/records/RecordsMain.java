@@ -217,6 +217,7 @@ public final class RecordsMain {
     rec.offset(Long.MIN_VALUE);
     rec.ratio(1.5);
     rec.next(rec);
+    check(rec.addressOfNext().read().rawValue() == rec.rawValue(), "read the struct pointer slot");
     rec.handle(WordFactory.pointer(0x1234));
     rec.signed32(Integer.MIN_VALUE);
     rec.unsigned32(0x80000000);

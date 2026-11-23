@@ -26,7 +26,10 @@ fn opt(index: Option<u32>) -> String {
     index.map_or(String::from("-"), |i| i.to_string())
 }
 
+const fn node_index(node: &AnyNode<'_>) -> u32 { node.index() }
+
 fn dump(node: AnyNode<'_>) -> String {
+    debug_assert_eq!(node_index(&node), node.index());
     match node {
         AnyNode::Style(s) => format!(
             "Style face={} flags={} align={} size={:x} parent={}",
