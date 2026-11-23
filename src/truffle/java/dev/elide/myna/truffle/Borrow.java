@@ -168,6 +168,9 @@ public final class Borrow {
     this.length = length;
   }
 
+  /**
+   * Retain the originating segment through the call and check it when the cell takes the address.
+   */
   void lendNative(NativeBytes bytes, long address, long length) {
     lend(address, length);
     owner = bytes;
@@ -355,7 +358,9 @@ public final class Borrow {
   }
 
   public long address() {
-    if (ImageInfo.inImageRuntimeCode() && owner instanceof NativeBytes bytes) bytes.checkScope();
+    if (ImageInfo.inImageRuntimeCode()
+        && owner instanceof NativeBytes bytes
+        && bytes.scoped != null) bytes.checkScope();
     return address;
   }
 
@@ -407,7 +412,8 @@ public final class Borrow {
       return;
     }
     released = true;
-    if (kind == PINNED) Pins.unpin(owner);
+    if (kind == LENT) java.lang.ref.Reference.reachabilityFence(owner);
+    else if (kind == PINNED) Pins.unpin(owner);
     else if (kind == COPIED) Copy.release((Copy) owner, array, interopSource);
   }
 

@@ -3,6 +3,7 @@
 package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 
@@ -46,6 +47,7 @@ public final class PointerCoercion extends Coercion {
     return address;
   }
 
+  @HostCompilerDirectives.InliningCutoff
   private long slow(Object value) {
     if (value == null) return checked(0, value);
     if (value instanceof NativeResource owner) {

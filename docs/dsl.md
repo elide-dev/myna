@@ -406,7 +406,7 @@ are omitted for them. Rust implementation traits require fixed-arity imports.
 ### Standalone Java constants
 
 Run `myna generate INPUT.seam --out DIR --constants-only shared.tape` to generate
-the constants source in package `shared.tape`. Compile it into a separate jar using a plain JDK.
+the constants source under `DIR/shared/tape/` in package `shared.tape`. Compile it into a separate jar using a plain JDK.
 Its literals, enum helpers and flag operations depend only on the Java standard library.
 The package choice applies to this output and leaves the descriptor fingerprint intact.
 Use `--check` with the same arguments to verify the generated source.

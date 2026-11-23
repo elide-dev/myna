@@ -4,6 +4,7 @@ package dev.elide.myna.truffle;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -174,6 +175,7 @@ public final class NativeBytes implements TruffleObject {
    * also compares its owner with the current thread. Compiled code makes no call and allocates
    * nothing unless the check fails, a branch it lays out as a slow path.
    */
+  @HostCompilerDirectives.InliningCutoff
   void checkScope() {
     MemorySegment.Scope s = scope;
     if (s != null
