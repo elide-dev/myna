@@ -143,20 +143,20 @@ Five fresh SVM processes per case on a Ryzen 9 9950X3D2 (Linux x86-64, logical C
 
 | Upcall path | Calling thread (ns/call) | Native worker (ns/call) |
 |---|---:|---:|
-| Native C control | 1.19 | 1.24 |
-| Static FFM reducer | 16.02 | 16.53 |
-| Generic dynamic FFM reducer | 4,517.93 | 4,436.65 |
-| Receiver-bound FFM reducer | 14.49 | 15.15 |
-| Explicit isolate-thread reducer | 10.60 | — |
-| Static void hook | 18.32 | 24.18 |
-| Generic dynamic void hook | 1,394.69 | 1,502.16 |
-| Receiver-bound void hook | 18.75 | 18.88 |
-| Static Truffle callback, enter per call | 90.80 | 84.11 |
-| Receiver-bound Truffle callback, enter per call | 109.48 | 104.49 |
-| Static Truffle callback, enter per batch | 40.22 | 42.71 |
-| Receiver-bound Truffle callback, enter per batch | 40.93 | 42.93 |
+| Native C control | 1.22 | 1.32 |
+| Static FFM reducer | 15.13 | 15.15 |
+| Generic dynamic FFM reducer | 4,856.50 | 4,409.30 |
+| Receiver-bound FFM reducer | 14.62 | 14.62 |
+| Explicit isolate-thread reducer | 11.22 | — |
+| Static void hook | 18.87 | 18.89 |
+| Generic dynamic void hook | 1,457.69 | 1,418.29 |
+| Receiver-bound void hook | 18.34 | 18.65 |
+| Static Truffle callback, enter per call | 83.83 | 84.20 |
+| Receiver-bound Truffle callback, enter per call | 85.65 | 84.54 |
+| Static Truffle callback, enter per batch | 36.97 | 37.66 |
+| Receiver-bound Truffle callback, enter per batch | 38.40 | 40.58 |
 
-Creating stubs and closing their arena cost 11,550 ns per static registration, 7,573 ns per generic dynamic registration, and 11,598 ns per receiver-bound registration.
+Creating stubs and closing their arena cost 11,475 ns per static registration, 7,416 ns per generic dynamic registration, and 12,444 ns per receiver-bound registration.
 
 <!-- upcall-results:end -->
 
