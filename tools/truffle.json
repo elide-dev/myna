@@ -1,54 +1,54 @@
 {
-  "version": "25.5.5-elide.31",
+  "version": "25.5.5-elide.32",
   "repository": "https://maven.elide.dev/gvm-elide/{version}",
   "artifacts": {
     "truffle-api": {
-      "path": "org/graalvm/truffle/truffle-api/25.5.5-elide.31/truffle-api-25.5.5-elide.31.jar",
-      "sha256": "70af57708cd27a27cfb455e0fec37b2d04b5192dcf061382e07dcb9c2b88c35c"
+      "path": "org/graalvm/truffle/truffle-api/25.5.5-elide.32/truffle-api-25.5.5-elide.32.jar",
+      "sha256": "bb00e7eceb458168365bd777e5d1fcc511ce43541ca069bc2f2cb55ee9271bb6"
     },
     "truffle-runtime": {
-      "path": "org/graalvm/truffle/truffle-runtime/25.5.5-elide.31/truffle-runtime-25.5.5-elide.31.jar",
-      "sha256": "4ce57f30e2b5652c979c66c12ff8100dd22dfb8cad4a76759076f97bb7a65c4a"
+      "path": "org/graalvm/truffle/truffle-runtime/25.5.5-elide.32/truffle-runtime-25.5.5-elide.32.jar",
+      "sha256": "8081ad5ebdb5dcd51735820070cc9f28aee3d57cb2038bbbf536c77c90429cdf"
     },
     "truffle-compiler": {
-      "path": "org/graalvm/truffle/truffle-compiler/25.5.5-elide.31/truffle-compiler-25.5.5-elide.31.jar",
-      "sha256": "1ead63d25a373529fcc8f00fb633200023fa280a61aa58983d6cef647f2d389f"
+      "path": "org/graalvm/truffle/truffle-compiler/25.5.5-elide.32/truffle-compiler-25.5.5-elide.32.jar",
+      "sha256": "5fa659e13955af04a09c20204e4b08a89487f590ecfd1fc68d6f39825266ce44"
     },
     "polyglot": {
-      "path": "org/graalvm/polyglot/polyglot/25.5.5-elide.31/polyglot-25.5.5-elide.31.jar",
-      "sha256": "bd524955411b5c7a02a9a5d2d850d8f771c16f95c03c03aa20660a67ae1b7e27"
+      "path": "org/graalvm/polyglot/polyglot/25.5.5-elide.32/polyglot-25.5.5-elide.32.jar",
+      "sha256": "a6858ddb0582fc9246b0ff8959382caf2d93ab73043e27b56e20c6f1fcb72bfd"
     },
     "collections": {
-      "path": "org/graalvm/sdk/collections/25.5.5-elide.31/collections-25.5.5-elide.31.jar",
-      "sha256": "586842bb34e63a90d8f50fc2fdfb0d774e06b805bd02d7ef677d7f84fd1ec183"
+      "path": "org/graalvm/sdk/collections/25.5.5-elide.32/collections-25.5.5-elide.32.jar",
+      "sha256": "62bb1f6080f51c6a76a689571a1827c987d37c12791f45c666a1b1b7eeff632f"
     },
     "nativeimage": {
-      "path": "org/graalvm/sdk/nativeimage/25.5.5-elide.31/nativeimage-25.5.5-elide.31.jar",
-      "sha256": "25cd316438dea110ef02a667a8767a610675524ab8f7a583e1172019ed46488e"
+      "path": "org/graalvm/sdk/nativeimage/25.5.5-elide.32/nativeimage-25.5.5-elide.32.jar",
+      "sha256": "885a16a34324b5eea218e3300b441d0f56db9cdfdcb83b58676c4edad8303e2e"
     },
     "word": {
-      "path": "org/graalvm/sdk/word/25.5.5-elide.31/word-25.5.5-elide.31.jar",
-      "sha256": "3b2afff64729ac2718220b1314ccfd6dbbdb069cf606b3558b43220d204ea984"
+      "path": "org/graalvm/sdk/word/25.5.5-elide.32/word-25.5.5-elide.32.jar",
+      "sha256": "3244e0bf551e2a241d524569561d79020c2106736f0416b8dcae127b6d552971"
     },
     "jniutils": {
-      "path": "org/graalvm/sdk/jniutils/25.5.5-elide.31/jniutils-25.5.5-elide.31.jar",
-      "sha256": "1a301a266fb37c444049ba071a676730218983d1a079d71798a80314e8a1125a"
+      "path": "org/graalvm/sdk/jniutils/25.5.5-elide.32/jniutils-25.5.5-elide.32.jar",
+      "sha256": "62e381177bdcbb4376462d5357cf915d43f42014b3eeb2a136d90b318f9e5ac4"
     },
     "nativebridge": {
-      "path": "org/graalvm/sdk/nativebridge/25.5.5-elide.31/nativebridge-25.5.5-elide.31.jar",
-      "sha256": "cbe52a1fbad351e16a561ebbf433174717da9ae60f0b08e27fe20f1d26630415"
+      "path": "org/graalvm/sdk/nativebridge/25.5.5-elide.32/nativebridge-25.5.5-elide.32.jar",
+      "sha256": "3464d00d3c10481acc89ce8c306e16a4a61ea499a42c900d020a221f4678dec6"
     },
     "truffle-nfi": {
-      "path": "org/graalvm/truffle/truffle-nfi/25.5.5-elide.31/truffle-nfi-25.5.5-elide.31.jar",
-      "sha256": "ddb4afebf69889a4f10d9f552a2bff74c5c1f03c49a9bb87c250168ca6c49922"
+      "path": "org/graalvm/truffle/truffle-nfi/25.5.5-elide.32/truffle-nfi-25.5.5-elide.32.jar",
+      "sha256": "bd2690bc2c18193f30ad4d52067cc672d1a6c1a4cfd90ca967ca035deb3e2a71"
     },
     "truffle-nfi-libffi": {
-      "path": "org/graalvm/truffle/truffle-nfi-libffi/25.5.5-elide.31/truffle-nfi-libffi-25.5.5-elide.31.jar",
-      "sha256": "2515463f21a85d3b5c498bf9e75541c61ebdab3f7a2907f423d9acd11a6144ee"
+      "path": "org/graalvm/truffle/truffle-nfi-libffi/25.5.5-elide.32/truffle-nfi-libffi-25.5.5-elide.32.jar",
+      "sha256": "e618437f9189bcae3922ee3be08e70eab16c973906f13099a68153ba60f3ce0a"
     },
     "truffle-dsl-processor": {
-      "path": "org/graalvm/truffle/truffle-dsl-processor/25.5.5-elide.31/truffle-dsl-processor-25.5.5-elide.31.jar",
-      "sha256": "65ecd5060f7791948dee48a876edc3790a68aa1b8103b0e7afb457a612f6f0ee"
+      "path": "org/graalvm/truffle/truffle-dsl-processor/25.5.5-elide.32/truffle-dsl-processor-25.5.5-elide.32.jar",
+      "sha256": "c579dbcbb4b309ab7f7d4b85b8b058724375f0894d873969448f3c6cb55ba4eb"
     }
   }
 }
