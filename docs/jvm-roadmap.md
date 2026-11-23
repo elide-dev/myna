@@ -50,7 +50,7 @@ callback Reducer return=i64 ffm_java=fixture.CallbackOps.reduce ffm_sentinel=-1
 end
 ```
 
-This emits `ReducerUpcalls.create(arena)` and registers its static exception-translating method handle with `RuntimeForeignAccess.registerForDirectUpcall`. Static targets currently require `i32` or `i64` returns. Adapter method handles initialize at image build time; library addresses and upcall segments are created at runtime. No process address enters the image heap.
+This emits `ReducerUpcalls.create(arena)` and registers its static exception-translating method handle with `RuntimeForeignAccess.registerForDirectUpcall`. Static targets support `i32` and `i64` status returns, or `void` with no sentinel. For a fixed notification hook, declare `ffm_java` and use `create(arena)` to select the direct stub. Adapter method handles initialize at image build time; library addresses and upcall segments are created at runtime. No process address enters the image heap.
 
 An ordinary JVM downcall uses the raw C ABI. Calling a Native Image export still requires that export's isolate-thread argument. FFM does not create or erase isolate setup requirements. See the [JDK FFM upcall guide](https://docs.oracle.com/en/java/javase/25/core/upcalls-passing-java-code-function-pointer-foreign-function.html) and [Native Image FFM registration requirements](https://docs.oracle.com/en/graalvm/jdk/25/docs/reference-manual/native-image/native-code-interoperability/ffm-api/).
 

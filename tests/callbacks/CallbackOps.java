@@ -3,6 +3,13 @@
 package fixture.callbacks;
 
 public final class CallbackOps {
+  static int lastNotice;
+
+  public static void notifyValue(int value) {
+    lastNotice = value;
+    throw new IllegalStateException("void callback exception");
+  }
+
   public static long reduce(long left, long right) {
     if (left < 0) throw new IllegalArgumentException("sentinel case");
     return left + right;
