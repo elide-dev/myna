@@ -9,7 +9,7 @@ import java.util.*;
 public final class Seam {
   private Seam() {}
 
-  public static final String VERSION = "0.21.0";
+  public static final String VERSION = "0.22.0";
   public static final int BINDING_ABI_VERSION = 2;
 
   /**

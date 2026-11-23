@@ -22,7 +22,7 @@ public final class Main {
 
   private static final String HELP =
       """
-      myna 0.21.0 — Native Image / Rust ABI generator
+      myna 0.22.0 — Native Image / Rust ABI generator
       Usage:
         myna generate INPUT.seam --out DIRECTORY [--target TRIPLE] [--relaxed] [--check] [--jni | --rust-only]
         myna validate INPUT.seam [--target TRIPLE | --targets TRIPLE,...] [--relaxed]
