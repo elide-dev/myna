@@ -41,6 +41,18 @@ class BatchCoercionTest {
   }
 
   @Test
+  void rawBorrowAddressRechecksTheOriginalSegment() {
+    Arena arena = Arena.ofConfined();
+    MemorySegment segment = arena.allocate(8);
+    Borrow lent = new Borrow();
+    lent.lendNative(NativeBytes.of(segment, false), segment.address(), 8);
+    assertEquals(segment.address(), lent.address());
+    arena.close();
+    assertThrows(NativeCellException.class, lent::address);
+    lent.release();
+  }
+
+  @Test
   void nativeBatchTracksArenasUntilAllArgumentsAreReady() {
     var site = new BatchCoercion("digest", "parts", false, true, Long.MAX_VALUE, false, true);
     Arena arena = Arena.ofConfined();

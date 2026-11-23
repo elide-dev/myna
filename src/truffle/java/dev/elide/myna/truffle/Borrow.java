@@ -358,9 +358,7 @@ public final class Borrow {
   }
 
   public long address() {
-    if (ImageInfo.inImageRuntimeCode()
-        && owner instanceof NativeBytes bytes
-        && bytes.scoped != null) bytes.checkScope();
+    if (owner instanceof NativeBytes bytes && bytes.scoped != null) bytes.checkScope();
     return address;
   }
 
