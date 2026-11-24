@@ -96,6 +96,27 @@ class TruffleRuntimeTest {
   }
 
   @Test
+  void exclusiveReuseGuardsLifetimeAndDependentOwners() {
+    AtomicLong destroyed = new AtomicLong();
+    var resource = new NativeResource("View", 42L, destroyed::set, Thread.currentThread());
+    Object hold = NativeResource.hold(resource);
+    assertThrows(NativeCellException.class, resource::beginReuse);
+    NativeResource.release(hold);
+    resource.beginReuse();
+    assertThrows(NativeCellException.class, resource::address);
+    assertThrows(NativeCellException.class, resource::close);
+    assertThrows(NativeCellException.class, resource::beginReuse);
+    assertThrows(NativeCellException.class, () -> NativeResource.hold(resource));
+    resource.endReuse(true);
+    assertEquals(42L, resource.address());
+    resource.beginReuse();
+    resource.endReuse(false);
+    resource.close();
+    assertEquals(0L, destroyed.get());
+    assertThrows(NativeCellException.class, () -> resource.endReuse(true));
+  }
+
+  @Test
   void typedExecuteMatchesExecute() throws Exception {
     var typed = new TypedSumCell();
     for (long[] pair : new long[][] {{40, 2}, {-7, 3}, {Long.MAX_VALUE, 0}, {0, Long.MIN_VALUE}}) {

@@ -206,6 +206,15 @@ int32_t cells_view_init(const uint8_t *data, uint64_t length, View *view) {
   return 0;
 }
 void cells_view_release(View *view) { free(view->scratch); view->scratch = NULL; live--; }
+int32_t cells_view_reuse(View *view, int64_t sum) {
+  if (sum < 0) {
+    cells_view_release(view);
+    view->sum = 0;
+    return -1;
+  }
+  view->sum = sum;
+  return 0;
+}
 int64_t cells_view_sum(const View *view) { return view->sum; }
 int64_t cells_sleepy_add(int64_t left, int64_t right) { return left + right; }
 /* Two C strings borrowed by one call: each length up to its terminator, plus each first byte

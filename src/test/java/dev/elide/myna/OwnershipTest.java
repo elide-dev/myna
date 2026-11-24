@@ -23,6 +23,36 @@ class OwnershipTest {
   }
 
   @Test
+  void reuseRequiresAnExclusiveInPlaceStatusContract() throws Exception {
+    String source = Files.readString(Path.of("tests/truffle/cells.seam"));
+    assertTrue(SeamJson.canonical(Dsl.parse(source)).contains("\"reuse\":\"viewReuse\""));
+    String handle = "param view type=ptr<View> nullable=false ownership=borrowed access=read_write";
+    Generator.generate(
+        Dsl.parse(
+            source.replace(
+                handle,
+                handle + " align=16@explicit_contract dereferenceable=16@explicit_contract")),
+        true);
+    for (String invalid :
+        List.of(
+            source.replace(handle, handle + " align=32@explicit_contract"),
+            source.replace(handle, handle + " dereferenceable=17@explicit_contract"),
+            source.replace("reuse=viewReuse", "reuse=missing"),
+            source.replace(
+                "resource View representation=native threading=confined",
+                "resource View representation=native threading=shared"),
+            source.replace("reuse=viewReuse", "reuse=viewRelease"),
+            source.replace(
+                "symbol=cells_view_reuse return=i32", "symbol=cells_view_reuse return=void"),
+            source.replace(
+                "type=ptr<View> nullable=false ownership=borrowed access=read_write",
+                "type=ptr<View> nullable=false ownership=borrowed access=write"))) {
+      assertThrows(
+          IllegalArgumentException.class, () -> Generator.generate(Dsl.parse(invalid), true));
+    }
+  }
+
+  @Test
   void generatesConsumerPolicyAndRustOwners() throws Exception {
     var module = Dsl.parse(source());
     var output = Generator.generate(module, true);
