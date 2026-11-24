@@ -30,7 +30,11 @@ CASES += [f"guest-{scope}-{thread}" for scope in ("each", "batch") for thread in
 
 def source_hashes():
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
-            if p.suffix in (".java", ".c", ".seam")}
+            if p.is_file() and p.suffix in (".py", ".java", ".c", ".seam")}
+
+
+def binary_hashes():
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB) if p.is_file()}
 
 
 def build():
@@ -50,13 +54,16 @@ def build():
                  "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
                  "-o", APP, timeout=900)
 
+    binaries = binary_hashes()
+    if len(binaries) != 2:
+        raise RuntimeError("upcall build did not produce both binaries")
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
         "machine": platform.platform(),
         "build_flags": {"native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
-        "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
+        "binaries": binaries,
         "sources": source_hashes(),
         "cases": CASES,
     }
@@ -64,11 +71,13 @@ def build():
 
 
 def measure(forks):
-    output = WORK / "results"
-    output.mkdir(exist_ok=True)
     metadata = json.loads((WORK / "build.json").read_text())
     if metadata.get("cases") != CASES or metadata["sources"] != source_hashes():
         raise RuntimeError("upcall workloads have changed; rebuild the Native Image before measuring")
+    if metadata.get("binaries") != binary_hashes():
+        raise RuntimeError("upcall binaries have changed; rebuild the Native Image before measuring")
+    output = WORK / "results"
+    output.mkdir(exist_ok=True)
     if sys.platform == "darwin":
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:
