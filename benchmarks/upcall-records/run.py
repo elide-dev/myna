@@ -12,6 +12,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[1]
@@ -51,10 +52,15 @@ def artifact(module, extension, checksum):
     name = "truffledata-" + module
     filename = name + "-" + VERSION + extension
     path = DEPS / filename
-    if not path.is_file():
-        run("curl", "-fLsS", "--retry", "3", "https://maven.elide.dev/dev/elide/" + name + "/" + VERSION + "/" + filename, "-o", path)
-    if not path.is_file() or digest(path) != checksum:
-        raise RuntimeError("TruffleData checksum mismatch for " + filename)
+    if path.is_file() and digest(path) == checksum:
+        return path
+    with tempfile.TemporaryDirectory(dir=DEPS) as staging:
+        candidate = Path(staging) / filename
+        run("curl", "-fLsS", "--retry", "3", f"https://maven.elide.dev/dev/elide/{name}/{VERSION}/{filename}",
+            "-o", candidate)
+        if not candidate.is_file() or digest(candidate) != checksum:
+            raise RuntimeError("TruffleData checksum mismatch for " + filename)
+        candidate.replace(path)
     return path
 
 
@@ -99,6 +105,9 @@ def build():
     for mode in MODES:
         for count in (32, 35):
             run(APP, RANGES, mode, str(count), "32")
+    no_inline = run(APP, "-Dpolyglot.compiler.Inlining=false", RANGES, "push", "35", "32", ok=False)
+    if not no_inline.returncode or "spans outside compiled upcall cell" not in no_inline.stderr:
+        raise RuntimeError("uninlined guest must fail the push compilation check: " + no_inline.stderr)
     metadata = dict(revision=run("git", "rev-parse", "HEAD").stdout.strip(), sources=fixture_hashes(),
                     truffledata=VERSION, native_image=image_flags, target=TARGET,
                     cc=run("cc", "--version").stdout, kernel_flags=["-O3", "-shared", "-fPIC"],
@@ -107,6 +116,26 @@ def build():
                     generated={p.name: digest(p) for p in generation.glob("*.java")},
                     binaries={p.name: digest(p) for p in (APP, RANGES, DEPS / ("libtruffledata_json" + SUFFIX))})
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+
+def sample(mode, rows, width, timeout=180):
+    with subprocess.Popen([APP, RANGES, mode, str(rows), str(width)],
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+    if process.returncode:
+        raise RuntimeError(f"{mode} exited with {process.returncode}: {stderr}")
+    ns = [int(line) for line in stdout.splitlines()]
+    verification = next((line for line in stderr.splitlines() if line.startswith("verified ")), "")
+    if len(ns) != 12 or min(ns) <= 0 or not verification.startswith(f"verified {mode} rows={rows} compiled={rows} "):
+        raise RuntimeError(f"{mode} failed verification: {stderr}")
+    if mode == "push" and not verification.endswith(f" inlined_spans={(rows + width - 1) // width}"):
+        raise RuntimeError(f"push failed to verify inlined spans: {verification}")
+    return dict(mode=mode, pid=process.pid, ns=ns, verification=verification)
 
 
 def measure(args):
@@ -130,15 +159,7 @@ def measure(args):
         if block % len(order) == 0:
             rng.shuffle(order)
         for mode in order[block % len(order):] + order[:block % len(order)]:
-            with subprocess.Popen([APP, RANGES, mode, str(args.rows), str(args.width)],
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
-                stdout, stderr = process.communicate(timeout=180)
-            ns = [int(x) for x in stdout.splitlines()]
-            verification = next((line for line in stderr.splitlines() if line.startswith("verified ")), "")
-            if process.returncode or len(ns) != 12 or min(ns) <= 0 or not verification.startswith(
-                    f"verified {mode} rows={args.rows} compiled={args.rows} "):
-                raise RuntimeError(f"{mode} failed: {stderr}")
-            data["samples"].append(dict(mode=mode, block=block, pid=process.pid, ns=ns, verification=verification))
+            data["samples"].append(dict(block=block, **sample(mode, args.rows, args.width)))
     data["ns_per_record"] = {mode: statistics.median(statistics.median(s["ns"]) / args.rows
                              for s in data["samples"] if s["mode"] == mode) for mode in MODES}
     out = WORK / f"records-{args.rows}-{args.width}.json"
@@ -156,6 +177,11 @@ if __name__ == "__main__":
     args = cli.parse_args()
     if min(args.forks, args.rows, args.width) < 1:
         cli.error("positive forks, rows and width required")
+    if args.cpu is not None:
+        if args.command != "run" or not hasattr(os, "sched_setaffinity"):
+            cli.error("--cpu is supported for measurements on Linux")
+        if args.cpu not in os.sched_getaffinity(0):
+            cli.error("--cpu must be in the current process's CPU affinity mask")
     if args.command == "build":
         build()
     else:

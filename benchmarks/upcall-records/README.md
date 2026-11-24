@@ -13,7 +13,7 @@ The input is JSON containing arrays of records. Each record has a signed 64-bit 
 | `bound` | Use the same native producer and span guest as `push`, through a receiver-bound FFM callback that calls the guest target directly. |
 | `push` | Make one downcall to the native range producer. It calls the generated receiver-bound Truffle upcall with the first record index and count of each span. The same span guest exports the same borrowed subtree. |
 
-The timer includes dispatch, tape traversal and projection. Parsing, registering the callback, collecting span views and warming the guest are outside the timer. Every timed round checks the ordered projection and verifies that all records reached compiled guest code. Span modes also check exact delivery order, the number of callbacks or direct calls, and the final partial span. The default 32,771 records at width 32 end in a three-record span. File I/O, streaming arrival latency and foreign-thread delivery are outside this comparison. TruffleData confines session borrows to their owner thread.
+The timer includes dispatch, tape traversal and projection. Parsing, registering the callback, collecting span views and warming the guest are outside the timer. Every timed round checks the ordered projection and verifies that all records reached compiled guest code. The push workload also verifies that each span guest inlined into its only Truffle caller, the generated cell entry. Interpreted and separately compiled span entries increment a failure counter. The check folds out in the inlined graph. The build repeats a push smoke with guest inlining disabled and requires that control to fail. Span modes also check exact delivery order, the number of callbacks or direct calls, and the final partial span. The default 32,771 records at width 32 end in a three-record span. File I/O, streaming arrival latency and foreign-thread delivery are outside this comparison. TruffleData confines session borrows to their owner thread.
 
 From the repository root, with the pinned tools installed:
 
@@ -27,7 +27,7 @@ On Linux, add `--cpu N` to use one available logical CPU. For other batch sizes,
 
 ## Linux x86-64 advisory measurements
 
-On an AMD Ryzen 9 9950X3D2, the median of the fresh-process medians was as follows, in nanoseconds per projected record. All 26,741,136 timed records produced the expected ordered checksum in compiled guest code. These shared-host runs used one logical CPU.
+On an AMD Ryzen 9 9950X3D2, the median of the fresh-process medians was as follows, in nanoseconds per projected record. These original samples checked the projected record count, compiled projection and ordered checksum for all 26,741,136 timed records. The per-span cell-entry check was added after this campaign. These shared-host runs used one logical CPU.
 
 | Records per span | Whole tape | Guest-driven spans | Native receiver-bound callback | Native upcall cell | Fresh processes per mode |
 |---|---:|---:|---:|---:|---:|
@@ -36,6 +36,8 @@ On an AMD Ryzen 9 9950X3D2, the median of the fresh-process medians was as follo
 | [128](baselines/records-32771-128.json) | 28.76 | 28.17 | 28.27 | 27.68 | 5 |
 
 At width 32 the cell delivered 34.7 million records/s. The whole-tape walk was faster in all seven paired blocks, by a median 0.81 ns/record. At width 128 the cell led the whole-tape walk in three of five blocks. The remaining differences at this width overlapped between runs.
+
+A later seven-process run with the per-span compilation check verified that all 86,100 timed push callbacks inlined into the generated cell. The shared host had other Native Image builds running. The medians were 52.65 ns/record for the whole tape, 52.14 for guest spans, 54.98 for the receiver-bound callback and 55.04 for the generated cell. Disabling guest inlining still allowed all 35 projections in the manual smoke case to compile and caused both generated span entries to fail the new check. [Raw samples with per-span verification](baselines/records-32771-32-entry-check.json)
 
 A separate 35-record diagnostic caught the cell root recompiling after its first call. Its warm tier-2 compilation inlined its one direct guest call. The guest root contains TruffleData's tape export node. The native producer issues one indirect call for each range and checks the count returned by the guest. [Truffle compilation trace](baselines/compiled-ast.txt) · [Native loop instructions](baselines/native-range-loop.asm)
 

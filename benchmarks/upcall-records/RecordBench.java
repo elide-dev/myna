@@ -82,11 +82,14 @@ public final class RecordBench {
     private final TapeValue[] spans;
     private final int width, rows;
     private final Projection sink;
-    int calls, lastCount;
+    private final boolean requireInlinedCell;
+    int calls, lastCount, spansOutsideCompiledCell;
     @Child private TapeExportNode export = TapeExportNode.create();
 
-    SpanRoot(RecordLanguage language, TapeValue[] spans, int width, int rows, Projection sink) {
+    SpanRoot(RecordLanguage language, TapeValue[] spans, int width, int rows, Projection sink,
+        boolean requireInlinedCell) {
       super(language);
+      this.requireInlinedCell = requireInlinedCell;
       this.spans = spans;
       this.width = width;
       this.rows = rows;
@@ -94,6 +97,10 @@ public final class RecordBench {
     }
 
     @Override public Object execute(VirtualFrame frame) {
+      // In push mode this root has one Truffle caller, the generated cell's direct call.
+      // Only interpreter or separately compiled executions write this counter.
+      if (requireInlinedCell && (!CompilerDirectives.inCompiledCode() || CompilerDirectives.inCompilationRoot()))
+        spansOutsideCompiledCell++;
       long first = (long) frame.getArguments()[0];
       long count = (long) frame.getArguments()[1];
       if (first < 0 || first >= rows || first % width != 0 || first != sink.rows
@@ -150,7 +157,8 @@ public final class RecordBench {
     int at = 0;
     for (var part : document.elements()) spans[at++] = part;
     if (at != spans.length) throw new AssertionError("source span count");
-    var span = new SpanRoot(lang, spans, width, rows, sink);
+    boolean push = mode.equals("push");
+    var span = new SpanRoot(lang, spans, width, rows, sink, push);
     var direct = switch (mode) {
       case "whole" -> new PullWhole(lang, document, sink).getCallTarget();
       case "pull" -> new PullSpans(lang, rows, width, span).getCallTarget();
@@ -170,7 +178,7 @@ public final class RecordBench {
       };
       for (int round = -3; round < 12; round++) {
         sink.reset();
-        span.calls = span.lastCount = 0;
+        span.calls = span.lastCount = span.spansOutsideCompiledCell = 0;
         long start = System.nanoTime();
         long result = direct != null ? (long) direct.call() : library.deliver(callback, rows, width);
         long elapsed = System.nanoTime() - start;
@@ -179,10 +187,13 @@ public final class RecordBench {
               + " compiled=" + sink.compiled + " hash=" + sink.hash + " expected=" + expected);
         if (!mode.equals("whole") && (span.calls != spans.length || span.lastCount != (rows - 1) % width + 1))
           throw new AssertionError("span count or tail");
+        if (round >= 0 && span.spansOutsideCompiledCell != 0)
+          throw new AssertionError(span.spansOutsideCompiledCell + " spans outside compiled upcall cell");
         if (round >= 0) System.out.println(elapsed);
       }
       System.err.println("verified " + mode + " rows=" + rows + " compiled=" + sink.compiled
-          + " spans=" + span.calls + " last=" + span.lastCount + " hash=" + expected);
+          + " spans=" + span.calls + " last=" + span.lastCount + " hash=" + expected
+          + (push ? " inlined_spans=" + (span.calls - span.spansOutsideCompiledCell) : ""));
     }
   }
 
