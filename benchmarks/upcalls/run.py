@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import sys
 
@@ -40,12 +41,14 @@ def source_hashes():
 def build():
     gen = WORK / "generated"
     WORK.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(gen, ignore_errors=True)
     run("java", "-cp", ROOT / ".dev/jvm/classes/main/java", "dev.elide.myna.cli.Main",
         "generate", SOURCE / "upcalls.seam", "--out", gen, "--target", TARGET)
     run("cc", "-O3", "-shared", "-fPIC", "-pthread", "-I", gen, SOURCE / "kernel.c", "-o", LIB)
     nfi_shim = ROOT / "benchmarks/native/nfi_memfd.c"
     run("cc", "-O3", "-fPIC", "-c", nfi_shim, "-o", WORK / "nfi.o")
     classes = WORK / "classes"
+    shutil.rmtree(classes, ignore_errors=True)
     jars = truffle_jars()
     modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
     compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=[TRUFFLE_JAR, *jars.values()],
@@ -53,7 +56,8 @@ def build():
     # The DSL processor emits the interop library exports and their call-site cache classes.
     nfi_classes = sorted(p.stem for p in (classes / "bench/upcalls").glob("NfiExecutableGen*.class"))
     init = ["Guest$CountingRoot", "Guest$MixNode", "HookLanguage", "HookLanguageProvider",
-            "ReducerBench$ReducerRoot", "ReducerBench$NfiExecutable", "ReducerCellChecks$CheckedRoot",
+            "ReducerBench$ReducerRoot", "ReducerBench$NfiExecutable", "ReducerBench$NfiExecutable$Execute",
+            "ReducerCellChecks$CheckedRoot",
             *nfi_classes]
     native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
                  "--initialize-at-build-time=" + ",".join("bench.upcalls." + name for name in init), "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",

@@ -4,11 +4,15 @@ package bench.upcalls;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.foreign.Arena;
@@ -40,8 +44,19 @@ final class ReducerBench {
 
     @ExportMessage boolean isExecutable() { return true; }
 
-    @ExportMessage Object execute(Object[] arguments) {
-      return target.call(arguments);
+    @ExportMessage
+    static final class Execute {
+      @Specialization(guards = "receiver.target == cached", limit = "1")
+      static Object direct(NfiExecutable receiver, Object[] arguments,
+          @Cached("receiver.target") CallTarget cached,
+          @Cached("create(cached)") DirectCallNode call) {
+        return call.call(arguments);
+      }
+
+      @Specialization(replaces = "direct")
+      static Object indirect(NfiExecutable receiver, Object[] arguments, @Cached IndirectCallNode call) {
+        return call.call(receiver.target, arguments);
+      }
     }
   }
 
