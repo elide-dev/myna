@@ -34,6 +34,14 @@ def disassembly(app, prefix, method, evidence):
 
 
 class NativeImageIntegrationTests(unittest.TestCase):
+    def test_truffle_upcall_cells_on_native_threads(self):
+        from truffle_integration import truffle_jars
+        from upcall_fixture import build_upcall_fixture
+        app, library = build_upcall_fixture(ROOT / "build/truffle-upcall-test", [BINARY], truffle_jars(),
+                                            benchmark=False)
+        self.assertEqual(run(app, library).stdout.strip(),
+                         "Truffle upcall cells passed worker delivery, context restoration and sentinels")
+
     def test_scoped_ffm_callbacks_and_static_jni(self):
         from callback_fixture import build_callback_fixture
         work, classes, library = build_callback_fixture()

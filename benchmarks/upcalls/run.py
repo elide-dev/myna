@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import sys
 import uuid
@@ -15,13 +14,14 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "benchmarks/native"))
-from support import TARGET, compile_native, native_image, run
+from support import run
+from upcall_fixture import LIB_NAME, build_upcall_fixture
 from walltime import report
 from truffle_integration import TRUFFLE_JAR, truffle_jars
 
 SOURCE = Path(__file__).resolve().parent
 WORK = ROOT / "build/upcalls"
-LIB = WORK / ("libbench.dylib" if sys.platform == "darwin" else "libbench.so")
+LIB = WORK / LIB_NAME
 APP = WORK / "measure"
 CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic", "bound")
          for thread in ("caller", "worker")]
@@ -60,34 +60,10 @@ def current_build():
 
 
 def build():
-    gen = WORK / "generated"
-    WORK.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(gen, ignore_errors=True)
-    run("java", "-cp", ROOT / ".dev/jvm/classes/main/java", "dev.elide.myna.cli.Main",
-        "generate", SOURCE / "upcalls.seam", "--out", gen, "--target", TARGET)
-    run("cc", "-O3", "-shared", "-fPIC", "-pthread", "-I", gen, SOURCE / "kernel.c", "-o", LIB)
-    nfi_shim = ROOT / "benchmarks/native/nfi_memfd.c"
-    run("cc", "-O3", "-fPIC", "-c", nfi_shim, "-o", WORK / "nfi.o")
-    classes = WORK / "classes"
-    shutil.rmtree(classes, ignore_errors=True)
     jars = truffle_jars()
-    modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
-    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=[TRUFFLE_JAR, *jars.values()],
-                   options=("-processorpath", str(jars["truffle-dsl-processor"])))
-    # The DSL processor emits the interop library exports and their call-site cache classes.
-    nfi_classes = sorted(p.stem for p in (classes / "bench/upcalls").glob("NfiExecutableGen*.class"))
-    init = ["Guest$CountingRoot", "Guest$MixNode", "HookLanguage", "HookLanguageProvider",
-            "ReducerBench$ReducerRoot", "ReducerBench$NfiExecutable", "ReducerBench$NfiExecutable$Execute",
-            "ReducerCellChecks$CheckedRoot",
-            *nfi_classes]
-    native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
-                 "--initialize-at-build-time=" + ",".join("bench.upcalls." + name for name in init), "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
-                 f'-H:NativeLinkerOption={WORK / "nfi.o"}',
-                 "-H:-UnlockExperimentalVMOptions", "--enable-native-access=ALL-UNNAMED", "-cp", os.pathsep.join(map(str, (classes, TRUFFLE_JAR))),
-                 "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
-                 "-o", APP, timeout=900)
-
-    run(APP, LIB, "reducer-cell-checks", "1")
+    generator = ["java", "-cp", ROOT / ".dev/jvm/classes/main/java", "dev.elide.myna.cli.Main"]
+    app, library = build_upcall_fixture(WORK, generator, jars, benchmark=True)
+    run(app, library, "reducer-cell-checks", "1")
 
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
