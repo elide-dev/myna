@@ -524,7 +524,18 @@ public final class Seam {
       String destroy,
       boolean shared,
       String handle,
-      List<Long> success) {
+      List<Long> success,
+      String reuse) {
+    public Resource(
+        String name,
+        List<String> creates,
+        String destroy,
+        boolean shared,
+        String handle,
+        List<Long> success) {
+      this(name, creates, destroy, shared, handle, success, null);
+    }
+
     public Resource {
       creates = List.copyOf(creates);
       success = List.copyOf(success);

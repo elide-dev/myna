@@ -121,6 +121,24 @@ final class OwnershipValidator {
               + " and "
               + r.name());
       nativeCall(destroy);
+      if (r.reuse() != null) {
+        var reuse = functions.get(r.reuse());
+        require(inPlace && !r.shared(), "reuse requires a confined in-place resource: " + r.name());
+        require(
+            reuse != null && lifecycle.putIfAbsent(r.reuse(), r.name()) == null,
+            "unknown or duplicate resource reuse function: " + r.reuse());
+        nativeCall(reuse);
+        handle(m, r, reuse);
+        require(
+            reuse.returns() != Scalar.VOID
+                && reuse.parameters().stream()
+                    .anyMatch(p ->
+                        p.name().equals(r.handleParameter())
+                            && p.access() == Access.READ_WRITE
+                            && p.ownership() == Ownership.BORROWED),
+            "reuse requires an integer status and a borrowed read_write handle: " + r.reuse());
+        require(reuse.variadicAfter() == null, "variadic imports cannot back resource reuse");
+      }
       for (String name : r.creates()) {
         var create = functions.get(name);
         require(create != null, "unknown resource lifecycle function: " + form + ": " + name);
@@ -561,6 +579,17 @@ final class OwnershipValidator {
       require(
           pointee.equals(new Named(r.name())),
           "a resource initialized in place is what its handle parameter points to: " + form);
+      var struct =
+          m.structs().stream().filter(s -> s.name().equals(r.name())).findFirst().orElseThrow();
+      for (String fact : List.of("align", "dereferenceable")) {
+        var requirement = out.facts().get(fact);
+        long bound = fact.equals("align") ? 16 : struct.size();
+        require(
+            requirement == null
+                || !requirement.enabled()
+                || Long.parseLong(requirement.value()) <= bound,
+            "in-place resource storage cannot satisfy " + fact + " on " + create.name());
+      }
     } else {
       Struct struct =
           pointee instanceof Named named

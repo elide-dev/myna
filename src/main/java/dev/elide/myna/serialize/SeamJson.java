@@ -148,6 +148,7 @@ public final class SeamJson {
                                       + "]")
                               + ",\"destroy\":"
                               + quote(r.destroy())
+                              + (r.reuse() == null ? "" : ",\"reuse\":" + quote(r.reuse()))
                               + (r.handle() == null
                                   ? ""
                                   : ",\"handle\":"
