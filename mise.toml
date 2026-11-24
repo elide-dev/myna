@@ -167,7 +167,7 @@ run = "python3 benchmarks/upcalls/run.py build"
 [tasks."bench:upcalls"]
 description = "Measure all SVM upcalls in five fresh processes per case and summarize the results"
 depends = ["bench:upcalls-build"]
-run = ["python3 benchmarks/upcalls/run.py run --forks 5", "python3 benchmarks/upcalls/report.py collect"]
+run = ["python3 benchmarks/upcalls/run.py run --forks 5 --include-nfi", "python3 benchmarks/upcalls/report.py collect"]
 
 [tasks."bench:floor-build"]
 run = "scripts/python.sh benchmarks/floor/run.py build"

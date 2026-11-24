@@ -131,6 +131,8 @@ def build():
     cc = os.environ['CC']
     execute(cc, *flags, '-c', ROOT / 'benchmarks/comparison/kernel.c', '-o', WORK / 'kernel.o')
     execute(cc, *flags, '-c', SOURCE / 'native.c', '-o', WORK / 'cells.o')
+    nfi_shim = ROOT / 'benchmarks/native/nfi_memfd.c'
+    execute(cc, *flags, '-c', nfi_shim, '-o', WORK / 'nfi.o')
     library = WORK / ('libcellsbench.dylib' if sys.platform == 'darwin' else 'libcellsbench.so')
     execute(cc, '-dynamiclib' if sys.platform == 'darwin' else '-shared', WORK / 'kernel.o', WORK / 'cells.o', '-o', library)
     java_sources = [SOURCE / 'CellBench.java', SOURCE / 'Bodies.java', SOURCE / 'BenchLanguage.java',
@@ -151,7 +153,7 @@ def build():
             # Consumer node classes must initialize at build time, or partial evaluation stops at them.
             '--initialize-at-build-time=bench.nodes',
             '-H:+UnlockExperimentalVMOptions', '-H:-DeleteLocalSymbols',
-            f'-H:NativeLinkerOption={WORK / "kernel.o"}', f'-H:NativeLinkerOption={WORK / "cells.o"}',
+            f'-H:NativeLinkerOption={WORK / "kernel.o"}', f'-H:NativeLinkerOption={WORK / "cells.o"}', f'-H:NativeLinkerOption={WORK / "nfi.o"}',
             '-H:-UnlockExperimentalVMOptions', 'bench.CellBench', '-o', str(WORK / 'svm')]
     # One -O3 truffle-svm image with every benchmark cell: slower than the test images, and
     # over five minutes on the shared ARM runners.
@@ -160,7 +162,7 @@ def build():
     commands.append([str(home / 'bin/native-image'), '-J--enable-native-access=ALL-UNNAMED',
                      '-H:+UnlockExperimentalVMOptions', '-H:-CheckToolchain', f'-H:CCompilerPath={cc}',
                      '-H:-UnlockExperimentalVMOptions', *args])
-    files = [*sorted(SOURCE.glob('*')), ROOT / 'benchmarks/comparison/kernel.c', ROOT / 'tests/support.py',
+    files = [*sorted(SOURCE.glob('*')), nfi_shim, ROOT / 'benchmarks/comparison/kernel.c', ROOT / 'tests/support.py',
              ROOT / 'tests/truffle_integration.py', ROOT / 'tools/graalvm.json', ROOT / 'tools/truffle.json', *generator_sources]
     versions = {name: execute(*command).stdout for name, command in {
         'clang': (cc, '--version'), 'graalvm': (home / 'bin/native-image', '--version')}.items()}
