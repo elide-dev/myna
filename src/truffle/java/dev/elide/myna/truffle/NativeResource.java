@@ -42,6 +42,7 @@ public final class NativeResource implements TruffleObject {
    */
   private static final class State implements Runnable {
     static final int RELEASED = -1;
+    static final int REUSING = -2;
     static final int PENDING = 1 << 30;
     private static final State[] NONE = {};
 
@@ -65,7 +66,7 @@ public final class NativeResource implements TruffleObject {
     }
 
     boolean released() {
-      return holds.get() == RELEASED;
+      return holds.get() < 0;
     }
 
     /** Keeps this resource open for a dependent; fails once it is released or abandoned. */
@@ -137,17 +138,22 @@ public final class NativeResource implements TruffleObject {
       try {
         destructor.destroy(address);
       } finally {
-        // A struct the resource lived in is freed with it; anything else kept is just dropped.
-        Object memory = kept;
-        kept = null;
-        if (memory instanceof NativeStruct struct) struct.free();
-        Borrow[] held = borrows;
-        borrows = null;
-        try {
-          end(held);
-        } finally {
-          for (State parent : parents) parent.unhold();
-        }
+        releaseStorage();
+      }
+    }
+
+    @TruffleBoundary
+    private void releaseStorage() {
+      // A struct the resource lived in is freed with it; anything else kept is just dropped.
+      Object memory = kept;
+      kept = null;
+      if (memory instanceof NativeStruct struct) struct.free();
+      Borrow[] held = borrows;
+      borrows = null;
+      try {
+        end(held);
+      } finally {
+        for (State parent : parents) parent.unhold();
       }
     }
   }
@@ -291,6 +297,27 @@ public final class NativeResource implements TruffleObject {
     if (!accessible()) throw wrongThread();
   }
 
+  /** Reserve a confined owner after argument coercion, immediately before native replacement. */
+  public void beginReuse() {
+    checkThread();
+    if (requiredThread == null || !state.holds.compareAndSet(0, State.REUSING))
+      throw unavailableForReuse();
+  }
+
+  @TruffleBoundary
+  private NativeCellException unavailableForReuse() {
+    return NativeCellException.of(
+        null, type, " must be open, confined, and exclusively owned for reuse");
+  }
+
+  /** Complete a replacement. The provider already consumed the old allocation on failure. */
+  public void endReuse(boolean live) {
+    checkThread();
+    if (!state.holds.compareAndSet(State.REUSING, live ? 0 : State.RELEASED))
+      throw unavailableForReuse();
+    if (!live) state.releaseStorage();
+  }
+
   /** The live address; fails after close or from a foreign thread. */
   public long address() {
     checkThread();
@@ -309,6 +336,7 @@ public final class NativeResource implements TruffleObject {
    */
   public void close() {
     checkThread();
+    if (state.holds.get() == State.REUSING) throw unavailableForReuse();
     int dependents = state.close();
     if (dependents > 0) throw held(dependents);
   }

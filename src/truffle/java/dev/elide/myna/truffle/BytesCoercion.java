@@ -99,7 +99,7 @@ public final class BytesCoercion extends Coercion {
       if ((seen & NATIVE) != 0 && value instanceof NativeBytes bytes) {
         if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
         long size = bytes.size();
-        borrow.lend(size == 0 ? emptyAddress() : bytes.address(), size);
+        borrow.lendNative(bytes, size == 0 ? emptyAddress() : bytes.address(), size);
         return borrow;
       }
       if ((seen & HEAP) != 0 && value instanceof HeapBytes bytes) {

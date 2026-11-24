@@ -82,7 +82,7 @@ public final class OverAlignedBytesCoercion extends Coercion {
       // folds.
       if (size == 0) borrow.lend(align > EmptyBytes.ALIGNMENT ? align : Borrow.emptyAddress(), 0);
       else if (misaligned(bytes.address())) slow(value, borrow);
-      else borrow.lend(bytes.address(), size);
+      else borrow.lendNative(bytes, bytes.address(), size);
     } else if (value instanceof HeapBytes bytes) {
       if (writable && !bytes.isWritable()) throw mismatch("writable buffer", value);
       borrow.lendAlignedArray(bytes.array(), writable, terminated, align);

@@ -130,7 +130,8 @@ public final class Dsl {
                     destroy,
                     threading.equals("shared"),
                     handle,
-                    success));
+                    success,
+                    take(opts, "reuse", null)));
             empty(opts);
           }
           case "borrow" -> {
