@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import sys
 import uuid
@@ -15,13 +14,14 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "benchmarks/native"))
-from support import TARGET, compile_native, native_image, run
+from support import run
+from upcall_fixture import LIB_NAME, build_upcall_fixture
 from walltime import report
 from truffle_integration import TRUFFLE_JAR, truffle_jars
 
 SOURCE = Path(__file__).resolve().parent
 WORK = ROOT / "build/upcalls"
-LIB = WORK / ("libbench.dylib" if sys.platform == "darwin" else "libbench.so")
+LIB = WORK / LIB_NAME
 APP = WORK / "measure"
 CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic", "bound")
          for thread in ("caller", "worker")]
@@ -34,40 +34,36 @@ CASES += [f"reducer-{kind}-{thread}" for kind in ("bound", "cell") for thread in
 NFI_CASES = ["reducer-nfi-caller", "reducer-nfi-worker"]
 
 
-def source_hashes():
-    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
-            if p.suffix in (".java", ".c", ".seam")}
+def file_hash(path):
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def build_hashes(jars):
+    gen = WORK / "generated"
+    return {
+        "binaries": {p.name: file_hash(p) for p in (APP, LIB)},
+        "sources": {p.name: file_hash(p) for p in SOURCE.iterdir() if p.suffix in (".java", ".c", ".seam")},
+        "nfi_shim_sha256": file_hash(ROOT / "benchmarks/native/nfi_memfd.c"),
+        "dependencies": {name: file_hash(path) for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
+        "generated": {p.name: file_hash(p) for p in sorted(gen.glob("*.java"))},
+    }
+
+
+def current_build():
+    metadata = json.loads((WORK / "build.json").read_text())
+    if metadata.get("cases") != CASES + NFI_CASES or any(
+        metadata.get(key) != value for key, value in build_hashes(truffle_jars()).items()
+    ):
+        raise ValueError("Stale upcall inputs or executable. Run mise run bench:upcalls-build.")
+    return metadata
 
 
 def build():
-    gen = WORK / "generated"
-    WORK.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(gen, ignore_errors=True)
-    run("java", "-cp", ROOT / ".dev/jvm/classes/main/java", "dev.elide.myna.cli.Main",
-        "generate", SOURCE / "upcalls.seam", "--out", gen, "--target", TARGET)
-    run("cc", "-O3", "-shared", "-fPIC", "-pthread", "-I", gen, SOURCE / "kernel.c", "-o", LIB)
-    nfi_shim = ROOT / "benchmarks/native/nfi_memfd.c"
-    run("cc", "-O3", "-fPIC", "-c", nfi_shim, "-o", WORK / "nfi.o")
-    classes = WORK / "classes"
-    shutil.rmtree(classes, ignore_errors=True)
     jars = truffle_jars()
-    modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
-    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=[TRUFFLE_JAR, *jars.values()],
-                   options=("-processorpath", str(jars["truffle-dsl-processor"])))
-    # The DSL processor emits the interop library exports and their call-site cache classes.
-    nfi_classes = sorted(p.stem for p in (classes / "bench/upcalls").glob("NfiExecutableGen*.class"))
-    init = ["Guest$CountingRoot", "Guest$MixNode", "HookLanguage", "HookLanguageProvider",
-            "ReducerBench$ReducerRoot", "ReducerBench$NfiExecutable", "ReducerBench$NfiExecutable$Execute",
-            "ReducerCellChecks$CheckedRoot",
-            *nfi_classes]
-    native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
-                 "--initialize-at-build-time=" + ",".join("bench.upcalls." + name for name in init), "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
-                 f'-H:NativeLinkerOption={WORK / "nfi.o"}',
-                 "-H:-UnlockExperimentalVMOptions", "--enable-native-access=ALL-UNNAMED", "-cp", os.pathsep.join(map(str, (classes, TRUFFLE_JAR))),
-                 "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
-                 "-o", APP, timeout=900)
-
-    run(APP, LIB, "reducer-cell-checks", "1")
+    generator = ["java", "-cp", ROOT / ".dev/jvm/classes/main/java", "dev.elide.myna.cli.Main"]
+    app, library = build_upcall_fixture(WORK, generator, jars, benchmark=True)
+    run(app, library, "reducer-cell-checks", "1")
 
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
@@ -76,12 +72,7 @@ def build():
         "build_flags": {"native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
-        "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
-        "sources": source_hashes(),
-        "nfi_shim_sha256": hashlib.sha256(nfi_shim.read_bytes()).hexdigest(),
-        "dependencies": {name: hashlib.sha256(path.read_bytes()).hexdigest()
-                         for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
-        "generated": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(gen.glob("*.java"))},
+        **build_hashes(jars),
         "cases": CASES + NFI_CASES,
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2))
@@ -93,9 +84,7 @@ def measure(forks, include_nfi):
     cases = CASES + NFI_CASES if include_nfi else CASES
     output = WORK / "results"
     output.mkdir(exist_ok=True)
-    metadata = json.loads((WORK / "build.json").read_text())
-    if metadata.get("cases") != CASES + NFI_CASES or metadata["sources"] != source_hashes():
-        raise RuntimeError("upcall workloads have changed; rebuild the Native Image before measuring")
+    metadata = current_build()
     if sys.platform == "darwin":
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:
