@@ -465,6 +465,15 @@ uses the native pointer from a libffi closure of signature `(SINT64,SINT64):SINT
 An untimed image smoke test exercises single-call context entry, restoration, signed results,
 and return of the declared sentinel on guest exceptions and invalid result types.
 
+On Linux x86-64, build the .32 benchmark and run
+`mise exec -- python3 benchmarks/upcalls/stock.py --cpu 7 --blocks 12` on an available CPU.
+This builds the same sources against stock GraalVM CE 25i5 GA using the pinned distribution
+and Truffle jars. Each fresh process uses the identical native kernel. In the
+[paired scalar results and machine traces](../benchmarks/upcalls/baselines/stock-25i5-scalar-upcalls-linux-x86_64.json),
+the generated cell beat the NFI closure in all 12 blocks on each runtime. Both the Myna cell
+entry and the NFI closure specialized a call in their Tier 2 compilations. The .32 cell and
+handwritten receiver-bound bridge split their pairs six each way.
+
 ### Upcall benchmark cycle
 
 CodSpeed runs a single process per Myna case on pull requests and pushes to main. The full uninstrumented run adds the NFI closure control using `run.py run --forks 5 --include-nfi`. The full
