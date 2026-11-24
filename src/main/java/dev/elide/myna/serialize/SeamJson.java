@@ -84,6 +84,7 @@ public final class SeamJson {
                         + ",\"parameters\":"
                         + array(c.parameters().stream().map(SeamJson::parameter).toList())
                         + reference(c.returnsGroup(), "return")
+                        + (c.truffleUpcall() ? ",\"truffleUpcall\":true" : "")
                         + "}")
                 .toList())
         + ",\n  \"functions\": "

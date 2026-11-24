@@ -56,6 +56,43 @@ Exports are never cells. The option, backend, coercion policy and transition mod
 `seam.json` under `"truffle"` and change the fingerprint; a descriptor without the option keeps its
 existing fingerprint.
 
+## Native callbacks into a guest
+
+A callback can opt in to a generated upcall cell in a module with `truffle_cells=true`.
+The supported signature has zero or more signed `i64` parameters and a signed `i64` result.
+
+```text
+module hooks target=x86_64-unknown-linux-gnu java_package=my.hooks java_class=Hooks truffle_cells=true
+callback Reducer return=i64 truffle_upcall=true
+  param previous type=i64
+  param increment type=i64
+end
+```
+
+```java
+// target is the guest language's CallTarget for (long, long) -> Long.
+// The language obtains the owning TruffleContext from its Env.
+try (Arena registrations = Arena.ofShared()) {
+    MemorySegment reducer = HooksTruffle.ReducerUpcall.bind(context, target, -1L, registrations);
+    producer.runAndJoin(reducer); // all native invocations finish before the arena closes
+}
+```
+
+`bind` enters the specified context on the delivery thread and restores its previous context
+when the call returns or throws. Keep the owning polyglot context open through the last call
+and observe the language's thread-access policy. A producer that already owns the context
+can use `bindEntered(target, sentinel, arena)` during registration and hold the context
+entered on the delivery thread across the whole batch. Each callback still runs synchronously.
+Use a language adapter target that captures the receiver and any closure environment it needs.
+
+The factory uses the generated receiver-bound FFM stub, so the C function pointer has the declared
+signature even when the native API has no user-data argument. A Truffle entry root owns a
+`DirectCallNode` to the guest. The guest receives boxed Java `Long` arguments and must
+return a `Long`. Exceptions, null and other result types produce the supplied sentinel.
+Reserve a sentinel the native caller can distinguish from a successful result. The generated
+FFM binding and its hosted foreign feature must be included in the Native Image together
+with the Truffle binding and `myna-truffle.jar`. The opt-in changes the seam fingerprint.
+
 ## The generated class
 
 ```java
