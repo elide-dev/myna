@@ -373,3 +373,19 @@ python3 scripts/check-hygiene.py
 ```
 
 `benchmarks/comparison/inspect-floor.py ARTIFACT_DIRECTORY OUTPUT_PREFIX` extracts the ordinary leaf stubs, native baselines and SVM loops from the full workflow assembly, preserving hashes and build metadata. It fails if a standalone custom pointer adapter remains or a binding ABI 2 build retains generated leaf wrappers/invoke stubs. Historical prototype data and its `floor-chart.py` renderer remain separate. All chart renderers are covered by input/output manifests and rerendered in the hygiene workflow. Do not silently replace an identity result with an arithmetic result or subtract independently timed controls to claim pure crossing cost.
+
+### SVM upcalls
+
+Run `mise run build:jvm`, then `mise exec -- python3 benchmarks/upcalls/run.py build` and
+`mise exec -- python3 benchmarks/upcalls/run.py run --forks 5`. Each process warms up three
+rounds and records twelve. The native control, generated static FFM stub and dynamic FFM stub
+perform the same dependent integer reduction. Each worker round creates one native thread
+and uses it for every callback in the round. Its timer excludes thread creation and joining
+and includes any VM entry or attachment triggered by the callbacks. The explicit isolate-thread
+entry point uses the current thread only. Both Komodo and TruffleData use this explicit-thread
+shape for their benchmark hooks. These cases measure native-to-Java entry, while the Truffle
+context entry in Komodo issue 125 is a separate operation.
+
+Setup cases time creating a batch of stubs and closing the owning arena. Registration is outside
+the timed loops in the invocation cases. CI publishes wall time to CodSpeed and retains the raw
+elapsed times and binary hashes in the svm-upcall-samples artifact.
