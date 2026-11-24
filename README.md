@@ -167,6 +167,13 @@ Static and receiver-bound Truffle callbacks invoke the same compiled call target
 
 [Raw samples and build hashes](benchmarks/upcalls/baselines/readme.json) · [Rerun and refresh](docs/benchmarking.md#upcall-benchmark-cycle)
 
+For a borrowed TruffleData JSON tape on the owning thread, native delivery of 32 records per
+upcall took **28.85 ns/record**, compared with **27.97 ns/record** for one compiled guest
+walk over the whole tape. Delivering a single record per callback took **64.49 ns/record**.
+Both paths projected the same two fields and checked their order-sensitive checksum. Parsing
+and registration were outside the timer. [Borrowed-record benchmark and raw samples](benchmarks/upcall-records/README.md)
+
+
 ## Build and use
 
 Requirements: mise 2026.10.25+ and the platform SDK. mise installs pinned Elide 1.6.3, elide-dev/toolchain 2026.11.7 (including LLVM/LLD), Rust, CMake, and workflow linters. Setup installs the checksum-pinned elide-dev/graal 25.5.5-elide.32 distribution. Elide supplies Java compilation and Python; native builds use the pinned external GraalVM driver.

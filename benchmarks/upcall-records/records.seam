@@ -1,0 +1,10 @@
+module records target=x86_64-unknown-linux-gnu java_package=bench.records java_class=Records truffle_cells=true
+callback Span return=i64 truffle_upcall=true
+  param first type=i64
+  param count type=i64
+end
+import deliver symbol=myna_deliver_records return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
+  param span type=fn<Span>
+  param records type=i64
+  param width type=i64
+end

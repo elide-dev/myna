@@ -160,6 +160,11 @@ run = "scripts/python.sh benchmarks/cells/run.py run"
 [tasks."bench:cells-smoke"]
 run = "scripts/python.sh benchmarks/cells/run.py run --forks 1 --iterations 65536"
 
+[tasks."bench:upcall-records"]
+description = "Compare native record batches to TruffleData tape traversal"
+depends = ["build:jvm"]
+run = ["python3 benchmarks/upcall-records/run.py build", "python3 benchmarks/upcall-records/run.py run"]
+
 [tasks."bench:upcalls-build"]
 depends = ["build:jvm"]
 run = "python3 benchmarks/upcalls/run.py build"
