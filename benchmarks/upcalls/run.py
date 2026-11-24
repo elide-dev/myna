@@ -34,9 +34,29 @@ CASES += [f"reducer-{kind}-{thread}" for kind in ("bound", "cell") for thread in
 NFI_CASES = ["reducer-nfi-caller", "reducer-nfi-worker"]
 
 
-def source_hashes():
-    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
-            if p.suffix in (".java", ".c", ".seam")}
+def file_hash(path):
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def build_hashes(jars):
+    gen = WORK / "generated"
+    return {
+        "binaries": {p.name: file_hash(p) for p in (APP, LIB)},
+        "sources": {p.name: file_hash(p) for p in SOURCE.iterdir() if p.suffix in (".java", ".c", ".seam")},
+        "nfi_shim_sha256": file_hash(ROOT / "benchmarks/native/nfi_memfd.c"),
+        "dependencies": {name: file_hash(path) for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
+        "generated": {p.name: file_hash(p) for p in sorted(gen.glob("*.java"))},
+    }
+
+
+def current_build():
+    metadata = json.loads((WORK / "build.json").read_text())
+    if metadata.get("cases") != CASES + NFI_CASES or any(
+        metadata.get(key) != value for key, value in build_hashes(truffle_jars()).items()
+    ):
+        raise ValueError("Stale upcall inputs or executable. Run mise run bench:upcalls-build.")
+    return metadata
 
 
 def build():
@@ -76,12 +96,7 @@ def build():
         "build_flags": {"native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
-        "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
-        "sources": source_hashes(),
-        "nfi_shim_sha256": hashlib.sha256(nfi_shim.read_bytes()).hexdigest(),
-        "dependencies": {name: hashlib.sha256(path.read_bytes()).hexdigest()
-                         for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
-        "generated": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(gen.glob("*.java"))},
+        **build_hashes(jars),
         "cases": CASES + NFI_CASES,
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2))
@@ -93,9 +108,7 @@ def measure(forks, include_nfi):
     cases = CASES + NFI_CASES if include_nfi else CASES
     output = WORK / "results"
     output.mkdir(exist_ok=True)
-    metadata = json.loads((WORK / "build.json").read_text())
-    if metadata.get("cases") != CASES + NFI_CASES or metadata["sources"] != source_hashes():
-        raise RuntimeError("upcall workloads have changed; rebuild the Native Image before measuring")
+    metadata = current_build()
     if sys.platform == "darwin":
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:

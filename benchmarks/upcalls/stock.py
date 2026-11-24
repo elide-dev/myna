@@ -13,6 +13,8 @@ import statistics
 import subprocess
 import tempfile
 
+from run import current_build
+
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[1]
 FORK = ROOT / "build/upcalls"
@@ -37,15 +39,7 @@ def download(spec, dest):
 
 
 def verify_inputs(baseline):
-    metadata = json.loads((FORK / "build.json").read_text())
-    inputs = {p.name: sha(p) for p in SOURCE.iterdir() if p.suffix in (".java", ".c", ".seam")}
-    generated = {p.name: sha(p) for p in (FORK / "generated").glob("*.java")}
-    binaries = {name: sha(FORK / name) for name in ("measure", "libbench.so")}
-    runtime_jar = ROOT / ".dev/artifacts/jar/myna-truffle/myna-truffle.jar"
-    if (metadata["sources"] != inputs or metadata["generated"] != generated or metadata["binaries"] != binaries
-            or metadata["dependencies"]["myna-truffle"] != sha(runtime_jar)
-            or metadata["nfi_shim_sha256"] != sha(ROOT / "benchmarks/native/nfi_memfd.c")):
-        raise ValueError("Stale Elide inputs or executable. Run mise run bench:upcalls-build.")
+    metadata = current_build()
     # This stock release recipe reproduces a specific set of guest, adapter and generated inputs.
     for name, digest in baseline["source_sha256"].items():
         if sha(ROOT / name) != digest:
