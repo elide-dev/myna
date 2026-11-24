@@ -74,6 +74,13 @@ class FfmTest {
     assertTrue(
         out.get("CallbackApiForeignFeature.java")
             .contains("registerForDirectUpcall(CallbackApiFFM.ReducerUpcalls.STATIC_HANDLE"));
+    assertTrue(
+        out.get("CallbackApiForeignFeature.java")
+            .contains("registerForDirectUpcall(CallbackApiFFM.NotifyUpcalls.STATIC_HANDLE"));
+    assertTrue(
+        out.get("seam.json")
+            .contains(
+                "\"ffmTarget\":\"fixture.callbacks.CallbackOps.notifyValue\",\"returnType\":\"void\""));
     var scalar =
         generate(
             MODULE
@@ -97,6 +104,8 @@ class FfmTest {
     for (String header :
         new String[] {
           "return=i32 ffm_java=fixture.Ops.call",
+          "return=void ffm_java=fixture.Ops.call ffm_sentinel=0",
+          "return=void ffm_sentinel=0",
           "return=i32 ffm_sentinel=-1",
           "return=f32 ffm_java=fixture.Ops.call ffm_sentinel=-1",
           "return=i32 ffm_java=fixture.Ops.call ffm_sentinel=2147483648",

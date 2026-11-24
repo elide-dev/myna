@@ -9,7 +9,7 @@ end
 callback ShortResult return=u16
   param fail type=bool
 end
-callback Notify return=void
+callback Notify return=void ffm_java=fixture.callbacks.CallbackOps.notifyValue
   param value type=i32
 end
 callback PointerResult return=ptr<u8>

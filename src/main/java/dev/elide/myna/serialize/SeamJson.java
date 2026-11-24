@@ -75,12 +75,10 @@ public final class SeamJson {
                     "{\"name\":"
                         + quote(c.name())
                         + (c.javaType() == null ? "" : ",\"javaType\":" + quote(c.javaType()))
-                        + (c.ffmTarget() == null
+                        + (c.ffmTarget() == null ? "" : ",\"ffmTarget\":" + quote(c.ffmTarget()))
+                        + (c.ffmSentinel() == null
                             ? ""
-                            : ",\"ffmTarget\":"
-                                + quote(c.ffmTarget())
-                                + ",\"ffmSentinel\":"
-                                + quote(c.ffmSentinel()))
+                            : ",\"ffmSentinel\":" + quote(c.ffmSentinel()))
                         + ",\"returnType\":"
                         + quote(c.returns().text())
                         + ",\"parameters\":"

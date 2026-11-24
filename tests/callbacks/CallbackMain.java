@@ -56,6 +56,8 @@ public final class CallbackMain {
       notices.addAndGet(value);
       throw new IllegalStateException("void callback exception is discarded");
     }, arena);
+    binding.callNotify(CallbackApiFFM.NotifyUpcalls.create(arena), 17);
+    if (CallbackOps.lastNotice != 17) throw new AssertionError("static void callback");
     binding.callNotify(notify, 7);
     if (notices.get() != 7) throw new AssertionError("void callback");
     var memory = arena.allocate(1);

@@ -389,3 +389,13 @@ context entry in Komodo issue 125 is a separate operation.
 Setup cases time creating a batch of stubs and closing the owning arena. Registration is outside
 the timed loops in the invocation cases. CI publishes wall time to CodSpeed and retains the raw
 elapsed times and binary hashes in the svm-upcall-samples artifact.
+
+In the [x86-64 baseline](../benchmarks/upcalls/baselines/linux-x86_64-before.json) and
+[direct void callback run](../benchmarks/upcalls/baselines/linux-x86_64-after.json), measurements
+used five processes per case on logical CPU 7. Within the latter executable, the median of process
+medians for the no-argument notification was 799.49 ns/call with a dynamic target and 15.98 ns/call
+with a declared static target on the calling thread. The corresponding native worker measurements
+were 769.95 and 15.82 ns/call. Both target the same Java method, increment the same volatile counter,
+and return through the same C loop. The direct x86-64 SVM high-level upcall stub inlined the
+counter increment; the generic stub issued an indirect call. These measurements exclude registration
+and guest context entry.

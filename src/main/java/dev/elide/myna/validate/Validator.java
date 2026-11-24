@@ -168,10 +168,13 @@ public final class Validator {
       identifier(signature.name());
       if (signature.javaType() != null) qualifiedType(signature.javaType());
       require(
-          (signature.ffmTarget() == null) == (signature.ffmSentinel() == null),
-          "FFM callback target and sentinel must be declared together");
+          (signature.ffmTarget() != null && signature.returns() != Scalar.VOID)
+              == (signature.ffmSentinel() != null),
+          "a static non-void FFM callback requires a sentinel; other callbacks omit it");
       if (signature.ffmTarget() != null) {
         qualifiedType(signature.ffmTarget());
+      }
+      if (signature.ffmSentinel() != null) {
         require(
             signature.returns() == Scalar.I32 || signature.returns() == Scalar.I64,
             "static FFM callbacks require an i32/i64 status return");

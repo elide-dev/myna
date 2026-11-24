@@ -26,8 +26,11 @@ public final class Measure {
       var callback = workload.startsWith("control") ? MemorySegment.NULL
           : dynamic ? UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, arena)
           : UpcallsFFM.ReducerUpcalls.create(arena);
-      var hook = workload.contains("-hook-")
-          ? UpcallsFFM.HookUpcalls.create(Measure::hook, arena) : MemorySegment.NULL;
+      var hook = switch (workload) {
+        case "dynamic-hook-caller", "dynamic-hook-worker" -> UpcallsFFM.HookUpcalls.create(Measure::hook, arena);
+        case "static-hook-caller", "static-hook-worker" -> UpcallsFFM.HookUpcalls.create(arena);
+        default -> MemorySegment.NULL;
+      };
       for (int round = -3; round < 12; round++) {
         long elapsed;
         if (workload.endsWith("-setup")) {
