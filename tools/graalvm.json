@@ -1,18 +1,18 @@
 {
-  "version": "25.5.5-elide.32",
+  "version": "25.5.5-elide.33",
   "edition": "ce",
   "platforms": {
     "Darwin-arm64": {
       "archive": "macos-aarch64",
-      "sha256": "5c17149e6783615cece5af908c5eab20db23801fd83e516a159b81550ee154ad"
+      "sha256": "f0ab63ea9264c8b6605cc77de68857b4c5ea99168d44a8416ec167e6f62dcc28"
     },
     "Linux-x86_64": {
       "archive": "linux-amd64",
-      "sha256": "a2170e6dc5cfcbdc66e31f1b2d7c9106aabca0f6ae79bece08eb7a9e08b23cc9"
+      "sha256": "bbf252e8804bdc128fbaa8f56ed5498672630a2c782b8b526976325ccd4a3be2"
     },
     "Linux-aarch64": {
       "archive": "linux-aarch64",
-      "sha256": "2105f836b6019842de71f5700e9ee9835d221081793d8c57a235f54f9c19b578"
+      "sha256": "62360633f1397d60f58949509634f4a948d3d2f4757627fc8c77575b87896867"
     }
   }
 }
