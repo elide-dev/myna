@@ -32,15 +32,18 @@ ROWS = [
 
 
 def collect(directory):
+    metadata = json.loads((directory / "metadata.json").read_text())
+    if metadata["cases"] != CASES + NFI_CASES or metadata["forks"] != 5:
+        raise ValueError("collect requires a complete run with --forks 5 --include-nfi")
     samples = {}
     for case in CASES + NFI_CASES:
         samples[case] = []
         for fork in range(5):
             record = json.loads((directory / f"{case}-{fork}.json").read_text())
-            if record["case"] != case:
+            if record["case"] != case or record["campaign"] != metadata["campaign"]:
                 raise ValueError(f"unexpected case in {case}-{fork}")
             samples[case].append(record)
-    return {"metadata": json.loads((directory / "metadata.json").read_text()), "samples": samples}
+    return {"metadata": metadata, "samples": samples}
 
 
 def table(data):

@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -101,8 +102,8 @@ def measure(forks, include_nfi):
         metadata["cpu"] = run("lscpu").stdout.strip()
     if hasattr(os, "sched_getaffinity"):
         metadata["cpu_affinity"] = sorted(os.sched_getaffinity(0))
-    metadata["cases"] = cases
-    (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    metadata.update(cases=cases, forks=forks, campaign=uuid.uuid4().hex)
+    (output / "metadata.json").unlink(missing_ok=True)
     for fork in range(forks):
         order = cases if fork % 2 == 0 else reversed(cases)
         for case in order:
@@ -112,7 +113,7 @@ def measure(forks, include_nfi):
             samples = list(map(int, stdout.splitlines()))
             if proc.returncode or len(samples) != 12 or min(samples) <= 0:
                 raise RuntimeError(f"invalid measurement for {case}")
-            raw = dict(case=case, iterations=count, warmup_iters=count * 3,
+            raw = dict(case=case, campaign=metadata["campaign"], iterations=count, warmup_iters=count * 3,
                        samples_ns=samples, pid=proc.pid)
             (output / f"{case}-{fork}.json").write_text(json.dumps(raw, indent=2))
             if folder := os.getenv("CODSPEED_PROFILE_FOLDER"):
@@ -121,6 +122,7 @@ def measure(forks, include_nfi):
                 results = Path(folder) / "results"
                 results.mkdir(parents=True, exist_ok=True)
                 (results / f"{proc.pid}.json").write_text(json.dumps(payload))
+    (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
 
 if __name__ == "__main__":
