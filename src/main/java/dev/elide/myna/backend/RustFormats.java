@@ -278,7 +278,7 @@ public final class RustFormats {
         .append(" { raw, at: raw.node_at(index), index }\n        }\n\n");
     out.append(
         "        /// The node's index in the file.\n"
-            + "        pub fn index(&self) -> u32 {\n"
+            + "        pub const fn index(&self) -> u32 {\n"
             + "            self.index\n"
             + "        }\n");
     fixedAccessors(out, l, members, offsets);
@@ -470,7 +470,7 @@ public final class RustFormats {
           .append("::from_raw(raw, index)),\n");
     out.append(
         "                _ => unreachable!(\"validated tag\"),\n            }\n        }\n\n");
-    out.append("        pub fn index(&self) -> u32 {\n            match self {\n");
+    out.append("        pub const fn index(&self) -> u32 {\n            match self {\n");
     for (String n : nodes)
       out.append("                ")
           .append(name)
@@ -599,7 +599,8 @@ public final class RustFormats {
       out.append("        pub fn ")
           .append(f.headerWord())
           .append("(&self) -> u32 {\n            self.header\n        }\n\n");
-    out.append("        pub fn bytes(&self) -> &'a [u8] {\n            self.raw.b\n        }\n\n");
+    out.append(
+        "        pub const fn bytes(&self) -> &'a [u8] {\n            self.raw.b\n        }\n\n");
     out.append("        /// The number of nodes; the root is the last.\n");
     out.append(
         "        pub fn node_count(&self) -> u32 {\n            self.raw.nodes\n        }\n\n");

@@ -343,6 +343,7 @@ public final class RustFfi implements Backend {
       for (FlagBit b : f.bits())
         constant(out, b.name(), literal(f.type(), BigInteger.ONE.shiftLeft(b.bit()), true));
       for (FlagRange r : f.ranges()) {
+        rawConstant(out, r.name() + "_width", carrier, Integer.toString(r.width()));
         rawConstant(out, r.name() + "_shift", carrier, Integer.toString(r.low()));
         rawConstant(out, r.name() + "_mask", carrier, literal(f.type(), r.mask(), true));
       }

@@ -207,6 +207,8 @@ public final class TruffleCells implements Backend {
       }
       // A range is its shift and its in-place mask, as the other backends name them.
       for (FlagRange r : f.ranges()) {
+        members.add(r.name() + "_width");
+        masks.add(guestLiteral(f.type(), BigInteger.valueOf(r.width())));
         members.add(r.name() + "_shift");
         masks.add(guestLiteral(f.type(), BigInteger.valueOf(r.low())));
         members.add(r.name() + "_mask");

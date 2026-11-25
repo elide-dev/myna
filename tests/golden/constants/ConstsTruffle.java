@@ -84,18 +84,21 @@ public final class ConstsTruffle {
                                 1L
                             }),
                     new NativeConstants(
-                            new String[] {"code_shift", "code_mask"},
+                            new String[] {"code_width", "code_shift", "code_mask"},
                             new Object[] {
+                                8,
                                 0,
                                 255
                             }),
                     new NativeConstants(
-                            new String[] {"open", "external", "kind_shift", "kind_mask", "depth_shift", "depth_mask"},
+                            new String[] {"open", "external", "kind_width", "kind_shift", "kind_mask", "depth_width", "depth_shift", "depth_mask"},
                             new Object[] {
                                 1L,
                                 4L,
                                 8L,
+                                8L,
                                 65280L,
+                                4L,
                                 16L,
                                 983040L
                             }),

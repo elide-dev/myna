@@ -981,7 +981,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
         pub fn face(&self) -> &'a str {
@@ -1024,7 +1024,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
         pub fn style(&self) -> Style<'a> {
@@ -1072,7 +1072,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
 
@@ -1119,7 +1119,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
         pub fn title(&self) -> &'a str {
@@ -1167,7 +1167,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
         pub fn meta(&self) -> Option<Meta<'a>> {
@@ -1220,7 +1220,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
         pub fn a(&self) -> i8 {
@@ -1319,7 +1319,7 @@ pub mod doc {
         }
 
         /// The node's index in the file.
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             self.index
         }
     }
@@ -1433,7 +1433,7 @@ pub mod doc {
             }
         }
 
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             match self {
                 Block::Paragraph(x) => x.index(),
                 Block::RawText(x) => x.index(),
@@ -1468,7 +1468,7 @@ pub mod doc {
             }
         }
 
-        pub fn index(&self) -> u32 {
+        pub const fn index(&self) -> u32 {
             match self {
                 AnyNode::Style(x) => x.index(),
                 AnyNode::Paragraph(x) => x.index(),
@@ -1552,7 +1552,7 @@ pub mod doc {
             self.header
         }
 
-        pub fn bytes(&self) -> &'a [u8] {
+        pub const fn bytes(&self) -> &'a [u8] {
             self.raw.b
         }
 
@@ -1620,7 +1620,7 @@ pub mod doc {
             peek(bytes, DOC_FRAGMENT.magic)
         }
 
-        pub fn bytes(&self) -> &'a [u8] {
+        pub const fn bytes(&self) -> &'a [u8] {
             self.raw.b
         }
 
@@ -1692,7 +1692,7 @@ pub mod doc {
             self.header
         }
 
-        pub fn bytes(&self) -> &'a [u8] {
+        pub const fn bytes(&self) -> &'a [u8] {
             self.raw.b
         }
 

@@ -86,7 +86,7 @@ final class RustOwnership {
                   + "            let owned = core::mem::ManuallyDrop::new(self);\n"
                   + "            owned.pointer.as_ptr()\n"
                   + "        }\n")
-          .append("        pub fn borrow(&self) -> ")
+          .append("        pub const fn borrow(&self) -> ")
           .append(n)
           .append("Borrow<'_> {\n            ")
           .append(n)
@@ -106,7 +106,7 @@ final class RustOwnership {
           .append(n)
           .append("Borrow<'_> {\n")
           .append("        /// Raw escape hatch. Dereferencing or passing it on remains unsafe.\n")
-          .append("        pub fn as_ptr(&self) -> *mut super::")
+          .append("        pub const fn as_ptr(&self) -> *mut super::")
           .append(n)
           .append(" { self.owner.pointer.as_ptr() }\n    }\n");
     }
@@ -727,10 +727,10 @@ impl<'a, L: BatchLength> BufferBatch<'a, L> {
     }
     /// The number of elements.
     #[inline(always)]
-    pub fn len(&self) -> usize { self.count }
+    pub const fn len(&self) -> usize { self.count }
     /// Whether the batch has no elements.
     #[inline(always)]
-    pub fn is_empty(&self) -> bool { self.count == 0 }
+    pub const fn is_empty(&self) -> bool { self.count == 0 }
     /// The element at `index`, counted from the start, or `None` past the end.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&'a [u8]> {
@@ -799,10 +799,10 @@ impl<'a, L: BatchLength> OptionalBufferBatch<'a, L> {
     }
     /// The number of elements.
     #[inline(always)]
-    pub fn len(&self) -> usize { self.count }
+    pub const fn len(&self) -> usize { self.count }
     /// Whether the batch has no elements.
     #[inline(always)]
-    pub fn is_empty(&self) -> bool { self.count == 0 }
+    pub const fn is_empty(&self) -> bool { self.count == 0 }
     /// The element at `index`, counted from the start, or `None` past the end.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<Option<&'a [u8]>> {

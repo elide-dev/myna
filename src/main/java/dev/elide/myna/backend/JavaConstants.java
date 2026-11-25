@@ -203,6 +203,13 @@ public final class JavaConstants implements Backend {
           "        ",
           null,
           f.type(),
+          upper + "_WIDTH",
+          Types.javaLiteral(f.type(), BigInteger.valueOf(r.width()), false));
+      field(
+          out,
+          "        ",
+          null,
+          f.type(),
           upper + "_SHIFT",
           Types.javaLiteral(f.type(), BigInteger.valueOf(r.low()), false));
       field(

@@ -390,7 +390,8 @@ final class ConstantsValidator {
           r.low() >= 0 && r.high() < width,
           where + range + " is outside " + f.type().text() + " (bits 0.." + (width - 1) + ")");
       // C, Rust and Java spell the derived constants NAME_SHIFT and NAME_MASK.
-      for (String member : List.of(r.name(), r.name() + "_shift", r.name() + "_mask")) {
+      for (String member :
+          List.of(r.name(), r.name() + "_shift", r.name() + "_mask", r.name() + "_width")) {
         String other = members.putIfAbsent(member, "range " + r.name());
         require(
             other == null,
@@ -792,7 +793,7 @@ final class ConstantsValidator {
       }
       for (FlagRange r : f.ranges()) {
         String where = "flags " + f.name() + " range " + r.name();
-        for (String suffix : List.of("_shift", "_mask")) {
+        for (String suffix : List.of("_shift", "_mask", "_width")) {
           String name = Names.cMacro(m, f.name(), r.name() + suffix);
           require(
               !reserved.contains(name),
