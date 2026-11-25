@@ -416,3 +416,13 @@ returns. The batch timer measures notifications between those hooks. Both modes 
 cross the native boundary once per notification. A producer using batch entry must
 own the delivery interval and balance entry and exit on the same thread, including
 on errors. Independent notifications from framework-owned threads use per-call entry.
+
+### Upcall benchmark cycle
+
+CodSpeed runs a single process per case on pull requests and pushes to main. The full
+[upcall workflow](../.github/workflows/benchmark.upcalls.yml) runs weekly and on demand.
+Run `mise run bench:upcalls` locally for the same build, five processes per case,
+raw JSON and Markdown summary. To publish a reviewed run, copy its `baseline.json` to
+`benchmarks/upcalls/baselines/readme.json`, update
+the README host description from the artifact metadata, then run
+`python3 benchmarks/upcalls/report.py update-readme`.
