@@ -22,6 +22,10 @@ public final class Measure {
     int count = Integer.parseInt(args[2]);
     try (var arena = Arena.ofShared()) {
       var binding = new UpcallsFFM.LibraryBinding(Path.of(args[0]), arena);
+      if (workload.startsWith("guest-")) {
+        Guest.measure(binding, arena, workload, count);
+        return;
+      }
       boolean dynamic = workload.startsWith("dynamic");
       var callback = workload.startsWith("control") ? MemorySegment.NULL
           : dynamic ? UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, arena)

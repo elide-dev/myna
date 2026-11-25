@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "benchmarks/native"))
 from support import TARGET, compile_native, native_image, run
 from walltime import report
+from truffle_integration import truffle_jars
 
 SOURCE = Path(__file__).resolve().parent
 WORK = ROOT / "build/upcalls"
@@ -24,6 +25,18 @@ CASES = [f"{kind}-{thread}" for kind in ("control", "static", "dynamic")
          for thread in ("caller", "worker")] + ["static-hook-caller", "static-hook-worker", "dynamic-hook-caller", "dynamic-hook-worker", "isolate-caller", "static-setup", "dynamic-setup"]
 
 
+CASES += [f"guest-{scope}-{thread}" for scope in ("each", "batch") for thread in ("caller", "worker")]
+
+
+def source_hashes():
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
+            if p.is_file() and p.suffix in (".py", ".java", ".c", ".seam")}
+
+
+def binary_hashes():
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB) if p.is_file()}
+
+
 def build():
     gen = WORK / "generated"
     WORK.mkdir(parents=True, exist_ok=True)
@@ -31,29 +44,40 @@ def build():
         "generate", SOURCE / "upcalls.seam", "--out", gen, "--target", TARGET)
     run("cc", "-O3", "-shared", "-fPIC", "-pthread", "-I", gen, SOURCE / "kernel.c", "-o", LIB)
     classes = WORK / "classes"
-    compile_native(classes, gen, *sorted(gen.glob("*.java")), SOURCE / "Measure.java")
-    native_image("-O3", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
+    jars = truffle_jars()
+    modules = ("truffle-api", "truffle-runtime", "truffle-compiler", "polyglot", "collections", "nativeimage", "word", "jniutils", "nativebridge", "truffle-nfi", "truffle-nfi-libffi")
+    compile_native(classes, gen, *sorted(gen.glob("*.java")), *sorted(SOURCE.glob("*.java")), classpath=jars.values(),
+                   options=("-processorpath", str(jars["truffle-dsl-processor"])))
+    native_image("-O3", "--macro:truffle-svm", "--module-path", os.pathsep.join(str(jars[m]) for m in modules),
+                 "--initialize-at-build-time=bench.upcalls.Guest$CountingRoot,bench.upcalls.Guest$MixNode,bench.upcalls.HookLanguage,bench.upcalls.HookLanguageProvider", "-H:+UnlockExperimentalVMOptions", "-H:-DeleteLocalSymbols",
                  "-H:-UnlockExperimentalVMOptions", "--enable-native-access=ALL-UNNAMED", "-cp", classes,
                  "--features=bench.upcalls.UpcallsForeignFeature", "bench.upcalls.Measure",
                  "-o", APP, timeout=900)
 
+    binaries = binary_hashes()
+    if len(binaries) != 2:
+        raise RuntimeError("upcall build did not produce both binaries")
     metadata = {
         "revision": run("git", "rev-parse", "HEAD").stdout.strip(),
         "machine": platform.platform(),
-        "build_flags": {"native_image": "-O3 -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
+        "build_flags": {"native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols", "kernel": "-O3 -shared -fPIC -pthread"},
         "compiler": run("cc", "--version").stdout.strip(),
         "graalvm": run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout.strip(),
-        "binaries": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (APP, LIB)},
-        "sources": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.iterdir()
-                    if p.is_file()},
+        "binaries": binaries,
+        "sources": source_hashes(),
+        "cases": CASES,
     }
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2))
 
 
 def measure(forks):
+    metadata = json.loads((WORK / "build.json").read_text())
+    if metadata.get("cases") != CASES or metadata["sources"] != source_hashes():
+        raise RuntimeError("upcall workloads have changed; rebuild the Native Image before measuring")
+    if metadata.get("binaries") != binary_hashes():
+        raise RuntimeError("upcall binaries have changed; rebuild the Native Image before measuring")
     output = WORK / "results"
     output.mkdir(exist_ok=True)
-    metadata = json.loads((WORK / "build.json").read_text())
     if sys.platform == "darwin":
         metadata["cpu"] = run("sysctl", "-n", "machdep.cpu.brand_string").stdout.strip()
     else:
@@ -61,7 +85,7 @@ def measure(forks):
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
     for fork in range(forks):
         for case in CASES:
-            count = 256 if case.endswith("setup") else 16384
+            count = 262144 if case.startswith("guest-") else 256 if case.endswith("setup") else 16384
             proc = subprocess.Popen([APP, LIB, case, str(count)], stdout=subprocess.PIPE, text=True)
             stdout, _ = proc.communicate()
             samples = list(map(int, stdout.splitlines()))
