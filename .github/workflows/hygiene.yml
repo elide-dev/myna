@@ -33,6 +33,7 @@ jobs:
       - run: python3 -m unittest discover -s tests -p test_publish_symbols.py
       - run: python3 -m unittest discover -s tests -p test_build_policy.py
       - run: python3 -m unittest discover -s tests -p test_gate.py
+      - run: python3 -m unittest discover -s tests -p test_upcall_records.py
       - run: python3 -m unittest discover -s tests -p test_trufflecheck.py
       - name: Render performance charts from retained measurements
         run: |

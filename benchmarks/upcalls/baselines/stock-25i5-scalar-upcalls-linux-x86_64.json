@@ -1,0 +1,743 @@
+{
+  "revision": "ea9a14d395dd70ff92d2e9cf4163e9dfbc84f298",
+  "machine": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+  "cpu_model": "AMD Ryzen 9 9950X3D2 16-Core Processor",
+  "logical_cpu": 7,
+  "workload": {
+    "events_per_round": 262144,
+    "warmup_rounds": 3,
+    "measured_rounds": 12,
+    "process_blocks": 12,
+    "verified_each_measured_round": {
+      "guest_calls": 262144,
+      "compiled_guest_calls": 262144,
+      "guest_and_native_result": 4296146993
+    },
+    "timed_region": "CLOCK_MONOTONIC on the C worker between context entry and exit; registration, worker creation/join and guest warmup excluded."
+  },
+  "kernel_sha256": "47f112f33f69badef0b49f7554507c409ca89a8dee7fafa653af07a42f265af1",
+  "native_compiler": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)",
+  "native_compiler_target": "Target: x86_64-unknown-linux-gnu",
+  "stock": {
+    "runtime_version": "native-image 25.0.5.0.3 2026-10-24\nGraalVM Runtime Environment GraalVM CE 25.5.5.0.3+1.1 (build 25.0.5.0.3+1-jvmci-25.5-b26)\nSubstrate VM GraalVM CE 25.5.5.0.3+1.1 (build 25.0.5.0.3+1, serial gc, compressed references)",
+    "runtime_archive": {
+      "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.5.5.0.3/graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz",
+      "sha256": "c6438dee6c3ade2220d40b7ccdcad24b512d30e233e61bb4fc70519522de34ef"
+    },
+    "jars": {
+      "truffle-api": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-api/25.5.5.0.3/truffle-api-25.5.5.0.3.jar",
+        "sha256": "ce6662ca5f319c329eb8867f4aa809ea3e892e07b2975bf9d364d94bdad166d0"
+      },
+      "truffle-runtime": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-runtime/25.5.5.0.3/truffle-runtime-25.5.5.0.3.jar",
+        "sha256": "a4b8df5041e6001d00019d92617cad6b7f5628a4f84d4d94b53b9e56c6b80a0e"
+      },
+      "truffle-compiler": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-compiler/25.5.5.0.3/truffle-compiler-25.5.5.0.3.jar",
+        "sha256": "f12a579e489daea109d7e19d231b48fe33b2a8a34033251618ef7a54579a236d"
+      },
+      "polyglot": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/polyglot/polyglot/25.5.5.0.3/polyglot-25.5.5.0.3.jar",
+        "sha256": "51096bb48c663a82a720358d9f5f9145b9809ea3d155459211a6a05759f4f43c"
+      },
+      "collections": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/sdk/collections/25.5.5.0.3/collections-25.5.5.0.3.jar",
+        "sha256": "694c52b4536e744fd091257d190af6ba95c78f37a2eb1cb7b5d1cfc8e7c1efca"
+      },
+      "nativeimage": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/sdk/nativeimage/25.5.5.0.3/nativeimage-25.5.5.0.3.jar",
+        "sha256": "b8d337a9d413169953285b600bb1bd243f1b294a10654a324751f56b2a88d749"
+      },
+      "word": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/sdk/word/25.5.5.0.3/word-25.5.5.0.3.jar",
+        "sha256": "11a21c7f6a132bd21c566ec4b8b397fb06656db5d293ff52966ee8582b79ddd1"
+      },
+      "jniutils": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/sdk/jniutils/25.5.5.0.3/jniutils-25.5.5.0.3.jar",
+        "sha256": "1c46ac4d58434d9118026ab2f4a585102460ec07a4cfcf31973b0fb13f84268e"
+      },
+      "nativebridge": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/sdk/nativebridge/25.5.5.0.3/nativebridge-25.5.5.0.3.jar",
+        "sha256": "fe2cf1b0cfbb83b1507ba33883282894e085553e18fe47a6cb2a18645f1c381c"
+      },
+      "truffle-nfi": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-nfi/25.5.5.0.3/truffle-nfi-25.5.5.0.3.jar",
+        "sha256": "46991d13620a0894cf32388d84b1c206becd850134a69a5c6dd56c810a51ac79"
+      },
+      "truffle-nfi-libffi": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-nfi-libffi/25.5.5.0.3/truffle-nfi-libffi-25.5.5.0.3.jar",
+        "sha256": "f46236213f1be9a7cfde58180087de0eae097cdd59707c75d9a204ab28e8a9c7"
+      },
+      "truffle-dsl-processor": {
+        "url": "https://repo.maven.apache.org/maven2/org/graalvm/truffle/truffle-dsl-processor/25.5.5.0.3/truffle-dsl-processor-25.5.5.0.3.jar",
+        "sha256": "39daafb069ea01c5ef961a04cdb6d491800b019c4ec994f8eb9ce4fb88e5f290"
+      }
+    },
+    "image_sha256": "b5b1c6fb7dcf5f9b564723f61a177111104095c52333344ac699d37b871b07dd",
+    "native_image_argv": [
+      "{stock_jdk}/bin/native-image",
+      "-J--enable-native-access=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:-CheckToolchain",
+      "-H:CCompilerPath={clang}",
+      "-H:-UnlockExperimentalVMOptions",
+      "-O3",
+      "--macro:truffle-svm",
+      "--module-path",
+      "{stock_jars}/truffle-api.jar:{stock_jars}/truffle-runtime.jar:{stock_jars}/truffle-compiler.jar:{stock_jars}/polyglot.jar:{stock_jars}/collections.jar:{stock_jars}/nativeimage.jar:{stock_jars}/word.jar:{stock_jars}/jniutils.jar:{stock_jars}/nativebridge.jar:{stock_jars}/truffle-nfi.jar:{stock_jars}/truffle-nfi-libffi.jar",
+      "--initialize-at-build-time=bench.upcalls.Guest$CountingRoot,bench.upcalls.Guest$MixNode,bench.upcalls.HookLanguage,bench.upcalls.HookLanguageProvider,bench.upcalls.ReducerBench$ReducerRoot,bench.upcalls.ReducerBench$NfiExecutable,bench.upcalls.ReducerBench$NfiExecutable$Execute,bench.upcalls.ReducerCellChecks$CheckedRoot,bench.upcalls.NfiExecutableGen$InteropLibraryExports$Cached$DirectData,bench.upcalls.NfiExecutableGen$InteropLibraryExports$Cached,bench.upcalls.NfiExecutableGen$InteropLibraryExports$Uncached,bench.upcalls.NfiExecutableGen$InteropLibraryExports,bench.upcalls.NfiExecutableGen",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:-DeleteLocalSymbols",
+      "-H:NativeLinkerOption={work}/nfi.o",
+      "-H:-UnlockExperimentalVMOptions",
+      "--enable-native-access=ALL-UNNAMED",
+      "-cp",
+      "{classes}",
+      "--features=bench.upcalls.UpcallsForeignFeature",
+      "bench.upcalls.Measure",
+      "-o",
+      "{comparison}/measure"
+    ]
+  },
+  "elide": {
+    "runtime_version": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)",
+    "deps_sha256": {
+      "myna-truffle": "c39a0e49968363ffe2f9676140a05a73843e19f7c82e9940be5c05431b8eebee",
+      "truffle-api": "bb00e7eceb458168365bd777e5d1fcc511ce43541ca069bc2f2cb55ee9271bb6",
+      "truffle-runtime": "8081ad5ebdb5dcd51735820070cc9f28aee3d57cb2038bbbf536c77c90429cdf",
+      "truffle-compiler": "5fa659e13955af04a09c20204e4b08a89487f590ecfd1fc68d6f39825266ce44",
+      "polyglot": "a6858ddb0582fc9246b0ff8959382caf2d93ab73043e27b56e20c6f1fcb72bfd",
+      "collections": "62bb1f6080f51c6a76a689571a1827c987d37c12791f45c666a1b1b7eeff632f",
+      "nativeimage": "885a16a34324b5eea218e3300b441d0f56db9cdfdcb83b58676c4edad8303e2e",
+      "word": "3244e0bf551e2a241d524569561d79020c2106736f0416b8dcae127b6d552971",
+      "jniutils": "62e381177bdcbb4376462d5357cf915d43f42014b3eeb2a136d90b318f9e5ac4",
+      "nativebridge": "3464d00d3c10481acc89ce8c306e16a4a61ea499a42c900d020a221f4678dec6",
+      "truffle-nfi": "bd2690bc2c18193f30ad4d52067cc672d1a6c1a4cfd90ca967ca035deb3e2a71",
+      "truffle-nfi-libffi": "e618437f9189bcae3922ee3be08e70eab16c973906f13099a68153ba60f3ce0a",
+      "truffle-dsl-processor": "c579dbcbb4b309ab7f7d4b85b8b058724375f0894d873969448f3c6cb55ba4eb"
+    },
+    "image_sha256": "d03275b846b63002260a2e2001d8bd163deeb27de65f1855980ec85fbc8c526d",
+    "build_flags": {
+      "native_image": "-O3 --macro:truffle-svm -H:-DeleteLocalSymbols",
+      "kernel": "-O3 -shared -fPIC -pthread"
+    }
+  },
+  "source_sha256": {
+    "benchmarks/upcalls/Guest.java": "1140fc138ef641af8cfea06b9d0c2e291066ed316aa1e145fba9a3aae486b9c9",
+    "benchmarks/upcalls/HookLanguage.java": "11766d51e5b6fde9ee81d8e1b7d6a0727c7371b94c20ca0d15b3f1ffb432db9e",
+    "benchmarks/upcalls/Measure.java": "f46aa4b13eaee9263c63d4b092218ac02e84be9e1f48b2269dddfa82f8edd25c",
+    "benchmarks/upcalls/ReducerBench.java": "9d402a50e021c38655577a4d268a8a450e30562ea46af13851573007519e1f1b",
+    "benchmarks/upcalls/ReducerCellChecks.java": "af287235ea9ef492b49a0956eb0aac022b13dc47fa651c716e083bb5b90a2de7",
+    "benchmarks/upcalls/kernel.c": "ed3b41be5c413350ad9f7c4b68db22a89c33f9f4522720125d8edc89dbe46f15",
+    "benchmarks/native/nfi_memfd.c": "33ed732001a02b24434b19d503525bafa42a7e1bb88f5fb16d13614f1bf81989",
+    "benchmarks/upcalls/upcalls.seam": "2e55a9f2a9ebf7ebcadc1bc732b02b55552ce2feae2e16bfe63ea8a4ded18569",
+    "build/upcalls/generated/META-INF/native-image/dev.elide.myna/bench.upcalls.Upcalls/native-image.properties": "cd1fdb0dd43789af1d104b7e4ebdcd4a33431a0e44339b16433ce6f2a0b377a3",
+    "build/upcalls/generated/Upcalls.java": "33d0868772dce530840be2e8426d45b2e37a32996403870da969913367d5d63c",
+    "build/upcalls/generated/UpcallsDirectives.java": "3a44819384b2104458a3fbcd1d3b67908f0345df4ae46cffc94c0499ac4dcee6",
+    "build/upcalls/generated/UpcallsFFM.java": "3b93131130166c60c8938a63d29f0697b71a3bc11ed81a6de12a69197639beb0",
+    "build/upcalls/generated/UpcallsForeignFeature.java": "83645163f486d1a94ba23c3b9dcea90aa17007401fa442b01127f10ca8100ad1",
+    "build/upcalls/generated/UpcallsTruffle.java": "5bc3f2d3e0b48c0261ccf68121291f844bdea9657849ab044cd264b1c4598f13",
+    "build/upcalls/generated/seam.abi": "efec936f5888f6e73b72e00d7e69ea3aaf4c0e07d6568072c8447ca5092d8788",
+    "build/upcalls/generated/seam.h": "0909a139bce41dcc8bd772791618df870cea6ae4ded6c0a9d7a7a2a66a860025",
+    "build/upcalls/generated/seam.json": "e4ca99381810463665878632d2e3667cbe9fd018d7bc8ec8636c9932d33a3513",
+    "build/upcalls/generated/seam.ll": "5be6ad4b89c51a7bf0cb24592e2016de6a61b58ee973a9b1a927f338bd7f8296",
+    "build/upcalls/generated/seam.rs": "fdee6ab2d2c3d7ca65e78d7b48b940bcd2b0a5413efd200ba021e6196c0d865b",
+    "build/upcalls/generated/seam_impl.rs": "f07d2564dbf46bb3166c566e0bbd9e773366535ec564e5bcd58bc07a154325f3",
+    "build/upcalls/generated/seam_types.rs": "dda2fd423d1bf24fff1837d2d98a3f77e902721f55da4098d383f95f5184d614",
+    "src/truffle/java/dev/elide/myna/truffle/AlignedBytesCoercion.java": "3fd8732b43ce36b6d8697bf345eeacc2d7b607932eb6f066f7991eeef8863143",
+    "src/truffle/java/dev/elide/myna/truffle/Batch.java": "08b505b6c3b8955c37c605b3132bb5f35e75214bf5f2a02bef2c82f7cacc425b",
+    "src/truffle/java/dev/elide/myna/truffle/BatchCoercion.java": "498d3403507381b97fb9298846c6cdb753d45bf106b70d4677d9ca0437875689",
+    "src/truffle/java/dev/elide/myna/truffle/BooleanCoercion.java": "4caa676860bfadd8ad1ae28fc51636c3efd748055430aa943e2a7f9d8afe6fe0",
+    "src/truffle/java/dev/elide/myna/truffle/Borrow.java": "0c518900b48ceaf2470e296a4a85ffb4e2b6576fe12c68669bb07ed8768b6ddc",
+    "src/truffle/java/dev/elide/myna/truffle/BufferArray.java": "fb53e612b7423d45a8144ee6bc7be905b237533dc2f20962d4c782f85a886a70",
+    "src/truffle/java/dev/elide/myna/truffle/BytesCoercion.java": "26e05cb17b3aaba7f8f923df15ebd196ddc52624422b63d3ee26f56434d4abe0",
+    "src/truffle/java/dev/elide/myna/truffle/CStrings.java": "2312c99430c6cc2a4ae5682eabce7ac63990b32c31906d20cc2f003d615deabe",
+    "src/truffle/java/dev/elide/myna/truffle/Carriers.java": "9eaf7a7323ebbe0178e393fc990907b51f35fb8617d2b7a181d66ea723987ddf",
+    "src/truffle/java/dev/elide/myna/truffle/Coercion.java": "1129e974d0ca793cd3a1451e8fca22178735ff14b2c62f651107488a6cdbb0ec",
+    "src/truffle/java/dev/elide/myna/truffle/CoercionPolicy.java": "522f0b2ef2a06e522c4182cc999fd3291c120c5cc8450707847a09a121b9af38",
+    "src/truffle/java/dev/elide/myna/truffle/EmptyBytes.java": "68569387d20911d8a2c6903f9a0a7324dd96ee6435f3111abed0a7df13bbed09",
+    "src/truffle/java/dev/elide/myna/truffle/FloatingCoercion.java": "080ac0561a316ed9a8cf8eafbb2bf5113ce2cca63d365657144b5e8a5a9734c6",
+    "src/truffle/java/dev/elide/myna/truffle/GuestText.java": "6b4566b023ca866ffea02dcc73964513f1272f581df56ac0f1dc837e0634983e",
+    "src/truffle/java/dev/elide/myna/truffle/HeapBytes.java": "c204082a292348484638511ed114e904e3bb4ccac1dc3a73e21eab4de1382063",
+    "src/truffle/java/dev/elide/myna/truffle/HeldBytesCoercion.java": "4f3b40ec49e02cbbfad272769f08777564ac7619cc3f6880780e5bfce8c47018",
+    "src/truffle/java/dev/elide/myna/truffle/ImageMemory.java": "b5a619b4fddd0b9764fa380c6b7c2af00cdc28dbc288d2cc2fd3269b0f732d53",
+    "src/truffle/java/dev/elide/myna/truffle/IntegerCoercion.java": "359b382155575753b02d37bcaa2087e021d96c80bfd46b6e43339ac743d59b48",
+    "src/truffle/java/dev/elide/myna/truffle/Memory.java": "a367a306dece955425ed9de599b85acab906bcda1ddc505d4eef948309f791d9",
+    "src/truffle/java/dev/elide/myna/truffle/NativeBytes.java": "c646036e851a942afcb490f98dd564e68705d0094486cfb627e2cdd6f9683dec",
+    "src/truffle/java/dev/elide/myna/truffle/NativeCell.java": "579233154c8c47fdbe1dddb7b91e8784dd53dc6628e565b6612ceab8d9d89e32",
+    "src/truffle/java/dev/elide/myna/truffle/NativeCellException.java": "967e19898f8cdafbe39d1f69f7e3ea1f4fcb29a8b8041f724d6ec47bf4f49ad3",
+    "src/truffle/java/dev/elide/myna/truffle/NativeCellRootNode.java": "db6e2e477716a38be8c2315d005c69471283911856898f70d384cceae5fbb9fe",
+    "src/truffle/java/dev/elide/myna/truffle/NativeConstants.java": "a793da3460eccdfebf028fee32e54883cb61029319dec8d1ca3054d42ce5ffc5",
+    "src/truffle/java/dev/elide/myna/truffle/NativeFunction.java": "54632a83bd2337ef239549bcad70af0d34f8b49480973ed5341f2556f56ebed9",
+    "src/truffle/java/dev/elide/myna/truffle/NativePointer.java": "c1e6b358b4659a4cf1864d50120c0968e8605ba59374d3206e887f56ec4678b3",
+    "src/truffle/java/dev/elide/myna/truffle/NativeResource.java": "cbd15bc84e6b331205b2bc311b223bd53e10e81dbe858391daf1892db4dd4ac2",
+    "src/truffle/java/dev/elide/myna/truffle/NativeStatusException.java": "c9add3ad94c7e0ddc1887b11b6e7c6d0eeb76df2988ffa9920ae1cb451f05671",
+    "src/truffle/java/dev/elide/myna/truffle/NativeStruct.java": "05cc022562f123c5dec0102057567157b75823aab4c91c1bf82d2f66f2529c6d",
+    "src/truffle/java/dev/elide/myna/truffle/NativeVoid.java": "2a6924d25635e87910a152c35eb7da0180570c8885828495a398afa29a0d6be7",
+    "src/truffle/java/dev/elide/myna/truffle/OverAlignedBytesCoercion.java": "e13c52b1a2d676bcc5078988fb780945440218745efc07d7b4f55a55410c818c",
+    "src/truffle/java/dev/elide/myna/truffle/PointerCoercion.java": "8de50e753c67661689b369a552879e54cca2c480bec377919c8780bc6ad0dc59",
+    "src/truffle/java/dev/elide/myna/truffle/UpcallTarget.java": "cafbebbb1cc993d8cfe15dbfcd479869fd8168ae01bc934d5d24f2ec398e8b3c",
+    "src/truffle/resources/META-INF/native-image/dev.elide.myna/myna-truffle/native-image.properties": "28315389508bcfcf083822c6d0c2a84dfcf5698e70da7bca71298b35fee8645b"
+  },
+  "median_ns_per_callback": {
+    "stock-bound": {
+      "median": 28.905678749084473,
+      "range": [
+        27.209136962890625,
+        40.23056983947754
+      ]
+    },
+    "stock-cell": {
+      "median": 29.89477252960205,
+      "range": [
+        28.261716842651367,
+        34.248273849487305
+      ]
+    },
+    "stock-nfi": {
+      "median": 47.19911289215088,
+      "range": [
+        41.69113349914551,
+        64.54998207092285
+      ]
+    },
+    "elide-bound": {
+      "median": 31.150930404663086,
+      "range": [
+        27.30384635925293,
+        33.76711082458496
+      ]
+    },
+    "elide-cell": {
+      "median": 29.330291748046875,
+      "range": [
+        27.625995635986328,
+        36.32337188720703
+      ]
+    },
+    "elide-nfi": {
+      "median": 52.25282001495361,
+      "range": [
+        47.704673767089844,
+        62.99690628051758
+      ]
+    }
+  },
+  "paired_ratios": {
+    "elide-bound/elide-cell": {
+      "median": 0.9969148879909764,
+      "minimum": 0.8672900016110139,
+      "maximum": 1.202386817524564,
+      "denominator_faster": 6
+    },
+    "stock-bound/stock-cell": {
+      "median": 0.960731273787844,
+      "minimum": 0.8111127899100238,
+      "maximum": 1.269042033653155,
+      "denominator_faster": 3
+    },
+    "elide-nfi/elide-cell": {
+      "median": 1.7434923466645147,
+      "minimum": 1.4770697086761926,
+      "maximum": 1.9670522155862282,
+      "denominator_faster": 12
+    },
+    "stock-nfi/stock-cell": {
+      "median": 1.531965264850367,
+      "minimum": 1.3880348363490356,
+      "maximum": 1.994994002246306,
+      "denominator_faster": 12
+    },
+    "stock-nfi/elide-cell": {
+      "median": 1.5570358241687443,
+      "minimum": 1.3033964025140852,
+      "maximum": 2.2985101662004146,
+      "denominator_faster": 12
+    },
+    "stock-cell/elide-cell": {
+      "median": 1.0024530562521254,
+      "minimum": 0.8727583645121579,
+      "maximum": 1.1943740179666111,
+      "denominator_faster": 6
+    },
+    "stock-bound/elide-bound": {
+      "median": 0.9598088461925878,
+      "minimum": 0.8570014778426787,
+      "maximum": 1.2770434891800615,
+      "denominator_faster": 4
+    },
+    "stock-nfi/elide-nfi": {
+      "median": 0.9071251318825732,
+      "minimum": 0.7728040436929816,
+      "maximum": 1.255332210427578,
+      "denominator_faster": 1
+    }
+  },
+  "instructions": {
+    "stock": {
+      "bound": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "ReducerBench$$Le4fbfcb9_invoke_dPRmvn52YYLb055B94T4gB",
+          "CEntryPointSnippets_enterAttachThread1_DyyRIjnWVrEm6wvovz6IbC",
+          "UpcallStubsHolder_direct_upcallHigh_injrecv_JJJ_J_AnbqQM2GG637t2aAPOLxT0",
+          "UpcallStubsHolder_direct_upcallLow_injrecv_JJ_J_IVQJzXAUaiAuPAouEuPG7G"
+        ],
+        "tier_2_compilations": {
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x28,%rsp",
+          "0004  mov    $0x140,%eax",
+          "0009  add    0x8(%r15),%rax",
+          "000d  cmp    %rsp,%rax",
+          "0010  jae    .+0x150",
+          "0016  mov    0xfe4(%rip),%eax",
+          "001c  lea    (%r14,%rax,8),%rax",
+          "0020  mov    $0x1,%edi",
+          "0025  add    0x1c(%rax),%edi",
+          "0028  mov    %edi,0x1c(%rax)",
+          "002b  lock addl $0x0,(%rsp)",
+          "0030  mov    $0x1,%edi",
+          "0035  add    0x18(%rax),%edi",
+          "0038  mov    %edi,0x18(%rax)",
+          "003b  mov    %rsi,%rcx",
+          "003e  add    %rdx,%rcx",
+          "0041  mov    %rcx,0x10(%rax)",
+          "0045  lock addl $0x0,(%rsp)",
+          "004a  lea    0x80(%rcx),%rax",
+          "0051  cmp    $0x100,%rax",
+          "0058  jae    .+0x9f",
+          "005e  mov    %ecx,%eax",
+          "0060  lea    0x80(%rax),%eax",
+          "0066  cmp    $0x100,%eax",
+          "006c  jae    .+0x16f",
+          "0072  mov    0xc8a0f0(%r14,%rax,4),%eax",
+          "007a  lea    (%r14,%rax,8),%rax",
+          "007e  mov    %rax,%rbx",
+          "0081  cmpl   $0x0,0x18(%r15)",
+          "0086  jne    .+0xdd",
+          "008c  cmpl   $0x0,0x10(%r15)",
+          "0091  jle    .+0xfe",
+          "0097  mov    %rbx,%rax",
+          "009a  add    $0x28,%rsp"
+        ]
+      },
+      "cell": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "UpcallsTruffle$ReducerUpcall$$L4ad59fd4_invoke_I9lObTK1fgI5F37Xf3eikL"
+        ],
+        "tier_2_compilations": {
+          "UpcallTarget.EntryRoot": {
+            "root": "UpcallTarget.EntryRoot",
+            "tier": 2,
+            "inlined": 1,
+            "not_inlined": 0,
+            "code_bytes": 403
+          },
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x28,%rsp",
+          "0004  mov    $0x250,%eax",
+          "0009  add    0x8(%r15),%rax",
+          "000d  cmp    %rsp,%rax",
+          "0010  jae    .+0x150",
+          "0016  mov    0xfe4(%rip),%eax",
+          "001c  lea    (%r14,%rax,8),%rax",
+          "0020  mov    $0x1,%edi",
+          "0025  add    0x1c(%rax),%edi",
+          "0028  mov    %edi,0x1c(%rax)",
+          "002b  lock addl $0x0,(%rsp)",
+          "0030  mov    $0x1,%edi",
+          "0035  add    0x18(%rax),%edi",
+          "0038  mov    %edi,0x18(%rax)",
+          "003b  mov    %rsi,%rcx",
+          "003e  add    %rdx,%rcx",
+          "0041  mov    %rcx,0x10(%rax)",
+          "0045  lock addl $0x0,(%rsp)",
+          "004a  lea    0x80(%rcx),%rax",
+          "0051  cmp    $0x100,%rax",
+          "0058  jae    .+0x9f",
+          "005e  mov    %ecx,%eax",
+          "0060  lea    0x80(%rax),%eax",
+          "0066  cmp    $0x100,%eax",
+          "006c  jae    .+0x16f",
+          "0072  mov    0xc8a0f0(%r14,%rax,4),%eax",
+          "007a  lea    (%r14,%rax,8),%rax",
+          "007e  mov    %rax,%rbx",
+          "0081  cmpl   $0x0,0x18(%r15)",
+          "0086  jne    .+0xdd",
+          "008c  cmpl   $0x0,0x10(%r15)",
+          "0091  jle    .+0xfe",
+          "0097  mov    %rbx,%rax",
+          "009a  add    $0x28,%rsp"
+        ]
+      },
+      "nfi": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "OptimizedCallTarget_call_WMt8na5yWf9rRyW8r8xYkE",
+          "NativeClosure_call_9b3dX5zDiALsCy2sQz1O36"
+        ],
+        "tier_2_compilations": {
+          "SignatureRootNode": {
+            "root": "SignatureRootNode",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 163
+          },
+          "LibFFIClosureFactory.BufferRetClosureRootNodeGen": {
+            "root": "LibFFIClosureFactory.BufferRetClosureRootNodeGen",
+            "tier": 2,
+            "inlined": 1,
+            "not_inlined": 0,
+            "code_bytes": 399
+          },
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x18,%rsp",
+          "0004  mov    %rsi,%rbx",
+          "0007  mov    $0x5e0,%eax",
+          "000c  add    0x8(%r15),%rax",
+          "0010  cmp    %rsp,%rax",
+          "0013  jae    .+0x147",
+          "0019  mov    0x4(%rcx),%eax",
+          "001c  nopl   0x0(%rax)",
+          "0020  test   %eax,%eax",
+          "0022  je     .+0xee",
+          "0028  mov    (%r14,%rax,8),%edi",
+          "002c  shr    $0x5,%edi",
+          "002f  cmp    0xfcb(%rip),%edi",
+          "0035  jne    .+0x15c",
+          "003b  mov    0x8(%rcx),%edi",
+          "003e  xchg   %ax,%ax",
+          "0040  test   %edi,%edi",
+          "0042  je     .+0x171",
+          "0048  mov    0xfb6(%rip),%esi",
+          "004e  cmp    0x8(%r14,%rdi,8),%esi",
+          "0053  jne    .+0x17b",
+          "0059  mov    0x14(%r14,%rdi,8),%edi",
+          "005e  xchg   %ax,%ax",
+          "0060  test   %edi,%edi",
+          "0062  je     .+0x163",
+          "0068  cmpl   $0x2,0x4(%r14,%rdi,8)",
+          "006e  jb     .+0x16a",
+          "0074  mov    0xf8e(%rip),%edi",
+          "007a  nopw   0x0(%rax,%rax,1)",
+          "0080  cmp    0x4(%r14,%rax,8),%edi",
+          "0085  jne    .+0x185",
+          "008b  mov    0x8(%rbx),%rax",
+          "008f  mov    (%rax),%rax",
+          "0092  mov    0x8(%rdx),%rdi"
+        ]
+      }
+    },
+    "elide": {
+      "bound": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "ReducerBench$$Le4fbfcb9_invoke_dPRmvn52YYLb055B94T4gB",
+          "CEntryPointSnippets_enterAttachThread1_DyyRIjnWVrEm6wvovz6IbC",
+          "UpcallStubsHolder_direct_upcallHigh_injrecv_JJJ_J_AnbqQM2GG637t2aAPOLxT0",
+          "UpcallStubsHolder_direct_upcallLow_injrecv_JJ_J_IVQJzXAUaiAuPAouEuPG7G"
+        ],
+        "tier_2_compilations": {
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x28,%rsp",
+          "0004  mov    $0x100,%eax",
+          "0009  add    0x8(%r15),%rax",
+          "000d  cmp    %rsp,%rax",
+          "0010  jae    .+0x150",
+          "0016  mov    0xfe4(%rip),%eax",
+          "001c  lea    (%r14,%rax,8),%rax",
+          "0020  mov    $0x1,%edi",
+          "0025  add    0x1c(%rax),%edi",
+          "0028  mov    %edi,0x1c(%rax)",
+          "002b  lock addl $0x0,(%rsp)",
+          "0030  mov    $0x1,%edi",
+          "0035  add    0x18(%rax),%edi",
+          "0038  mov    %edi,0x18(%rax)",
+          "003b  mov    %rsi,%rcx",
+          "003e  add    %rdx,%rcx",
+          "0041  mov    %rcx,0x10(%rax)",
+          "0045  lock addl $0x0,(%rsp)",
+          "004a  lea    0x80(%rcx),%rax",
+          "0051  cmp    $0x100,%rax",
+          "0058  jae    .+0x9f",
+          "005e  mov    %ecx,%eax",
+          "0060  lea    0x80(%rax),%eax",
+          "0066  cmp    $0x100,%eax",
+          "006c  jae    .+0x16f",
+          "0072  mov    0xcf0bd8(%r14,%rax,4),%eax",
+          "007a  lea    (%r14,%rax,8),%rax",
+          "007e  mov    %rax,%rbx",
+          "0081  cmpl   $0x0,0x18(%r15)",
+          "0086  jne    .+0xdd",
+          "008c  cmpl   $0x0,0x10(%r15)",
+          "0091  jle    .+0xfe",
+          "0097  mov    %rbx,%rax",
+          "009a  add    $0x28,%rsp"
+        ]
+      },
+      "cell": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "UpcallsTruffle$ReducerUpcall$$L4ad59fd4_invoke_I9lObTK1fgI5F37Xf3eikL"
+        ],
+        "tier_2_compilations": {
+          "UpcallTarget.EntryRoot": {
+            "root": "UpcallTarget.EntryRoot",
+            "tier": 2,
+            "inlined": 1,
+            "not_inlined": 0,
+            "code_bytes": 403
+          },
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x28,%rsp",
+          "0004  mov    $0x1f0,%eax",
+          "0009  add    0x8(%r15),%rax",
+          "000d  cmp    %rsp,%rax",
+          "0010  jae    .+0x150",
+          "0016  mov    0xfe4(%rip),%eax",
+          "001c  lea    (%r14,%rax,8),%rax",
+          "0020  mov    $0x1,%edi",
+          "0025  add    0x1c(%rax),%edi",
+          "0028  mov    %edi,0x1c(%rax)",
+          "002b  lock addl $0x0,(%rsp)",
+          "0030  mov    $0x1,%edi",
+          "0035  add    0x18(%rax),%edi",
+          "0038  mov    %edi,0x18(%rax)",
+          "003b  mov    %rsi,%rcx",
+          "003e  add    %rdx,%rcx",
+          "0041  mov    %rcx,0x10(%rax)",
+          "0045  lock addl $0x0,(%rsp)",
+          "004a  lea    0x80(%rcx),%rax",
+          "0051  cmp    $0x100,%rax",
+          "0058  jae    .+0x9f",
+          "005e  mov    %ecx,%eax",
+          "0060  lea    0x80(%rax),%eax",
+          "0066  cmp    $0x100,%eax",
+          "006c  jae    .+0x16f",
+          "0072  mov    0xcf0bd8(%r14,%rax,4),%eax",
+          "007a  lea    (%r14,%rax,8),%rax",
+          "007e  mov    %rax,%rbx",
+          "0081  cmpl   $0x0,0x18(%r15)",
+          "0086  jne    .+0xdd",
+          "008c  cmpl   $0x0,0x10(%r15)",
+          "0091  jle    .+0xfe",
+          "0097  mov    %rbx,%rax",
+          "009a  add    $0x28,%rsp"
+        ]
+      },
+      "nfi": {
+        "symbols": [
+          "guest_reducer_loop",
+          "SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB",
+          "OptimizedCallTarget_call_WMt8na5yWf9rRyW8r8xYkE",
+          "NativeClosure_call_9b3dX5zDiALsCy2sQz1O36"
+        ],
+        "tier_2_compilations": {
+          "SignatureRootNode": {
+            "root": "SignatureRootNode",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 163
+          },
+          "LibFFIClosureFactory.BufferRetClosureRootNodeGen": {
+            "root": "LibFFIClosureFactory.BufferRetClosureRootNodeGen",
+            "tier": 2,
+            "inlined": 1,
+            "not_inlined": 0,
+            "code_bytes": 390
+          },
+          "ReducerBench.ReducerRoot": {
+            "root": "ReducerBench.ReducerRoot",
+            "tier": 2,
+            "inlined": 0,
+            "not_inlined": 0,
+            "code_bytes": 403
+          }
+        },
+        "runtime_compiled_root_x86_64": [
+          "0000  sub    $0x18,%rsp",
+          "0004  mov    %rsi,%rbx",
+          "0007  mov    $0x490,%eax",
+          "000c  add    0x8(%r15),%rax",
+          "0010  cmp    %rsp,%rax",
+          "0013  jae    .+0x126",
+          "0019  mov    0x4(%rcx),%eax",
+          "001c  nopl   0x0(%rax)",
+          "0020  test   %eax,%eax",
+          "0022  je     .+0x17f",
+          "0028  mov    (%r14,%rax,8),%edi",
+          "002c  shr    $0x5,%edi",
+          "002f  cmp    0xfcb(%rip),%edi",
+          "0035  jne    .+0x13b",
+          "003b  mov    0x8(%rcx),%edi",
+          "003e  xchg   %ax,%ax",
+          "0040  test   %edi,%edi",
+          "0042  je     .+0x171",
+          "0048  mov    0xfb6(%rip),%esi",
+          "004e  cmp    0x8(%r14,%rdi,8),%esi",
+          "0053  jne    .+0x178",
+          "0059  mov    0x14(%r14,%rdi,8),%edi",
+          "005e  xchg   %ax,%ax",
+          "0060  test   %edi,%edi",
+          "0062  je     .+0x163",
+          "0068  cmpl   $0x2,0x4(%r14,%rdi,8)",
+          "006e  jb     .+0x15c",
+          "0074  mov    0xf8e(%rip),%edi",
+          "007a  nopw   0x0(%rax,%rax,1)",
+          "0080  cmp    0x4(%r14,%rax,8),%edi",
+          "0085  jne    .+0x16a",
+          "008b  mov    0x8(%rbx),%rax",
+          "008f  mov    (%rax),%rax",
+          "0092  mov    0x8(%rdx),%rdi"
+        ]
+      }
+    }
+  },
+  "blocks": [
+    [
+      {"case": "stock-nfi", "pid": 654637, "elapsed_ns": [10887059, 11311032, 17590808, 10503628, 12147619, 15879893, 13334267, 14043703, 11459312, 18374722, 18540557, 17854707]},
+      {"case": "elide-bound", "pid": 655117, "elapsed_ns": [14840203, 8206874, 8036853, 8055119, 9279055, 9873659, 8172070, 8037465, 7434452, 7318122, 7176806, 8294812]},
+      {"case": "elide-nfi", "pid": 655173, "elapsed_ns": [12911156, 11796620, 13093495, 13302652, 14667874, 16429170, 15205472, 16844056, 17004137, 13978772, 14962392, 17711438]},
+      {"case": "stock-cell", "pid": 655239, "elapsed_ns": [14312772, 8473720, 7983302, 8081078, 8778436, 8486596, 7563211, 8567404, 9948371, 9807906, 9500224, 9264646]},
+      {"case": "stock-bound", "pid": 655292, "elapsed_ns": [13042939, 7065105, 8570805, 7992888, 8042454, 6955195, 7427771, 7217611, 7577754, 7136549, 7792532, 7166866]},
+      {"case": "elide-cell", "pid": 655323, "elapsed_ns": [13552122, 7326679, 7664920, 7506829, 8568079, 7696660, 9159890, 8665141, 7700186, 7159338, 7099570, 7241452]}
+    ],
+    [
+      {"case": "elide-cell", "pid": 655358, "elapsed_ns": [11809965, 7158020, 7607861, 7548167, 9672409, 8656095, 7151329, 7115628, 7630214, 7149654, 7152890, 7175623]},
+      {"case": "stock-bound", "pid": 655389, "elapsed_ns": [12529947, 6886286, 6901204, 7535775, 9002050, 8156309, 7964371, 8756736, 9002580, 8589500, 7262107, 6936130]},
+      {"case": "stock-cell", "pid": 655415, "elapsed_ns": [12747149, 7979846, 8964129, 9062134, 9549316, 7706608, 8767968, 8567667, 8396184, 7783885, 7305700, 7329814]},
+      {"case": "elide-nfi", "pid": 655444, "elapsed_ns": [12151592, 11572105, 12438956, 17495472, 13817637, 12100083, 13420204, 16988007, 12904868, 13539019, 17633874, 15388359]},
+      {"case": "elide-bound", "pid": 655478, "elapsed_ns": [12817611, 7822448, 8636299, 8828941, 9266472, 8874750, 7293156, 8602954, 9333509, 8642009, 9486625, 9662992]},
+      {"case": "stock-nfi", "pid": 655510, "elapsed_ns": [22574362, 17474176, 25807271, 25806851, 26980012, 14780729, 16368605, 16133509, 16095878, 17503102, 13388654, 12460395]}
+    ],
+    [
+      {"case": "stock-cell", "pid": 655755, "elapsed_ns": [12963900, 8339314, 8088581, 7819893, 10449614, 13965912, 7677925, 7936644, 8579298, 8072622, 8620689, 8281416]},
+      {"case": "elide-cell", "pid": 656196, "elapsed_ns": [16431771, 9307157, 9070530, 8412405, 11200852, 10050966, 9736751, 10107603, 10057347, 9207018, 9182683, 8061288]},
+      {"case": "elide-bound", "pid": 656699, "elapsed_ns": [14344785, 8126878, 8050543, 8242679, 9469446, 8855973, 8092449, 7274631, 8379290, 7988141, 8273912, 8468671]},
+      {"case": "stock-bound", "pid": 657066, "elapsed_ns": [17603296, 9682219, 10376882, 10824350, 11798590, 10480107, 10265773, 10267156, 10642575, 10475550, 10770499, 10612298]},
+      {"case": "stock-nfi", "pid": 657389, "elapsed_ns": [11994877, 13461109, 16781517, 12494159, 17715350, 14037035, 12546611, 13226077, 11822318, 12456159, 13402009, 17316393]},
+      {"case": "elide-nfi", "pid": 657798, "elapsed_ns": [15332843, 15450658, 16632914, 16805353, 18557366, 17179114, 14047785, 16395608, 14003577, 15770945, 17946791, 17341929]}
+    ],
+    [
+      {"case": "elide-nfi", "pid": 659093, "elapsed_ns": [17264650, 12883356, 12651989, 13035077, 13850108, 11441217, 11509567, 12858409, 13478795, 16408540, 12960368, 11246720]},
+      {"case": "stock-nfi", "pid": 659726, "elapsed_ns": [12164161, 14597326, 12959532, 10520814, 10975707, 12449747, 12021134, 13753365, 10798711, 14040127, 18882673, 15495122]},
+      {"case": "stock-bound", "pid": 659750, "elapsed_ns": [13246916, 7366624, 8397155, 7492843, 8367962, 8224217, 8471646, 8784811, 7430676, 6914307, 6896604, 7783908]},
+      {"case": "elide-bound", "pid": 659777, "elapsed_ns": [11967635, 7062477, 6935604, 7004389, 9925689, 7143020, 7048893, 7487754, 7394077, 7137961, 7910178, 9129823]},
+      {"case": "elide-cell", "pid": 659808, "elapsed_ns": [11631247, 7251617, 7318964, 7151818, 8414523, 7169360, 7150456, 7561754, 7865580, 7114637, 7872792, 9265379]},
+      {"case": "stock-cell", "pid": 659842, "elapsed_ns": [12290085, 7228002, 7173208, 7352118, 8395313, 7190091, 7375130, 8427272, 9279806, 8146962, 7274195, 7455962]}
+    ],
+    [
+      {"case": "elide-bound", "pid": 659865, "elapsed_ns": [12116650, 7110660, 7177417, 7826936, 8568359, 7046688, 7137662, 6923356, 7489818, 6923866, 7538098, 6906343]},
+      {"case": "stock-cell", "pid": 659890, "elapsed_ns": [14968092, 8909305, 8877535, 8831678, 9513478, 7184320, 7159122, 7167428, 8468194, 8661916, 8576886, 8637371]},
+      {"case": "stock-nfi", "pid": 659938, "elapsed_ns": [10388504, 10561442, 12845406, 11615257, 11948186, 11223546, 16214036, 16721403, 13926729, 11870829, 12063827, 14087387]},
+      {"case": "elide-cell", "pid": 660515, "elapsed_ns": [13190239, 7560290, 7201151, 7216761, 7861061, 7176845, 7337910, 7156897, 7600107, 7184610, 7267217, 7091995]},
+      {"case": "elide-nfi", "pid": 660573, "elapsed_ns": [11230249, 11210742, 15465794, 14571083, 14404498, 13095027, 13199917, 12302919, 10961639, 12419299, 16877177, 18603085]},
+      {"case": "stock-bound", "pid": 660607, "elapsed_ns": [12030974, 7192115, 9179596, 7776980, 9422325, 7527296, 7474589, 7782602, 8997019, 7421679, 6963662, 6916082]}
+    ],
+    [
+      {"case": "stock-bound", "pid": 660635, "elapsed_ns": [11475968, 7503784, 7222712, 8161054, 8688355, 9503341, 8914324, 10492120, 7402146, 7143994, 7053122, 9280663]},
+      {"case": "elide-nfi", "pid": 660662, "elapsed_ns": [18937157, 17731094, 15387188, 18175905, 12336283, 11144775, 11231621, 11575362, 12149623, 14165079, 13666751, 16270247]},
+      {"case": "elide-cell", "pid": 660753, "elapsed_ns": [12337704, 7846501, 7580451, 8586073, 9988036, 9093703, 8728273, 8691143, 7594887, 7308041, 7261846, 8184083]},
+      {"case": "stock-nfi", "pid": 660881, "elapsed_ns": [11503586, 13363335, 11405270, 10964351, 10893810, 10433230, 10738959, 11013187, 10461272, 10851492, 11688992, 10698140]},
+      {"case": "stock-cell", "pid": 660998, "elapsed_ns": [12050931, 7283748, 7287355, 7677744, 8429876, 7327029, 7236899, 7411209, 7752636, 7576912, 7713210, 9225023]},
+      {"case": "elide-bound", "pid": 661054, "elapsed_ns": [13050825, 7243823, 7345064, 7588794, 8222355, 7345605, 7101323, 7171475, 8857025, 7299037, 7903601, 7378507]}
+    ],
+    [
+      {"case": "elide-nfi", "pid": 661136, "elapsed_ns": [12350439, 13044591, 12940376, 11778166, 12401815, 12205134, 12369686, 14456182, 17993171, 18052853, 13833396, 11364533]},
+      {"case": "stock-nfi", "pid": 661765, "elapsed_ns": [10550089, 11187628, 11284411, 10440863, 11213748, 10884775, 10696127, 11104620, 10649158, 10421959, 11133168, 13911485]},
+      {"case": "elide-bound", "pid": 662092, "elapsed_ns": [12653512, 7048523, 7325246, 7880077, 8696070, 8216543, 7018456, 7705085, 7355232, 6844726, 6897718, 7052630]},
+      {"case": "stock-bound", "pid": 662621, "elapsed_ns": [11383367, 6987537, 6941370, 7316230, 7601638, 7217422, 6844717, 7048002, 7232941, 6987637, 7422279, 6882178]},
+      {"case": "elide-cell", "pid": 662980, "elapsed_ns": [11863626, 7339574, 7180593, 7097024, 8422157, 7833658, 8366548, 7848517, 8162110, 7251687, 7236577, 7266261]},
+      {"case": "stock-cell", "pid": 663105, "elapsed_ns": [11886759, 7187496, 7254127, 7591050, 9203901, 7133412, 7445253, 7190702, 7789616, 7328793, 7570770, 7372026]}
+    ],
+    [
+      {"case": "stock-nfi", "pid": 663601, "elapsed_ns": [14815487, 10381672, 11943558, 15772913, 13288032, 12559595, 13243019, 11209618, 12103782, 11211594, 12927309, 13939978]},
+      {"case": "stock-bound", "pid": 664146, "elapsed_ns": [11822859, 6843104, 6897567, 6861709, 8226002, 7814181, 7252960, 6827063, 7551198, 7292304, 6990722, 7854548]},
+      {"case": "elide-nfi", "pid": 664201, "elapsed_ns": [11392845, 15313923, 11978741, 10929438, 12025403, 12829399, 18720998, 19319682, 15621139, 14920004, 12435625, 13976826]},
+      {"case": "stock-cell", "pid": 664253, "elapsed_ns": [12203390, 7158150, 7111101, 9416674, 8031834, 7246197, 7163430, 7625665, 7546093, 7354847, 8585662, 7931384]},
+      {"case": "elide-bound", "pid": 664276, "elapsed_ns": [12369225, 7290040, 8285603, 8457650, 9329531, 8152022, 7879484, 8337262, 9232237, 8331652, 8459693, 8498376]},
+      {"case": "elide-cell", "pid": 664301, "elapsed_ns": [16419490, 10054844, 8509828, 8643681, 10052940, 8129379, 7188417, 7186483, 7567745, 7033334, 7160765, 7064273]}
+    ],
+    [
+      {"case": "elide-cell", "pid": 664330, "elapsed_ns": [11507434, 7220808, 7081203, 7185833, 8001246, 7242460, 7117874, 7171534, 7653577, 7353290, 7331669, 7308655]},
+      {"case": "elide-bound", "pid": 664363, "elapsed_ns": [12201086, 7129321, 7259350, 7887090, 7810774, 7089917, 8300358, 8543812, 9022749, 8501093, 8392367, 8136571]},
+      {"case": "stock-cell", "pid": 664415, "elapsed_ns": [15971849, 7995811, 9011850, 8964599, 8702374, 7362657, 7495770, 7309046, 7830812, 7195150, 8127926, 7552425]},
+      {"case": "elide-nfi", "pid": 664448, "elapsed_ns": [14960941, 17006043, 19248686, 19117258, 18966142, 15326928, 11030663, 11387797, 11537081, 11895315, 11688336, 13661862]},
+      {"case": "stock-bound", "pid": 664498, "elapsed_ns": [13282194, 7506650, 8507142, 8651678, 8743952, 7940161, 7631025, 7373346, 8693777, 7640243, 7604696, 7443189]},
+      {"case": "stock-nfi", "pid": 665001, "elapsed_ns": [15799042, 12229997, 11916356, 10722978, 11037283, 11096283, 10750651, 11211743, 11152811, 15993636, 15817051, 11034056]}
+    ],
+    [
+      {"case": "stock-cell", "pid": 665107, "elapsed_ns": [12509304, 7437219, 7234344, 7424503, 8132043, 7553268, 7780198, 7336788, 8874228, 8150979, 7738359, 7428001]},
+      {"case": "elide-cell", "pid": 665130, "elapsed_ns": [15085385, 8183591, 7966780, 8962686, 9384484, 8501513, 8431329, 7144916, 8135410, 8259976, 8642951, 8971882]},
+      {"case": "stock-bound", "pid": 665162, "elapsed_ns": [12084796, 7706503, 6950681, 6991397, 7723080, 8122865, 7495077, 7019897, 7612731, 7203436, 7421549, 6946596]},
+      {"case": "elide-bound", "pid": 665204, "elapsed_ns": [14859519, 8502774, 8823212, 8980379, 9633826, 8259184, 8523044, 8356719, 8874069, 7666231, 8386304, 7272256]},
+      {"case": "stock-nfi", "pid": 665251, "elapsed_ns": [10554510, 10525754, 14941324, 14003206, 12262443, 10712518, 12153746, 12199562, 11941966, 11079538, 14452222, 12610235]},
+      {"case": "elide-nfi", "pid": 665348, "elapsed_ns": [11108108, 11117696, 12263347, 11509968, 12747641, 12256320, 17317031, 18803253, 14070319, 11874153, 14671166, 13462679]}
+    ],
+    [
+      {"case": "stock-bound", "pid": 665440, "elapsed_ns": [11661151, 6827274, 6974894, 7218223, 7661582, 6867710, 6855738, 7051619, 7847204, 7108215, 7456365, 8489841]},
+      {"case": "stock-cell", "pid": 665506, "elapsed_ns": [12077643, 7898432, 8447300, 7634330, 8044819, 7355624, 7600587, 7342890, 7726685, 7793633, 7677023, 8241391]},
+      {"case": "stock-nfi", "pid": 665831, "elapsed_ns": [10662913, 12307828, 12340952, 11088523, 11547489, 11523269, 11645213, 11533267, 13530563, 10874223, 11246388, 11114284]},
+      {"case": "elide-cell", "pid": 666217, "elapsed_ns": [11941885, 7544381, 8852818, 7963123, 9316767, 7252789, 7367396, 7574167, 7601669, 7972652, 7718131, 7675329]},
+      {"case": "elide-nfi", "pid": 666241, "elapsed_ns": [10978211, 11021654, 12526791, 11439626, 19436909, 19695425, 16890484, 12944422, 11312204, 19970122, 20531346, 22292162]},
+      {"case": "elide-bound", "pid": 666267, "elapsed_ns": [13824855, 7934087, 8353373, 8363562, 9377010, 8394330, 8565413, 7696263, 7751303, 7308876, 7576833, 8545005]}
+    ],
+    [
+      {"case": "elide-bound", "pid": 666337, "elapsed_ns": [12828575, 7300790, 7350314, 7033585, 8262981, 7517048, 7653578, 7034726, 7544351, 7039525, 7069262, 7882981]},
+      {"case": "elide-nfi", "pid": 666429, "elapsed_ns": [11249008, 13542715, 13115744, 17067938, 16910371, 14742974, 11421184, 11979497, 11549704, 14355825, 16381859, 14643976]},
+      {"case": "elide-cell", "pid": 666540, "elapsed_ns": [13144781, 8178622, 7566995, 8675298, 8302832, 7187685, 7260693, 7585620, 7807709, 7779076, 8131954, 8640937]},
+      {"case": "stock-nfi", "pid": 666628, "elapsed_ns": [14058572, 13099228, 18020849, 14717931, 13618634, 19879511, 10901170, 11015686, 11130869, 12039321, 10825989, 10736595]},
+      {"case": "stock-cell", "pid": 666787, "elapsed_ns": [14538301, 8577647, 8553682, 8473601, 9628976, 9018130, 9624740, 9277442, 9262183, 8365339, 8090975, 8937829]},
+      {"case": "stock-bound", "pid": 667237, "elapsed_ns": [11778757, 8370124, 7274138, 6998769, 7596570, 6938685, 6836041, 6965625, 7290170, 6908026, 8185825, 8163373]}
+    ]
+  ]
+}

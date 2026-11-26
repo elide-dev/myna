@@ -31,6 +31,14 @@ public final class Measure {
     int count = Integer.parseInt(args[2]);
     try (var arena = Arena.ofShared()) {
       var binding = new UpcallsFFM.LibraryBinding(Path.of(args[0]), arena);
+      if (workload.equals("reducer-cell-checks")) {
+        ReducerCellChecks.verify(binding, arena);
+        return;
+      }
+      if (workload.startsWith("reducer-")) {
+        ReducerBench.measure(binding, arena, workload, count);
+        return;
+      }
       if (workload.startsWith("guest-")) {
         Guest.measure(binding, arena, workload, count);
         return;

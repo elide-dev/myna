@@ -42,6 +42,55 @@ class TruffleCellsTest {
   }
 
   @Test
+  void signedUpcallsReuseTheDirectRegistrationAndPreserveUnselectedDescriptors() {
+    String callback =
+        "callback Reducer return=i64\n  param target type=i64\n  param arena type=i64\nend\n";
+    String module = MODULE.replace("module cells ", "module cells java_class=Hooks ");
+    var plain = generate(module + callback);
+    assertEquals(
+        plain,
+        generate(module + callback.replace("return=i64", "return=i64 truffle_upcall=false")));
+    assertFalse(plain.get("HooksTruffle.java").contains("ReducerUpcall"));
+    var enabled =
+        generate(module + callback.replace("return=i64", "return=i64 truffle_upcall=true"));
+    assertNotEquals(plain.get("seam.abi"), enabled.get("seam.abi"));
+    assertTrue(enabled.get("seam.json").contains("\"truffleUpcall\":true"));
+    String truffle = enabled.get("HooksTruffle.java");
+    assertTrue(truffle.contains("public static final class ReducerUpcall"));
+    assertTrue(truffle.contains("UpcallTarget.entering(context, target)"));
+    assertTrue(truffle.contains("UpcallTarget.entered(target)"));
+    assertTrue(
+        truffle.contains(
+            "HooksFFM.ReducerUpcalls.createDirect(target::callLong, sentinel, arena)"));
+    assertTrue(enabled.values().stream().anyMatch(v -> v.contains("HooksTruffle$ReducerUpcall")));
+  }
+
+  @Test
+  void upcallSelectionRequiresCellsAndAnExactSignedSignature() {
+    String callback =
+        "callback Reducer return=i64 truffle_upcall=true\n  param value type=i64\nend\n";
+    assertTrue(
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> generate(MODULE.replace(" truffle_cells=true", "") + callback))
+            .getMessage()
+            .contains("requires module truffle_cells=true"));
+    for (String bad :
+        List.of(
+            callback.replace("type=i64", "type=f64"),
+            callback.replace("type=i64", "type=ptr<i64>"),
+            callback.replace("return=i64", "return=u64"))) {
+      assertTrue(
+          assertThrows(IllegalArgumentException.class, () -> generate(MODULE + bad))
+              .getMessage()
+              .contains("requires i64 parameters and an i64 return on Reducer"));
+    }
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> generate(MODULE + callback.replace("truffle_upcall=true", "truffle_upcall=maybe")));
+  }
+
+  @Test
   void cellsAreOptInAndFingerprinted() throws Exception {
     var plain = generate(MODULE.replace(" truffle_cells=true", "") + ADD);
     assertFalse(plain.containsKey("MynaTruffle.java"));

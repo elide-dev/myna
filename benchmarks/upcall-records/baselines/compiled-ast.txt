@@ -1,0 +1,19 @@
+[To redirect Truffle log output to a file use one of the following options:
+* '--log.file=<path>' if the option is passed using a guest language launcher.
+* '-Dpolyglot.log.file=<path>' if the option is passed using the host Java launcher.
+* Configure logging using the polyglot embedding API.]
+[engine] opt done   engine=1  id=2     UpcallTarget.EntryRoot@1ab0c789                    |Tier 2|Time     5(   5+1   )ms|AST    2|Inlined   0Y   1N|IR     13/    26|CodeSize      79|Addr 0x6565b5fc8000|CompId 1671   |UTC 2026-11-24T00:19:48.203|Src n/a
+[engine] opt AST      UpcallTarget.EntryRoot@1ab0c789                             |AST    2|Calls/Thres       1/    0|CallsAndLoop/Thres       1/    0
+EntryRoot
+guest = OptimizedDirectCallNode
+[engine] opt inval. engine=1  id=2     UpcallTarget.EntryRoot@1ab0c789                                                                                                                                                   |UTC 2026-11-24T00:19:48.204|Src n/a|Reason null
+[engine] opt done   engine=1  id=1     RecordBench.SpanRoot@5fd19fa                       |Tier 2|Time     2(   1+2   )ms|AST    2|Inlined   0Y   0N|IR     54/   125|CodeSize     446|Addr 0x568a0e200000|CompId 1672   |UTC 2026-11-24T00:19:48.206|Src n/a
+[engine] opt AST      RecordBench.SpanRoot@5fd19fa                                |AST    2|Calls/Thres       1/    0|CallsAndLoop/Thres       1/    0
+SpanRoot
+export = TapeExportNode
+[engine] opt inval. engine=1  id=1     RecordBench.SpanRoot@5fd19fa                                                                                                                                                      |UTC 2026-11-24T00:19:48.206|Src n/a|Reason null
+[engine] opt done   engine=1  id=2     UpcallTarget.EntryRoot@1ab0c789                    |Tier 2|Time    15(   3+12  )ms|AST    2|Inlined   1Y   0N|IR    534/   796|CodeSize    4229|Addr 0x5b38feddf000|CompId 1673   |UTC 2026-11-24T00:19:48.221|Src n/a
+[engine] opt AST      UpcallTarget.EntryRoot@1ab0c789                             |AST    2|Calls/Thres       2/    0|CallsAndLoop/Thres       2/    0
+EntryRoot
+guest = OptimizedDirectCallNode
+verified push rows=35 compiled=35 spans=2 last=3 hash=-5099545587278293532

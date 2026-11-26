@@ -1,0 +1,652 @@
+{
+  "build": {
+    "revision": "6f3e38f6f3fe8327fbc438823c867b408fbcba5f",
+    "sources": {
+      "RecordBench.java": "6e0060359c17ac8d53b94da7d9b8029d15a9ef5f397e2cea3274ba4bc339167b",
+      "RecordLanguage.java": "66c1994c625818827a7d71d57684190a1c38293598090a0a81ee08e9493814b9",
+      "ranges.c": "c5077fa8fde4a595d85c62ab9d9598cbd733201d4202e222827457369c8e4861",
+      "records.seam": "8dfb0579d8811f589b630c36a0e5e18b3b23e7752bd2fb4e519b807541951ed1",
+      "run.py": "d5938efd0ae9e2e044e58f3b7ed2b7b744952c1ef3e25d74b5423b8527b6dba9"
+    },
+    "truffledata": "0.14.0",
+    "native_image": [
+      "-O3",
+      "--macro:truffle-svm",
+      "--module-path",
+      "/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/truffle/truffle-api/25.5.5-elide.32/truffle-api-25.5.5-elide.32.jar:/tmp/myna-upcall-records/build/downloads/truffle/truffle-runtime-25.5.5-elide.32.jar:/tmp/myna-upcall-records/build/downloads/truffle/truffle-compiler-25.5.5-elide.32.jar:/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/polyglot/polyglot/25.5.5-elide.32/polyglot-25.5.5-elide.32.jar:/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/sdk/collections/25.5.5-elide.32/collections-25.5.5-elide.32.jar:/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/sdk/nativeimage/25.5.5-elide.32/nativeimage-25.5.5-elide.32.jar:/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/sdk/word/25.5.5-elide.32/word-25.5.5-elide.32.jar:/tmp/myna-upcall-records/.dev/dependencies/m2/org/graalvm/sdk/jniutils/25.5.5-elide.32/jniutils-25.5.5-elide.32.jar:/tmp/myna-upcall-records/build/downloads/truffle/nativebridge-25.5.5-elide.32.jar",
+      "--initialize-at-build-time=bench.records,dev.elide.truffledata",
+      "--enable-native-access=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:-DeleteLocalSymbols",
+      "-H:NativeLinkerOption=-L/tmp/myna-upcall-records/build/upcall-records/deps",
+      "-H:NativeLinkerOption=-ltruffledata_json",
+      "-H:NativeLinkerOption=/tmp/myna-upcall-records/build/upcall-records/deps/truffledata-json-0.14.0-linux-x86_64.a",
+      "-H:NativeLinkerOption=-Wl,-rpath,$ORIGIN/deps",
+      "-H:-UnlockExperimentalVMOptions",
+      "-cp",
+      "/tmp/myna-upcall-records/build/upcall-records/classes:/tmp/myna-upcall-records/.dev/artifacts/jar/myna-truffle/myna-truffle.jar:/tmp/myna-upcall-records/build/upcall-records/deps/truffledata-core-0.14.0.jar:/tmp/myna-upcall-records/build/upcall-records/deps/truffledata-tape-0.14.0.jar:/tmp/myna-upcall-records/build/upcall-records/deps/truffledata-json-bindings-0.14.0.jar:/tmp/myna-upcall-records/build/upcall-records/deps/truffledata-json-0.14.0.jar",
+      "--features=bench.records.RecordsForeignFeature",
+      "bench.records.RecordBench",
+      "-o",
+      "/tmp/myna-upcall-records/build/upcall-records/measure-records"
+    ],
+    "target": "x86_64-unknown-linux-gnu",
+    "cc": "clang version 23.1.4 (https://github.com/llvm/llvm-project.git)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin\nConfiguration file: /home/sam/.local/share/mise/installs/github-elide-dev-toolchain/2026.11.7/elide-toolchain/bin/x86_64-unknown-linux-gnu.cfg\n",
+    "kernel_flags": [
+      "-O3",
+      "-shared",
+      "-fPIC"
+    ],
+    "graal": "native-image 25.0.4.1.1 2026-08-18\nGraalVM Runtime Environment GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1-jvmci-25.5-b24)\nSubstrate VM GraalVM CE 25.5.5-dev+1.1 (build 25.0.4.1.1+1, serial gc, compressed references)\n",
+    "inputs": {
+      "truffledata-core-0.14.0.jar": "0d38f26a6ef1808f00b33b90993d514855bfca5425bf4ba4ce314a98a89dba80",
+      "truffledata-tape-0.14.0.jar": "092b771f8e5897b308d21f863a5c26be2ac95145909ab4a5d9db42de16ec5f04",
+      "truffledata-json-bindings-0.14.0.jar": "c50f640782d9657384e537c53d03c29dd46d7ba1cecb133556a6275167afa822",
+      "truffledata-json-0.14.0.jar": "03841816cd0b2fa654fb7f83a2ba9fedb4532479bedec389bcec2994faf8c9dc",
+      "truffledata-json-0.14.0-linux-x86_64.so": "3477403004849b81ec47be0de816b8c5b1e107d3f9f9744faef55e132bbce878",
+      "truffledata-json-0.14.0-linux-x86_64.a": "01e8e56e6d0a01d0428289db4cbc4f34f516ad72c0ae0d4301e4e5d6992a326e",
+      "myna-truffle.jar": "c39a0e49968363ffe2f9676140a05a73843e19f7c82e9940be5c05431b8eebee",
+      "truffle-api-25.5.5-elide.32.jar": "bb00e7eceb458168365bd777e5d1fcc511ce43541ca069bc2f2cb55ee9271bb6",
+      "truffle-runtime-25.5.5-elide.32.jar": "8081ad5ebdb5dcd51735820070cc9f28aee3d57cb2038bbbf536c77c90429cdf",
+      "truffle-compiler-25.5.5-elide.32.jar": "5fa659e13955af04a09c20204e4b08a89487f590ecfd1fc68d6f39825266ce44",
+      "polyglot-25.5.5-elide.32.jar": "a6858ddb0582fc9246b0ff8959382caf2d93ab73043e27b56e20c6f1fcb72bfd",
+      "collections-25.5.5-elide.32.jar": "62bb1f6080f51c6a76a689571a1827c987d37c12791f45c666a1b1b7eeff632f",
+      "nativeimage-25.5.5-elide.32.jar": "885a16a34324b5eea218e3300b441d0f56db9cdfdcb83b58676c4edad8303e2e",
+      "word-25.5.5-elide.32.jar": "3244e0bf551e2a241d524569561d79020c2106736f0416b8dcae127b6d552971",
+      "jniutils-25.5.5-elide.32.jar": "62e381177bdcbb4376462d5357cf915d43f42014b3eeb2a136d90b318f9e5ac4",
+      "nativebridge-25.5.5-elide.32.jar": "3464d00d3c10481acc89ce8c306e16a4a61ea499a42c900d020a221f4678dec6",
+      "truffle-nfi-25.5.5-elide.32.jar": "bd2690bc2c18193f30ad4d52067cc672d1a6c1a4cfd90ca967ca035deb3e2a71",
+      "truffle-nfi-libffi-25.5.5-elide.32.jar": "e618437f9189bcae3922ee3be08e70eab16c973906f13099a68153ba60f3ce0a",
+      "truffle-dsl-processor-25.5.5-elide.32.jar": "c579dbcbb4b309ab7f7d4b85b8b058724375f0894d873969448f3c6cb55ba4eb"
+    },
+    "generated": {
+      "RecordsForeignFeature.java": "ee4006248c72a7c10c1f417bede65511b85a197fb66530db35e5833d087f4b45",
+      "RecordsTruffle.java": "6f18a985215383e286135e6209bfa8390960c3dd7aea5834ac9f3b9a4a0ce1af",
+      "RecordsFFM.java": "34868515fdeb5c57a35fc882ff8bc538b3d92437b2dd9e89bc104719c4733058",
+      "RecordsDirectives.java": "244f1443bf4533ec1c34055b7b3a5a0879f9672b62d058c47dad3f69a8d990da",
+      "Records.java": "cf5dd85642cf913d7e1202e47278eee44b3accaed58d012f55253971823db2cc"
+    },
+    "binaries": {
+      "measure-records": "62d88fe1b42407561ee5f7167aba1d144acaecb89ea6e9f8191ee75fee5f664e",
+      "libranges.so": "b8f6ce220f51289660c0f2ba0c88b47c4c211c9520e770e35743d7354aff4f58",
+      "libtruffledata_json.so": "3477403004849b81ec47be0de816b8c5b1e107d3f9f9744faef55e132bbce878"
+    }
+  },
+  "platform": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+  "hardware": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D2 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xffffffff\nBogoMIPS:                                8583.72\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                96 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+  "affinity": [
+    7
+  ],
+  "rows": 32771,
+  "width": 32,
+  "rounds": 12,
+  "warmup": 3,
+  "samples": [
+    {
+      "mode": "pull",
+      "block": 0,
+      "pid": 742227,
+      "ns": [
+        874856,
+        875898,
+        1186426,
+        933918,
+        865669,
+        870087,
+        881799,
+        982509,
+        864196,
+        878483,
+        867542,
+        884364
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 0,
+      "pid": 742236,
+      "ns": [
+        933847,
+        974314,
+        871309,
+        970637,
+        876940,
+        980736,
+        876529,
+        898541,
+        894413,
+        920333,
+        880958,
+        1128947
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 0,
+      "pid": 742244,
+      "ns": [
+        960268,
+        957503,
+        923508,
+        975687,
+        931302,
+        946562,
+        913379,
+        1024169,
+        931252,
+        928568,
+        904792,
+        958043
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 0,
+      "pid": 742252,
+      "ns": [
+        972411,
+        1291926,
+        979234,
+        1038195,
+        1034357,
+        1354393,
+        1215731,
+        961941,
+        977521,
+        1243513,
+        987479,
+        938546
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 1,
+      "pid": 742261,
+      "ns": [
+        1757556,
+        905163,
+        986057,
+        967602,
+        1025702,
+        908911,
+        1108298,
+        871720,
+        891688,
+        884805,
+        873273,
+        924050
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 1,
+      "pid": 742269,
+      "ns": [
+        1036161,
+        1109630,
+        1105082,
+        1016294,
+        919821,
+        1716686,
+        960488,
+        940525,
+        946797,
+        890556,
+        946372,
+        930732
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 1,
+      "pid": 742277,
+      "ns": [
+        964555,
+        996937,
+        946812,
+        934409,
+        905594,
+        928848,
+        973102,
+        914591,
+        906686,
+        939278,
+        1040450,
+        1006315
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 1,
+      "pid": 742286,
+      "ns": [
+        904282,
+        1222654,
+        930721,
+        927746,
+        917647,
+        898140,
+        919420,
+        926644,
+        953606,
+        903881,
+        925312,
+        903700
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 2,
+      "pid": 742294,
+      "ns": [
+        918398,
+        922487,
+        929529,
+        952793,
+        916154,
+        916816,
+        911255,
+        1044176,
+        1083401,
+        943967,
+        915863,
+        940961
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 2,
+      "pid": 742302,
+      "ns": [
+        1128897,
+        906536,
+        953234,
+        901046,
+        940881,
+        922607,
+        930712,
+        900896,
+        997643,
+        953284,
+        916355,
+        1783676
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 2,
+      "pid": 742310,
+      "ns": [
+        928939,
+        888472,
+        871780,
+        1126001,
+        922306,
+        947824,
+        883873,
+        856061,
+        878353,
+        991637,
+        855880,
+        1007618
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 2,
+      "pid": 742318,
+      "ns": [
+        876369,
+        878152,
+        876289,
+        870448,
+        895936,
+        867121,
+        877070,
+        925381,
+        894113,
+        875928,
+        892299,
+        869115
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 3,
+      "pid": 742326,
+      "ns": [
+        913810,
+        919782,
+        969174,
+        932445,
+        940760,
+        927616,
+        977450,
+        1000467,
+        1669297,
+        1075526,
+        950379,
+        902990
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 3,
+      "pid": 742337,
+      "ns": [
+        1946408,
+        1875881,
+        2116026,
+        1876502,
+        1545325,
+        872271,
+        919401,
+        874445,
+        1125160,
+        969695,
+        914862,
+        1048361
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 3,
+      "pid": 742346,
+      "ns": [
+        2647251,
+        945189,
+        933578,
+        1073973,
+        893552,
+        913660,
+        907328,
+        1033131,
+        1565288,
+        880437,
+        908039,
+        944067
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 3,
+      "pid": 742354,
+      "ns": [
+        1544083,
+        1719365,
+        1692924,
+        894253,
+        1002578,
+        1689078,
+        1490162,
+        939690,
+        939138,
+        1090194,
+        916546,
+        1152261
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 4,
+      "pid": 742362,
+      "ns": [
+        1040329,
+        965638,
+        945019,
+        914711,
+        1019960,
+        912908,
+        950049,
+        925392,
+        1016263,
+        927235,
+        949969,
+        924019
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 4,
+      "pid": 742370,
+      "ns": [
+        2202079,
+        955028,
+        1138465,
+        924049,
+        1005093,
+        904151,
+        953685,
+        914672,
+        913870,
+        917587,
+        923368,
+        882320
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 4,
+      "pid": 742379,
+      "ns": [
+        947534,
+        952252,
+        954998,
+        915393,
+        920853,
+        945330,
+        926264,
+        927005,
+        912768,
+        900084,
+        927937,
+        898752
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 4,
+      "pid": 742387,
+      "ns": [
+        939749,
+        945300,
+        1029749,
+        1065988,
+        959917,
+        956791,
+        935451,
+        1322243,
+        926804,
+        917838,
+        948796,
+        958755
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 5,
+      "pid": 742395,
+      "ns": [
+        962963,
+        1068272,
+        1040740,
+        1857747,
+        886869,
+        926915,
+        908701,
+        1010202,
+        990806,
+        1047473,
+        1043966,
+        1004892
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 5,
+      "pid": 742403,
+      "ns": [
+        952583,
+        926023,
+        903129,
+        945961,
+        920953,
+        941653,
+        919260,
+        1018117,
+        928007,
+        931623,
+        921615,
+        1112836
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 5,
+      "pid": 742411,
+      "ns": [
+        2361390,
+        2112369,
+        1946495,
+        1894046,
+        1864149,
+        1957896,
+        1895228,
+        1782625,
+        1928660,
+        1728632,
+        1767586,
+        1683958
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 5,
+      "pid": 742419,
+      "ns": [
+        1993955,
+        1964790,
+        1842569,
+        1920476,
+        1989787,
+        1957656,
+        1981481,
+        1111855,
+        987770,
+        918889,
+        937294,
+        907538
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "pull",
+      "block": 6,
+      "pid": 742428,
+      "ns": [
+        842134,
+        876419,
+        905404,
+        932385,
+        868414,
+        856822,
+        897469,
+        906546,
+        874075,
+        858405,
+        867442,
+        1012968
+      ],
+      "verification": "verified pull rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "bound",
+      "block": 6,
+      "pid": 742436,
+      "ns": [
+        1158954,
+        947003,
+        1084072,
+        1022645,
+        935662,
+        1006936,
+        947454,
+        988231,
+        939369,
+        929059,
+        902950,
+        972821
+      ],
+      "verification": "verified bound rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "push",
+      "block": 6,
+      "pid": 742446,
+      "ns": [
+        941492,
+        919771,
+        997368,
+        905264,
+        899252,
+        1033767,
+        1014089,
+        922927,
+        926854,
+        1112837,
+        982120,
+        903280
+      ],
+      "verification": "verified push rows=32771 compiled=32771 spans=1025 last=3 hash=2604237597026127144"
+    },
+    {
+      "mode": "whole",
+      "block": 6,
+      "pid": 742454,
+      "ns": [
+        918259,
+        1012867,
+        913529,
+        1279983,
+        998510,
+        881519,
+        901858,
+        890787,
+        968193,
+        892450,
+        888933,
+        906236
+      ],
+      "verification": "verified whole rows=32771 compiled=32771 spans=0 last=0 hash=2604237597026127144"
+    }
+  ],
+  "ns_per_record": {
+    "whole": 27.966204876262548,
+    "pull": 28.145799639925546,
+    "bound": 29.100195294620242,
+    "push": 28.853849440053708
+  }
+}

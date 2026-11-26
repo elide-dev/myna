@@ -292,7 +292,8 @@ public final class Dsl {
                       take(options, "java_type", null),
                       take(options, "ffm_java", null),
                       take(options, "ffm_sentinel", null),
-                      group(options)));
+                      group(options),
+                      bool(take(options, "truffle_upcall", "false"))));
               empty(options);
             } else if (header[0].equals("enum")) {
               enums.add(

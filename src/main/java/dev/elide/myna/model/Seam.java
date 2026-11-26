@@ -324,7 +324,8 @@ public final class Seam {
       String javaType,
       String ffmTarget,
       String ffmSentinel,
-      GroupRef returnsGroup) {
+      GroupRef returnsGroup,
+      boolean truffleUpcall) {
     public Signature(String name, Type returns, List<Parameter> parameters) {
       this(name, returns, parameters, null, null, null, null);
     }
@@ -341,6 +342,17 @@ public final class Seam {
         String ffmTarget,
         String ffmSentinel) {
       this(name, returns, parameters, javaType, ffmTarget, ffmSentinel, null);
+    }
+
+    public Signature(
+        String name,
+        Type returns,
+        List<Parameter> parameters,
+        String javaType,
+        String ffmTarget,
+        String ffmSentinel,
+        GroupRef returnsGroup) {
+      this(name, returns, parameters, javaType, ffmTarget, ffmSentinel, returnsGroup, false);
     }
 
     public Signature {

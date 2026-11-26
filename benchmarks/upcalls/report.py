@@ -7,7 +7,7 @@ import re
 import statistics
 from pathlib import Path
 
-from run import CASES, ROOT, WORK
+from run import CASES, NFI_CASES, ROOT, WORK
 
 BASELINE = ROOT / "benchmarks/upcalls/baselines/readme.json"
 START = "<!-- upcall-results:start -->"
@@ -25,19 +25,25 @@ ROWS = [
     ("Receiver-bound Truffle callback, enter per call", "guest-bound-each"),
     ("Static Truffle callback, enter per batch", "guest-batch"),
     ("Receiver-bound Truffle callback, enter per batch", "guest-bound-batch"),
+    ("Receiver-bound Truffle i64 reducer", "reducer-bound"),
+    ("Generated Truffle i64 upcall cell", "reducer-cell"),
+    ("Truffle NFI i64 closure", "reducer-nfi"),
 ]
 
 
 def collect(directory):
+    metadata = json.loads((directory / "metadata.json").read_text())
+    if metadata["cases"] != CASES + NFI_CASES or metadata["forks"] != 5:
+        raise ValueError("collect requires a complete run with --forks 5 --include-nfi")
     samples = {}
-    for case in CASES:
+    for case in CASES + NFI_CASES:
         samples[case] = []
         for fork in range(5):
             record = json.loads((directory / f"{case}-{fork}.json").read_text())
-            if record["case"] != case:
+            if record["case"] != case or record["campaign"] != metadata["campaign"]:
                 raise ValueError(f"unexpected case in {case}-{fork}")
             samples[case].append(record)
-    return {"metadata": json.loads((directory / "metadata.json").read_text()), "samples": samples}
+    return {"metadata": metadata, "samples": samples}
 
 
 def table(data):
@@ -61,7 +67,7 @@ def table(data):
             value = f"{medians[worker]:,.2f}"
         lines.append(f"| {name} | {medians[caller]:,.2f} | {value} |")
     displayed.update(("static-setup", "dynamic-setup", "bound-setup"))
-    if displayed != set(CASES) or displayed != medians.keys():
+    if displayed != set(CASES + NFI_CASES) or displayed != medians.keys():
         raise ValueError("README rows and measured cases differ")
     lines += ["", "Creating stubs and closing their arena cost "
               f"{medians['static-setup']:,.0f} ns per static registration, "
