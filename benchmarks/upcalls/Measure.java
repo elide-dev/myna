@@ -17,6 +17,15 @@ public final class Measure {
     return previous + increment;
   }
 
+  private static MemorySegment reducer(String kind, Arena arena) {
+    return switch (kind) {
+      case "static" -> UpcallsFFM.ReducerUpcalls.create(arena);
+      case "dynamic" -> UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, arena);
+      case "bound" -> UpcallsFFM.ReducerUpcalls.createDirect(Measure::reduce, -1, arena);
+      default -> throw new IllegalArgumentException(kind);
+    };
+  }
+
   public static void main(String[] args) throws Throwable {
     String workload = args[1];
     int count = Integer.parseInt(args[2]);
@@ -26,12 +35,15 @@ public final class Measure {
         Guest.measure(binding, arena, workload, count);
         return;
       }
-      boolean dynamic = workload.startsWith("dynamic");
-      var callback = workload.startsWith("control") ? MemorySegment.NULL
-          : dynamic ? UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, arena)
-          : UpcallsFFM.ReducerUpcalls.create(arena);
+      String kind = workload.substring(0, workload.indexOf('-'));
+      var callback = switch (workload) {
+        case "static-caller", "static-worker", "dynamic-caller", "dynamic-worker",
+            "bound-caller", "bound-worker" -> reducer(kind, arena);
+        default -> MemorySegment.NULL;
+      };
       var hook = switch (workload) {
         case "dynamic-hook-caller", "dynamic-hook-worker" -> UpcallsFFM.HookUpcalls.create(Measure::hook, arena);
+        case "bound-hook-caller", "bound-hook-worker" -> UpcallsFFM.HookUpcalls.createDirect(Measure::hook, arena);
         case "static-hook-caller", "static-hook-worker" -> UpcallsFFM.HookUpcalls.create(arena);
         default -> MemorySegment.NULL;
       };
@@ -41,9 +53,7 @@ public final class Measure {
           long start = System.nanoTime();
           try (var registrations = Arena.ofShared()) {
             for (int i = 0; i < count; i++) {
-              var stub = dynamic
-                  ? UpcallsFFM.ReducerUpcalls.create(Measure::reduce, -1, registrations)
-                  : UpcallsFFM.ReducerUpcalls.create(registrations);
+              var stub = reducer(kind, registrations);
               if (stub.address() == 0) throw new AssertionError();
             }
           }

@@ -137,26 +137,30 @@ Every measured sample ran in compiled code. Buffer, text and borrow cases are in
 
 ### Native upcalls into Java and Truffle
 
-Five fresh SVM processes per case on a Ryzen 9 9950X3D2 (Linux x86-64). The table reports the median of the five process medians. Each worker serves a full round on one native thread. The explicit isolate-thread case uses the calling thread only.
+Five fresh SVM processes per case on a Ryzen 9 9950X3D2 (Linux x86-64, logical CPU 9) using GraalVM 25.5.5-elide.32. The table reports the median of the five process medians. Each worker serves a full round on one native thread. The explicit isolate-thread case uses the calling thread only.
 
 <!-- upcall-results:start -->
 
 | Upcall path | Calling thread (ns/call) | Native worker (ns/call) |
 |---|---:|---:|
-| Native C control | 1.11 | 1.13 |
-| Static FFM reducer | 12.50 | 12.37 |
-| Dynamic FFM reducer | 2,403.52 | 3,736.48 |
-| Explicit isolate-thread reducer | 9.37 | — |
-| Static void hook | 16.44 | 17.21 |
-| Dynamic void hook | 886.79 | 1,034.61 |
-| Compiled Truffle AST, enter per call | 75.22 | 70.46 |
-| Compiled Truffle AST, enter per batch | 42.14 | 40.31 |
+| Native C control | 1.22 | 1.32 |
+| Static FFM reducer | 15.13 | 15.15 |
+| Generic dynamic FFM reducer | 4,856.50 | 4,409.30 |
+| Receiver-bound FFM reducer | 14.62 | 14.62 |
+| Explicit isolate-thread reducer | 11.22 | — |
+| Static void hook | 18.87 | 18.89 |
+| Generic dynamic void hook | 1,457.69 | 1,418.29 |
+| Receiver-bound void hook | 18.34 | 18.65 |
+| Static Truffle callback, enter per call | 83.83 | 84.20 |
+| Receiver-bound Truffle callback, enter per call | 85.65 | 84.54 |
+| Static Truffle callback, enter per batch | 36.97 | 37.66 |
+| Receiver-bound Truffle callback, enter per batch | 38.40 | 40.58 |
 
-Creating stubs and closing their arena cost 7,679 ns per static registration and 5,069 ns per dynamic registration.
+Creating stubs and closing their arena cost 11,475 ns per static registration, 7,416 ns per generic dynamic registration, and 12,444 ns per receiver-bound registration.
 
 <!-- upcall-results:end -->
 
-Each Truffle case checks the guest result and verifies that every measured callback ran in compiled code. Batch entry holds the context on the delivery thread for the round; the timer excludes its one entry and exit. Both Truffle paths cross the native boundary once per notification.
+Static and receiver-bound Truffle callbacks invoke the same compiled call target. The receiver-bound callbacks carry their context and call target in the registration. Each case checks the guest result and verifies that every measured callback ran in compiled code. Batch entry holds the context on the delivery thread for the round and excludes its one entry and exit from timing. Each Truffle notification crosses the native boundary once.
 
 [Raw samples and build hashes](benchmarks/upcalls/baselines/readme.json) · [Rerun and refresh](docs/benchmarking.md#upcall-benchmark-cycle)
 

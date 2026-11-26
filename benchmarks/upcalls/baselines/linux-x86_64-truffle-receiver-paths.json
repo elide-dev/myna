@@ -1,0 +1,24 @@
+{
+  "revision": "93dad8b39db1fa4f4341c7504d2d8cefd767c63d",
+  "binaries": {
+    "measure": "b527ebb10898cbdb39238fca2ba1233a9bc91214594dc0ebd8f9fe76fb599171",
+    "libbench.so": "6267b68b9b3d028d94c4ca24e4191e299e8531bcf715fba48fdbd8096f439441"
+  },
+  "procedure": "On Linux x86-64, start each workload under GDB with count=1, break at myna_measure_guest, then break on all UpcallStubsHolder_*upcallLow*_V_* functions. Continue to the first callback. Disassemble that function and its high-level callee from the same image with objdump -d.",
+  "observed": {
+    "guest-bound-each-caller": {
+      "workload": "guest-bound-each-caller",
+      "native_caller": "myna_measure_guest",
+      "native_entry": "UpcallStubsHolder_direct_upcallLow_injrecv__V_tJuP0nhOUUBWwlmwpDCKO1%2_gv4FdxWxmb9X2zxlFpjpR2",
+      "native_to_java": "173c5a:  e8 81 ee ff ff         call   172ae0 <UpcallStubsHolder_direct_upcallHigh_injrecv_J_V_7bF47anSGoBZgFKomAQfS5%3_SAajPztAtfFUDoF2a1t8Y5>",
+      "java_to_truffle": "172c89:  e8 d2 9d 3b 00         call   52ca60 <SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB>"
+    },
+    "guest-each-caller": {
+      "workload": "guest-each-caller",
+      "native_caller": "myna_measure_guest",
+      "native_entry": "UpcallStubsHolder_direct_upcallLow__V_7uaaHcqqPr35oHPj5KQKPJ",
+      "native_to_java": "17387a:  e8 41 e4 ff ff         call   171cc0 <UpcallStubsHolder_direct_upcallHigh__V_Jv04gUjGGZIBfhCFn3wur7>",
+      "java_to_truffle": "171de9:  e8 72 ac 3b 00         call   52ca60 <SubstrateOptimizedCallTarget_invokeCompiledAdapterOrCallBoundary_syCudCrLg5GXeTyp1CHfnB>"
+    }
+  }
+}
