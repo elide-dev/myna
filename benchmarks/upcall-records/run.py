@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """Build and compare Myna span callbacks with TruffleData's published native tape traversal."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,7 +16,7 @@ import tempfile
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
-from support import TARGET, compile_native, native_image, run
+from support import TARGET, compile_native, native_image, run, sha256_file
 from truffle_integration import TRUFFLE_JAR, truffle_jars
 
 WORK = ROOT / "build/upcall-records"
@@ -43,29 +42,24 @@ NATIVES = {
 MODES = ("whole", "pull", "bound", "push")
 
 
-def digest(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
 def artifact(module, extension, checksum):
     name = "truffledata-" + module
     filename = name + "-" + VERSION + extension
     path = DEPS / filename
-    if path.is_file() and digest(path) == checksum:
+    if path.is_file() and sha256_file(path) == checksum:
         return path
     with tempfile.TemporaryDirectory(dir=DEPS) as staging:
         candidate = Path(staging) / filename
         run("curl", "-fLsS", "--retry", "3", f"https://maven.elide.dev/dev/elide/{name}/{VERSION}/{filename}",
             "-o", candidate)
-        if not candidate.is_file() or digest(candidate) != checksum:
+        if not candidate.is_file() or sha256_file(candidate) != checksum:
             raise RuntimeError("TruffleData checksum mismatch for " + filename)
         candidate.replace(path)
     return path
 
 
 def fixture_hashes():
-    return {p.name: digest(p) for p in sorted(SOURCE.iterdir()) if p.suffix in (".java", ".seam", ".c", ".py")}
+    return {p.name: sha256_file(p) for p in sorted(SOURCE.iterdir()) if p.suffix in (".java", ".seam", ".c", ".py")}
 
 
 def build():
@@ -112,9 +106,9 @@ def build():
                     truffledata=VERSION, native_image=image_flags, target=TARGET,
                     cc=run("cc", "--version").stdout, kernel_flags=["-O3", "-shared", "-fPIC"],
                     graal=run(Path(os.environ["GRAALVM_HOME"]) / "bin/native-image", "--version").stdout,
-                    inputs={p.name: digest(p) for p in [*downstream, parser, archive, TRUFFLE_JAR, *jars.values()]},
-                    generated={p.name: digest(p) for p in generation.glob("*.java")},
-                    binaries={p.name: digest(p) for p in (APP, RANGES, DEPS / ("libtruffledata_json" + SUFFIX))})
+                    inputs={p.name: sha256_file(p) for p in [*downstream, parser, archive, TRUFFLE_JAR, *jars.values()]},
+                    generated={p.name: sha256_file(p) for p in generation.glob("*.java")},
+                    binaries={p.name: sha256_file(p) for p in (APP, RANGES, DEPS / ("libtruffledata_json" + SUFFIX))})
     (WORK / "build.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
@@ -143,7 +137,7 @@ def measure(args):
         raise RuntimeError("Run the cross-library comparison outside CodSpeed")
     metadata = json.loads((WORK / "build.json").read_text())
     if metadata["sources"] != fixture_hashes() or any(
-        metadata["binaries"][p.name] != digest(p) for p in (APP, RANGES, DEPS / ("libtruffledata_json" + SUFFIX))
+        metadata["binaries"][p.name] != sha256_file(p) for p in (APP, RANGES, DEPS / ("libtruffledata_json" + SUFFIX))
     ):
         raise RuntimeError("Changed benchmark inputs, rebuild before measuring")
     if args.cpu is not None:

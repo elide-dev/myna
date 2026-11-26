@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """Build the SVM executable or collect callback wall-time samples."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,7 +13,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "benchmarks/native"))
-from support import run
+from support import run, sha256_file
 from upcall_fixture import LIB_NAME, build_upcall_fixture
 from walltime import report
 from truffle_integration import TRUFFLE_JAR, truffle_jars
@@ -34,20 +33,15 @@ CASES += [f"reducer-{kind}-{thread}" for kind in ("bound", "cell") for thread in
 NFI_CASES = ["reducer-nfi-caller", "reducer-nfi-worker"]
 
 
-def file_hash(path):
-    with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
-
-
 def build_hashes(jars):
     gen = WORK / "generated"
     return {
-        "binaries": {p.name: file_hash(p) for p in (APP, LIB)},
-        "sources": {p.name: file_hash(p) for p in SOURCE.iterdir() if p.is_file() and p.suffix in (".py", ".java", ".c", ".seam")},
-        "fixture_sha256": file_hash(ROOT / "tests/upcall_fixture.py"),
-        "nfi_shim_sha256": file_hash(ROOT / "benchmarks/native/nfi_memfd.c"),
-        "dependencies": {name: file_hash(path) for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
-        "generated": {p.name: file_hash(p) for p in sorted(gen.glob("*.java"))},
+        "binaries": {p.name: sha256_file(p) for p in (APP, LIB)},
+        "sources": {p.name: sha256_file(p) for p in SOURCE.iterdir() if p.is_file() and p.suffix in (".py", ".java", ".c", ".seam")},
+        "fixture_sha256": sha256_file(ROOT / "tests/upcall_fixture.py"),
+        "nfi_shim_sha256": sha256_file(ROOT / "benchmarks/native/nfi_memfd.c"),
+        "dependencies": {name: sha256_file(path) for name, path in {"myna-truffle": TRUFFLE_JAR, **jars}.items()},
+        "generated": {p.name: sha256_file(p) for p in sorted(gen.glob("*.java"))},
     }
 
 

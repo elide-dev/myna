@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """Repeat the uninstrumented Linux x86-64 stock GraalVM versus Elide scalar upcall comparison."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +13,7 @@ import subprocess
 import tempfile
 
 from run import current_build
+from support import sha256_file
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[1]
@@ -22,19 +22,14 @@ BASELINE = SOURCE / "baselines/stock-25i5-scalar-upcalls-linux-x86_64.json"
 KINDS = ("bound", "cell", "nfi")
 
 
-def sha(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
 def download(spec, dest):
     if not dest.exists():
         partial = dest.with_name(dest.name + ".partial")
         subprocess.run(["curl", "--fail", "--location", "--retry", "3", "--output", partial, spec["url"]], check=True)
-        if sha(partial) != spec["sha256"]:
+        if sha256_file(partial) != spec["sha256"]:
             raise ValueError(f"Checksum mismatch for {partial}")
         partial.replace(dest)
-    if sha(dest) != spec["sha256"]:
+    if sha256_file(dest) != spec["sha256"]:
         raise ValueError(f"Checksum mismatch for {dest}")
 
 
@@ -42,7 +37,7 @@ def verify_inputs(baseline):
     metadata = current_build()
     # This stock release recipe reproduces a specific set of guest, adapter and generated inputs.
     for name, digest in baseline["source_sha256"].items():
-        if sha(ROOT / name) != digest:
+        if sha256_file(ROOT / name) != digest:
             raise ValueError(f"{name} differs from the stock comparison at {baseline['revision']}")
     return metadata
 
@@ -89,8 +84,8 @@ def measure(directory, baseline, cpu, blocks, build_commands):
     os.sched_setaffinity(0, {cpu})
     metadata = verify_inputs(baseline)
     results = {"machine": platform.platform(), "lscpu": subprocess.check_output(["lscpu"], text=True), "cpu": cpu,
-               "source_sha256": {p: sha(ROOT / p) for p in baseline["source_sha256"]},
-               "kernel_sha256": sha(library), "image_sha256": {r: sha(app) for r, app in apps.items()},
+               "source_sha256": {p: sha256_file(ROOT / p) for p in baseline["source_sha256"]},
+               "kernel_sha256": sha256_file(library), "image_sha256": {r: sha256_file(app) for r, app in apps.items()},
                "elide_build": metadata, "stock_build": build_commands, "blocks": []}
     for epoch in range(blocks // 6):
         keys = cases.copy()
