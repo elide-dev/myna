@@ -21,14 +21,14 @@ import org.graalvm.word.PointerBase;
 @CContext(CellApiDirectives.class)
 public final class CellApi {
     private CellApi() {}
-    public static final String ABI_FINGERPRINT = "a8602da0513b5459ffd27c81420730fdab74872c6994a3e98c87c0b9555b78be";
+    public static final String ABI_FINGERPRINT = "2d14c95ea32d08225bd70b9916f5667d11f678e978de4a17b268d17a86425dee";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("TRUFFLE_DEMO_SEAM_ABI_a8602da0513b5459ffd27c81420730fdab74872c6994a3e98c87c0b9555b78be") static native int seamHeaderCheck();
+    @CConstant("TRUFFLE_DEMO_SEAM_ABI_2d14c95ea32d08225bd70b9916f5667d11f678e978de4a17b268d17a86425dee") static native int seamHeaderCheck();
     public interface add_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)

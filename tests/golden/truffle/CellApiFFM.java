@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class CellApiFFM {
     private CellApiFFM() {}
-    public static final String ABI_FINGERPRINT = "a8602da0513b5459ffd27c81420730fdab74872c6994a3e98c87c0b9555b78be";
+    public static final String ABI_FINGERPRINT = "2d14c95ea32d08225bd70b9916f5667d11f678e978de4a17b268d17a86425dee";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
