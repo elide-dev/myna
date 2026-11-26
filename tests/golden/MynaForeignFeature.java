@@ -73,9 +73,17 @@ public final class MynaForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$widen_CriticalDowncall");
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$widen_Downcall");
         RuntimeClassInitialization.initializeAtRunTime("dev.elide.myna.generated.MynaFFM$widen_Binding");
-        RuntimeForeignAccess.registerForUpcall(MynaFFM.Reducer_CALLBACK_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$ReducerUpcalls");
-        RuntimeForeignAccess.registerForUpcall(MynaFFM.Visitor_CALLBACK_DESCRIPTOR);
+        RuntimeForeignAccess.registerForUpcall(MynaFFM.Reducer_CALLBACK_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("dev.elide.myna.generated.MynaFFM$VisitorUpcalls");
+        RuntimeForeignAccess.registerForUpcall(MynaFFM.Visitor_CALLBACK_DESCRIPTOR);
+    }
+    @Override public void beforeAnalysis(BeforeAnalysisAccess access) {
+        try {
+            access.registerReachabilityHandler(during -> RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.ReducerUpcalls.DIRECT_HANDLE, MynaFFM.Reducer_CALLBACK_DESCRIPTOR),
+                MynaFFM.ReducerUpcalls.class.getDeclaredMethod("createDirect", MynaFFM.ReducerCallback.class, long.class, java.lang.foreign.Arena.class));
+            access.registerReachabilityHandler(during -> RuntimeForeignAccess.registerForDirectUpcall(MynaFFM.VisitorUpcalls.DIRECT_HANDLE, MynaFFM.Visitor_CALLBACK_DESCRIPTOR),
+                MynaFFM.VisitorUpcalls.class.getDeclaredMethod("createDirect", MynaFFM.VisitorCallback.class, int.class, java.lang.foreign.Arena.class));
+        } catch (NoSuchMethodException failure) { throw new IllegalStateException(failure); }
     }
 }

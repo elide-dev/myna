@@ -673,12 +673,22 @@ public final class MynaFFM {
         long invoke(long arg0, long arg1) throws Throwable;
     }
     public static final class ReducerUpcalls {
-        private ReducerUpcalls() {}
+        private final ReducerCallback target;
+        private final long sentinel;
+        private ReducerUpcalls(ReducerCallback target, long sentinel) {
+            this.target = target;
+            this.sentinel = sentinel;
+        }
         private static final MethodHandle HANDLE;
+        static final MethodHandle DIRECT_HANDLE;
         static {
             try {
                 HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(ReducerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(long.class, ReducerCallback.class, long.class, long.class, long.class));
+                DIRECT_HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(ReducerUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(long.class, long.class, long.class));
             } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+        }
+        private long invoke(long arg0, long arg1) {
+            return invoke(target, sentinel, arg0, arg1);
         }
         private static long invoke(ReducerCallback target, long sentinel, long arg0, long arg1) {
             try { return target.invoke(arg0, arg1); }
@@ -691,18 +701,33 @@ public final class MynaFFM {
             java.util.Objects.requireNonNull(target);
             return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Reducer_CALLBACK_DESCRIPTOR, arena);
         }
+        /** Specializes repeated Native Image calls to this receiver. Uses the same arena and exception policy as create. */
+        public static MemorySegment createDirect(ReducerCallback target, long sentinel, Arena arena) {
+            java.util.Objects.requireNonNull(target);
+            return Linker.nativeLinker().upcallStub(DIRECT_HANDLE.bindTo(new ReducerUpcalls(target, sentinel)), Reducer_CALLBACK_DESCRIPTOR, arena);
+        }
     }
     public static final FunctionDescriptor Visitor_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG);
     @FunctionalInterface public interface VisitorCallback {
         int invoke(MemorySegment arg0, long arg1) throws Throwable;
     }
     public static final class VisitorUpcalls {
-        private VisitorUpcalls() {}
+        private final VisitorCallback target;
+        private final int sentinel;
+        private VisitorUpcalls(VisitorCallback target, int sentinel) {
+            this.target = target;
+            this.sentinel = sentinel;
+        }
         private static final MethodHandle HANDLE;
+        static final MethodHandle DIRECT_HANDLE;
         static {
             try {
                 HANDLE = java.lang.invoke.MethodHandles.lookup().findStatic(VisitorUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, VisitorCallback.class, int.class, MemorySegment.class, long.class));
+                DIRECT_HANDLE = java.lang.invoke.MethodHandles.lookup().findVirtual(VisitorUpcalls.class, "invoke", java.lang.invoke.MethodType.methodType(int.class, MemorySegment.class, long.class));
             } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+        }
+        private int invoke(MemorySegment arg0, long arg1) {
+            return invoke(target, sentinel, arg0, arg1);
         }
         private static int invoke(VisitorCallback target, int sentinel, MemorySegment arg0, long arg1) {
             try { return target.invoke(arg0, arg1); }
@@ -714,6 +739,11 @@ public final class MynaFFM {
         public static MemorySegment create(VisitorCallback target, int sentinel, Arena arena) {
             java.util.Objects.requireNonNull(target);
             return Linker.nativeLinker().upcallStub(java.lang.invoke.MethodHandles.insertArguments(HANDLE, 0, target, sentinel), Visitor_CALLBACK_DESCRIPTOR, arena);
+        }
+        /** Specializes repeated Native Image calls to this receiver. Uses the same arena and exception policy as create. */
+        public static MemorySegment createDirect(VisitorCallback target, int sentinel, Arena arena) {
+            java.util.Objects.requireNonNull(target);
+            return Linker.nativeLinker().upcallStub(DIRECT_HANDLE.bindTo(new VisitorUpcalls(target, sentinel)), Visitor_CALLBACK_DESCRIPTOR, arena);
         }
     }
 }

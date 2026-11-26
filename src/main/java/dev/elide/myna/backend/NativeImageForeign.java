@@ -62,25 +62,48 @@ public final class NativeImageForeign implements Backend {
       out.append(runTime).append(function.name()).append("_Binding\");\n");
     }
     for (var callback : module.callbacks()) {
+      String prefix = ffm + '.' + callback.name();
+      String descriptor = prefix + "_CALLBACK_DESCRIPTOR";
+      out.append(buildTime).append(callback.name()).append("Upcalls\");\n");
       out.append("        RuntimeForeignAccess.registerForUpcall(")
-          .append(ffm)
-          .append('.')
-          .append(callback.name())
-          .append("_CALLBACK_DESCRIPTOR);\n")
-          .append(buildTime)
-          .append(callback.name())
-          .append("Upcalls\");\n");
+          .append(descriptor)
+          .append(");\n");
       if (callback.ffmTarget() != null)
         out.append("        RuntimeForeignAccess.registerForDirectUpcall(")
-            .append(ffm)
-            .append('.')
-            .append(callback.name())
+            .append(prefix)
             .append("Upcalls.STATIC_HANDLE, ")
-            .append(ffm)
-            .append('.')
-            .append(callback.name())
-            .append("_CALLBACK_DESCRIPTOR);\n");
+            .append(descriptor)
+            .append(");\n");
     }
-    return out.append("    }\n}\n").toString();
+    out.append("    }\n");
+    if (!module.callbacks().isEmpty()) {
+      out.append("    @Override public void beforeAnalysis(BeforeAnalysisAccess access) {\n")
+          .append("        try {\n");
+      for (var callback : module.callbacks()) {
+        String prefix = ffm + '.' + callback.name();
+        String carrier = Types.ffmCarrier(callback.returns());
+        out.append(
+                "            access.registerReachabilityHandler(during ->"
+                    + " RuntimeForeignAccess.registerForDirectUpcall(")
+            .append(prefix)
+            .append("Upcalls.DIRECT_HANDLE, ")
+            .append(prefix)
+            .append("_CALLBACK_DESCRIPTOR),\n")
+            .append("                ")
+            .append(prefix)
+            .append("Upcalls.class.getDeclaredMethod(\"createDirect\", ")
+            .append(prefix)
+            .append("Callback.class, ");
+        if (callback.returns() != Seam.Scalar.VOID)
+          out.append(carrier.equals("MemorySegment") ? "java.lang.foreign.MemorySegment" : carrier)
+              .append(".class, ");
+        out.append("java.lang.foreign.Arena.class));\n");
+      }
+      out.append(
+              "        } catch (NoSuchMethodException failure) { throw new"
+                  + " IllegalStateException(failure); }\n")
+          .append("    }\n");
+    }
+    return out.append("}\n").toString();
   }
 }

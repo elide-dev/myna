@@ -97,6 +97,73 @@ class FfmTest {
   }
 
   @Test
+  void dynamicUpcallsExposeGenericAndDirectFactories() {
+    var out =
+        generate(
+            MODULE
+                + "callback Notify return=void\nend\n"
+                + "callback Ptr return=ptr<u8>\nend\n"
+                + "callback Reduce return=i64\nparam left type=i64\nparam right type=i64\nend\n");
+    String ffm = out.get("MynaFFM.java");
+    String feature = out.get("MynaForeignFeature.java");
+    assertTrue(ffm.contains("private final ReduceCallback target;"));
+    assertTrue(ffm.contains("private final long sentinel;"));
+    assertTrue(
+        ffm.contains(
+            "findStatic(ReduceUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(long.class, ReduceCallback.class,"
+                + " long.class, long.class, long.class))"));
+    assertTrue(
+        ffm.contains(
+            "findStatic(NotifyUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(void.class, NotifyCallback.class))"));
+    assertTrue(ffm.contains("insertArguments(HANDLE, 0, target, sentinel)"));
+    assertTrue(ffm.contains("insertArguments(HANDLE, 0, target)"));
+    assertTrue(
+        ffm.contains(
+            "findVirtual(ReduceUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(long.class, long.class, long.class))"));
+    assertTrue(
+        ffm.contains(
+            "findVirtual(NotifyUpcalls.class, \"invoke\","
+                + " java.lang.invoke.MethodType.methodType(void.class))"));
+    assertTrue(ffm.contains("createDirect(ReduceCallback target, long sentinel, Arena arena)"));
+    assertTrue(ffm.contains("createDirect(NotifyCallback target, Arena arena)"));
+    assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new ReduceUpcalls(target, sentinel))"));
+    assertTrue(ffm.contains("DIRECT_HANDLE.bindTo(new NotifyUpcalls(target))"));
+    int split = feature.indexOf("@Override public void beforeAnalysis");
+    assertTrue(split > 0);
+    String setup = feature.substring(0, split), analysis = feature.substring(split);
+    assertFalse(setup.contains("DIRECT_HANDLE"));
+    for (var entry :
+        java.util.Map.of(
+                "Notify",
+                "",
+                "Ptr",
+                "java.lang.foreign.MemorySegment.class, ",
+                "Reduce",
+                "long.class, ")
+            .entrySet()) {
+      String prefix = "MynaFFM." + entry.getKey();
+      assertTrue(setup.contains("registerForUpcall(" + prefix + "_CALLBACK_DESCRIPTOR)"));
+      assertTrue(
+          analysis.contains(
+              "registerReachabilityHandler(during -> RuntimeForeignAccess.registerForDirectUpcall("
+                  + prefix
+                  + "Upcalls.DIRECT_HANDLE, "
+                  + prefix
+                  + "_CALLBACK_DESCRIPTOR),\n"
+                  + "                "
+                  + prefix
+                  + "Upcalls.class.getDeclaredMethod(\"createDirect\", "
+                  + prefix
+                  + "Callback.class, "
+                  + entry.getValue()
+                  + "java.lang.foreign.Arena.class))"));
+    }
+  }
+
+  @Test
   void rejectsIncompleteAndInvalidStaticPolicies() {
     assertThrows(
         IllegalArgumentException.class,
@@ -130,11 +197,11 @@ class FfmTest {
     assertTrue(
         ffm.contains(
             "ShortResult_CALLBACK_DESCRIPTOR = FunctionDescriptor.of(ValueLayout.JAVA_INT)"));
-    assertTrue(ffm.contains("private static int invoke(ByteResultCallback target, byte sentinel)"));
+    assertTrue(ffm.contains("private ByteResultUpcalls(ByteResultCallback target, byte sentinel)"));
     assertTrue(ffm.contains("return target.invoke() & 0xff;"));
     assertTrue(ffm.contains("return sentinel & 0xff;"));
     assertTrue(
-        ffm.contains("private static int invoke(ShortResultCallback target, short sentinel)"));
+        ffm.contains("private ShortResultUpcalls(ShortResultCallback target, short sentinel)"));
     assertTrue(ffm.contains("return target.invoke() & 0xffff;"));
     assertTrue(ffm.contains("return sentinel & 0xffff;"));
   }

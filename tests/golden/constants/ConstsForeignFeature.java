@@ -21,7 +21,13 @@ public final class ConstsForeignFeature implements Feature {
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$status_CriticalDowncall");
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$status_Downcall");
         RuntimeClassInitialization.initializeAtRunTime("fixture.constants.ConstsFFM$status_Binding");
-        RuntimeForeignAccess.registerForUpcall(ConstsFFM.Listener_CALLBACK_DESCRIPTOR);
         RuntimeClassInitialization.initializeAtBuildTime("fixture.constants.ConstsFFM$ListenerUpcalls");
+        RuntimeForeignAccess.registerForUpcall(ConstsFFM.Listener_CALLBACK_DESCRIPTOR);
+    }
+    @Override public void beforeAnalysis(BeforeAnalysisAccess access) {
+        try {
+            access.registerReachabilityHandler(during -> RuntimeForeignAccess.registerForDirectUpcall(ConstsFFM.ListenerUpcalls.DIRECT_HANDLE, ConstsFFM.Listener_CALLBACK_DESCRIPTOR),
+                ConstsFFM.ListenerUpcalls.class.getDeclaredMethod("createDirect", ConstsFFM.ListenerCallback.class, int.class, java.lang.foreign.Arena.class));
+        } catch (NoSuchMethodException failure) { throw new IllegalStateException(failure); }
     }
 }

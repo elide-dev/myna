@@ -32,50 +32,88 @@ public final class CallbackMain {
         }
       }
       if (calls.get() != (args.length > 1 ? 6 : 4)) throw new AssertionError("callback count");
-      verifyCarriers(binding, callbacks, args.length > 1);
+      verifyCarriers(binding, callbacks, args.length > 1, false);
+      verifyCarriers(binding, callbacks, args.length > 1, true);
+      verifyDistinctRegistrations(binding, callbacks);
     }
     if (expired.scope().isAlive()) throw new AssertionError("upcall arena lifetime");
     System.out.println("Scoped callbacks, native threads and exception status passed");
   }
 
+  private static MemorySegment offsetReducer(long offset, long sentinel, Arena arena) {
+    return CallbackApiFFM.ReducerUpcalls.createDirect((left, right) -> {
+      if (left < 0) throw new IllegalArgumentException("negative input");
+      return offset + left + right;
+    }, sentinel, arena);
+  }
+
+  private static void verifyDistinctRegistrations(CallbackApiFFM.LibraryBinding binding,
+                                                  Arena outer) throws Throwable {
+    var first = offsetReducer(10, -11, outer);
+    try (var inner = Arena.ofShared()) {
+      var second = offsetReducer(20, -22, inner);
+      System.gc();
+      for (boolean worker : new boolean[] {false, true}) {
+        if (binding.invoke(first, worker, 2, 3) != 15 || binding.invoke(second, worker, 2, 3) != 25
+            || binding.invoke(first, worker, -1, 0) != -11 || binding.invoke(second, worker, -1, 0) != -22)
+          throw new AssertionError("callback target or sentinel crossed registrations");
+      }
+    }
+    System.gc();
+    if (binding.invoke(first, true, 2, 3) != 15)
+      throw new AssertionError("closing a second registration invalidated the first");
+  }
+
   private static void verifyCarriers(CallbackApiFFM.LibraryBinding binding, Arena arena,
-                                     boolean jni) throws Throwable {
-    var bytes = CallbackApiFFM.ByteResultUpcalls.create(fail -> {
+                                     boolean jni, boolean direct) throws Throwable {
+    CallbackApiFFM.ByteResultCallback byteTarget = fail -> {
       if (fail) throw new IllegalStateException("byte sentinel");
       return (byte) 200;
-    }, (byte) 255, arena);
-    var shorts = CallbackApiFFM.ShortResultUpcalls.create(fail -> {
+    };
+    var bytes = direct ? CallbackApiFFM.ByteResultUpcalls.createDirect(byteTarget, (byte) 255, arena)
+                       : CallbackApiFFM.ByteResultUpcalls.create(byteTarget, (byte) 255, arena);
+    CallbackApiFFM.ShortResultCallback shortTarget = fail -> {
       if (fail) throw new IllegalStateException("short sentinel");
       return (short) 60000;
-    }, (short) 65535, arena);
+    };
+    var shorts = direct ? CallbackApiFFM.ShortResultUpcalls.createDirect(shortTarget, (short) 65535, arena)
+                        : CallbackApiFFM.ShortResultUpcalls.create(shortTarget, (short) 65535, arena);
     if (binding.invokeByte(bytes, false) != 200 || binding.invokeByte(bytes, true) != 255
         || binding.invokeShort(shorts, false) != 60000 || binding.invokeShort(shorts, true) != 65535)
       throw new AssertionError("unsigned callback return extension");
     var notices = new AtomicInteger();
-    var notify = CallbackApiFFM.NotifyUpcalls.create(value -> {
+    CallbackApiFFM.NotifyCallback notifyTarget = value -> {
       notices.addAndGet(value);
       throw new IllegalStateException("void callback exception is discarded");
-    }, arena);
+    };
+    var notify = direct ? CallbackApiFFM.NotifyUpcalls.createDirect(notifyTarget, arena)
+                        : CallbackApiFFM.NotifyUpcalls.create(notifyTarget, arena);
     binding.callNotify(CallbackApiFFM.NotifyUpcalls.create(arena), 17);
     if (CallbackOps.lastNotice != 17) throw new AssertionError("static void callback");
     binding.callNotify(notify, 7);
     if (notices.get() != 7) throw new AssertionError("void callback");
     var memory = arena.allocate(1);
-    var pointers = CallbackApiFFM.PointerResultUpcalls.create(value -> {
+    CallbackApiFFM.PointerResultCallback pointerTarget = value -> {
       if (value.address() == 0) throw new IllegalStateException("pointer sentinel");
       return value;
-    }, MemorySegment.NULL, arena);
+    };
+    var pointers = direct ? CallbackApiFFM.PointerResultUpcalls.createDirect(pointerTarget, MemorySegment.NULL, arena)
+                          : CallbackApiFFM.PointerResultUpcalls.create(pointerTarget, MemorySegment.NULL, arena);
     if (binding.invokePointer(pointers, memory).address() != memory.address()
         || binding.invokePointer(pointers, MemorySegment.NULL).address() != 0)
       throw new AssertionError("pointer callback sentinel");
-    var floats = CallbackApiFFM.FloatResultUpcalls.create(value -> {
+    CallbackApiFFM.FloatResultCallback floatTarget = value -> {
       if (value < 0) throw new IllegalStateException("float sentinel");
       return value * 2;
-    }, -7.5f, arena);
-    var doubles = CallbackApiFFM.DoubleResultUpcalls.create(value -> {
+    };
+    var floats = direct ? CallbackApiFFM.FloatResultUpcalls.createDirect(floatTarget, -7.5f, arena)
+                        : CallbackApiFFM.FloatResultUpcalls.create(floatTarget, -7.5f, arena);
+    CallbackApiFFM.DoubleResultCallback doubleTarget = value -> {
       if (value < 0) throw new IllegalStateException("double sentinel");
       return value * 2;
-    }, -8.5, arena);
+    };
+    var doubles = direct ? CallbackApiFFM.DoubleResultUpcalls.createDirect(doubleTarget, -8.5, arena)
+                         : CallbackApiFFM.DoubleResultUpcalls.create(doubleTarget, -8.5, arena);
     if (binding.invokeFloat(floats, 1.25f) != 2.5f || binding.invokeFloat(floats, -1) != -7.5f
         || binding.invokeDouble(doubles, 1.25) != 2.5 || binding.invokeDouble(doubles, -1) != -8.5)
       throw new AssertionError("floating point callback carriers");
