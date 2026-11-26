@@ -23,14 +23,14 @@ import org.graalvm.word.WordFactory;
 @CContext(ViewsDirectives.class)
 public final class Views {
     private Views() {}
-    public static final String ABI_FINGERPRINT = "3f908b1fe257abdad0acec374c6924e3859ac965af3eef85c860a62bce6ca83f";
+    public static final String ABI_FINGERPRINT = "646fa295518fa12d51e7af1e6b7df085ebe0eaa7b5ebac2d6c0b3d5b5670ad86";
     public static final int BINDING_ABI_VERSION = 2;
     /**
      * The seam.h check. Only this generation's header defines the macro, and the image build's
      * C query resolves every @CConstant of this class, so mixing generations fails the build.
      * Never called; it costs the image nothing.
      */
-    @CConstant("VIEWS_SEAM_ABI_3f908b1fe257abdad0acec374c6924e3859ac965af3eef85c860a62bce6ca83f") static native int seamHeaderCheck();
+    @CConstant("VIEWS_SEAM_ABI_646fa295518fa12d51e7af1e6b7df085ebe0eaa7b5ebac2d6c0b3d5b5670ad86") static native int seamHeaderCheck();
     public interface empty_Leaf extends CFunctionPointer {
         @AlwaysInline("Myna binding ABI 2 native leaf")
         @Uninterruptible(reason = "Bounded primitive/word native leaf; no Java reentry", mayBeInlined = true)
