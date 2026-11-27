@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           version: '2026.10.25'
       - uses: ./.github/actions/setup-graalvm
@@ -50,7 +50,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           version: '2026.10.25'
       - run: mise exec -- python3 benchmarks/native/build.py
@@ -89,7 +89,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           version: '2026.10.25'
       - uses: ./.github/actions/setup-graalvm
@@ -98,7 +98,7 @@ jobs:
           name: jmh-binaries
           path: benchmarks/target
       - name: Run the benchmarks
-        uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
+        uses: CodSpeedHQ/action@b1f28b5eccf7cb5bfe6a2a89cb3053eb67f1150c # v5.8.0
         with:
           mode: walltime
           run: mise exec -- java -jar benchmarks/target/benchmarks.jar '${{ matrix.filter }}'
@@ -124,7 +124,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           version: '2026.10.25'
       - run: mise exec -- python3 benchmarks/native/build.py
@@ -136,7 +136,7 @@ jobs:
           path: build
       - run: tar -xzf build/native-wall.tar.gz
         if: matrix.mode == 'walltime'
-      - uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
+      - uses: CodSpeedHQ/action@b1f28b5eccf7cb5bfe6a2a89cb3053eb67f1150c # v5.8.0
         with:
           mode: ${{ matrix.mode }}
           run: ${{ matrix.mode == 'walltime' && 'python3 benchmarks/native/walltime.py' || 'benchmarks/native/run.sh' }}
@@ -156,13 +156,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           version: '2026.10.25'
       - uses: ./.github/actions/setup-graalvm
       - run: mise run build:jvm
       - run: mise exec -- python3 benchmarks/upcalls/run.py build
-      - uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
+      - uses: CodSpeedHQ/action@b1f28b5eccf7cb5bfe6a2a89cb3053eb67f1150c # v5.8.0
         with:
           mode: walltime
           run: mise exec -- python3 benchmarks/upcalls/run.py run
