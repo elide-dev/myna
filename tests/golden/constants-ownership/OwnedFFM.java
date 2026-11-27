@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 
 public final class OwnedFFM {
     private OwnedFFM() {}
-    public static final String ABI_FINGERPRINT = "52c9dcc250278ab847f3974db423bcc031ce7737e9aeae303c82c2afaccbde53";
+    public static final String ABI_FINGERPRINT = "7c568f478c895dc4ff68df6c9749dd8ad1fa50acf53923c3f45911d45205beb5";
     static {
         if (ValueLayout.ADDRESS.byteSize() != 8) throw new ExceptionInInitializerError("64-bit seam target required");
     }
