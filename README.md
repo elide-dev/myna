@@ -143,26 +143,36 @@ Five fresh SVM processes per case on a Ryzen 9 9950X3D2 (Linux x86-64, logical C
 
 | Upcall path | Calling thread (ns/call) | Native worker (ns/call) |
 |---|---:|---:|
-| Native C control | 1.22 | 1.32 |
-| Static FFM reducer | 15.13 | 15.15 |
-| Generic dynamic FFM reducer | 4,856.50 | 4,409.30 |
-| Receiver-bound FFM reducer | 14.62 | 14.62 |
-| Explicit isolate-thread reducer | 11.22 | — |
-| Static void hook | 18.87 | 18.89 |
-| Generic dynamic void hook | 1,457.69 | 1,418.29 |
-| Receiver-bound void hook | 18.34 | 18.65 |
-| Static Truffle callback, enter per call | 83.83 | 84.20 |
-| Receiver-bound Truffle callback, enter per call | 85.65 | 84.54 |
-| Static Truffle callback, enter per batch | 36.97 | 37.66 |
-| Receiver-bound Truffle callback, enter per batch | 38.40 | 40.58 |
+| Native C control | 1.15 | 1.15 |
+| Static FFM reducer | 12.42 | 13.26 |
+| Generic dynamic FFM reducer | 2,723.59 | 2,454.29 |
+| Receiver-bound FFM reducer | 12.81 | 13.09 |
+| Explicit isolate-thread reducer | 10.26 | — |
+| Static void hook | 16.35 | 16.13 |
+| Generic dynamic void hook | 862.69 | 909.27 |
+| Receiver-bound void hook | 16.88 | 17.16 |
+| Static Truffle callback, enter per call | 78.78 | 73.96 |
+| Receiver-bound Truffle callback, enter per call | 77.33 | 80.98 |
+| Static Truffle callback, enter per batch | 35.97 | 31.60 |
+| Receiver-bound Truffle callback, enter per batch | 35.93 | 35.88 |
+| Receiver-bound Truffle i64 reducer | 30.19 | 30.35 |
+| Generated Truffle i64 upcall cell | 33.78 | 33.34 |
+| Truffle NFI i64 closure | 47.44 | 44.89 |
 
-Creating stubs and closing their arena cost 11,475 ns per static registration, 7,416 ns per generic dynamic registration, and 12,444 ns per receiver-bound registration.
+Creating stubs and closing their arena cost 7,982 ns per static registration, 6,139 ns per generic dynamic registration, and 10,633 ns per receiver-bound registration.
 
 <!-- upcall-results:end -->
 
-Static and receiver-bound Truffle callbacks invoke the same compiled call target. The receiver-bound callbacks carry their context and call target in the registration. Each case checks the guest result and verifies that every measured callback ran in compiled code. Batch entry holds the context on the delivery thread for the round and excludes its one entry and exit from timing. Each Truffle notification crosses the native boundary once.
+Static and receiver-bound Truffle callbacks invoke the same compiled call target. The receiver-bound callbacks carry their context and call target in the registration. Each case checks the guest result and verifies that every measured callback ran in compiled code. Batch entry holds the context on the delivery thread for the round and excludes its one entry and exit from timing. Each Truffle notification crosses the native boundary once. The three Truffle i64 reducer rows use the same compiled guest and return a result to C on every call. The generated cell binds a guest target to the native callback. The NFI control uses a libffi closure and runs in the uninstrumented comparison. See [upcall cell registration and context ownership](docs/truffle-cells.md#native-callbacks-into-a-guest).
 
 [Raw samples and build hashes](benchmarks/upcalls/baselines/readme.json) · [Rerun and refresh](docs/benchmarking.md#upcall-benchmark-cycle)
+
+For a borrowed TruffleData JSON tape on the owning thread, native delivery of 32 records per
+upcall took **28.85 ns/record**, compared with **27.97 ns/record** for one compiled guest
+walk over the whole tape. Delivering a single record per callback took **64.49 ns/record**.
+Both paths projected the same two fields and checked their order-sensitive checksum. Parsing
+and registration were outside the timer. [Borrowed-record benchmark and raw samples](benchmarks/upcall-records/README.md)
+
 
 ## Build and use
 

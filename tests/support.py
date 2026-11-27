@@ -1,6 +1,7 @@
 # Copyright the Myna contributors.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """Standard-library test runner with JUnit XML, also used for native-binary tests."""
+import hashlib
 import os
 from pathlib import Path
 import platform
@@ -13,6 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(os.environ.get("MYNA_BIN", ROOT / "build/dist/myna")).resolve()
 TARGET = {("Darwin", "arm64"): "aarch64-apple-darwin", ("Darwin", "x86_64"): "x86_64-apple-darwin",
           ("Linux", "aarch64"): "aarch64-unknown-linux-gnu", ("Linux", "x86_64"): "x86_64-unknown-linux-gnu"}.get((platform.system(), platform.machine()))
+
+def sha256_file(path):
+    checksum = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 def run(*args, cwd=ROOT, ok=True, timeout=300):
     if str(args[0]) in ("cc", "c++"):

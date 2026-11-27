@@ -112,6 +112,8 @@ public final class TruffleCells implements Backend {
     imports.add(RUNTIME + "NativeFunction");
     var body = new StringBuilder();
     for (Cell cell : cells) emit(m, cell, config, ffm, bindings, charUnsigned, imports, body);
+    for (Signature callback : m.callbacks())
+      if (callback.truffleUpcall()) upcall(m, callback, imports, body);
     if (ffm && !cells.isEmpty()) helpers(imports, body);
     if (declaresConstants(m)) imports.add(RUNTIME + "NativeConstants");
     if (!m.enums().isEmpty()) imports.add("com.oracle.truffle.api.strings.TruffleString");
@@ -169,6 +171,33 @@ public final class TruffleCells implements Backend {
           .append("_Cell().function();\n    }\n");
     constants(m, out);
     return out.append(body).append("}\n").toString();
+  }
+
+  /** A registration wraps an existing direct FFM upcall and inherits its exception policy. */
+  private static void upcall(Module m, Signature callback, Set<String> imports, StringBuilder out) {
+    imports.add(RUNTIME + "UpcallTarget");
+    imports.add("com.oracle.truffle.api.CallTarget");
+    imports.add("com.oracle.truffle.api.TruffleContext");
+    imports.add("java.lang.foreign.Arena");
+    imports.add("java.lang.foreign.MemorySegment");
+    out.append(
+        """
+            public static final class %1$sUpcall {
+                private %1$sUpcall() {}
+                /** Enter this context on the calling thread for each delivery. */
+                public static MemorySegment bind(TruffleContext context, CallTarget target, long sentinel, Arena arena) {
+                    return register(UpcallTarget.entering(context, target), sentinel, arena);
+                }
+                /** Register and invoke only with the target's context already entered. */
+                public static MemorySegment bindEntered(CallTarget target, long sentinel, Arena arena) {
+                    return register(UpcallTarget.entered(target), sentinel, arena);
+                }
+                private static MemorySegment register(UpcallTarget target, long sentinel, Arena arena) {
+                    return %2$s.%1$sUpcalls.createDirect(target::callLong, sentinel, arena);
+                }
+            }
+        """
+            .formatted(callback.name(), m.ffmClass()));
   }
 
   /** Whether the module declares anything {@link #constants} emits. */

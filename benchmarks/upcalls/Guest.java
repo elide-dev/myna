@@ -51,24 +51,28 @@ public final class Guest {
     } catch (Throwable cause) { failure = cause; }
   }
 
-  private static final class Bound {
+  static final class Bound {
     private final Context context;
     private final CallTarget target;
     private final boolean perCall;
     private volatile Throwable failure;
 
-    private Bound(Context context, CallTarget target, boolean perCall) {
+    Bound(Context context, CallTarget target, boolean perCall) {
       this.context = context;
       this.target = target;
       this.perCall = perCall;
     }
 
-    private void enterContext() {
+    void enterContext() {
       try { context.enter(); } catch (Throwable cause) { failure = cause; }
     }
 
-    private void leaveContext() {
+    void leaveContext() {
       try { context.leave(); } catch (Throwable cause) { failure = cause; }
+    }
+
+    void checkFailure() {
+      if (failure != null) throw new AssertionError("guest callback failed", failure);
     }
 
     private void callTarget() {
@@ -116,8 +120,8 @@ public final class Guest {
         guest.calls = guest.compiled = 0;
         guest.value = 1;
         long elapsed = binding.measureGuest(hook, enter, leave, name.endsWith("-worker"), count);
-        var cause = bound ? receiver.failure : failure;
-        if (cause != null) throw new AssertionError("guest callback failed", cause);
+        if (bound) receiver.checkFailure();
+        else if (failure != null) throw new AssertionError("guest callback failed", failure);
         if (guest.value != expected || guest.calls != count || (round >= 0 && guest.compiled != count)) {
           throw new AssertionError("calls=" + guest.calls + " compiled=" + guest.compiled);
         }

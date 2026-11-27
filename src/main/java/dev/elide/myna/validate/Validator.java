@@ -167,6 +167,14 @@ public final class Validator {
     for (Signature signature : module.callbacks()) {
       identifier(signature.name());
       if (signature.javaType() != null) qualifiedType(signature.javaType());
+      if (signature.truffleUpcall()) {
+        require(
+            module.truffleConfig() != null, "truffle_upcall requires module truffle_cells=true");
+        require(
+            signature.returns() == Scalar.I64
+                && signature.parameters().stream().allMatch(p -> p.type() == Scalar.I64),
+            "truffle_upcall requires i64 parameters and an i64 return on " + signature.name());
+      }
       require(
           (signature.ffmTarget() != null && signature.returns() != Scalar.VOID)
               == (signature.ffmSentinel() != null),

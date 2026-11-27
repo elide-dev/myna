@@ -1,9 +1,9 @@
-module upcalls target=aarch64-apple-darwin java_package=bench.upcalls java_class=Upcalls
-callback Reducer return=i64 ffm_java=bench.upcalls.Measure.reduce ffm_sentinel=-1
+module upcalls target=aarch64-apple-darwin java_package=bench.upcalls java_class=Upcalls truffle_cells=true
+callback Reducer return=i64 truffle_upcall=true ffm_java=bench.upcalls.Measure.reduce ffm_sentinel=-1
   param previous type=i64
   param increment type=i64
 end
-import measure symbol=myna_measure return=i64 error=no_failure native_leaf=false@explicit_contract
+import measure symbol=myna_measure return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
   param target type=fn<Reducer>
   param worker type=bool
   param count type=i32
@@ -17,14 +17,14 @@ export reduceInIsolate symbol=myna_reduce_isolate return=i64 java=bench.upcalls.
   param previous type=i64
   param increment type=i64
 end
-import measureIsolate symbol=myna_measure_isolate return=i64 error=no_failure native_leaf=false@explicit_contract
+import measureIsolate symbol=myna_measure_isolate return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
   param target type=fn<IsolateReducer>
   param thread type=isolate_thread
   param count type=i32
 end
 callback Hook return=void ffm_java=bench.upcalls.Measure.hook
 end
-import measureHook symbol=myna_measure_hook return=i64 error=no_failure native_leaf=false@explicit_contract
+import measureHook symbol=myna_measure_hook return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
   param target type=fn<Hook>
   param worker type=bool
   param count type=i32
@@ -35,10 +35,23 @@ callback EnterGuest return=void ffm_java=bench.upcalls.Guest.enter
 end
 callback LeaveGuest return=void ffm_java=bench.upcalls.Guest.leave
 end
-import measureGuest symbol=myna_measure_guest return=i64 error=no_failure native_leaf=false@explicit_contract
+import measureGuest symbol=myna_measure_guest return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
   param target type=fn<GuestHook>
   param enter type=fn<EnterGuest>
   param leave type=fn<LeaveGuest>
   param worker type=bool
   param count type=i32
+end
+import measureGuestReducer symbol=myna_measure_guest_reducer return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
+  param target type=fn<Reducer>
+  param enter type=fn<EnterGuest>
+  param leave type=fn<LeaveGuest>
+  param worker type=bool
+  param count type=i32
+end
+import checkReducer symbol=myna_check_reducer return=i64 error=no_failure native_leaf=false@explicit_contract truffle_cell=false@explicit_contract
+  param target type=fn<Reducer>
+  param previous type=i64
+  param increment type=i64
+  param worker type=bool
 end

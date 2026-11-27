@@ -377,7 +377,7 @@ python3 scripts/check-hygiene.py
 ### SVM upcalls
 
 Run `mise run build:jvm`, then `mise exec -- python3 benchmarks/upcalls/run.py build` and
-`mise exec -- python3 benchmarks/upcalls/run.py run --forks 5`. Each process warms up three
+`mise exec -- python3 benchmarks/upcalls/run.py run --forks 5 --include-nfi`. Each process warms up three
 rounds and records twelve. The native control, declared static target, generic dynamic target
 and receiver-bound direct target perform the same dependent integer reduction. Matching void
 hooks increment a volatile counter through each of the three generated FFM callback paths. Each worker round creates one native thread
@@ -455,9 +455,28 @@ cross the native boundary once per notification. A producer using batch entry mu
 own the delivery interval and balance entry and exit on the same thread, including
 on errors. Independent notifications from framework-owned threads use per-call entry.
 
+The `reducer-{bound,cell,nfi}-{caller,worker}` workloads return a signed 64-bit value on each
+callback. One native loop feeds the previous result and a varying increment into the same
+guest reducer. Its accumulator starts above 32 bits. The timer covers the C loop including
+the return to C and excludes context entry and exit, thread creation and registration.
+Each round verifies the final native result, guest result and event count. Each timed
+round also checks that every guest invocation observed compiled execution. The NFI case
+uses the native pointer from a libffi closure of signature `(SINT64,SINT64):SINT64`.
+An untimed image smoke test exercises single-call context entry, restoration, signed results,
+and return of the declared sentinel on guest exceptions and invalid result types.
+
+On Linux x86-64, build the .32 benchmark and run
+`mise exec -- python3 benchmarks/upcalls/stock.py --cpu 7 --blocks 12` on an available CPU.
+This builds the same sources against stock GraalVM CE 25i5 GA using the pinned distribution
+and Truffle jars. Each fresh process uses the identical native kernel. In the
+[paired scalar results and machine traces](../benchmarks/upcalls/baselines/stock-25i5-scalar-upcalls-linux-x86_64.json),
+the generated cell beat the NFI closure in all 12 blocks on each runtime. Both the Myna cell
+entry and the NFI closure specialized a call in their Tier 2 compilations. The .32 cell and
+handwritten receiver-bound bridge split their pairs six each way.
+
 ### Upcall benchmark cycle
 
-CodSpeed runs a single process per case on pull requests and pushes to main. The full
+CodSpeed runs a single process per Myna case on pull requests and pushes to main. The full uninstrumented run adds the NFI closure control using `run.py run --forks 5 --include-nfi`. The full
 [upcall workflow](../.github/workflows/benchmark.upcalls.yml) runs weekly and on demand.
 Run `mise run bench:upcalls` locally for the same build, five processes per case,
 raw JSON and Markdown summary. To publish a reviewed run, copy its `baseline.json` to

@@ -160,6 +160,11 @@ run = "scripts/python.sh benchmarks/cells/run.py run"
 [tasks."bench:cells-smoke"]
 run = "scripts/python.sh benchmarks/cells/run.py run --forks 1 --iterations 65536"
 
+[tasks."bench:upcall-records"]
+description = "Compare native record batches to TruffleData tape traversal"
+depends = ["build:jvm"]
+run = ["python3 benchmarks/upcall-records/run.py build", "python3 benchmarks/upcall-records/run.py run"]
+
 [tasks."bench:upcalls-build"]
 depends = ["build:jvm"]
 run = "python3 benchmarks/upcalls/run.py build"
@@ -167,7 +172,7 @@ run = "python3 benchmarks/upcalls/run.py build"
 [tasks."bench:upcalls"]
 description = "Measure all SVM upcalls in five fresh processes per case and summarize the results"
 depends = ["bench:upcalls-build"]
-run = ["python3 benchmarks/upcalls/run.py run --forks 5", "python3 benchmarks/upcalls/report.py collect"]
+run = ["python3 benchmarks/upcalls/run.py run --forks 5 --include-nfi", "python3 benchmarks/upcalls/report.py collect"]
 
 [tasks."bench:floor-build"]
 run = "scripts/python.sh benchmarks/floor/run.py build"
